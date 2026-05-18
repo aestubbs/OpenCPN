@@ -116,7 +116,8 @@ if (UNIX AND NOT DEFINED ENV{FLATPAK_ID})
   add_dependencies(ipc-srv-tests cli-server ipc-client)
 endif ()
 
-set(_BUF_TEST_SRC buffer_tests.cpp ${CMAKE_SOURCE_DIR}/cli/api_shim.cpp)
+set(_BUF_TEST_SRC buffer_tests.cpp comm_framer_tests.cpp
+    ${CMAKE_SOURCE_DIR}/cli/api_shim.cpp)
 add_executable(buffer_tests ${_BUF_TEST_SRC})
 target_link_libraries(
   buffer_tests PRIVATE  ocpn::model-src ocpn::gtest ocpn::gl-headers win32_libs

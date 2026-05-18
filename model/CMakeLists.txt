@@ -45,6 +45,7 @@ set(
   ${MODEL_HDR_DIR}/comm_appmsg.h
   ${MODEL_HDR_DIR}/comm_bridge.h
   ${MODEL_HDR_DIR}/comm_buffers.h
+  ${MODEL_HDR_DIR}/comm_framer.h
   ${MODEL_HDR_DIR}/comm_can_util.h
   ${MODEL_HDR_DIR}/comm_decoder.h
   ${MODEL_HDR_DIR}/comm_driver.h
