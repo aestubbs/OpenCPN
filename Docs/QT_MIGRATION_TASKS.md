@@ -4,8 +4,10 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.5a done (`CommDriverN2KNet` rewritten to native Qt;
-build green, app runs). Next: P1.5b (migrate `comm_drv_n0183_net`).
+**Current position:** P1.5a done; P1.5 reframed around Qt-native transport
+classes (see `QT_MIGRATION_COMMS_PLAN.md`). Next: the two reference drivers —
+P1.5g (`comm_drv_n2k_socketcan` → `QCanBus`) and P1.5e (`comm_drv_n0183_serial`
+→ `QSerialPort`).
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -74,24 +76,32 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
       Dropped `: public wxEvtHandler`; header-only change, cpp untouched. The
       `m_listeners` `ObsListener` map stays on wx with the per-message channel.
       *(dep: P1.1)*
-- [~] **P1.5** Migrate the comm drivers (`comm_drv_*`) off `wxEvtHandler` to
-      native Qt. Split into per-driver sub-tasks.  *(dep: P1.2–1.4)*
-  - [x] **P1.5a** `CommDriverN2KNet` (NMEA 2000 IP) — full wxSocket → Qt
-        rewrite: native `QObject`, `QTcpSocket`/`QTcpServer`/`QUdpSocket`,
-        `QTimer`, decoded payloads delivered via a queued signal/slot. Plan
-        and detail in [`QT_MIGRATION_N2K_NET_PLAN.md`](./QT_MIGRATION_N2K_NET_PLAN.md).
-        The build now defines `QT_NO_KEYWORDS` (see P3.12). Build green, app
-        runs; functional RX/TX needs gateway/hardware testing.
-  - [ ] **P1.5b** `CommDriverN0183Net` (NMEA 0183 IP) — same wxSocket → Qt
-        rewrite (VHF/AIS integration). Follows the P1.5a pattern.
-  - [ ] **P1.5c** `CommDriverSignalKNet` — off `wxEvtHandler`; websocket
-        thread → main-thread delivery via a queued signal/slot.
-  - [ ] **P1.5d** `CommDriverN2KSerial` — off `wxEvtHandler`; the `wxThread`
-        worker posts a custom `wxEvent`, migrate to a queued signal/slot.
-  - [ ] **P1.5e** `CommDriverN0183Serial` — `wxEvtHandler` base is vestigial
-        (`SerialIo` already uses `std::function` callbacks); drop the base.
-  - [ ] **P1.5f** Android N0183 drivers (`comm_drv_n0183_android_*`) —
-        deferred; `__OCPN__ANDROID__`-only, wxQt backend, not in desktop build.
+- [~] **P1.5** Migrate the comm drivers (`comm_drv_*`) to **Qt-native
+      transport classes** — adopt the proper Qt class per transport, deleting
+      vendored libs and platform `#ifdef`s, not merely dropping `wxEvtHandler`.
+      Strategy and driver map: [`QT_MIGRATION_COMMS_PLAN.md`](./QT_MIGRATION_COMMS_PLAN.md).
+      Order: the two reference drivers **P1.5g** and **P1.5e** first; the rest
+      adapt from them.  *(dep: P1.2–1.4)*
+  - [x] **P1.5a** `CommDriverN2KNet` (N2K over TCP/UDP) → `QtNetwork`. Done —
+        see [`QT_MIGRATION_N2K_NET_PLAN.md`](./QT_MIGRATION_N2K_NET_PLAN.md).
+  - [ ] **P1.5g** `CommDriverN2KSocketCAN` → `QCanBus` (QtSerialBus).
+        *Frame-oriented reference pattern.* `QCanBusDevice` (socketcan plugin)
+        replaces the raw `PF_CAN` socket, the `ioctl`/`setsockopt` setup, and
+        the `Worker` read thread; N2K fast-message reassembly stays. SocketCAN
+        is Linux-only — build & verify on **Linux**, not the macOS dev box.
+  - [ ] **P1.5e** `CommDriverN0183Serial` → `QSerialPort`. *Byte-stream serial
+        reference pattern.* Replaces the `SerialIo` abstraction and the
+        vendored `libs/serial`; `QSerialPortInfo` replaces the `ser_ports.cpp`
+        enumeration `#ifdef`s. Verifiable on macOS.
+  - [ ] **P1.5d** `CommDriverN2KSerial` → `QSerialPort` + N2K gateway framing
+        (adapts P1.5e); retires its vendored `serial/serial.h` use.
+  - [ ] **P1.5b** `CommDriverN0183Net` (NMEA 0183 IP) → `QtNetwork`
+        (adapts P1.5a).
+  - [ ] **P1.5c** `CommDriverSignalKNet` → `QWebSocket`; retires the vendored
+        `IXWebSocket` for this driver.
+  - [ ] **P1.5f** Android N0183 drivers (`comm_drv_n0183_android_*`) →
+        `QBluetoothSocket`; deferred (`__OCPN__ANDROID__`-only, not in the
+        desktop build).
 - [ ] **P1.6** Sweep `wxString` → `QString` across `model/` and core `libs/`.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
@@ -218,3 +228,12 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   were left as-is (their `wxString` use is the P1.6 string sweep). Build
   green, 58/59 tests pass; on-water/simulator testing of a real N2K gateway
   still required.
+- 2026-05-18 — P1.5 reframed (`QT_MIGRATION_COMMS_PLAN.md`): rather than just
+  dropping `wxEvtHandler`, each driver adopts the correct Qt transport class
+  (`QSerialPort`, `QCanBus`, `QtNetwork`, `QWebSocket`), which lets vendored
+  libs (`libs/serial`, `IXWebSocket`) and the `ser_ports.cpp` `#ifdef` maze be
+  deleted. Two reference drivers go first — P1.5g (`socketcan` → `QCanBus`,
+  frame-oriented) and P1.5e (`n0183_serial` → `QSerialPort`, byte-stream); the
+  others adapt. Note: P1.5g is Linux-only and cannot be built on the macOS
+  dev box. Key distinction: only `socketcan` is real CAN — the N2K *gateway*
+  drivers (`n2k_serial`, `n2k_net`) are byte-stream transports, not `QCanBus`.

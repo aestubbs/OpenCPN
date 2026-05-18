@@ -1,8 +1,9 @@
 # P1.5a — `CommDriverN2KNet` wxSocket → Qt rewrite
 
-> Status: **plan** — companion to [`QT_MIGRATION_TASKS.md`](./QT_MIGRATION_TASKS.md)
-> task **P1.5a**. Scope: the NMEA 2000 IP network driver only. The NMEA 0183
-> net driver (`comm_drv_n0183_net`) and SignalK net driver follow as P1.5b/c.
+> Status: **done** (2026-05-18). Scope: the NMEA 2000 IP network driver only.
+> The P1.5 effort is now governed by the broader
+> [`QT_MIGRATION_COMMS_PLAN.md`](./QT_MIGRATION_COMMS_PLAN.md); this document
+> remains as the record of the completed P1.5a rewrite.
 
 ## 1. Why this driver first
 
