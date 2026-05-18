@@ -4,10 +4,11 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.5a, P1.5e, P1.5f, P1.5i, P1.5b, P1.5d done.
-`n0183_net` (TCP client + UDP) and `n2k_serial` are ported onto the comms
-framework (`QT_MIGRATION_COMMS_ARCH.md`). SignalK and SocketCAN are parked
-(P1.5c/g → P1.5m). Next: P1.5h, P1.5j.
+**Current position:** P1.5a, P1.5e, P1.5f, P1.5i, P1.5b, P1.5d, P1.5h done;
+P1.5j part 1 (`n0183_serial`) done. `n0183_serial`/`n0183_net`/`n2k_serial`
+are on the comms framework (`QT_MIGRATION_COMMS_ARCH.md`); `n2k_net` stays
+the standalone P1.5a driver (P1.5j-2 deferred). SignalK/SocketCAN parked
+(P1.5m). Next: P1.6 (wxString sweep), then P1.5j-2 alongside it.
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -141,10 +142,28 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         unreachable from the factory — NMEA 0183 + NMEA 2000 (serial &
         net) cover current needs. Revisit deletes the parked sources once
         P1.5c and P1.5g land, or sooner if either protocol is needed.
-  - [ ] **P1.5h** `ser_ports.cpp` serial-port enumeration → `QSerialPortInfo`,
-        retiring the platform `#ifdef` branches.
-  - [ ] **P1.5j** Refactor the standalone P1.5a (`n2k_net`) and P1.5e
+  - [x] **P1.5h** `ser_ports.cpp` serial-port enumeration → `QSerialPortInfo`.
+        Five platform implementations (sysfs scan, libudev, Win32 SetupAPI,
+        macOS IOKit, vendored libserial) behind an `#ifdef` maze collapse to
+        one ~30-line cross-platform function. `libs/serial` stays for other
+        GUI callers.
+  - [~] **P1.5j** Refactor the standalone P1.5a (`n2k_net`) and P1.5e
         (`n0183_serial`) onto the framework, retiring their bespoke code.
+    - [x] **P1.5j-1** `n0183_serial` re-homed onto the framework; bespoke
+          `CommDriverN0183Serial` deleted; Garmin host mode dropped from
+          scope. Also fixed a latent P1.5b bug: the 0183 *output* path
+          downcast every driver to `CommDriverN0183` for `GetParams()`,
+          which a framework driver is not — 0183 transmit to a TCP/UDP
+          connection was broken. New `ConnectionParamsProvider` capability
+          interface (cf. `DriverStatsProvider`) replaces the concrete
+          downcast.
+    - [ ] **P1.5j-2** `n2k_net` onto the framework. Deferred: it already
+          runs as a working Qt-native driver (P1.5a — no `wxEvtHandler`/
+          `wxSocket`); re-homing it means re-expressing ~1000 lines of
+          multi-format gateway parsing (YD_RAW, Actisense ASCII/binary,
+          SeaSmart, MiniPlex) + fast-packet reassembly into a multi-format
+          `N2kGatewayFramer`/`N2kDecoder` — high cost, zero functional gain.
+          Best done alongside the P1.6 `wxString` sweep of those parsers.
   - [x] **P1.5f** Deleted the Android comm drivers (`comm_drv_n0183_android_*`,
         `INTERNAL_GPS`/`INTERNAL_BT`) and Android serial I/O
         (`android_serial_io.cpp`, deleted with P1.5e). Android is dropped for
@@ -356,3 +375,15 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   SignalK driver; `wiz_ui.cpp` drops its now-unused `comm_drv_signalk_net
   .h` include (its SignalK discovery uses `mdns_query` only). New tracker
   item P1.5m tracks un-parking. Build green: OpenCPN app + tests link.
+- 2026-05-18 — P1.5h done: serial-port enumeration rewritten on
+  QSerialPortInfo, replacing five platform-specific implementations.
+- 2026-05-18 — P1.5j part 1 done: n0183_serial re-homed onto the comms
+  framework, bespoke CommDriverN0183Serial deleted, Garmin host mode
+  dropped from scope. Surfaced and fixed a latent P1.5b defect — the 0183
+  output path (BroadcastNMEA0183Message, Send-to-GPS) downcast every
+  driver to the legacy CommDriverN0183 base for GetParams(), so 0183
+  transmit to a framework (TCP/UDP/serial) connection hit a null cast.
+  Fixed with a ConnectionParamsProvider capability interface. P1.5j part 2
+  (n2k_net) deferred: it already works as a Qt-native standalone driver
+  and re-homing it is a large, zero-functional-value rewrite of its
+  multi-format gateway parsing — better folded into the P1.6 string sweep.
