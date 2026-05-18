@@ -4,9 +4,9 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.5a, P1.5e, P1.5f done. Remaining P1.5 sub-tasks —
-P1.5b/c/d/g (driver rewrites) and P1.5h (`ser_ports`). Next: P1.5b
-(`comm_drv_n0183_net` → `QtNetwork`, adapts P1.5a).
+**Current position:** P1.5a, P1.5e, P1.5f done. P1.5 architecture agreed —
+a comms framework (`QT_MIGRATION_COMMS_ARCH.md`). Next: P1.5i (build the
+framework), then port P1.5b/d/c/g onto it.
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -76,13 +76,20 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
       `m_listeners` `ObsListener` map stays on wx with the per-message channel.
       *(dep: P1.1)*
 - [~] **P1.5** Migrate the comm drivers (`comm_drv_*`) to **Qt-native
-      transport classes** — adopt the proper Qt class per transport, deleting
-      vendored libs and platform `#ifdef`s, not merely dropping `wxEvtHandler`.
-      Strategy and driver map: [`QT_MIGRATION_COMMS_PLAN.md`](./QT_MIGRATION_COMMS_PLAN.md).
-      Order: the two reference drivers **P1.5g** and **P1.5e** first; the rest
-      adapt from them.  *(dep: P1.2–1.4)*
-  - [x] **P1.5a** `CommDriverN2KNet` (N2K over TCP/UDP) → `QtNetwork`. Done —
-        see [`QT_MIGRATION_N2K_NET_PLAN.md`](./QT_MIGRATION_N2K_NET_PLAN.md).
+      transport classes**. P1.5a and P1.5e revealed a common shape; the rest
+      are built on a planned **comms framework** — `CommTransport` + `Framer`
+      + `ProtocolDecoder` + a generic `CommDriver` — see
+      [`QT_MIGRATION_COMMS_ARCH.md`](./QT_MIGRATION_COMMS_ARCH.md) and
+      [`QT_MIGRATION_COMMS_PLAN.md`](./QT_MIGRATION_COMMS_PLAN.md).
+      *(dep: P1.2–1.4)*
+  - [x] **P1.5a** `CommDriverN2KNet` (N2K over TCP/UDP) → `QtNetwork`. Done as
+        a standalone driver — see
+        [`QT_MIGRATION_N2K_NET_PLAN.md`](./QT_MIGRATION_N2K_NET_PLAN.md);
+        refactored onto the framework by P1.5j.
+  - [ ] **P1.5i** Build the comms framework — `CommTransport` (+ the transport
+        implementations), `Framer` (`LineFramer`, `PassThroughFramer`),
+        `ProtocolDecoder` interface, and the generic `CommDriver` (lifecycle,
+        reconnect, watchdog, stats). The remaining drivers are built on it.
   - [x] **P1.5e** `CommDriverN0183Serial` → `QSerialPort`. *Primary reference
         pattern* (byte-stream serial). Native `QObject` owning a `QSerialPort`;
         RX is event-loop driven (`readyRead` → `LineBuffer` framing). The
@@ -90,20 +97,21 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         `serial_io.h`, `std_serial_io.cpp`, `android_serial_io.cpp`. The
         vendored `libs/serial` is no longer used here (still used by P1.5d).
         Build green, 58/59 tests pass.
+  - [ ] **P1.5b** `n0183_net` on the framework — `TcpClient`/`Udp` transport
+        + `LineFramer` + `Nmea0183Decoder` (built on P1.5i).
+  - [ ] **P1.5d** `n2k_serial` on the framework — `SerialTransport` +
+        `N2kGatewayFramer` + `N2kDecoder`; retires vendored `serial/serial.h`.
+  - [ ] **P1.5c** `signalk_net` on the framework — `WebSocketTransport`
+        (`QWebSocket`) + `PassThroughFramer` + `SignalKDecoder`; retires the
+        vendored `IXWebSocket` for this driver.
+  - [ ] **P1.5g** `n2k_socketcan` on the framework — `CanTransport`
+        (`QCanBusDevice`) + `PassThroughFramer` + `N2kDecoder`. Replaces the
+        raw `PF_CAN` socket / `ioctl` / `Worker` thread. Backend by name —
+        `socketcan` (Linux, real HW) or `virtualcan` (macOS dev/test).
   - [ ] **P1.5h** `ser_ports.cpp` serial-port enumeration → `QSerialPortInfo`,
         retiring the platform `#ifdef` branches.
-  - [ ] **P1.5g** `CommDriverN2KSocketCAN` → `QCanBus` (QtSerialBus).
-        *Frame-oriented reference pattern.* `QCanBusDevice` replaces the raw
-        `PF_CAN` socket, the `ioctl`/`setsockopt` setup, and the `Worker` read
-        thread; N2K fast-message reassembly stays. On `QCanBus` the driver is
-        portable and builds on macOS; backend by name — `socketcan` (Linux,
-        real HW) or `virtualcan` (macOS dev/test).
-  - [ ] **P1.5d** `CommDriverN2KSerial` → `QSerialPort` + N2K gateway framing
-        (adapts P1.5e); retires its vendored `serial/serial.h` use.
-  - [ ] **P1.5b** `CommDriverN0183Net` (NMEA 0183 IP) → `QtNetwork`
-        (adapts P1.5a).
-  - [ ] **P1.5c** `CommDriverSignalKNet` → `QWebSocket`; retires the vendored
-        `IXWebSocket` for this driver.
+  - [ ] **P1.5j** Refactor the standalone P1.5a (`n2k_net`) and P1.5e
+        (`n0183_serial`) onto the framework, retiring their bespoke code.
   - [x] **P1.5f** Deleted the Android comm drivers (`comm_drv_n0183_android_*`,
         `INTERNAL_GPS`/`INTERNAL_BT`) and Android serial I/O
         (`android_serial_io.cpp`, deleted with P1.5e). Android is dropped for
@@ -251,6 +259,17 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   `readyRead`; reconnect is a `QTimer`. This is the byte-stream reference
   pattern; `n2k_serial` (P1.5d) and `n0183_net` (P1.5b) adapt from it. Build
   green, 58/59 tests pass; functional verification needs a serial device.
+- 2026-05-18 — P1.5 architecture agreed (`QT_MIGRATION_COMMS_ARCH.md`): the
+  two completed drivers (P1.5a, P1.5e) revealed a common shape, and the legacy
+  drivers fuse medium + protocol + lifecycle per N×M combination with
+  reconnect/watchdog/stats re-derived each time. Planned framework: a pipeline
+  of `CommTransport` (media I/O) → `Framer` (boundary finding; pass-through for
+  frame-native media) → `ProtocolDecoder` (frame → NavMsg) → generic
+  `CommDriver` (lifecycle/reconnect/watchdog/stats, written once). Key point:
+  it is *all frames* — byte-stream media just need a Framer to find boundaries;
+  frame-native media (CAN, WebSocket) deliver them pre-built. Remaining drivers
+  build on the framework (P1.5i); P1.5a/e refactor onto it (P1.5j). Decoders/
+  framers are pure → unit-testable without hardware.
 - 2026-05-18 — P1.5 reframed (`QT_MIGRATION_COMMS_PLAN.md`): rather than just
   dropping `wxEvtHandler`, each driver adopts the correct Qt transport class
   (`QSerialPort`, `QCanBus`, `QtNetwork`, `QWebSocket`), which lets vendored

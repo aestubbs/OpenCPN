@@ -78,13 +78,13 @@ Then, as adaptations:
 5. **P1.5c — `comm_drv_signalk_net`** — `QWebSocket`.
 6. **P1.5f — Android Bluetooth driver** — `QBluetoothSocket`; deferred.
 
-## 5. Common driver shape
+## 5. Common driver shape — the comms framework
 
-Once P1.5g and P1.5e are done the genuinely shared surface will be visible. A
-thin `CommTransport` interface (open / close / write + one "data arrived"
-signal) may then be extracted so `AbstractCommDriver` subclasses are uniform —
-**but the interface is derived from the two reference drivers, not designed up
-front.** Do not pre-abstract; let P1.5g and P1.5e reveal it.
+P1.5a and P1.5e revealed the shared shape; it is now a planned architecture —
+see [`QT_MIGRATION_COMMS_ARCH.md`](./QT_MIGRATION_COMMS_ARCH.md). The remaining
+drivers are built as `CommTransport` + `Framer` + `ProtocolDecoder` triples on
+a single generic `CommDriver`, not as standalone classes. The framework is
+built first (P1.5i); P1.5a/e are refactored onto it afterwards (P1.5j).
 
 All driver classes remain native `QObject`s with `Q_OBJECT` / `Q_SIGNALS` /
 `Q_SLOTS` under `QT_NO_KEYWORDS` (established in P1.5a; relaxed by P3.12).
