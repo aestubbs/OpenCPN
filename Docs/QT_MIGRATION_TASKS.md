@@ -4,11 +4,11 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.5a, P1.5e, P1.5f, P1.5i, P1.5b, P1.5d, P1.5h done;
-P1.5j part 1 (`n0183_serial`) done. `n0183_serial`/`n0183_net`/`n2k_serial`
-are on the comms framework (`QT_MIGRATION_COMMS_ARCH.md`); `n2k_net` stays
-the standalone P1.5a driver (P1.5j-2 deferred). SignalK/SocketCAN parked
-(P1.5m). Next: P1.6 (wxString sweep), then P1.5j-2 alongside it.
+**Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
+the comms pipeline is on the framework and, as of P1.6a, wx-free behind a
+`ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
+SignalK/SocketCAN parked (P1.5m). Next: P1.6b+ — widen the wx-free boundary
+into the adjacent layers (routes, nav data, config).
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -169,7 +169,22 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         (`android_serial_io.cpp`, deleted with P1.5e). Android is dropped for
         the migration (`QT_MIGRATION.md` §1, X.4); mobile returns natively via
         QtQuick after the core is on Qt. Desktop build green.
-- [ ] **P1.6** Sweep `wxString` → `QString` across `model/` and core `libs/`.
+- [~] **P1.6** Remove `wxString` from `model/`, working outward from a wx-free
+      core behind facade/adaptor boundaries (the wx-typed value stays at the
+      boundary; the layer below is wx-free; an adaptor bridges them — reusable
+      as each layer migrates).
+  - [x] **P1.6a** Comms pipeline de-wx'd. The framework (`CommTransport`,
+        `Framer`s, `Nmea0183Decoder`/`N2kDecoder`, generic `CommDriver`,
+        `N2kGatewayManager`) no longer depends on wxWidgets. New wx-free
+        `SentenceFilter` value type replaces the `wxString`/`wxRegEx` input
+        filter; `ConnectionParams::MakeInputFilter()` is the adaptor; the
+        factory adapts `ConnectionParams` → wx-free pipeline inputs. Logging
+        moved to Qt (`qWarning`/`qInfo`). `ConnectionParams` itself stays
+        `wxString` — the boundary, shared with the wx GUI and plugin ABI.
+  - [ ] **P1.6b+** Widen the wx-free boundary outward (routes, nav data,
+        config, …) as later layers migrate — same facade pattern. Legacy
+        gateway drivers (`n2k_net` parsers etc.) are swept only when revived,
+        not pre-emptively.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
 - [ ] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract `config_vars`.
@@ -387,3 +402,10 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   (n2k_net) deferred: it already works as a Qt-native standalone driver
   and re-homing it is a large, zero-functional-value rewrite of its
   multi-format gateway parsing — better folded into the P1.6 string sweep.
+- 2026-05-18 — P1.6a done: the comms pipeline is de-wx'd. Established the
+  facade/adaptor pattern for the wxString sweep — a wx-free core (here the
+  transport→framer→decoder→driver pipeline) behind a wx-typed boundary
+  (ConnectionParams, kept for the GUI + plugin ABI), with an adaptor (the
+  factory + ConnectionParams::MakeInputFilter) bridging. New wx-free
+  SentenceFilter value type; framework logging moved to Qt. The pattern is
+  reusable: P1.6b+ widens the wx-free boundary outward layer by layer.
