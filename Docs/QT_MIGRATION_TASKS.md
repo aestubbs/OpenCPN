@@ -4,8 +4,8 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.4 done (build green, app runs). Next: P1.5
-(migrate the ~15 comm drivers).
+**Current position:** P1.5a done (`CommDriverN2KNet` rewritten to native Qt;
+build green, app runs). Next: P1.5b (migrate `comm_drv_n0183_net`).
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -74,7 +74,24 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
       Dropped `: public wxEvtHandler`; header-only change, cpp untouched. The
       `m_listeners` `ObsListener` map stays on wx with the per-message channel.
       *(dep: P1.1)*
-- [ ] **P1.5** Migrate the ~15 comm drivers (`comm_drv_*`) to signal/callback based.  *(dep: P1.2–1.4)*
+- [~] **P1.5** Migrate the comm drivers (`comm_drv_*`) off `wxEvtHandler` to
+      native Qt. Split into per-driver sub-tasks.  *(dep: P1.2–1.4)*
+  - [x] **P1.5a** `CommDriverN2KNet` (NMEA 2000 IP) — full wxSocket → Qt
+        rewrite: native `QObject`, `QTcpSocket`/`QTcpServer`/`QUdpSocket`,
+        `QTimer`, decoded payloads delivered via a queued signal/slot. Plan
+        and detail in [`QT_MIGRATION_N2K_NET_PLAN.md`](./QT_MIGRATION_N2K_NET_PLAN.md).
+        The build now defines `QT_NO_KEYWORDS` (see P3.12). Build green, app
+        runs; functional RX/TX needs gateway/hardware testing.
+  - [ ] **P1.5b** `CommDriverN0183Net` (NMEA 0183 IP) — same wxSocket → Qt
+        rewrite (VHF/AIS integration). Follows the P1.5a pattern.
+  - [ ] **P1.5c** `CommDriverSignalKNet` — off `wxEvtHandler`; websocket
+        thread → main-thread delivery via a queued signal/slot.
+  - [ ] **P1.5d** `CommDriverN2KSerial` — off `wxEvtHandler`; the `wxThread`
+        worker posts a custom `wxEvent`, migrate to a queued signal/slot.
+  - [ ] **P1.5e** `CommDriverN0183Serial` — `wxEvtHandler` base is vestigial
+        (`SerialIo` already uses `std::function` callbacks); drop the base.
+  - [ ] **P1.5f** Android N0183 drivers (`comm_drv_n0183_android_*`) —
+        deferred; `__OCPN__ANDROID__`-only, wxQt backend, not in desktop build.
 - [ ] **P1.6** Sweep `wxString` → `QString` across `model/` and core `libs/`.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
@@ -116,6 +133,10 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
 - [ ] **P3.9** Dialogs (AIS target info, object query, alarms) in QML.
 - [ ] **P3.10** i18n via Qt Linguist (`.ts`/`tr()`); migrate translatable strings.
 - [ ] **P3.11** Remove the parallel wx build path; fork is now Qt-only.
+- [ ] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
+      `slots` / `emit` keywords now that no wx/system headers remain to clash
+      with. Touches the QObject classes added during Phase 1 (`observable_qt`,
+      `comm_drv_*`). Introduced by P1.5a.
 
 ## Phase 4 — Qt plugin host  (est. 6–8 wks)
 
@@ -182,3 +203,18 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   needing Qt, and the remaining `ObsListener` map needs no event-handler base
   (confirmed by P1.3). Header-only change. Build green, 58/59 tests pass
   (same unrelated locale test).
+- 2026-05-18 — P1.5 found to be deeper than expected and split into per-driver
+  sub-tasks P1.5a–f. The two net drivers (`n2k_net`, `n0183_net`) are
+  `wxSocket`-bound — dropping `wxEvtHandler` means a full socket-layer rewrite
+  to Qt, not a base-class swap.
+- 2026-05-18 — P1.5a done: `CommDriverN2KNet` rewritten as a native `QObject`
+  using `QTcpSocket`/`QTcpServer`/`QUdpSocket` + `QTimer`; the custom `wxEvent`
+  payload channel became a queued signal/slot. Decision: use **native QObject**
+  in driver headers (the fork's intent) rather than pimpl, and define
+  **`QT_NO_KEYWORDS`** project-wide so the `signals`/`slots`/`emit` macros
+  cannot collide with wx/system headers — Qt code uses `Q_SIGNALS`/`Q_SLOTS`/
+  `Q_EMIT`. `observable_qt` converted to match. Transitional; P3.12 records
+  removing `QT_NO_KEYWORDS` after the wx path is gone. The protocol parsers
+  were left as-is (their `wxString` use is the P1.6 string sweep). Build
+  green, 58/59 tests pass; on-water/simulator testing of a real N2K gateway
+  still required.

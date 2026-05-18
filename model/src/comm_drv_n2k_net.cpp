@@ -47,6 +47,19 @@
 #include <netinet/tcp.h>
 #endif
 
+#include <cstring>
+
+// Qt headers first -- they must be parsed before wxWidgets/system headers
+// pull in macros (Carbon check/verify, X11 Bool/None) that would otherwise
+// collide with Qt. See docs/QT_MIGRATION_N2K_NET_PLAN.md.
+#include <QByteArray>
+#include <QHostAddress>
+#include <QMetaType>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QTimer>
+#include <QUdpSocket>
+
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
 #include <wx/wx.h>
@@ -54,13 +67,7 @@
 
 #include <wx/tokenzr.h>
 #include <wx/datetime.h>
-
-#include <wx/socket.h>
 #include <wx/log.h>
-#include <wx/memory.h>
-#include <wx/chartype.h>
-#include <wx/wx.h>
-#include <wx/sckaddr.h>
 
 #include "model/comm_drv_n2k_net.h"
 #include "model/comm_navmsg_bus.h"
@@ -74,46 +81,9 @@ using namespace std::literals::chrono_literals;
 
 static const int kNotFound = -1;
 
-class MrqContainer {
-public:
-  struct ip_mreq m_mrq;
-  void SetMrqAddr(unsigned int addr) {
-    m_mrq.imr_multiaddr.s_addr = addr;
-    m_mrq.imr_interface.s_addr = INADDR_ANY;
-  }
-};
-
 /// CAN v2.0 29 bit header as used by NMEA 2000
 CanHeader::CanHeader()
     : priority('\0'), source('\0'), destination('\0'), pgn(-1) {};
-
-wxDEFINE_EVENT(wxEVT_COMMDRIVER_N2K_NET, CommDriverN2KNetEvent);
-
-class CommDriverN2KNetEvent;
-wxDECLARE_EVENT(wxEVT_COMMDRIVER_N2K_NET, CommDriverN2KNetEvent);
-
-class CommDriverN2KNetEvent : public wxEvent {
-public:
-  CommDriverN2KNetEvent(wxEventType commandType = wxEVT_NULL, int id = 0)
-      : wxEvent(id, commandType) {};
-  ~CommDriverN2KNetEvent() {};
-
-  // accessors
-  void SetPayload(std::shared_ptr<std::vector<unsigned char>> data) {
-    m_payload = data;
-  }
-  std::shared_ptr<std::vector<unsigned char>> GetPayload() { return m_payload; }
-
-  // required for sending with wxPostEvent()
-  wxEvent* Clone() const {
-    CommDriverN2KNetEvent* newevent = new CommDriverN2KNetEvent(*this);
-    newevent->m_payload = this->m_payload;
-    return newevent;
-  };
-
-private:
-  std::shared_ptr<std::vector<unsigned char>> m_payload;
-};
 
 static uint64_t PayloadToName(const std::vector<unsigned char> payload) {
   uint64_t name;
@@ -125,59 +95,67 @@ static uint64_t PayloadToName(const std::vector<unsigned char> payload) {
 /*    commdriverN2KNet implementation
  * */
 
-#define TIMER_SOCKET_N2KNET 7339
-
-BEGIN_EVENT_TABLE(CommDriverN2KNet, wxEvtHandler)
-EVT_TIMER(TIMER_SOCKET_N2KNET, CommDriverN2KNet::OnTimerSocket)
-EVT_SOCKET(DS_SOCKET_ID, CommDriverN2KNet::OnSocketEvent)
-EVT_SOCKET(DS_SERVERSOCKET_ID, CommDriverN2KNet::OnServerSocketEvent)
-EVT_TIMER(TIMER_SOCKET_N2KNET + 1, CommDriverN2KNet::OnSocketReadWatchdogTimer)
-END_EVENT_TABLE()
-
-// CommDriverN0183Net::CommDriverN0183Net() : CommDriverN0183() {}
-
 CommDriverN2KNet::CommDriverN2KNet(const ConnectionParams* params,
                                    DriverListener& listener)
     : CommDriverN2K(params->GetStrippedDSPort()),
       m_params(*params),
       m_listener(listener),
       m_stats_timer(*this, 2s),
-      m_net_port(wxString::Format("%i", params->NetworkPort)),
+      m_net_port(std::to_string(params->NetworkPort)),
       m_net_protocol(params->NetProtocol),
-      m_sock(NULL),
-      m_tsock(NULL),
-      m_socket_server(NULL),
+      m_host(params->NetworkAddress.ToStdString()),
       m_is_multicast(false),
+      m_tcp_socket(nullptr),
+      m_tcp_server(nullptr),
+      m_rx_socket(nullptr),
+      m_tx_socket(nullptr),
+      m_socket_timer(nullptr),
+      m_watchdog_timer(nullptr),
+      m_prodinfo_timer(nullptr),
       m_txenter(0),
-      m_portstring(params->GetDSPort()),
+      m_dog_value(0),
+      m_portstring(params->GetDSPort().ToStdString()),
       m_io_select(params->IOSelect),
+      m_brx_connect_event(false),
       m_connection_type(params->Type),
       m_bok(false),
       m_circle(RX_BUFFER_SIZE_NET),
       m_TX_available(false) {
-  m_addr.Hostname(params->NetworkAddress);
-  m_addr.Service(params->NetworkPort);
-
   m_driver_stats.driver_bus = NavAddr::Bus::N2000;
   m_driver_stats.driver_iface = params->GetStrippedDSPort();
 
-  m_socket_timer.SetOwner(this, TIMER_SOCKET_N2KNET);
-  m_socketread_watchdog_timer.SetOwner(this, TIMER_SOCKET_N2KNET + 1);
   this->attributes["netAddress"] = params->NetworkAddress.ToStdString();
-  char port_char[10];
-  sprintf(port_char, "%d", params->NetworkPort);
-  this->attributes["netPort"] = std::string(port_char);
+  this->attributes["netPort"] = std::to_string(params->NetworkPort);
   this->attributes["userComment"] = params->UserComment.ToStdString();
   this->attributes["ioDirection"] = DsPortTypeToString(params->IOSelect);
 
-  // Prepare the wxEventHandler to accept events from the actual hardware thread
-  Bind(wxEVT_COMMDRIVER_N2K_NET, &CommDriverN2KNet::handle_N2K_MSG, this);
+  // Decoded payloads cross a queued connection -- register the metatype.
+  qRegisterMetaType<CommDriverN2KNet::N2kPayloadPtr>(
+      "CommDriverN2KNet::N2kPayloadPtr");
 
-  m_prodinfo_timer.Connect(
-      wxEVT_TIMER, wxTimerEventHandler(CommDriverN2KNet::OnProdInfoTimer), NULL,
-      this);
+  // Native Qt signal/slot replacing the old custom wxEvent + AddPendingEvent.
+  // QueuedConnection keeps the deferral: the payload is dispatched after the
+  // socket read handler returns.
+  connect(this, &CommDriverN2KNet::N2kMsgReceived, this,
+          &CommDriverN2KNet::HandleN2kPayload, Qt::QueuedConnection);
 
-  m_mrq_container = new MrqContainer;
+  // Reconnect timer -- one-shot, restarted as needed.
+  m_socket_timer = new QTimer(this);
+  m_socket_timer->setSingleShot(true);
+  connect(m_socket_timer, &QTimer::timeout, this,
+          &CommDriverN2KNet::OnSocketTimer);
+
+  // No-data watchdog -- 1 s continuous.
+  m_watchdog_timer = new QTimer(this);
+  connect(m_watchdog_timer, &QTimer::timeout, this,
+          &CommDriverN2KNet::OnWatchdogTimer);
+
+  // YDEN TX-capability probe -- single-shot.
+  m_prodinfo_timer = new QTimer(this);
+  m_prodinfo_timer->setSingleShot(true);
+  connect(m_prodinfo_timer, &QTimer::timeout, this,
+          &CommDriverN2KNet::OnProdInfoTimer);
+
   m_ib = 0;
   m_bInMsg = false;
   m_bGotESC = false;
@@ -196,10 +174,9 @@ CommDriverN2KNet::CommDriverN2KNet(const ConnectionParams* params,
 }
 
 CommDriverN2KNet::~CommDriverN2KNet() {
-  delete m_mrq_container;
-  delete[] rx_buffer;
-
   Close();
+  delete[] rx_buffer;
+  // QTimers and Qt sockets are parented to this driver and destroyed with it.
 }
 
 typedef struct {
@@ -240,7 +217,7 @@ bool CommDriverN2KNet::HandleMgntMsg(uint64_t pgn,
   return b_handled;
 }
 
-void CommDriverN2KNet::OnProdInfoTimer(wxTimerEvent& ev) {
+void CommDriverN2KNet::OnProdInfoTimer() {
   // Check the results of the PGN 126996 capture
   bool b_found = false;
   for (const auto& [key, value] : prod_info_map) {
@@ -259,8 +236,7 @@ void CommDriverN2KNet::OnProdInfoTimer(wxTimerEvent& ev) {
   prod_info_map.clear();
 }
 
-void CommDriverN2KNet::handle_N2K_MSG(CommDriverN2KNetEvent& event) {
-  auto p = event.GetPayload();
+void CommDriverN2KNet::HandleN2kPayload(CommDriverN2KNet::N2kPayloadPtr p) {
   std::vector<unsigned char>* payload = p.get();
 
   // extract PGN
@@ -280,170 +256,138 @@ void CommDriverN2KNet::handle_N2K_MSG(CommDriverN2KNetEvent& event) {
 }
 
 void CommDriverN2KNet::Open() {
-#ifdef __UNIX__
-#if wxCHECK_VERSION(3, 0, 0)
-  in_addr_t addr =
-      ((struct sockaddr_in*)GetAddr().GetAddressData())->sin_addr.s_addr;
-#else
-  in_addr_t addr =
-      ((struct sockaddr_in*)GetAddr().GetAddress()->m_addr)->sin_addr.s_addr;
-#endif
-#else
-  unsigned int addr = inet_addr(GetAddr().IPAddress().mb_str());
-#endif
-  // Create the socket
+  unsigned int addr =
+      QHostAddress(QString::fromStdString(m_host)).toIPv4Address();
   switch (m_net_protocol) {
-    case TCP: {
+    case TCP:
       OpenNetworkTCP(addr);
       break;
-    }
-    case UDP: {
+    case UDP:
       OpenNetworkUDP(addr);
       break;
-    }
     default:
       break;
   }
   SetOk(true);
 }
 
+void CommDriverN2KNet::ConnectTcpSocketSignals() {
+  if (!m_tcp_socket) return;
+  connect(m_tcp_socket, &QTcpSocket::readyRead, this,
+          &CommDriverN2KNet::OnRxSocketData);
+  connect(m_tcp_socket, &QTcpSocket::connected, this,
+          &CommDriverN2KNet::OnSocketConnected);
+  connect(m_tcp_socket, &QTcpSocket::disconnected, this,
+          &CommDriverN2KNet::OnSocketDisconnected);
+  connect(m_tcp_socket, &QAbstractSocket::errorOccurred, this,
+          &CommDriverN2KNet::OnSocketDisconnected);
+}
+
 void CommDriverN2KNet::OpenNetworkUDP(unsigned int addr) {
+  (void)addr;  // multicast is detected from the host address below
+  const quint16 port = static_cast<quint16>(m_params.NetworkPort);
+  QHostAddress host_addr(QString::fromStdString(m_host));
+
   if (GetPortType() != DS_TYPE_OUTPUT) {
-    //  We need a local (bindable) address to create the Datagram receive socket
-    // Set up the receive socket
-    wxIPV4address conn_addr;
-    conn_addr.Service(GetNetPort());
-    conn_addr.AnyAddress();
-    SetSock(
-        new wxDatagramSocket(conn_addr, wxSOCKET_NOWAIT | wxSOCKET_REUSEADDR));
-
-    // Test if address is IPv4 multicast
-    if ((ntohl(addr) & 0xf0000000) == 0xe0000000) {
-      SetMulticast(true);
-      m_mrq_container->SetMrqAddr(addr);
-      GetSock()->SetOption(IPPROTO_IP, IP_ADD_MEMBERSHIP,
-                           &m_mrq_container->m_mrq,
-                           sizeof(m_mrq_container->m_mrq));
+    // Datagram receive socket, bound to the configured port on any interface.
+    m_rx_socket = new QUdpSocket(this);
+    m_rx_socket->bind(QHostAddress::AnyIPv4, port,
+                      QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+    if (host_addr.isMulticast()) {
+      m_is_multicast = true;
+      m_rx_socket->joinMulticastGroup(host_addr);
     }
-
-    GetSock()->SetEventHandler(*this, DS_SOCKET_ID);
-
-    GetSock()->SetNotify(wxSOCKET_CONNECTION_FLAG | wxSOCKET_INPUT_FLAG |
-                         wxSOCKET_LOST_FLAG);
-    GetSock()->Notify(TRUE);
-    GetSock()->SetTimeout(1);  // Short timeout
+    connect(m_rx_socket, &QUdpSocket::readyRead, this,
+            &CommDriverN2KNet::OnRxSocketData);
     m_driver_stats.available = true;
   }
 
-  // Set up another socket for transmit
+  // Set up another socket for transmit, on an ephemeral port. Qt enables
+  // broadcast as needed when writing to a broadcast address.
   if (GetPortType() != DS_TYPE_INPUT) {
-    wxIPV4address tconn_addr;
-    tconn_addr.Service(0);  // use ephemeral out port
-    tconn_addr.AnyAddress();
-    SetTSock(
-        new wxDatagramSocket(tconn_addr, wxSOCKET_NOWAIT | wxSOCKET_REUSEADDR));
-    // Here would be the place to disable multicast loopback
-    // but for consistency with broadcast behaviour, we will
-    // instead rely on setting priority levels to ignore
-    // sentences read back that have just been transmitted
-    if ((!GetMulticast()) && (GetAddr().IPAddress().EndsWith("255"))) {
-      int broadcastEnable = 1;
-      bool bam = GetTSock()->SetOption(
-          SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable));
-    }
+    m_tx_socket = new QUdpSocket(this);
+    m_tx_socket->bind(QHostAddress::AnyIPv4, 0);
     m_driver_stats.available = true;
   }
 
   // In case the connection is lost before acquired....
-  SetConnectTime(wxDateTime::Now());
+  m_connect_time = QDateTime::currentDateTime();
 }
 
 void CommDriverN2KNet::OpenNetworkTCP(unsigned int addr) {
-  int isServer = ((addr == INADDR_ANY) ? 1 : 0);
+  int isServer = ((addr == 0u /* INADDR_ANY */) ? 1 : 0);
   wxLogMessage(wxString::Format("Opening TCP Server %d", isServer));
 
   if (isServer) {
-    SetSockServer(new wxSocketServer(GetAddr(), wxSOCKET_REUSEADDR));
+    m_tcp_server = new QTcpServer(this);
+    connect(m_tcp_server, &QTcpServer::newConnection, this,
+            &CommDriverN2KNet::OnServerConnection);
+    if (!m_tcp_server->listen(QHostAddress::AnyIPv4,
+                              static_cast<quint16>(m_params.NetworkPort))) {
+      wxLogMessage(wxString::Format("N2K TCP server listen failed: port %d",
+                                    m_params.NetworkPort));
+    }
   } else {
-    SetSock(new wxSocketClient());
-  }
-
-  if (isServer) {
-    GetSockServer()->SetEventHandler(*this, DS_SERVERSOCKET_ID);
-    GetSockServer()->SetNotify(wxSOCKET_CONNECTION_FLAG);
-    GetSockServer()->Notify(TRUE);
-    GetSockServer()->SetTimeout(1);  // Short timeout
-  } else {
-    GetSock()->SetEventHandler(*this, DS_SOCKET_ID);
-    int notify_flags = (wxSOCKET_CONNECTION_FLAG | wxSOCKET_LOST_FLAG);
-    if (GetPortType() != DS_TYPE_INPUT) notify_flags |= wxSOCKET_OUTPUT_FLAG;
-    if (GetPortType() != DS_TYPE_OUTPUT) notify_flags |= wxSOCKET_INPUT_FLAG;
-    GetSock()->SetNotify(notify_flags);
-    GetSock()->Notify(TRUE);
-    GetSock()->SetTimeout(1);  // Short timeout
-
-    SetBrxConnectEvent(false);
-    GetSocketTimer()->Start(100, wxTIMER_ONE_SHOT);  // schedule a connection
+    m_tcp_socket = new QTcpSocket(this);
+    ConnectTcpSocketSignals();
+    m_brx_connect_event = false;
+    m_socket_timer->start(100);  // schedule the connection attempt
   }
 
   // In case the connection is lost before acquired....
-  SetConnectTime(wxDateTime::Now());
+  m_connect_time = QDateTime::currentDateTime();
 }
 
-void CommDriverN2KNet::OnSocketReadWatchdogTimer(wxTimerEvent& event) {
+void CommDriverN2KNet::OnWatchdogTimer() {
   m_dog_value--;
 
   if (m_dog_value <= 0) {  // No receive in n seconds
     if (GetParams().NoDataReconnect) {
       // Reconnect on NO DATA is true, so try to reconnect now.
       if (GetProtocol() == TCP) {
-        wxSocketClient* tcp_socket = dynamic_cast<wxSocketClient*>(GetSock());
-        if (tcp_socket) tcp_socket->Close();
+        if (m_tcp_socket) m_tcp_socket->abort();
 
         int n_reconnect_delay = wxMax(N_DOG_TIMEOUT - 2, 2);
         wxLogMessage(wxString::Format(" Reconnection scheduled in %d seconds.",
                                       n_reconnect_delay));
-        GetSocketTimer()->Start(n_reconnect_delay * 1000, wxTIMER_ONE_SHOT);
+        m_socket_timer->start(n_reconnect_delay * 1000);
 
         //  Stop DATA watchdog, will be restarted on successful connection.
-        GetSocketThreadWatchdogTimer()->Stop();
+        m_watchdog_timer->stop();
       }
     }
   }
 }
 
-void CommDriverN2KNet::OnTimerSocket() {
+void CommDriverN2KNet::OnSocketTimer() {
   //  Attempt a connection
-  wxSocketClient* tcp_socket = dynamic_cast<wxSocketClient*>(GetSock());
-  if (tcp_socket) {
-    if (tcp_socket->IsDisconnected()) {
-      wxLogDebug(" Attempting reconnection...");
-      SetBrxConnectEvent(false);
-      //  Stop DATA watchdog, may be restarted on successful connection.
-      GetSocketThreadWatchdogTimer()->Stop();
-      tcp_socket->Connect(GetAddr(), FALSE);
+  if (m_tcp_socket &&
+      m_tcp_socket->state() == QAbstractSocket::UnconnectedState) {
+    wxLogDebug(" Attempting reconnection...");
+    m_brx_connect_event = false;
+    //  Stop DATA watchdog, may be restarted on successful connection.
+    m_watchdog_timer->stop();
+    m_tcp_socket->connectToHost(QString::fromStdString(m_host),
+                                static_cast<quint16>(m_params.NetworkPort));
 
-      // schedule another connection attempt, in case this one fails
-      int n_reconnect_delay = N_DOG_TIMEOUT;
-      GetSocketTimer()->Start(n_reconnect_delay * 1000, wxTIMER_ONE_SHOT);
-    }
+    // schedule another connection attempt, in case this one fails
+    m_socket_timer->start(N_DOG_TIMEOUT * 1000);
   }
 }
 
 void CommDriverN2KNet::HandleResume() {
   //  Attempt a stop and restart of connection
-  wxSocketClient* tcp_socket = dynamic_cast<wxSocketClient*>(GetSock());
-  if (tcp_socket) {
-    GetSocketThreadWatchdogTimer()->Stop();
+  if (m_tcp_socket) {
+    m_watchdog_timer->stop();
 
-    tcp_socket->Close();
+    m_tcp_socket->abort();
 
     // schedule reconnect attempt
     int n_reconnect_delay = wxMax(N_DOG_TIMEOUT - 2, 2);
     wxLogMessage(wxString::Format(" Reconnection scheduled in %d seconds.",
                                   n_reconnect_delay));
 
-    GetSocketTimer()->Start(n_reconnect_delay * 1000, wxTIMER_ONE_SHOT);
+    m_socket_timer->start(n_reconnect_delay * 1000);
   }
 }
 
@@ -560,11 +504,8 @@ void CommDriverN2KNet::HandleCanFrameInput(can_frame frame) {
     // Intercept network management messages not used by OCPN navigation core.
     if (HandleMgntMsg(header.pgn, vec)) return;
 
-    // Message is ready
-    CommDriverN2KNetEvent Nevent(wxEVT_COMMDRIVER_N2K_NET, 0);
-    auto payload = std::make_shared<std::vector<uint8_t>>(vec);
-    Nevent.SetPayload(payload);
-    AddPendingEvent(Nevent);
+    // Message is ready -- hand it to the listener via the queued signal.
+    Q_EMIT N2kMsgReceived(std::make_shared<std::vector<unsigned char>>(vec));
   }
 }
 
@@ -668,12 +609,9 @@ bool CommDriverN2KNet::ProcessActisense_N2K(std::vector<unsigned char> packet) {
 
             o_payload.push_back(0x55);  // CRC dummy, not checked
 
-            // Message is ready
-            CommDriverN2KNetEvent Nevent(wxEVT_COMMDRIVER_N2K_NET, 0);
-            auto n2k_payload =
-                std::make_shared<std::vector<uint8_t>>(o_payload);
-            Nevent.SetPayload(n2k_payload);
-            AddPendingEvent(Nevent);
+            // Message is ready -- hand it to the listener (queued signal).
+            Q_EMIT N2kMsgReceived(
+                std::make_shared<std::vector<unsigned char>>(o_payload));
           }
 
           // reset for next packet
@@ -812,11 +750,9 @@ bool CommDriverN2KNet::ProcessActisense_NGT(std::vector<unsigned char> packet) {
           data.push_back(next_byte);
           bGotESC = false;
         } else if (next_byte == ENDOFTEXT) {
-          // Process packet
-          CommDriverN2KNetEvent Nevent(wxEVT_COMMDRIVER_N2K_NET, 0);
-          auto n2k_payload = std::make_shared<std::vector<uint8_t>>(data);
-          Nevent.SetPayload(n2k_payload);
-          AddPendingEvent(Nevent);
+          // Process packet -- hand it to the listener (queued signal).
+          Q_EMIT N2kMsgReceived(
+              std::make_shared<std::vector<unsigned char>>(data));
 
           // reset for next packet
           bInMsg = false;
@@ -974,11 +910,9 @@ bool CommDriverN2KNet::ProcessActisense_ASCII_N2K(
 
       if (HandleMgntMsg(PGN, o_payload)) return false;
 
-      // Message is ready
-      CommDriverN2KNetEvent Nevent(wxEVT_COMMDRIVER_N2K_NET, 0);
-      auto n2k_payload = std::make_shared<std::vector<uint8_t>>(o_payload);
-      Nevent.SetPayload(n2k_payload);
-      AddPendingEvent(Nevent);
+      // Message is ready -- hand it to the listener (queued signal).
+      Q_EMIT N2kMsgReceived(
+          std::make_shared<std::vector<unsigned char>>(o_payload));
     }
   }
   return true;
@@ -1045,11 +979,9 @@ bool CommDriverN2KNet::ProcessSeaSmart(std::vector<unsigned char> packet) {
 
       if (HandleMgntMsg(PGN, o_payload)) return false;
 
-      // Message is ready
-      CommDriverN2KNetEvent Nevent(wxEVT_COMMDRIVER_N2K_NET, 0);
-      auto n2k_payload = std::make_shared<std::vector<uint8_t>>(o_payload);
-      Nevent.SetPayload(n2k_payload);
-      AddPendingEvent(Nevent);
+      // Message is ready -- hand it to the listener (queued signal).
+      Q_EMIT N2kMsgReceived(
+          std::make_shared<std::vector<unsigned char>>(o_payload));
     }
   }
   return true;
@@ -1211,181 +1143,145 @@ bool CommDriverN2KNet::ProcessMiniPlex(std::vector<unsigned char> packet) {
   return true;
 }
 
-void CommDriverN2KNet::OnSocketEvent(wxSocketEvent& event) {
-#define RD_BUF_SIZE 4096
-  // can_frame frame;
+void CommDriverN2KNet::ProcessRxBytes(const std::vector<unsigned char>& rx_data,
+                                      int count) {
+  m_driver_stats.available = true;
 
-  switch (event.GetSocketEvent()) {
-    case wxSOCKET_INPUT: {
-      // TODO determine if the follwing SetFlags needs to be done at every
-      // socket event or only once when socket is created, it it needs to be
-      // done at all!
-      // m_sock->SetFlags(wxSOCKET_WAITALL | wxSOCKET_BLOCK);      // was
-      // (wxSOCKET_NOWAIT);
+  // DetectFormat() inspects the whole buffer; give it a NUL-terminated copy,
+  // as the wx implementation did.
+  std::vector<unsigned char> data = rx_data;
+  if (count >= 0 && count < static_cast<int>(data.size())) data[count] = 0;
 
-      // We use wxSOCKET_BLOCK to avoid Yield() reentrancy problems
-      // if a long ProgressDialog is active, as in S57 SENC creation.
+  for (int i = 0; i < count; i++) {
+    if (!m_circle.IsFull()) m_circle.Put(data[i]);
+  }
 
-      //    Disable input event notifications to preclude re-entrancy on
-      //    non-blocking socket
-      //           m_sock->SetNotify(wxSOCKET_LOST_FLAG);
+  m_n2k_format = DetectFormat(data);
 
-      std::vector<unsigned char> data(RD_BUF_SIZE + 1);
-      int newdata = 0;
-      uint8_t next_byte = 0;
-
-      event.GetSocket()->Read(&data.front(), RD_BUF_SIZE);
-      if (!event.GetSocket()->Error()) {
-        m_driver_stats.available = true;
-        size_t count = event.GetSocket()->LastCount();
-        if (count) {
-          if (1 /*FIXME !g_benableUDPNullHeader*/) {
-            data[count] = 0;
-            newdata = count;
-          } else {
-            // XXX FIXME: is it reliable?
-          }
-        }
-      }
-
-      bool done = false;
-      if (newdata > 0) {
-        for (int i = 0; i < newdata; i++) {
-          if (!m_circle.IsFull()) m_circle.Put(data[i]);
-          // printf("%c", data.at(i));
-        }
-      }
-
-      m_n2k_format = DetectFormat(data);
-
-      switch (m_n2k_format) {
-        case N2KFormat_Actisense_RAW_ASCII:
-          ProcessActisense_ASCII_RAW(data);
-          break;
-        case N2KFormat_YD_RAW:  // RX Byte compatible with Actisense ASCII RAW
-          ProcessActisense_ASCII_RAW(data);
-          break;
-        case N2KFormat_Actisense_N2K_ASCII:
-          ProcessActisense_ASCII_N2K(data);
-          break;
-        case N2KFormat_Actisense_N2K:
-          ProcessActisense_N2K(data);
-          break;
-        case N2KFormat_Actisense_RAW:
-          ProcessActisense_RAW(data);
-          break;
-        case N2KFormat_Actisense_NGT:
-          ProcessActisense_NGT(data);
-          break;
-        case N2KFormat_SeaSmart:
-          ProcessSeaSmart(data);
-          break;
-        case N2KFormat_MiniPlex:
-          ProcessMiniPlex(data);
-          break;
-        case N2KFormat_Undefined:
-        default:
-          break;
-      }
-      //      Check for any pending output message
-    }  // case
-
-      m_dog_value = N_DOG_TIMEOUT;  // feed the dog
+  switch (m_n2k_format) {
+    case N2KFormat_Actisense_RAW_ASCII:
+      ProcessActisense_ASCII_RAW(data);
       break;
-#if 1
-
-    case wxSOCKET_LOST: {
-      m_driver_stats.available = false;
-      if (GetProtocol() == TCP || GetProtocol() == GPSD) {
-        if (GetBrxConnectEvent())
-          wxLogMessage(wxString::Format("NetworkDataStream connection lost: %s",
-                                        GetPort().c_str()));
-        if (GetSockServer()) {
-          GetSock()->Destroy();
-          SetSock(NULL);
-          break;
-        }
-        wxDateTime now = wxDateTime::Now();
-        wxTimeSpan since_connect(
-            0, 0, 10);  // ten secs assumed, if connect time is uninitialized
-        if (GetConnectTime().IsValid()) since_connect = now - GetConnectTime();
-
-        int retry_time = 5000;  // default
-
-        //  If the socket has never connected, and it is a short interval since
-        //  the connect request then stretch the time a bit.  This happens on
-        //  Windows if there is no dafault IP on any interface
-
-        if (!GetBrxConnectEvent() && (since_connect.GetSeconds() < 5))
-          retry_time = 10000;  // 10 secs
-
-        GetSocketThreadWatchdogTimer()->Stop();
-        GetSocketTimer()->Start(
-            retry_time, wxTIMER_ONE_SHOT);  // Schedule a re-connect attempt
-      }
+    case N2KFormat_YD_RAW:  // RX Byte compatible with Actisense ASCII RAW
+      ProcessActisense_ASCII_RAW(data);
       break;
-    }
-
-    case wxSOCKET_CONNECTION: {
-      m_driver_stats.available = true;
-      if (GetProtocol() == GPSD) {
-        //      Sign up for watcher mode, Cooked NMEA
-        //      Note that SIRF devices will be converted by gpsd into
-        //      pseudo-NMEA
-        char cmd[] = "?WATCH={\"class\":\"WATCH\", \"nmea\":true}";
-        GetSock()->Write(cmd, strlen(cmd));
-      } else if (GetProtocol() == TCP) {
-        wxLogMessage(
-            wxString::Format("TCP NetworkDataStream connection established: %s",
-                             GetPort().c_str()));
-        m_dog_value = N_DOG_TIMEOUT;  // feed the dog
-        if (GetPortType() != DS_TYPE_OUTPUT) {
-          /// start the DATA watchdog only if NODATA Reconnect is desired
-          if (GetParams().NoDataReconnect)
-            GetSocketThreadWatchdogTimer()->Start(1000);
-        }
-        if (GetPortType() != DS_TYPE_INPUT && GetSock()->IsOk())
-          (void)SetOutputSocketOptions(GetSock());
-        GetSocketTimer()->Stop();
-        SetBrxConnectEvent(true);
-      }
-
-      SetConnectTime(wxDateTime::Now());
+    case N2KFormat_Actisense_N2K_ASCII:
+      ProcessActisense_ASCII_N2K(data);
       break;
-    }
-#endif
+    case N2KFormat_Actisense_N2K:
+      ProcessActisense_N2K(data);
+      break;
+    case N2KFormat_Actisense_RAW:
+      ProcessActisense_RAW(data);
+      break;
+    case N2KFormat_Actisense_NGT:
+      ProcessActisense_NGT(data);
+      break;
+    case N2KFormat_SeaSmart:
+      ProcessSeaSmart(data);
+      break;
+    case N2KFormat_MiniPlex:
+      ProcessMiniPlex(data);
+      break;
+    case N2KFormat_Undefined:
     default:
       break;
+  }
+
+  m_dog_value = N_DOG_TIMEOUT;  // feed the dog
+}
+
+void CommDriverN2KNet::OnRxSocketData() {
+  const int RD_BUF_SIZE = 4096;
+
+  if (GetProtocol() == UDP) {
+    while (m_rx_socket && m_rx_socket->hasPendingDatagrams()) {
+      std::vector<unsigned char> data(RD_BUF_SIZE + 1, 0);
+      qint64 n = m_rx_socket->readDatagram(
+          reinterpret_cast<char*>(data.data()), RD_BUF_SIZE);
+      if (n > 0) ProcessRxBytes(data, static_cast<int>(n));
+    }
+  } else {
+    if (!m_tcp_socket) return;
+    while (m_tcp_socket->bytesAvailable() > 0) {
+      std::vector<unsigned char> data(RD_BUF_SIZE + 1, 0);
+      qint64 n = m_tcp_socket->read(reinterpret_cast<char*>(data.data()),
+                                    RD_BUF_SIZE);
+      if (n <= 0) break;
+      ProcessRxBytes(data, static_cast<int>(n));
+    }
   }
 }
 
-void CommDriverN2KNet::OnServerSocketEvent(wxSocketEvent& event) {
-  switch (event.GetSocketEvent()) {
-    case wxSOCKET_CONNECTION: {
-      m_driver_stats.available = true;
-      SetSock(GetSockServer()->Accept(false));
-
-      if (GetSock()) {
-        GetSock()->SetTimeout(2);
-        //        GetSock()->SetFlags(wxSOCKET_BLOCK);
-        GetSock()->SetEventHandler(*this, DS_SOCKET_ID);
-        int notify_flags = (wxSOCKET_CONNECTION_FLAG | wxSOCKET_LOST_FLAG);
-        if (GetPortType() != DS_TYPE_INPUT) {
-          notify_flags |= wxSOCKET_OUTPUT_FLAG;
-          (void)SetOutputSocketOptions(GetSock());
-        }
-        if (GetPortType() != DS_TYPE_OUTPUT)
-          notify_flags |= wxSOCKET_INPUT_FLAG;
-        GetSock()->SetNotify(notify_flags);
-        GetSock()->Notify(true);
-      }
-
-      break;
+void CommDriverN2KNet::OnSocketConnected() {
+  m_driver_stats.available = true;
+  if (GetProtocol() == GPSD) {
+    //  Sign up for watcher mode, Cooked NMEA
+    const char cmd[] = "?WATCH={\"class\":\"WATCH\", \"nmea\":true}";
+    if (m_tcp_socket)
+      m_tcp_socket->write(cmd, static_cast<qint64>(strlen(cmd)));
+  } else if (GetProtocol() == TCP) {
+    wxLogMessage(wxString::Format(
+        "TCP NetworkDataStream connection established: %s", GetPort().c_str()));
+    m_dog_value = N_DOG_TIMEOUT;  // feed the dog
+    if (GetPortType() != DS_TYPE_OUTPUT) {
+      // start the DATA watchdog only if NODATA Reconnect is desired
+      if (GetParams().NoDataReconnect) m_watchdog_timer->start(1000);
     }
-
-    default:
-      break;
+    if (GetPortType() != DS_TYPE_INPUT && m_tcp_socket)
+      (void)SetOutputSocketOptions(m_tcp_socket);
+    m_socket_timer->stop();
+    m_brx_connect_event = true;
   }
+  m_connect_time = QDateTime::currentDateTime();
+}
+
+void CommDriverN2KNet::OnSocketDisconnected() {
+  m_driver_stats.available = false;
+  if (GetProtocol() != TCP && GetProtocol() != GPSD) return;
+
+  if (m_brx_connect_event)
+    wxLogMessage(wxString::Format("NetworkDataStream connection lost: %s",
+                                  GetPort().c_str()));
+
+  // Server mode: the dropped socket is an accepted peer -- discard it and
+  // wait for the next inbound connection.
+  if (m_tcp_server) {
+    if (m_tcp_socket) {
+      m_tcp_socket->deleteLater();
+      m_tcp_socket = nullptr;
+    }
+    return;
+  }
+
+  // Client mode: schedule a reconnect attempt.
+  qint64 since_connect = 10;  // assumed, if connect time is uninitialized
+  if (m_connect_time.isValid())
+    since_connect = m_connect_time.secsTo(QDateTime::currentDateTime());
+
+  int retry_time = 5000;  // default
+  // If the socket has never connected, and it is a short interval since the
+  // connect request, stretch the time a bit.
+  if (!m_brx_connect_event && since_connect < 5) retry_time = 10000;
+
+  m_watchdog_timer->stop();
+  m_socket_timer->start(retry_time);  // schedule a re-connect attempt
+}
+
+void CommDriverN2KNet::OnServerConnection() {
+  m_driver_stats.available = true;
+  if (!m_tcp_server) return;
+
+  QTcpSocket* peer = m_tcp_server->nextPendingConnection();
+  if (!peer) return;
+
+  // One active peer at a time, mirroring the wx implementation.
+  if (m_tcp_socket) m_tcp_socket->deleteLater();
+  m_tcp_socket = peer;
+  m_tcp_socket->setParent(this);
+  ConnectTcpSocketSignals();
+
+  if (GetPortType() != DS_TYPE_INPUT) SetOutputSocketOptions(m_tcp_socket);
 }
 
 std::vector<unsigned char> MakeSimpleOutMsg(
@@ -1868,7 +1764,7 @@ bool CommDriverN2KNet::PrepareForTX() {
     SendSentenceNetwork(out_data);
 
     // Wait some time, and study results
-    m_prodinfo_timer.Start(200, true);
+    m_prodinfo_timer->start(200);
   }
 
   //  No acceptable TX device found
@@ -1899,27 +1795,27 @@ bool CommDriverN2KNet::SendSentenceNetwork(
   m_txenter++;
 
   bool ret = true;
-  wxDatagramSocket* udp_socket;
   switch (GetProtocol()) {
     case TCP:
       for (std::vector<unsigned char>& v : payload) {
-        if (GetSock() && GetSock()->IsOk()) {
+        if (m_tcp_socket &&
+            m_tcp_socket->state() == QAbstractSocket::ConnectedState) {
           m_driver_stats.available = true;
-          // printf("---%s", v.data());
-          GetSock()->Write(v.data(), v.size());
+          qint64 written = m_tcp_socket->write(
+              reinterpret_cast<const char*>(v.data()),
+              static_cast<qint64>(v.size()));
+          m_tcp_socket->flush();
           m_dog_value = N_DOG_TIMEOUT;  // feed the dog
-          if (GetSock()->Error()) {
-            if (GetSockServer()) {
-              GetSock()->Destroy();
-              SetSock(NULL);
+          if (written < 0) {
+            if (m_tcp_server) {
+              // Server-side peer write failed -- discard the peer socket.
+              m_tcp_socket->deleteLater();
+              m_tcp_socket = nullptr;
             } else {
-              wxSocketClient* tcp_socket =
-                  dynamic_cast<wxSocketClient*>(GetSock());
-              if (tcp_socket) tcp_socket->Close();
-              if (!GetSocketTimer()->IsRunning())
-                GetSocketTimer()->Start(
-                    5000, wxTIMER_ONE_SHOT);  // schedule a reconnect
-              GetSocketThreadWatchdogTimer()->Stop();
+              m_tcp_socket->abort();
+              if (!m_socket_timer->isActive())
+                m_socket_timer->start(5000);  // schedule a reconnect
+              m_watchdog_timer->stop();
             }
             ret = false;
           }
@@ -1931,14 +1827,8 @@ bool CommDriverN2KNet::SendSentenceNetwork(
       }
       break;
     case UDP:
-#if 0
-      udp_socket = dynamic_cast<wxDatagramSocket*>(GetTSock());
-      if (udp_socket && udp_socket->IsOk()) {
-        udp_socket->SendTo(GetAddr(), payload.mb_str(), payload.size());
-        if (udp_socket->Error()) ret = false;
-      } else
-        ret = false;
-#endif
+      // UDP transmit is intentionally not implemented (matches the previous
+      // wx implementation, where the UDP send path was disabled).
       break;
 
     case GPSD:
@@ -1954,49 +1844,34 @@ void CommDriverN2KNet::Close() {
   wxLogMessage(wxString::Format("Closing NMEA NetworkDataStream %s",
                                 GetNetPort().c_str()));
   m_stats_timer.Stop();
-  //    Kill off the TCP Socket if alive
-  if (m_sock) {
+  if (m_socket_timer) m_socket_timer->stop();
+  if (m_watchdog_timer) m_watchdog_timer->stop();
+  if (m_prodinfo_timer) m_prodinfo_timer->stop();
+
+  if (m_rx_socket) {
     if (m_is_multicast)
-      m_sock->SetOption(IPPROTO_IP, IP_DROP_MEMBERSHIP, &m_mrq_container->m_mrq,
-                        sizeof(m_mrq_container->m_mrq));
-    m_sock->Notify(FALSE);
-    m_sock->Destroy();
-    m_driver_stats.available = false;
+      m_rx_socket->leaveMulticastGroup(
+          QHostAddress(QString::fromStdString(m_host)));
+    m_rx_socket->close();
   }
+  if (m_tx_socket) m_tx_socket->close();
+  if (m_tcp_socket) m_tcp_socket->abort();
+  if (m_tcp_server) m_tcp_server->close();
 
-  if (m_tsock) {
-    m_tsock->Notify(FALSE);
-    m_tsock->Destroy();
-  }
-
-  if (m_socket_server) {
-    m_socket_server->Notify(FALSE);
-    m_socket_server->Destroy();
-  }
-
-  m_socket_timer.Stop();
-  m_socketread_watchdog_timer.Stop();
+  m_driver_stats.available = false;
+  // The Qt sockets/timers are parented to this driver and freed with it.
 }
 
-bool CommDriverN2KNet::SetOutputSocketOptions(wxSocketBase* tsock) {
-  int ret;
+bool CommDriverN2KNet::SetOutputSocketOptions(QTcpSocket* sock) {
+  if (!sock) return false;
 
-  // Disable nagle algorithm on outgoing connection
-  // Doing this here rather than after the accept() is
-  // pointless  on platforms where TCP_NODELAY is
-  // not inherited.  However, none of OpenCPN's currently
-  // supported platforms fall into that category.
+  // Disable the Nagle algorithm on the outgoing connection.
+  sock->setSocketOption(QAbstractSocket::LowDelayOption, QVariant(1));
 
-  int nagleDisable = 1;
-  ret = tsock->SetOption(IPPROTO_TCP, TCP_NODELAY, &nagleDisable,
-                         sizeof(nagleDisable));
-
-  //  Drastically reduce the size of the socket output buffer
-  //  so that when client goes away without properly closing, the stream will
-  //  quickly fill the output buffer, and thus fail the write() call
-  //  within a few seconds.
-  unsigned long outbuf_size = 1024;  // Smallest allowable value on Linux
-  return (tsock->SetOption(SOL_SOCKET, SO_SNDBUF, &outbuf_size,
-                           sizeof(outbuf_size)) &&
-          ret);
+  //  Drastically reduce the size of the socket output buffer so that when a
+  //  client goes away without properly closing, the stream quickly fills the
+  //  output buffer and thus fails the write() within a few seconds.
+  sock->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption,
+                        QVariant(1024));
+  return true;
 }

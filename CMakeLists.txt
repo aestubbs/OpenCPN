@@ -103,8 +103,14 @@ if (NOT QT_ANDROID)
   if (APPLE AND EXISTS "/opt/homebrew/opt/qt")
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/qt")
   endif ()
-  find_package(Qt6 REQUIRED COMPONENTS Core)
+  find_package(Qt6 REQUIRED COMPONENTS Core Network)
   message(STATUS "Found Qt ${Qt6_VERSION}")
+
+  # Native QObject classes now live in headers shared with wxWidgets TUs.
+  # QT_NO_KEYWORDS disables the signals/slots/emit macros (use Q_SIGNALS/
+  # Q_SLOTS/Q_EMIT) so they cannot collide with wx/system headers. This is
+  # transitional -- removed once the wx path is gone (task P3.12).
+  add_compile_definitions(QT_NO_KEYWORDS)
 endif ()
 
 #

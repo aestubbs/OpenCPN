@@ -19,41 +19,34 @@
 /**
  * \file
  *
- * Nmea2000 IP network driver
+ * Nmea2000 IP network driver.
+ *
+ * Qt-native rewrite (Qt/QtQuick migration, task P1.5a) -- the driver is a
+ * QObject using QTcpSocket / QTcpServer / QUdpSocket and QTimer. Decoded
+ * payloads are delivered through a queued signal/slot, see
+ * docs/QT_MIGRATION_N2K_NET_PLAN.md.
  */
 
 #ifndef _COMMDRIVERN2KNET_H
 #define _COMMDRIVERN2KNET_H
 
-#ifndef __WXMSW__
-#include <sys/socket.h>  // needed for (some) Mac builds
-#include <netinet/in.h>
-#endif
+#include <memory>
+#include <string>
+#include <vector>
 
-#include <wx/wxprec.h>
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif
-
-#include <wx/datetime.h>
+#include <QObject>
+#include <QDateTime>
 
 #include "model/comm_buffers.h"
 #include "model/comm_can_util.h"
 #include "model/comm_drv_n2k.h"
-#include "model/comm_drv_n2k_net.h"
 #include "model/comm_drv_stats.h"
 #include "model/conn_params.h"
 
-#ifdef __WXGTK__
-// newer versions of glib define its own GSocket but we unfortunately use this
-// name in our own (semi-)public header and so can't change it -- rename glib
-// one instead
-#define GSocket GlibGSocket
-#include <wx/socket.h>
-#undef GSocket
-#else
-#include <wx/socket.h>
-#endif
+class QTcpSocket;
+class QTcpServer;
+class QUdpSocket;
+class QTimer;
 
 #define RX_BUFFER_SIZE_NET 4096
 
@@ -78,17 +71,18 @@ typedef enum {
 
 typedef enum { TX_FORMAT_YDEN = 0, TX_FORMAT_ACTISENSE } GW_TX_FORMAT;
 
-class MrqContainer;           // forward in .cpp file
-class CommDriverN2KNetEvent;  // Internal
-
-class CommDriverN2KNet : public CommDriverN2K,
-                         public wxEvtHandler,
+class CommDriverN2KNet : public QObject,
+                         public CommDriverN2K,
                          public DriverStatsProvider {
+  Q_OBJECT
+
 public:
-  CommDriverN2KNet();
+  /** Decoded N2K payload handed from the read path to the listener. */
+  using N2kPayloadPtr = std::shared_ptr<std::vector<unsigned char>>;
+
   CommDriverN2KNet(const ConnectionParams* params, DriverListener& listener);
 
-  virtual ~CommDriverN2KNet();
+  ~CommDriverN2KNet() override;
 
   DriverStats GetDriverStats() const override { return m_driver_stats; }
 
@@ -98,49 +92,48 @@ public:
   void Close();
   ConnectionParams GetParams() const { return m_params; }
 
-  bool SetOutputSocketOptions(wxSocketBase* tsock);
-  void OnServerSocketEvent(wxSocketEvent& event);  // The listener
-  void OnTimerSocket(wxTimerEvent& event) { OnTimerSocket(); }
-  void OnTimerSocket();
-  void OnSocketEvent(wxSocketEvent& event);
-  void OpenNetworkGPSD();
-  void OpenNetworkTCP(unsigned int addr);
-  void OpenNetworkUDP(unsigned int addr);
-  void OnSocketReadWatchdogTimer(wxTimerEvent& event);
-  void HandleResume();
-
   bool SendMessage(std::shared_ptr<const NavMsg> msg,
                    std::shared_ptr<const NavAddr> addr) override;
-  wxSocketBase* GetSock() const { return m_sock; }
+
+  // The build defines QT_NO_KEYWORDS (task P1.5a) so the signals/slots/emit
+  // macros are off and cannot collide with wx/system headers; Q_SIGNALS /
+  // Q_SLOTS / Q_EMIT are used instead. Reverted by task P3.12.
+Q_SIGNALS:
+  /**
+   * Emitted from the read path with one decoded N2K payload. Connected to
+   * HandleN2kPayload with Qt::QueuedConnection so the payload is dispatched
+   * to upper layers after the socket handler returns (the old AddPendingEvent
+   * deferral).
+   */
+  void N2kMsgReceived(CommDriverN2KNet::N2kPayloadPtr payload);
+
+private Q_SLOTS:
+  void OnRxSocketData();        ///< QTcpSocket/QUdpSocket readyRead
+  void OnSocketConnected();     ///< QTcpSocket connected
+  void OnSocketDisconnected();  ///< QTcpSocket disconnected / error
+  void OnServerConnection();    ///< QTcpServer newConnection
+  void OnSocketTimer();         ///< reconnect attempt (single-shot)
+  void OnWatchdogTimer();       ///< no-data watchdog (1 s continuous)
+  void OnProdInfoTimer();       ///< YDEN TX-capability probe (single-shot)
+  void HandleN2kPayload(CommDriverN2KNet::N2kPayloadPtr payload);
 
 private:
   ConnectionParams m_params;
   DriverListener& m_listener;
 
-  void handle_N2K_MSG(CommDriverN2KNetEvent& event);
-  wxString GetNetPort() const { return m_net_port; }
-  wxIPV4address GetAddr() const { return m_addr; }
-  wxTimer* GetSocketThreadWatchdogTimer() {
-    return &m_socketread_watchdog_timer;
-  }
-  wxTimer* GetSocketTimer() { return &m_socket_timer; }
-  void SetSock(wxSocketBase* sock) { m_sock = sock; }
-  void SetTSock(wxSocketBase* sock) { m_tsock = sock; }
-  wxSocketBase* GetTSock() const { return m_tsock; }
-  void SetSockServer(wxSocketServer* sock) { m_socket_server = sock; }
-  wxSocketServer* GetSockServer() const { return m_socket_server; }
-  void SetMulticast(bool multicast) { m_is_multicast = multicast; }
-  bool GetMulticast() const { return m_is_multicast; }
+  void OpenNetworkTCP(unsigned int addr);
+  void OpenNetworkUDP(unsigned int addr);
+  void HandleResume();
 
-  NetworkProtocol GetProtocol() { return m_net_protocol; }
-  void SetBrxConnectEvent(bool event) { m_brx_connect_event = event; }
-  bool GetBrxConnectEvent() { return m_brx_connect_event; }
+  /** Push received bytes through DetectFormat + the matching parser. */
+  void ProcessRxBytes(const std::vector<unsigned char>& data, int count);
+  /** Wire a (re)connected TCP socket's signals to this driver's slots. */
+  void ConnectTcpSocketSignals();
 
-  void SetConnectTime(wxDateTime time) { m_connect_time = time; }
-  wxDateTime GetConnectTime() { return m_connect_time; }
-
+  std::string GetNetPort() const { return m_net_port; }
+  std::string GetPort() const { return m_portstring; }
+  NetworkProtocol GetProtocol() const { return m_net_protocol; }
   dsPortType GetPortType() const { return m_io_select; }
-  wxString GetPort() const { return m_portstring; }
 
   std::vector<unsigned char> PushFastMsgFragment(const CanHeader& header,
                                                  int position);
@@ -150,9 +143,6 @@ private:
 
   void HandleCanFrameInput(can_frame frame);
 
-  ConnectionType GetConnectionType() const { return m_connection_type; }
-
-  bool ChecksumOK(const std::string& sentence);
   void SetOk(bool ok) { m_bok = ok; };
 
   N2K_Format DetectFormat(const std::vector<unsigned char>& packet);
@@ -176,32 +166,37 @@ private:
   std::vector<unsigned char> PrepareLogPayload(
       std::shared_ptr<const Nmea2000Msg>& msg,
       std::shared_ptr<const NavAddr2000> addr);
-  void OnProdInfoTimer(wxTimerEvent& ev);
+
+  /** Apply TCP_NODELAY and a small send buffer to an output socket. */
+  bool SetOutputSocketOptions(QTcpSocket* sock);
 
   StatsTimer m_stats_timer;
   DriverStats m_driver_stats;
 
-  wxString m_net_port;
+  std::string m_net_port;
   NetworkProtocol m_net_protocol;
-  wxIPV4address m_addr;
-  wxSocketBase* m_sock;
-  wxSocketBase* m_tsock;
-  wxSocketServer* m_socket_server;
+  std::string m_host;  ///< target host address (numeric or name)
   bool m_is_multicast;
-  MrqContainer* m_mrq_container;
+
+  // Qt sockets -- owned via QObject parenting to this driver.
+  QTcpSocket* m_tcp_socket;  ///< TCP client / GPSD / accepted server peer
+  QTcpServer* m_tcp_server;  ///< TCP server (listen mode)
+  QUdpSocket* m_rx_socket;   ///< UDP receive socket
+  QUdpSocket* m_tx_socket;   ///< UDP transmit socket
+
+  QTimer* m_socket_timer;    ///< reconnect attempt, single-shot
+  QTimer* m_watchdog_timer;  ///< no-data watchdog, 1 s continuous
+  QTimer* m_prodinfo_timer;  ///< YDEN TX-capability probe, single-shot
 
   int m_txenter;
   int m_dog_value;
   std::string m_sock_buffer;
-  wxString m_portstring;
+  std::string m_portstring;
   dsPortType m_io_select;
-  wxDateTime m_connect_time;
+  QDateTime m_connect_time;
   bool m_brx_connect_event;
   bool m_bchecksumCheck;
   ConnectionType m_connection_type;
-
-  wxTimer m_socket_timer;
-  wxTimer m_socketread_watchdog_timer;
 
   bool m_bok;
   int m_ib;
@@ -216,11 +211,8 @@ private:
   uint8_t m_order;
   char m_TX_flag;
   bool m_TX_available;
-  wxTimer m_prodinfo_timer;
 
   ObsListener resume_listener;
-
-  DECLARE_EVENT_TABLE()
 };
 
 #endif  // guard

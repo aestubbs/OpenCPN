@@ -293,6 +293,13 @@ add_library(_model_src OBJECT ${SRC} ${HDRS})
 add_library(ocpn::model-src ALIAS _model_src)
 target_link_libraries(_model_src PUBLIC _OCPN_MODEL)
 
+# comm_drv_n2k_net.h declares a Q_OBJECT class (Qt/QtQuick migration, P1.5a);
+# AUTOMOC runs moc on it, and the Qt socket/core libraries are linked in.
+if (NOT QT_ANDROID)
+  set_target_properties(_model_src PROPERTIES AUTOMOC ON)
+  target_link_libraries(_model_src PUBLIC Qt6::Core Qt6::Network)
+endif ()
+
 target_include_directories(
   _OCPN_MODEL BEFORE INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/include
