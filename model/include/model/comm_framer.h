@@ -84,4 +84,30 @@ public:
   }
 };
 
+// Control bytes of the Actisense serial paketizing format:
+//   <ESC><STX> <application data, ESC-escaped> <CRC> <ESC><ETX>
+constexpr uint8_t kN2kEscape = 0x10;       ///< DLE
+constexpr uint8_t kN2kStartOfText = 0x02;  ///< STX
+constexpr uint8_t kN2kEndOfText = 0x03;    ///< ETX
+
+/**
+ * Framer for NMEA 2000 gateways speaking the Actisense binary serial format
+ * (NGT-1, Yacht Devices YDNU-02, ...). It finds <ESC><STX> ... <ESC><ETX>
+ * packet boundaries and un-escapes the doubled ESC bytes, emitting the raw
+ * application data (data code, length, PGN, payload, trailing CRC) as one
+ * frame. CRC validation is left to the decoder.
+ *
+ * Stateful across chunks; see comm_framer.cpp.
+ */
+class N2kGatewayFramer : public Framer {
+public:
+  std::vector<CommFrame> Feed(const std::vector<uint8_t>& bytes) override;
+
+private:
+  CommFrame m_frame;          ///< application data of the packet in progress
+  bool m_in_msg = false;      ///< between <ESC><STX> and <ESC><ETX>
+  bool m_got_esc = false;     ///< previous byte was an unescaped ESC
+  bool m_got_sot = false;     ///< an <ESC><STX> opener was just seen
+};
+
 #endif  // COMM_FRAMER_H

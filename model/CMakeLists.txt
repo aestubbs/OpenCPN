@@ -179,6 +179,7 @@ set(SRC
   ${MODEL_SRC_DIR}/comm_drv_registry.cpp
   ${MODEL_SRC_DIR}/comm_drv_signalk.cpp
   ${MODEL_SRC_DIR}/comm_drv_signalk_net.cpp
+  ${MODEL_SRC_DIR}/comm_framer.cpp
   ${MODEL_SRC_DIR}/comm_n0183_decoder.cpp
   ${MODEL_SRC_DIR}/comm_n0183_output.cpp
   ${MODEL_SRC_DIR}/comm_navmsg_bus.cpp
