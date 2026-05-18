@@ -89,6 +89,14 @@ public:
     return std::pair<CommStatus, std::string>(CommStatus::NotImplemented, "");
   }
 
+  /**
+   * Register intent to transmit a PGN. Meaningful only for NMEA 2000
+   * gateway drivers, which maintain a TX-PGN whitelist; a no-op default
+   * for every other driver. Declared here so callers need no driver-type
+   * downcast. Returns 0 on success / acceptance, negative on failure.
+   */
+  virtual int SetTXPGN(int pgn) { return 0; }
+
   std::string Key() const { return NavAddr::BusToString(bus) + "!@!" + iface; }
 
   const NavAddr::Bus bus;

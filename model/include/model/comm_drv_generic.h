@@ -117,6 +117,19 @@ public:
    */
   bool WriteRaw(const QByteArray& data);
 
+  /**
+   * Install the handler backing SetTXPGN(). Side-channel logic (the N2K
+   * gateway manager) registers a callback; without one SetTXPGN is a
+   * no-op, as for any non-N2K driver.
+   */
+  void SetTxPgnHandler(std::function<int(int)> handler) {
+    m_tx_pgn_handler = std::move(handler);
+  }
+
+  int SetTXPGN(int pgn) override {
+    return m_tx_pgn_handler ? m_tx_pgn_handler(pgn) : 0;
+  }
+
 Q_SIGNALS:
   /** Emitted when the transport becomes ready (see CommTransport::Connected).
    *  Lets side-channel logic (re)run a handshake on every (re)connect. */
@@ -134,6 +147,7 @@ private:
   std::unique_ptr<CommTransport> m_transport;
   std::unique_ptr<Framer> m_framer;
   std::function<void(const CommFrame&)> m_frame_observer;
+  std::function<int(int)> m_tx_pgn_handler;
   std::unique_ptr<ProtocolDecoder> m_decoder;
   DriverListener* m_listener;
 
