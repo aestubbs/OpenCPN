@@ -36,7 +36,6 @@
 
 #include "model/comm_driver.h"
 #include "model/comm_drv_factory.h"
-#include "model/comm_drv_n0183_android_bt.h"
 #include "model/comm_drv_n0183_net.h"
 #include "model/comm_drv_n0183_serial.h"
 #include "model/comm_drv_registry.h"

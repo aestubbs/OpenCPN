@@ -52,8 +52,6 @@ set(
   ${MODEL_HDR_DIR}/comm_drv_file.h
   ${MODEL_HDR_DIR}/comm_drv_internal.h
   ${MODEL_HDR_DIR}/comm_drv_loopback.h
-  ${MODEL_HDR_DIR}/comm_drv_n0183_android_bt.h
-  ${MODEL_HDR_DIR}/comm_drv_n0183_android_int.h
   ${MODEL_HDR_DIR}/comm_drv_n0183.h
   ${MODEL_HDR_DIR}/comm_drv_n0183_net.h
   ${MODEL_HDR_DIR}/comm_drv_n0183_serial.h
@@ -270,11 +268,6 @@ endif ()
 if (APPLE)
   list(APPEND HDRS ${MODEL_HDR_DIR}/macutils.h )
   list(APPEND SRC ${MODEL_SRC_DIR}/macutils.c)
-endif ()
-
-if (QT_ANDROID)
-  list(APPEND SRC ${MODEL_SRC_DIR}/comm_drv_n0183_android_bt.cpp)
-  list(APPEND SRC ${MODEL_SRC_DIR}/comm_drv_n0183_android_int.cpp)
 endif ()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

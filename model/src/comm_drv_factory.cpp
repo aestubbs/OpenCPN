@@ -41,8 +41,6 @@
 #include "model/comm_drv_n0183_serial.h"
 #include "model/comm_drv_n0183_net.h"
 #include "model/comm_drv_signalk_net.h"
-#include "model/comm_drv_n0183_android_int.h"
-#include "model/comm_drv_n0183_android_bt.h"
 #include "model/comm_navmsg_bus.h"
 #include "model/comm_drv_registry.h"
 
@@ -130,20 +128,6 @@ void MakeCommDriver(const ConnectionParams* params) {
 #if defined(__linux__) && !defined(__ANDROID__) && !defined(__WXOSX__)
     case SOCKETCAN: {
       auto driver = CommDriverN2KSocketCAN::Create(params, msgbus);
-      registry.Activate(std::move(driver));
-      break;
-    }
-#endif
-
-#ifdef __ANDROID__
-    case INTERNAL_GPS: {
-      auto driver = std::make_unique<CommDriverN0183AndroidInt>(params, msgbus);
-      registry.Activate(std::move(driver));
-      break;
-    }
-
-    case INTERNAL_BT: {
-      auto driver = std::make_unique<CommDriverN0183AndroidBT>(params, msgbus);
       registry.Activate(std::move(driver));
       break;
     }
