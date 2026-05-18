@@ -52,23 +52,23 @@ threads, no custom `wxEvent`s, no raw sockets/ioctls.
 
 ## 4. Order of work — two reference patterns first
 
-The drivers are not equal effort; two are done first because **the rest are
-adaptations of them**:
+Two drivers are done first because **the rest are adaptations of them**:
 
-1. **P1.5g — `comm_drv_n2k_socketcan` → `QCanBus`.** The *frame-oriented*
-   reference. `QCanBusDevice` (socketcan plugin) subsumes the raw `socket(
-   PF_CAN, SOCK_RAW, CAN_RAW)`, the `ioctl`/`setsockopt` setup, and the entire
-   `Worker` read thread — it delivers `QCanBusFrame`s via `framesReceived()`.
-   The N2K fast-message reassembly stays.
-   **Build caveat:** SocketCAN is Linux-only and this driver is already
-   Linux-gated; the Homebrew/macOS Qt ships no socketcan `QCanBus` backend.
-   This sub-task must be built and verified on **Linux**, not the macOS dev
-   box. `QtSerialBus` also offers a `virtualcan` backend useful for testing.
+1. **P1.5e — `comm_drv_n0183_serial` → `QSerialPort`.** The primary reference
+   — the *byte-stream serial* pattern. `QSerialPort` (a `QIODevice`) replaces
+   the `SerialIo` worker-thread abstraction and the vendored `libs/serial`;
+   `QSerialPortInfo` replaces the `ser_ports.cpp` enumeration `#ifdef`s. Fully
+   buildable and verifiable on macOS.
 
-2. **P1.5e — `comm_drv_n0183_serial` → `QSerialPort`.** The *byte-stream
-   serial* reference. `QSerialPort` (a `QIODevice`) replaces the `SerialIo`
-   abstraction and the vendored `libs/serial`; `QSerialPortInfo` replaces the
-   `ser_ports.cpp` enumeration `#ifdef`s. Fully buildable/verifiable on macOS.
+2. **P1.5g — `comm_drv_n2k_socketcan` → `QCanBus`.** The *frame-oriented*
+   reference. `QCanBusDevice` subsumes the raw `socket(PF_CAN, SOCK_RAW,
+   CAN_RAW)`, the `ioctl`/`setsockopt` setup, and the entire `Worker` read
+   thread — it delivers `QCanBusFrame`s via `framesReceived()`; the N2K
+   fast-message reassembly stays. Once on `QCanBus` the driver is portable
+   C++/Qt (the Linux-only `PF_CAN` headers are gone) and **builds on macOS**;
+   it picks its backend by name — `socketcan` on Linux for real hardware,
+   `virtualcan` (shipped in the macOS Qt) for hardware-free dev/test. Only the
+   real `socketcan` backend is Linux-specific.
 
 Then, as adaptations:
 
@@ -98,11 +98,12 @@ All driver classes remain native `QObject`s with `Q_OBJECT` / `Q_SIGNALS` /
 
 ## 7. Risks
 
-- **`socketcan` not buildable on macOS** — P1.5g needs a Linux build/CI leg;
-  it cannot be compile-verified on the current dev machine.
-- **`QCanBus` backend coverage is platform-specific** — socketcan (Linux),
-  PCAN/Vector (Linux/Windows), virtualcan (all). No CAN-hardware path on
-  macOS.
+- **CAN backend coverage is platform-specific** — the real `socketcan`
+  backend is Linux-only; PCAN/TinyCAN are Linux/Windows; `virtualcan` is
+  available everywhere (incl. the macOS Qt). The P1.5g *driver* builds on
+  macOS once it is on `QCanBus`; the real `socketcan` path is validated on
+  Linux (e.g. a VM/container with the `vcan` kernel module). There is no real
+  CAN-hardware path on macOS.
 - **Functional verification needs hardware** — a CAN interface for P1.5g, a
   serial GPS/AIS device for P1.5e/d. Compile + run + no-crash is the limit of
   what the dev box proves; on-water/bench testing is required before release.

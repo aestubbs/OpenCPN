@@ -5,9 +5,8 @@
 > **Current position** line as work proceeds.
 
 **Current position:** P1.5a done; P1.5 reframed around Qt-native transport
-classes (see `QT_MIGRATION_COMMS_PLAN.md`). Next: the two reference drivers —
-P1.5g (`comm_drv_n2k_socketcan` → `QCanBus`) and P1.5e (`comm_drv_n0183_serial`
-→ `QSerialPort`).
+classes (see `QT_MIGRATION_COMMS_PLAN.md`). In progress: P1.5e
+(`comm_drv_n0183_serial` → `QSerialPort`), the primary reference driver.
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -84,15 +83,16 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
       adapt from them.  *(dep: P1.2–1.4)*
   - [x] **P1.5a** `CommDriverN2KNet` (N2K over TCP/UDP) → `QtNetwork`. Done —
         see [`QT_MIGRATION_N2K_NET_PLAN.md`](./QT_MIGRATION_N2K_NET_PLAN.md).
+  - [ ] **P1.5e** `CommDriverN0183Serial` → `QSerialPort`. *Primary reference
+        pattern* (byte-stream serial). Replaces the `SerialIo` worker-thread
+        abstraction and the vendored `libs/serial`; `QSerialPortInfo` replaces
+        the `ser_ports.cpp` enumeration `#ifdef`s. Verifiable on macOS.
   - [ ] **P1.5g** `CommDriverN2KSocketCAN` → `QCanBus` (QtSerialBus).
-        *Frame-oriented reference pattern.* `QCanBusDevice` (socketcan plugin)
-        replaces the raw `PF_CAN` socket, the `ioctl`/`setsockopt` setup, and
-        the `Worker` read thread; N2K fast-message reassembly stays. SocketCAN
-        is Linux-only — build & verify on **Linux**, not the macOS dev box.
-  - [ ] **P1.5e** `CommDriverN0183Serial` → `QSerialPort`. *Byte-stream serial
-        reference pattern.* Replaces the `SerialIo` abstraction and the
-        vendored `libs/serial`; `QSerialPortInfo` replaces the `ser_ports.cpp`
-        enumeration `#ifdef`s. Verifiable on macOS.
+        *Frame-oriented reference pattern.* `QCanBusDevice` replaces the raw
+        `PF_CAN` socket, the `ioctl`/`setsockopt` setup, and the `Worker` read
+        thread; N2K fast-message reassembly stays. On `QCanBus` the driver is
+        portable and builds on macOS; backend by name — `socketcan` (Linux,
+        real HW) or `virtualcan` (macOS dev/test).
   - [ ] **P1.5d** `CommDriverN2KSerial` → `QSerialPort` + N2K gateway framing
         (adapts P1.5e); retires its vendored `serial/serial.h` use.
   - [ ] **P1.5b** `CommDriverN0183Net` (NMEA 0183 IP) → `QtNetwork`
