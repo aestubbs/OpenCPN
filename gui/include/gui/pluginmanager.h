@@ -59,6 +59,7 @@
 
 #include "chartimg.h"
 #include "observable.h"
+#include "observable_qt.h"
 #include "ocpndc.h"
 #include "ocpn_plugin.h"
 #include "s57chart.h"  // for Object list
@@ -299,7 +300,7 @@ private:
 
   ObservableListener m_listener_SignalK;
 
-  ObsListener m_new_msgtype_lstnr;
+  ObsConnection m_new_msgtype_lstnr;
 
   ObsListener m_on_msg_sent_listener;
 

@@ -34,6 +34,7 @@
 
 #include "model/comm_navmsg.h"
 #include "model/nmea_log.h"
+#include "observable_qt.h"
 
 class Multiplexer;  // forward
 
@@ -83,7 +84,7 @@ private:
   MuxLogCallbacks m_log_callbacks;
   bool& m_legacy_input_filter_behaviour;
   std::unordered_map<std::string, ObsListener> m_listeners;
-  ObsListener m_new_msgtype_lstnr;
+  ObsConnection m_new_msgtype_lstnr;
   int m_n2k_repeat_count;
   unsigned int m_last_pgn_logged;
 

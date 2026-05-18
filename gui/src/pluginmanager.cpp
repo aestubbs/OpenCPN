@@ -928,8 +928,8 @@ PlugInManager::PlugInManager(AbstractTopFrame* parent) {
     SendNMEASentenceToAllPlugIns(ev.GetString());
   };
   m_on_msg_sent_listener.Init(g_pRouteMan->on_message_sent, msg_sent_action);
-  m_new_msgtype_lstnr.Init(NavMsgBus::GetInstance().new_msg_event,
-                           [&](ObservedEvt&) { OnNewMessageType(); });
+  m_new_msgtype_lstnr.Listen(NavMsgBus::GetInstance().new_msg_event.Key(),
+                             [this](const ObsData&) { OnNewMessageType(); });
 }
 PlugInManager::~PlugInManager() {
 #if !defined(__ANDROID__) && defined(OCPN_USE_CURL)

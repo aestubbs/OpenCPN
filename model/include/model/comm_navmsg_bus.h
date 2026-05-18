@@ -32,13 +32,11 @@
 #include <set>
 #include <string>
 
-#include <wx/event.h>
-
 #include "model/comm_driver.h"
-#include "observable_evtvar.h"
+#include "observable_qt.h"
 
 /** The raw message layer, a singleton. */
-class NavMsgBus : public wxEvtHandler, public DriverListener {
+class NavMsgBus : public DriverListener {
 public:
   /* Singleton implementation. */
   static NavMsgBus& GetInstance();
@@ -66,7 +64,7 @@ public:
   const std::set<std::string>& GetActiveMessages() { return m_active_messages; }
 
   /** Notified without data when new message type(s) are detected. */
-  EventVar new_msg_event;
+  EventVarQt new_msg_event;
 
 private:
   std::mutex m_mutex;

@@ -39,6 +39,7 @@
 #include "model/ocpn_utils.h"
 
 #include "observable.h"
+#include "observable_qt.h"
 
 /**
  * Create a stream of input messages.  The
@@ -60,7 +61,7 @@ public:
 private:
   SinkFunc m_sink_func;
   std::unordered_map<std::string, ObsListener> m_listeners;
-  ObsListener new_msg_lstnr;
+  ObsConnection new_msg_lstnr;
   ObsListener undelivered_msg_lstnr;
 
   /** Handle new message type detected. */

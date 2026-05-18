@@ -29,6 +29,7 @@
 #include <wx/frame.h>
 
 #include "model/data_monitor_src.h"
+#include "observable_evtvar.h"
 #include "tty_scroll.h"
 #include "std_filesystem.h"
 

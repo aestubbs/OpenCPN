@@ -24,14 +24,18 @@
 
 #include "model/comm_navmsg_bus.h"
 
+#include "observable.h"
+
 void NavMsgBus::Notify(std::shared_ptr<const NavMsg> msg) {
   if (!msg) return;
   std::string key = NavAddr::BusToString(msg->bus) + "::" + msg->GetKey();
+  auto deferred = [msg] { Observable(*msg).Notify(msg); };
   if (RegisterKey(key))
-    // Leave some time for listeners to register before message is sent.
-    CallAfter([msg] { Observable(*msg).Notify(msg); });
+    // Leave some time for listeners to register before the message is sent.
+    // Deferred onto the Qt event loop, pumped by QtEventBridge (task P1.16).
+    PostToMainThread(deferred);
   else
-    Observable(*msg).Notify(msg);
+    deferred();
 }
 
 bool NavMsgBus::RegisterKey(const std::string& key) {

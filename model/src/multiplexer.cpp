@@ -185,8 +185,8 @@ Multiplexer::Multiplexer(const MuxLogCallbacks &cb, bool &filter_behaviour)
 
     : m_log_callbacks(cb),
       m_legacy_input_filter_behaviour(filter_behaviour),
-      m_new_msgtype_lstnr(NavMsgBus::GetInstance().new_msg_event,
-                          [&](ObservedEvt &) { OnNewMessageType(); }),
+      m_new_msgtype_lstnr(NavMsgBus::GetInstance().new_msg_event.Key(),
+                          [this](const ObsData &) { OnNewMessageType(); }),
       m_n2k_repeat_count(0),
       m_last_pgn_logged(0) {
   if (g_GPS_Ident.IsEmpty()) g_GPS_Ident = "Generic";
