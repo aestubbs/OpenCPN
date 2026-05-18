@@ -114,9 +114,17 @@ void CommDriver::OnDataReceived(const QByteArray& data) {
     m_watchdog_timer->start(static_cast<int>(m_watchdog_timeout.count()));
 
   for (const CommFrame& frame : m_framer->Feed(bytes)) {
+    // The raw-frame tap sees every frame before decoding.
+    if (m_frame_observer) m_frame_observer(frame);
     for (auto& msg : m_decoder->Decode(frame, m_source_addr))
       if (m_listener) m_listener->Notify(std::move(msg));
   }
+}
+
+bool CommDriver::WriteRaw(const QByteArray& data) {
+  if (!m_transport->Write(data)) return false;
+  m_stats.tx_count += data.size();
+  return true;
 }
 
 void CommDriver::OnConnected() {
@@ -125,6 +133,7 @@ void CommDriver::OnConnected() {
   if (m_watchdog_timeout.count() > 0)
     m_watchdog_timer->start(static_cast<int>(m_watchdog_timeout.count()));
   if (m_listener) m_listener->Notify(*this);
+  Q_EMIT TransportConnected();
 }
 
 void CommDriver::OnDisconnected() {

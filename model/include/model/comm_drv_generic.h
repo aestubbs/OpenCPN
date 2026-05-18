@@ -38,6 +38,7 @@
 #define COMM_DRV_GENERIC_H
 
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -99,6 +100,28 @@ public:
 
   DriverStats GetDriverStats() const override { return m_stats; }
 
+  /**
+   * Install a tap called with every complete frame the framer produces,
+   * before decoding. Used by side-channel logic that needs the raw frame
+   * stream -- e.g. the N2K gateway manager intercepting management
+   * packets. Pass an empty std::function to remove the tap.
+   */
+  void SetFrameObserver(std::function<void(const CommFrame&)> observer) {
+    m_frame_observer = std::move(observer);
+  }
+
+  /**
+   * Write raw bytes straight to the transport, bypassing the decoder. For
+   * side-channel traffic such as gateway management messages that is not a
+   * NavMsg. Returns false if nothing could be sent.
+   */
+  bool WriteRaw(const QByteArray& data);
+
+Q_SIGNALS:
+  /** Emitted when the transport becomes ready (see CommTransport::Connected).
+   *  Lets side-channel logic (re)run a handshake on every (re)connect. */
+  void TransportConnected();
+
 private Q_SLOTS:
   void OnDataReceived(const QByteArray& data);  ///< frame, decode, forward
   void OnConnected();                           ///< transport became ready
@@ -110,6 +133,7 @@ private Q_SLOTS:
 private:
   std::unique_ptr<CommTransport> m_transport;
   std::unique_ptr<Framer> m_framer;
+  std::function<void(const CommFrame&)> m_frame_observer;
   std::unique_ptr<ProtocolDecoder> m_decoder;
   DriverListener* m_listener;
 
