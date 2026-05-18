@@ -92,6 +92,22 @@ include(CMakeDependentOption)
 include(CheckSymbolExists)
 
 #
+# Qt 6 discovery (Qt/QtQuick migration -- see docs/QT_MIGRATION.md).
+# During the migration the existing wxWidgets build still works in parallel;
+# OCPN_USE_QT_GUI will later switch the GUI layer over.
+#
+option(OCPN_USE_QT_GUI "Build the Qt/QtQuick GUI instead of wxWidgets" OFF)
+
+if (NOT QT_ANDROID)
+  # Homebrew installs Qt keg-only; add its prefix so find_package can see it.
+  if (APPLE AND EXISTS "/opt/homebrew/opt/qt")
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/qt")
+  endif ()
+  find_package(Qt6 REQUIRED COMPONENTS Core)
+  message(STATUS "Found Qt ${Qt6_VERSION}")
+endif ()
+
+#
 # Options
 #
 macro (BUNDLE_DOCS_OPT onoff)
@@ -898,6 +914,7 @@ set(GUI_HDRS
     ${GUI_HDR_DIR}/user_colors_dlg.h
     ${GUI_HDR_DIR}/viewport.h
     ${GUI_HDR_DIR}/waypointman_gui.h
+    ${GUI_HDR_DIR}/qt_event_bridge.h
 )
 
 set(GUI_SRC_DIR ${CMAKE_SOURCE_DIR}/gui/src)
@@ -962,6 +979,7 @@ set(GUI_SRC
     ${GUI_SRC_DIR}/notification_manager_gui.cpp
     ${GUI_SRC_DIR}/ocp_cursor.cpp
     ${GUI_SRC_DIR}/ocpn_app.cpp
+    ${GUI_SRC_DIR}/qt_event_bridge.cpp
     ${GUI_SRC_DIR}/ocpn_plugin_gui.cpp
     ${GUI_SRC_DIR}/ocpn_aui_manager.cpp
     ${GUI_SRC_DIR}/ocpndc.cpp
@@ -1522,6 +1540,10 @@ target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::s57-charts)
 
 add_subdirectory(libs/gui)
 target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::guilib)
+
+if (NOT QT_ANDROID)
+  target_link_libraries(${PACKAGE_NAME} PRIVATE Qt6::Core)
+endif ()
 
 if (MSVC)
   install(FILES "cache/buildwin/libssl-3.dll" DESTINATION ".")
