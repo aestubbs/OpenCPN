@@ -177,11 +177,11 @@ bool UdpTransport::Open() {
     connect(m_socket, &QUdpSocket::errorOccurred, this,
             &UdpTransport::OnError);
   }
-  // Multicast receivers must share the port with other listeners on the host.
+  // Bind shareable: multicast receivers must share the port with other
+  // listeners, and OpenCPN itself may run several connections (or a separate
+  // RX and TX direction) on one port -- the legacy driver bound REUSEADDR.
   const QUdpSocket::BindMode mode =
-      m_multicast ? QUdpSocket::BindMode(QUdpSocket::ShareAddress |
-                                         QUdpSocket::ReuseAddressHint)
-                  : QUdpSocket::BindMode(QUdpSocket::DefaultForPlatform);
+      QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint;
   if (!m_socket->bind(QHostAddress::AnyIPv4, m_port, mode)) {
     Q_EMIT ErrorOccurred(m_socket->errorString());
     return false;

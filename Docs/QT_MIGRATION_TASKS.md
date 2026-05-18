@@ -4,9 +4,9 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.5a, P1.5e, P1.5f done. P1.5 architecture agreed —
-a comms framework (`QT_MIGRATION_COMMS_ARCH.md`). Next: P1.5i (build the
-framework), then port P1.5b/d/c/g onto it.
+**Current position:** P1.5a, P1.5e, P1.5f, P1.5i, P1.5b done. The comms
+framework (`QT_MIGRATION_COMMS_ARCH.md`) is built and `n0183_net` (TCP
+client + UDP) is the first driver ported onto it. Next: P1.5d/c/g.
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -86,10 +86,13 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         a standalone driver — see
         [`QT_MIGRATION_N2K_NET_PLAN.md`](./QT_MIGRATION_N2K_NET_PLAN.md);
         refactored onto the framework by P1.5j.
-  - [ ] **P1.5i** Build the comms framework — `CommTransport` (+ the transport
-        implementations), `Framer` (`LineFramer`, `PassThroughFramer`),
-        `ProtocolDecoder` interface, and the generic `CommDriver` (lifecycle,
-        reconnect, watchdog, stats). The remaining drivers are built on it.
+  - [x] **P1.5i** Built the comms framework — `CommTransport`
+        (`SerialTransport`, `TcpClientTransport`, `UdpTransport`), `Framer`
+        (`LineFramer`, `PassThroughFramer`), the `ProtocolDecoder` interface,
+        and the generic `CommDriver` (lifecycle, reconnect, watchdog, stats).
+        `CanTransport`/`WebSocketTransport` and the concrete decoders are
+        added with their driver tasks (P1.5g/c, P1.5b/d). The remaining
+        drivers are built on this framework.
   - [x] **P1.5e** `CommDriverN0183Serial` → `QSerialPort`. *Primary reference
         pattern* (byte-stream serial). Native `QObject` owning a `QSerialPort`;
         RX is event-loop driven (`readyRead` → `LineBuffer` framing). The
@@ -97,8 +100,13 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         `serial_io.h`, `std_serial_io.cpp`, `android_serial_io.cpp`. The
         vendored `libs/serial` is no longer used here (still used by P1.5d).
         Build green, 58/59 tests pass.
-  - [ ] **P1.5b** `n0183_net` on the framework — `TcpClient`/`Udp` transport
-        + `LineFramer` + `Nmea0183Decoder` (built on P1.5i).
+  - [x] **P1.5b** `n0183_net` on the framework — TCP-client and UDP
+        connections run on the generic `CommDriver` (`TcpClientTransport` /
+        `UdpTransport` + `LineFramer` + new `Nmea0183Decoder`, 10 unit
+        tests). The factory builds the triple. TCP server-mode (a 0.0.0.0
+        listen address) and GPSD stay on the legacy `CommDriverN0183Net`:
+        server-mode needs a `TcpServerTransport` (a transport-layer
+        follow-up if wanted); GPSD is dropped from scope pending review.
   - [ ] **P1.5d** `n2k_serial` on the framework — `SerialTransport` +
         `N2kGatewayFramer` + `N2kDecoder`; retires vendored `serial/serial.h`.
   - [ ] **P1.5c** `signalk_net` on the framework — `WebSocketTransport`
@@ -279,3 +287,22 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   others adapt. Note: P1.5g is Linux-only and cannot be built on the macOS
   dev box. Key distinction: only `socketcan` is real CAN — the N2K *gateway*
   drivers (`n2k_serial`, `n2k_net`) are byte-stream transports, not `QCanBus`.
+- 2026-05-18 — P1.5i done: the comms framework is built. `CommTransport`
+  (abstract `QObject` media adaptor) with `SerialTransport`/`TcpClientTransport`/
+  `UdpTransport`; `Framer` with `LineFramer`/`PassThroughFramer`; the pure
+  `ProtocolDecoder` interface; and the generic `CommDriver` (`QObject` +
+  `AbstractCommDriver`) that owns a transport+framer+decoder triple and
+  provides reconnect, the no-data watchdog and `DriverStats` once. The NxM
+  driver grid now collapses to N transports + M decoders + a few framers + 1
+  driver. `CanTransport`/`WebSocketTransport` and the concrete decoders land
+  with their driver tasks (P1.5g/c, P1.5b/d). Build green.
+- 2026-05-18 — P1.5b done: `n0183_net` is the first driver on the comms
+  framework. TCP-client and UDP connections now run as a generic `CommDriver`
+  + `TcpClientTransport`/`UdpTransport` + `LineFramer` + a new pure
+  `Nmea0183Decoder` (v4-tag stripping, garbage/checksum classification, input
+  sentence filter; 10 gtest cases, no hardware needed). The factory
+  (`MakeN0183NetDriver`) builds the triple. The legacy `CommDriverN0183Net`
+  is retained only for TCP server-mode and GPSD — server-mode would be a
+  `TcpServerTransport` (transport layer, deferred); GPSD is out of scope
+  pending review. `UdpTransport` now binds shareable (REUSEADDR), matching
+  the legacy socket. Build green; framer+decoder tests pass.

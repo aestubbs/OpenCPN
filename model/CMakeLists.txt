@@ -64,6 +64,7 @@ set(
   ${MODEL_HDR_DIR}/comm_drv_signalk.h
   ${MODEL_HDR_DIR}/comm_drv_signalk_net.h
   ${MODEL_HDR_DIR}/comm_drv_stats.h
+  ${MODEL_HDR_DIR}/comm_n0183_decoder.h
   ${MODEL_HDR_DIR}/comm_n0183_output.h
   ${MODEL_HDR_DIR}/comm_navmsg_bus.h
   ${MODEL_HDR_DIR}/comm_navmsg.h
@@ -178,6 +179,7 @@ set(SRC
   ${MODEL_SRC_DIR}/comm_drv_registry.cpp
   ${MODEL_SRC_DIR}/comm_drv_signalk.cpp
   ${MODEL_SRC_DIR}/comm_drv_signalk_net.cpp
+  ${MODEL_SRC_DIR}/comm_n0183_decoder.cpp
   ${MODEL_SRC_DIR}/comm_n0183_output.cpp
   ${MODEL_SRC_DIR}/comm_navmsg_bus.cpp
   ${MODEL_SRC_DIR}/comm_navmsg.cpp

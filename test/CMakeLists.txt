@@ -117,6 +117,7 @@ if (UNIX AND NOT DEFINED ENV{FLATPAK_ID})
 endif ()
 
 set(_BUF_TEST_SRC buffer_tests.cpp comm_framer_tests.cpp
+    comm_n0183_decoder_tests.cpp
     ${CMAKE_SOURCE_DIR}/cli/api_shim.cpp)
 add_executable(buffer_tests ${_BUF_TEST_SRC})
 target_link_libraries(
