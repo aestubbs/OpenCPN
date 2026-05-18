@@ -18,19 +18,20 @@
 /**
  * \file
  *
- * Comms framework -- NMEA 0183 protocol decoder.
+ * Comms framework -- NMEA 2000 gateway protocol decoder.
  *
- * Turns terminator-delimited NMEA 0183 frames (from a LineFramer) into
- * Nmea0183Msg objects, applying the parsing rules of CommDriverN0183:
- * v4-tag stripping, garbage / bad-checksum classification and the
- * connection's input sentence filter. Encode() is the transmit path.
+ * Converts between Actisense application-data frames (produced by a
+ * N2kGatewayFramer) and Nmea2000Msg objects. Decode() reads the data code,
+ * PGN and node NAME out of a received frame; Encode() builds the escaped
+ * Actisense TX packet for transmission.
  *
- * No I/O and no Qt -- so it is unit-testable against captured sentence
- * logs with no hardware (task P1.5b, built on the P1.5i framework).
+ * Management packets (data code 0xA0) are not NavMsg objects -- Decode()
+ * ignores them; the gateway manager picks them up via the driver's raw
+ * frame tap. No I/O and no Qt -- unit-testable (task P1.5d).
  */
 
-#ifndef COMM_N0183_DECODER_H
-#define COMM_N0183_DECODER_H
+#ifndef COMM_N2K_DECODER_H
+#define COMM_N2K_DECODER_H
 
 #include <memory>
 #include <vector>
@@ -38,26 +39,20 @@
 #include "model/comm_protocol_decoder.h"
 #include "model/conn_params.h"
 
-/**
- * ProtocolDecoder for the NMEA 0183 wire protocol.
- *
- * Holds a copy of the connection's ConnectionParams -- it needs the input
- * sentence filter and the I/O direction, both per-connection configuration
- * rather than wire-protocol state.
- */
-class Nmea0183Decoder : public ProtocolDecoder {
+/** ProtocolDecoder for NMEA 2000 over an Actisense-format serial gateway. */
+class N2kDecoder : public ProtocolDecoder {
 public:
-  explicit Nmea0183Decoder(const ConnectionParams& params);
+  explicit N2kDecoder(const ConnectionParams& params);
 
-  /** One 0183 frame -> exactly one Nmea0183Msg (or none for an output-only
-   *  connection / an empty frame). */
+  /** One Actisense application-data frame -> one Nmea2000Msg. Empty for a
+   *  management packet, an output-only connection or a too-short frame. */
   std::vector<std::shared_ptr<const NavMsg>> Decode(
       const CommFrame& frame,
       const std::shared_ptr<const NavAddr>& src) override;
 
-  /** An Nmea0183Msg -> one wire frame, CR/LF terminated. Empty for a
-   *  non-0183 message or an input-only connection. NMEA 0183 has no
-   *  destination address, so dest is ignored. */
+  /** An Nmea2000Msg -> one escaped Actisense TX packet. Empty for a
+   *  non-N2K message or an input-only connection. dest, when a NavAddr2000,
+   *  supplies the N2K destination node address (else broadcast, 255). */
   std::vector<CommFrame> Encode(
       const std::shared_ptr<const NavMsg>& msg,
       const std::shared_ptr<const NavAddr>& dest) override;
@@ -66,4 +61,4 @@ private:
   ConnectionParams m_params;
 };
 
-#endif  // COMM_N0183_DECODER_H
+#endif  // COMM_N2K_DECODER_H

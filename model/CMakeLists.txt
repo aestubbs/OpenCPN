@@ -66,6 +66,7 @@ set(
   ${MODEL_HDR_DIR}/comm_drv_stats.h
   ${MODEL_HDR_DIR}/comm_n0183_decoder.h
   ${MODEL_HDR_DIR}/comm_n0183_output.h
+  ${MODEL_HDR_DIR}/comm_n2k_decoder.h
   ${MODEL_HDR_DIR}/comm_navmsg_bus.h
   ${MODEL_HDR_DIR}/comm_navmsg.h
   ${MODEL_HDR_DIR}/comm_out_queue.h
@@ -182,6 +183,7 @@ set(SRC
   ${MODEL_SRC_DIR}/comm_framer.cpp
   ${MODEL_SRC_DIR}/comm_n0183_decoder.cpp
   ${MODEL_SRC_DIR}/comm_n0183_output.cpp
+  ${MODEL_SRC_DIR}/comm_n2k_decoder.cpp
   ${MODEL_SRC_DIR}/comm_navmsg_bus.cpp
   ${MODEL_SRC_DIR}/comm_navmsg.cpp
   ${MODEL_SRC_DIR}/comm_navmsg.cpp

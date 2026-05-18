@@ -155,7 +155,7 @@ void CommDriver::OnWatchdogTimer() {
 
 bool CommDriver::SendMessage(std::shared_ptr<const NavMsg> msg,
                              std::shared_ptr<const NavAddr> addr) {
-  const std::vector<CommFrame> frames = m_decoder->Encode(msg);
+  const std::vector<CommFrame> frames = m_decoder->Encode(msg, addr);
   if (frames.empty()) return false;
 
   bool ok = true;

@@ -81,7 +81,7 @@ TEST(Nmea0183Decoder, EmptyOrSentenceLessFrameYieldsNothing) {
 TEST(Nmea0183Decoder, EncodeAppendsCrlf) {
   Nmea0183Decoder decoder(Params(DS_TYPE_INPUT_OUTPUT));
   auto msg = std::make_shared<const Nmea0183Msg>("GPGGA", kGoodGga, kSrc);
-  auto frames = decoder.Encode(msg);
+  auto frames = decoder.Encode(msg, nullptr);
   ASSERT_EQ(frames.size(), 1u);
   const std::string out(frames[0].begin(), frames[0].end());
   EXPECT_EQ(out, std::string(kGoodGga) + "\r\n");
@@ -91,7 +91,7 @@ TEST(Nmea0183Decoder, EncodeDoesNotDoubleTerminate) {
   Nmea0183Decoder decoder(Params(DS_TYPE_INPUT_OUTPUT));
   auto msg = std::make_shared<const Nmea0183Msg>(
       "GPGGA", std::string(kGoodGga) + "\r\n", kSrc);
-  auto frames = decoder.Encode(msg);
+  auto frames = decoder.Encode(msg, nullptr);
   ASSERT_EQ(frames.size(), 1u);
   const std::string out(frames[0].begin(), frames[0].end());
   EXPECT_EQ(out, std::string(kGoodGga) + "\r\n");
@@ -100,12 +100,12 @@ TEST(Nmea0183Decoder, EncodeDoesNotDoubleTerminate) {
 TEST(Nmea0183Decoder, EncodeRejectsInputOnlyConnection) {
   Nmea0183Decoder decoder(Params(DS_TYPE_INPUT));
   auto msg = std::make_shared<const Nmea0183Msg>("GPGGA", kGoodGga, kSrc);
-  EXPECT_TRUE(decoder.Encode(msg).empty());
+  EXPECT_TRUE(decoder.Encode(msg, nullptr).empty());
 }
 
 TEST(Nmea0183Decoder, EncodeRejectsNon0183Message) {
   Nmea0183Decoder decoder(Params(DS_TYPE_INPUT_OUTPUT));
   std::shared_ptr<const NavMsg> n2k = std::make_shared<const Nmea2000Msg>(
       static_cast<uint64_t>(129025));
-  EXPECT_TRUE(decoder.Encode(n2k).empty());
+  EXPECT_TRUE(decoder.Encode(n2k, nullptr).empty());
 }

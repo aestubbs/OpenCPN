@@ -68,11 +68,17 @@ public:
   /**
    * Encode a NavMsg for transmission into zero or more wire frames.
    *
+   * @param msg   The message to send.
+   * @param dest  Destination address from the SendMessage call, or null for
+   *              a broadcast / address-less protocol. Protocols that do not
+   *              use it (NMEA 0183) ignore the argument.
+   *
    * An empty result means this decoder cannot encode the message (wrong
-   * protocol, or a receive-only protocol).
+   * protocol, or a receive-only protocol / connection).
    */
   virtual std::vector<CommFrame> Encode(
-      const std::shared_ptr<const NavMsg>& msg) = 0;
+      const std::shared_ptr<const NavMsg>& msg,
+      const std::shared_ptr<const NavAddr>& dest) = 0;
 };
 
 #endif  // COMM_PROTOCOL_DECODER_H

@@ -109,7 +109,8 @@ std::vector<std::shared_ptr<const NavMsg>> Nmea0183Decoder::Decode(
 }
 
 std::vector<CommFrame> Nmea0183Decoder::Encode(
-    const std::shared_ptr<const NavMsg>& msg) {
+    const std::shared_ptr<const NavMsg>& msg,
+    const std::shared_ptr<const NavAddr>& /* dest */) {
   // An input-only connection cannot transmit.
   if (m_params.IOSelect == DS_TYPE_INPUT) return {};
 
