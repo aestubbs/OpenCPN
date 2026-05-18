@@ -25,16 +25,16 @@
 #ifndef COMM_BRIDGE_H
 #define COMM_BRIDGE_H
 
+#include <chrono>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
 
-#include <wx/event.h>
-#include <wx/timer.h>
-
 #include "model/comm_decoder.h"
 #include "model/comm_navmsg.h"
 #include "model/nmea_log.h"
+#include "model/periodic_timer.h"
 
 using N0183MsgPtr = std::shared_ptr<const Nmea0183Msg>;
 using N2000MsgPtr = std::shared_ptr<const Nmea2000Msg>;
@@ -80,20 +80,40 @@ struct BridgeLogCallbacks {
 };
 
 /**
+ * Pure-C++ watchdog timer for CommBridge.
+ *
+ * A continuous 1 s timer replacing the old wxTimer. PeriodicTimer::Notify()
+ * runs on a worker thread, so the supplied callback is responsible for
+ * marshalling work back onto the main thread.
+ */
+class WatchdogTimer : public PeriodicTimer {
+public:
+  explicit WatchdogTimer(std::function<void()> on_timeout)
+      : PeriodicTimer(std::chrono::milliseconds(1000)),
+        m_on_timeout(std::move(on_timeout)) {}
+
+protected:
+  void Notify() override { m_on_timeout(); }
+
+private:
+  std::function<void()> m_on_timeout;
+};
+
+/**
  * Process incoming messages.
  *
  * Listem to "known" messages and process them for example by broadcasting
  * ship data. Also handles message source priorities i.e., which source to
  * use for broadcasted data.
  */
-class CommBridge : public wxEvtHandler {
+class CommBridge {
 public:
   static CommBridge& GetInstance();
 
   CommBridge(const CommBridge&) = delete;
   CommBridge& operator=(const CommBridge&) = delete;
 
-  ~CommBridge() override;
+  ~CommBridge();
 
   bool Initialize();
 
@@ -182,7 +202,7 @@ private:
   int m_last_position_priority;
   std::string m_last_position_source;
   Watchdogs m_watchdogs;
-  wxTimer m_watchdog_timer;
+  std::unique_ptr<WatchdogTimer> m_watchdog_timer;
 
   void InitCommListeners();
 

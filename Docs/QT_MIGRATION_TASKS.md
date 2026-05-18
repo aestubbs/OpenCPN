@@ -4,9 +4,9 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.2 done (build green, app runs). Next: P1.3
-(migrate `comm_bridge`).
-**Last updated:** 2026-05-17.
+**Current position:** P1.3 done (build green, app runs). Next: P1.4
+(migrate `multiplexer`).
+**Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
 Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
@@ -59,7 +59,14 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
       `ObsListener` → `ObsConnection`). Per-message dispatch channel
       (`Observable(*msg)`) left on wx for a later whole-channel migration.
       Build green, app runs.  *(dep: P1.1, P1.16)*
-- [ ] **P1.3** Migrate `comm_bridge` (22 ObsListener members) off `wxEvtHandler`.  *(dep: P1.1)*
+- [x] **P1.3** Migrate `comm_bridge` off `wxEvtHandler`. The base class existed
+      solely for the watchdog `wxTimer`; replaced with `WatchdogTimer` (a pure
+      C++17 `PeriodicTimer` subclass) which fires on a worker thread and
+      marshals `OnWatchdogTimer()` back to the main thread via
+      `PostToMainThread()`, preserving the wxTimer main-thread semantics. The
+      19 message `ObsListener` members are untouched — they subscribe to the
+      per-message dispatch channel, still on wx (see P1.2); they migrate with
+      that channel later.  *(dep: P1.1, P1.16)*
 - [ ] **P1.4** Migrate `multiplexer` off `wxEvtHandler`.  *(dep: P1.1)*
 - [ ] **P1.5** Migrate the ~15 comm drivers (`comm_drv_*`) to signal/callback based.  *(dep: P1.2–1.4)*
 - [ ] **P1.6** Sweep `wxString` → `QString` across `model/` and core `libs/`.
@@ -154,3 +161,13 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   (`ocpn_plugin.h`), so observable conversion must be strangler-style — add a
   parallel Qt mechanism, keep the wx path for the plugin boundary until Phase 4.
   P0.3 (Qt in CMake) promoted to a hard prerequisite of P1.1.
+- 2026-05-18 — P1.3 done: `CommBridge` no longer inherits `wxEvtHandler`. The
+  base class was needed only for the watchdog `wxTimer`; it is replaced by
+  `WatchdogTimer`, a `PeriodicTimer` subclass. `PeriodicTimer` runs `Notify()`
+  on a worker thread, so the tick is marshalled to the main thread with
+  `PostToMainThread()` to keep `OnWatchdogTimer()` (touches global nav state,
+  AppMsgBus) on the main thread as the old wxTimer did. The message
+  `ObsListener` members stay on wx — their publisher (the per-message
+  dispatch channel) is still wx. Build green; 58/59 unit tests pass (the one
+  failure, `DateTimeFormatTest.LocalTimezoneCETSwedish`, is a pre-existing
+  locale-dependent test unrelated to this change).

@@ -50,6 +50,8 @@
 #include "model/multiplexer.h"
 #include "model/notification_manager.h"
 
+#include "observable_qt.h"
+
 #define N_ACTIVE_LOG_WATCHDOG 300
 
 using std::string;
@@ -261,18 +263,15 @@ CommBridge& CommBridge::GetInstance() {
 }
 
 CommBridge::CommBridge()
-    : wxEvtHandler(),
-      // every 60 minutes, reduced after first position Rx
-      active_priority_position("position"),
+    // every 60 minutes, reduced after first position Rx
+    : active_priority_position("position"),
       active_priority_velocity("velocity"),
       active_priority_heading("heading"),
       active_priority_variation("variation"),
       active_priority_satellites("satellites"),
       active_priority_void("", -1),
       m_n_log_watchdog_period(3600),
-      m_last_position_priority(0) {
-  Bind(wxEVT_TIMER, [&](wxTimerEvent&) { OnWatchdogTimer(); });
-}
+      m_last_position_priority(0) {}
 CommBridge::~CommBridge() = default;
 
 bool CommBridge::Initialize() {
@@ -285,8 +284,11 @@ bool CommBridge::Initialize() {
   // Clear the watchdogs
   PresetWatchdogs();
 
-  m_watchdog_timer.SetOwner(this, WATCHDOG_TIMER);
-  m_watchdog_timer.Start(1000, wxTIMER_CONTINUOUS);
+  // Continuous 1 s watchdog. PeriodicTimer fires on a worker thread, so the
+  // work is marshalled back onto the main thread via the Qt event loop
+  // (pumped by QtEventBridge, task P1.16) to preserve the wxTimer semantics.
+  m_watchdog_timer = std::make_unique<WatchdogTimer>(
+      [this] { PostToMainThread([this] { OnWatchdogTimer(); }); });
 
   InitCommListeners();
 
