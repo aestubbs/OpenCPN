@@ -18,6 +18,16 @@ Modernise the OpenCPN GUI as a hard fork built on Qt:
 This is explicitly a fork: it will diverge permanently from upstream and
 breaks the existing wxWidgets plugin ABI.
 
+**Android / mobile during the migration.** The existing Android build (wxQt)
+is **dropped** for the duration of the migration — it is not kept alive in
+parallel. Android- and wxQt-specific code (`__OCPN__ANDROID__`, `QT_ANDROID`,
+the `comm_drv_*_android_*` drivers, `wxQt` paths) is **removed** as each area
+is migrated, rather than ported or stubbed; keeping the legacy mobile build
+working through the transition is not worth the friction. Mobile remains a
+target — it is re-introduced *natively* once the core is on Qt, via QtQuick,
+which delivers a far better Android/iOS experience than wxQt ever did. So
+mobile is **deferred, not abandoned**.
+
 ## 2. Starting point (investigation findings)
 
 - Desktop builds use **wxWidgets**. The Android build uses **wxQt** — wxWidgets

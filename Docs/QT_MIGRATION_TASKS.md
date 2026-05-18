@@ -4,9 +4,9 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.5a done; P1.5 reframed around Qt-native transport
-classes (see `QT_MIGRATION_COMMS_PLAN.md`). In progress: P1.5e
-(`comm_drv_n0183_serial` → `QSerialPort`), the primary reference driver.
+**Current position:** P1.5a and P1.5e done — the two transport reference
+patterns (`QtNetwork`, `QSerialPort`) are in place. Next: P1.5g
+(`comm_drv_n2k_socketcan` → `QCanBus`).
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -83,10 +83,15 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
       adapt from them.  *(dep: P1.2–1.4)*
   - [x] **P1.5a** `CommDriverN2KNet` (N2K over TCP/UDP) → `QtNetwork`. Done —
         see [`QT_MIGRATION_N2K_NET_PLAN.md`](./QT_MIGRATION_N2K_NET_PLAN.md).
-  - [ ] **P1.5e** `CommDriverN0183Serial` → `QSerialPort`. *Primary reference
-        pattern* (byte-stream serial). Replaces the `SerialIo` worker-thread
-        abstraction and the vendored `libs/serial`; `QSerialPortInfo` replaces
-        the `ser_ports.cpp` enumeration `#ifdef`s. Verifiable on macOS.
+  - [x] **P1.5e** `CommDriverN0183Serial` → `QSerialPort`. *Primary reference
+        pattern* (byte-stream serial). Native `QObject` owning a `QSerialPort`;
+        RX is event-loop driven (`readyRead` → `LineBuffer` framing). The
+        `SerialIo`/`ThreadCtrl` worker-thread abstraction is gone — deleted
+        `serial_io.h`, `std_serial_io.cpp`, `android_serial_io.cpp`. The
+        vendored `libs/serial` is no longer used here (still used by P1.5d).
+        Build green, 58/59 tests pass.
+  - [ ] **P1.5h** `ser_ports.cpp` serial-port enumeration → `QSerialPortInfo`,
+        retiring the platform `#ifdef` branches.
   - [ ] **P1.5g** `CommDriverN2KSocketCAN` → `QCanBus` (QtSerialBus).
         *Frame-oriented reference pattern.* `QCanBusDevice` replaces the raw
         `PF_CAN` socket, the `ioctl`/`setsockopt` setup, and the `Worker` read
@@ -99,9 +104,11 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         (adapts P1.5a).
   - [ ] **P1.5c** `CommDriverSignalKNet` → `QWebSocket`; retires the vendored
         `IXWebSocket` for this driver.
-  - [ ] **P1.5f** Android N0183 drivers (`comm_drv_n0183_android_*`) →
-        `QBluetoothSocket`; deferred (`__OCPN__ANDROID__`-only, not in the
-        desktop build).
+  - [ ] **P1.5f** **Delete** the Android comm drivers
+        (`comm_drv_n0183_android_*`) and Android serial I/O
+        (`android_serial_io.cpp`). Android is dropped for the migration
+        (see `QT_MIGRATION.md` §1 and X.4); mobile returns natively via
+        QtQuick after the core is on Qt — it is not migrated in place.
 - [ ] **P1.6** Sweep `wxString` → `QString` across `model/` and core `libs/`.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
@@ -172,6 +179,11 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
 - [ ] **X.1** Keep Phase 1 changes mechanical (not redesign) to preserve upstream cherry-pick ability.
 - [ ] **X.2** Update [`QT_MIGRATION.md`](./QT_MIGRATION.md) when design decisions change.
 - [ ] **X.3** Maintain the image-diff regression suite as the chart renderer evolves.
+- [ ] **X.4** As each area is migrated, **remove** its Android / wxQt-specific
+      code (`__OCPN__ANDROID__`, `QT_ANDROID`, `wxQt` paths, `*_android_*`
+      files) rather than porting it. Android is dropped for the migration
+      (`QT_MIGRATION.md` §1); mobile is reintroduced natively via QtQuick once
+      the core is on Qt.
 
 ## Notes / decisions log
 
@@ -228,6 +240,17 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   were left as-is (their `wxString` use is the P1.6 string sweep). Build
   green, 58/59 tests pass; on-water/simulator testing of a real N2K gateway
   still required.
+- 2026-05-18 — Android dropped for the migration (`QT_MIGRATION.md` §1, X.4):
+  the legacy wxQt Android build is not kept alive; Android/wxQt-specific code
+  is deleted as each area is migrated. Mobile returns natively via QtQuick
+  after the core is on Qt.
+- 2026-05-18 — P1.5e done: `CommDriverN0183Serial` is a native `QObject`
+  owning a `QSerialPort`; the `SerialIo`/`ThreadCtrl` worker-thread layer and
+  its desktop + Android implementations were deleted (`serial_io.h`,
+  `std_serial_io.cpp`, `android_serial_io.cpp`). RX is event-loop driven via
+  `readyRead`; reconnect is a `QTimer`. This is the byte-stream reference
+  pattern; `n2k_serial` (P1.5d) and `n0183_net` (P1.5b) adapt from it. Build
+  green, 58/59 tests pass; functional verification needs a serial device.
 - 2026-05-18 — P1.5 reframed (`QT_MIGRATION_COMMS_PLAN.md`): rather than just
   dropping `wxEvtHandler`, each driver adopts the correct Qt transport class
   (`QSerialPort`, `QCanBus`, `QtNetwork`, `QWebSocket`), which lets vendored

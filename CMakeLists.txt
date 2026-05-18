@@ -103,7 +103,7 @@ if (NOT QT_ANDROID)
   if (APPLE AND EXISTS "/opt/homebrew/opt/qt")
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/qt")
   endif ()
-  find_package(Qt6 REQUIRED COMPONENTS Core Network)
+  find_package(Qt6 REQUIRED COMPONENTS Core Network SerialPort)
   message(STATUS "Found Qt ${Qt6_VERSION}")
 
   # Native QObject classes now live in headers shared with wxWidgets TUs.

@@ -130,7 +130,6 @@ set(
   ${MODEL_HDR_DIR}/select.h
   ${MODEL_HDR_DIR}/select_item.h
   ${MODEL_HDR_DIR}/semantic_vers.h
-  ${MODEL_HDR_DIR}/serial_io.h
   ${MODEL_HDR_DIR}/ser_ports.h
   ${MODEL_HDR_DIR}/std_icon.h
   ${MODEL_HDR_DIR}/std_instance_chk.h
@@ -245,12 +244,6 @@ set(SRC
   ${MODEL_SRC_DIR}/usb_watch_factory.cpp
 )
 
-if (QT_ANDROID)
-  list(APPEND HDRS ${MODEL_SRC_DIR}/android_serial_io.cpp)
-else ()
-  list(APPEND SRC ${MODEL_SRC_DIR}/std_serial_io.cpp)
-endif ()
-
 if (LINUX)
   list(APPEND HDRS ${MODEL_HDR_DIR}/comm_drv_n2k_socketcan.h )
   list(APPEND SRC ${MODEL_SRC_DIR}/comm_drv_n2k_socketcan.cpp)
@@ -297,7 +290,7 @@ target_link_libraries(_model_src PUBLIC _OCPN_MODEL)
 # AUTOMOC runs moc on it, and the Qt socket/core libraries are linked in.
 if (NOT QT_ANDROID)
   set_target_properties(_model_src PROPERTIES AUTOMOC ON)
-  target_link_libraries(_model_src PUBLIC Qt6::Core Qt6::Network)
+  target_link_libraries(_model_src PUBLIC Qt6::Core Qt6::Network Qt6::SerialPort)
 endif ()
 
 target_include_directories(
