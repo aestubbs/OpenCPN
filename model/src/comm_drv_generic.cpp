@@ -42,6 +42,7 @@
 using namespace std::literals::chrono_literals;
 
 CommDriver::CommDriver(NavAddr::Bus bus, const std::string& iface,
+                       const ConnectionParams& params,
                        std::unique_ptr<CommTransport> transport,
                        std::unique_ptr<Framer> framer,
                        std::unique_ptr<ProtocolDecoder> decoder,
@@ -49,6 +50,7 @@ CommDriver::CommDriver(NavAddr::Bus bus, const std::string& iface,
                        std::chrono::milliseconds reconnect_interval,
                        std::chrono::milliseconds watchdog_timeout)
     : AbstractCommDriver(bus, iface),
+      m_params(params),
       m_transport(std::move(transport)),
       m_framer(std::move(framer)),
       m_decoder(std::move(decoder)),

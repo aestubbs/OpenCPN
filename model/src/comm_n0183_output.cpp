@@ -69,9 +69,11 @@ void BroadcastNMEA0183Message(const wxString& msg, NmeaLog* nmea_log,
 
   for (auto& driver : drivers) {
     if (driver->bus == NavAddr::Bus::N0183) {
-      auto drv_n0183 = dynamic_cast<CommDriverN0183*>(driver.get());
-      assert(drv_n0183);
-      ConnectionParams params = drv_n0183->GetParams();
+      // Any driver carrying connection params works here, whatever its
+      // concrete class -- framework CommDriver or a legacy driver.
+      auto* cpp = dynamic_cast<ConnectionParamsProvider*>(driver.get());
+      if (!cpp) continue;
+      const ConnectionParams& params = cpp->GetConnectionParams();
 
       if (params.IOSelect == DS_TYPE_INPUT_OUTPUT ||
           params.IOSelect == DS_TYPE_OUTPUT) {
@@ -370,7 +372,9 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
   auto& target_driver =
       FindDriver(registry.GetDrivers(), target_iface, NavAddr::Bus::N0183);
 
-  auto drv_n0183 = dynamic_cast<CommDriverN0183*>(target_driver.get());
+  // Only iface / SendMessage are needed below -- both AbstractCommDriver
+  // members -- so no concrete-driver downcast is required.
+  AbstractCommDriver* drv_n0183 = target_driver.get();
   if (!drv_n0183) {
     return ERR_GPS_DRIVER_NOT_AVAILAIBLE;
   }
@@ -969,7 +973,7 @@ int SendWaypointToGPS_N0183(RoutePoint* prp, const wxString& com_name,
 #endif  // USE_GARMINHOST
 
   {  // Standard NMEA mode
-    auto drv_n0183 = dynamic_cast<CommDriverN0183*>(target_driver.get());
+    AbstractCommDriver* drv_n0183 = target_driver.get();
     if (!drv_n0183) {
       ret_val = ERR_GPS_DRIVER_NOT_AVAILAIBLE;
       goto ret_point;

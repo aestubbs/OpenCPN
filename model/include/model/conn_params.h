@@ -140,4 +140,23 @@ private:
 
 std::vector<ConnectionParams *> &TheConnectionParams();
 
+/**
+ * Capability interface for drivers that carry the ConnectionParams they
+ * were built from.
+ *
+ * A mix-in in the spirit of DriverStatsProvider: code that needs a
+ * driver's connection settings (the NMEA 0183 output path, "Send to GPS")
+ * does `dynamic_cast<ConnectionParamsProvider*>(driver)` and null-checks,
+ * rather than downcasting to a concrete driver class. The interface is
+ * only pulled into a driver's hierarchy when it actually has params to
+ * expose.
+ */
+class ConnectionParamsProvider {
+public:
+  virtual ~ConnectionParamsProvider() = default;
+
+  /** The connection parameters this driver was created from. */
+  virtual const ConnectionParams &GetConnectionParams() const = 0;
+};
+
 #endif

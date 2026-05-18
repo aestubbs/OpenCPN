@@ -49,6 +49,7 @@
 #include "model/comm_framer.h"
 #include "model/comm_protocol_decoder.h"
 #include "model/comm_transport.h"
+#include "model/conn_params.h"
 
 class QTimer;
 
@@ -61,13 +62,15 @@ class QTimer;
  */
 class CommDriver : public QObject,
                    public AbstractCommDriver,
-                   public DriverStatsProvider {
+                   public DriverStatsProvider,
+                   public ConnectionParamsProvider {
   Q_OBJECT
 
 public:
   /**
    * @param bus       The driver's bus (sets the registry key).
    * @param iface     The driver's interface string (sets the registry key).
+   * @param params    Connection parameters this driver was built from.
    * @param transport Media adaptor; ownership taken.
    * @param framer    Frame boundary finder; ownership taken.
    * @param decoder   Protocol conversion layer; ownership taken.
@@ -77,6 +80,7 @@ public:
    *                            unavailable; zero disables the watchdog.
    */
   CommDriver(NavAddr::Bus bus, const std::string& iface,
+             const ConnectionParams& params,
              std::unique_ptr<CommTransport> transport,
              std::unique_ptr<Framer> framer,
              std::unique_ptr<ProtocolDecoder> decoder, DriverListener& listener,
@@ -99,6 +103,10 @@ public:
   void SetListener(DriverListener& l) override { m_listener = &l; }
 
   DriverStats GetDriverStats() const override { return m_stats; }
+
+  const ConnectionParams& GetConnectionParams() const override {
+    return m_params;
+  }
 
   /**
    * Install a tap called with every complete frame the framer produces,
@@ -144,6 +152,7 @@ private Q_SLOTS:
   void OnWatchdogTimer();                       ///< no data -> mark unavailable
 
 private:
+  ConnectionParams m_params;
   std::unique_ptr<CommTransport> m_transport;
   std::unique_ptr<Framer> m_framer;
   std::function<void(const CommFrame&)> m_frame_observer;
