@@ -4,9 +4,9 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.5a and P1.5e done — the two transport reference
-patterns (`QtNetwork`, `QSerialPort`) are in place. Next: P1.5g
-(`comm_drv_n2k_socketcan` → `QCanBus`).
+**Current position:** P1.5a, P1.5e, P1.5f done. Remaining P1.5 sub-tasks —
+P1.5b/c/d/g (driver rewrites) and P1.5h (`ser_ports`). Next: P1.5b
+(`comm_drv_n0183_net` → `QtNetwork`, adapts P1.5a).
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -104,11 +104,11 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         (adapts P1.5a).
   - [ ] **P1.5c** `CommDriverSignalKNet` → `QWebSocket`; retires the vendored
         `IXWebSocket` for this driver.
-  - [ ] **P1.5f** **Delete** the Android comm drivers
-        (`comm_drv_n0183_android_*`) and Android serial I/O
-        (`android_serial_io.cpp`). Android is dropped for the migration
-        (see `QT_MIGRATION.md` §1 and X.4); mobile returns natively via
-        QtQuick after the core is on Qt — it is not migrated in place.
+  - [x] **P1.5f** Deleted the Android comm drivers (`comm_drv_n0183_android_*`,
+        `INTERNAL_GPS`/`INTERNAL_BT`) and Android serial I/O
+        (`android_serial_io.cpp`, deleted with P1.5e). Android is dropped for
+        the migration (`QT_MIGRATION.md` §1, X.4); mobile returns natively via
+        QtQuick after the core is on Qt. Desktop build green.
 - [ ] **P1.6** Sweep `wxString` → `QString` across `model/` and core `libs/`.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
