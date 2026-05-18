@@ -34,12 +34,13 @@
 #include <wx/wx.h>
 #endif  // precompiled headers
 
+#include <ixwebsocket/IXNetSystem.h>
+
 #include "model/comm_util.h"
 #include "model/comm_drv_generic.h"
 #include "model/comm_drv_loopback.h"
 #include "model/comm_drv_n2k_net.h"
 #include "model/comm_drv_n0183_serial.h"
-#include "model/comm_drv_signalk_net.h"
 #include "model/comm_n0183_decoder.h"
 #include "model/comm_n2k_decoder.h"
 #include "model/comm_n2k_gateway_mgr.h"
@@ -47,9 +48,9 @@
 #include "model/comm_drv_registry.h"
 #include "model/ds_porttype.h"
 
-#if defined(__linux__) && !defined(__ANDROID__) && !defined(__WXOSX__)
-#include "model/comm_drv_n2k_socketcan.h"
-#endif
+// SignalK (comm_drv_signalk*) and SocketCAN (comm_drv_n2k_socketcan) are
+// parked: their source stays in the tree but is not built and the factory
+// no longer creates them. See P1.5m in QT_MIGRATION_TASKS.md.
 
 class N0183Listener : public DriverListener {
 public:
@@ -186,8 +187,11 @@ void MakeCommDriver(const ConnectionParams* params) {
     case NETWORK:
       switch (params->NetProtocol) {
         case SIGNALK: {
-          auto driver = std::make_unique<CommDriverSignalKNet>(params, msgbus);
-          registry.Activate(std::move(driver));
+          // Parked -- the SignalK driver is not built. See P1.5m.
+          wxLogMessage(
+              "MakeCommDriver: SignalK is out of scope -- no driver "
+              "created for %s",
+              params->GetDSPort().c_str());
           break;
         }
         default: {
@@ -210,19 +214,20 @@ void MakeCommDriver(const ConnectionParams* params) {
       }
 
       break;
-#if defined(__linux__) && !defined(__ANDROID__) && !defined(__WXOSX__)
-    case SOCKETCAN: {
-      auto driver = CommDriverN2KSocketCAN::Create(params, msgbus);
-      registry.Activate(std::move(driver));
+
+    case SOCKETCAN:
+      // Parked -- the SocketCAN driver is not built. See P1.5g / P1.5m.
+      wxLogMessage("MakeCommDriver: SocketCAN is out of scope -- no driver");
       break;
-    }
-#endif
 
     default:
       break;
   }
 };
 
-void initIXNetSystem() { CommDriverSignalKNet::initIXNetSystem(); };
+// IXWebSocket network-system init. Formerly delegated to the SignalK
+// driver (now parked); kept functional here directly so a future
+// IXWebSocket consumer -- or the revived SignalK driver -- still works.
+void initIXNetSystem() { ix::initNetSystem(); };
 
-void uninitIXNetSystem() { CommDriverSignalKNet::uninitIXNetSystem(); };
+void uninitIXNetSystem() { ix::uninitNetSystem(); };

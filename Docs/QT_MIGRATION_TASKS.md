@@ -6,7 +6,8 @@
 
 **Current position:** P1.5a, P1.5e, P1.5f, P1.5i, P1.5b, P1.5d done.
 `n0183_net` (TCP client + UDP) and `n2k_serial` are ported onto the comms
-framework (`QT_MIGRATION_COMMS_ARCH.md`). Next: P1.5c/g.
+framework (`QT_MIGRATION_COMMS_ARCH.md`). SignalK and SocketCAN are parked
+(P1.5c/g → P1.5m). Next: P1.5h, P1.5j.
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -127,13 +128,19 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         loops. `SetTXPGN` moved up to `AbstractCommDriver` so callers
         (`plugin_api`, `autopilot_output`) need no driver-type downcast.
         `libs/serial` stays — still used by `ser_ports.cpp` et al (P1.5h).
-  - [ ] **P1.5c** `signalk_net` on the framework — `WebSocketTransport`
-        (`QWebSocket`) + `PassThroughFramer` + `SignalKDecoder`; retires the
-        vendored `IXWebSocket` for this driver.
-  - [ ] **P1.5g** `n2k_socketcan` on the framework — `CanTransport`
-        (`QCanBusDevice`) + `PassThroughFramer` + `N2kDecoder`. Replaces the
-        raw `PF_CAN` socket / `ioctl` / `Worker` thread. Backend by name —
-        `socketcan` (Linux, real HW) or `virtualcan` (macOS dev/test).
+  - [~] **P1.5c** *(parked — see P1.5m)* `signalk_net` on the framework —
+        `WebSocketTransport` (`QWebSocket`) + `PassThroughFramer` +
+        `SignalKDecoder`; retires the vendored `IXWebSocket` for this driver.
+  - [~] **P1.5g** *(parked — see P1.5m)* `n2k_socketcan` on the framework —
+        `CanTransport` (`QCanBusDevice`) + `PassThroughFramer` + `N2kDecoder`.
+        Replaces the raw `PF_CAN` socket / `ioctl` / `Worker` thread. Backend
+        by name — `socketcan` (Linux, real HW) or `virtualcan` (macOS).
+  - [ ] **P1.5m** *(revisit)* Un-park SignalK and SocketCAN. Both legacy
+        drivers (`comm_drv_signalk{,_net}.{h,cpp}`, `comm_drv_n2k_socketcan
+        .{h,cpp}`) are kept in the tree but **excluded from the build** and
+        unreachable from the factory — NMEA 0183 + NMEA 2000 (serial &
+        net) cover current needs. Revisit deletes the parked sources once
+        P1.5c and P1.5g land, or sooner if either protocol is needed.
   - [ ] **P1.5h** `ser_ports.cpp` serial-port enumeration → `QSerialPortInfo`,
         retiring the platform `#ifdef` branches.
   - [ ] **P1.5j** Refactor the standalone P1.5a (`n2k_net`) and P1.5e
@@ -339,3 +346,13 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   `AbstractCommDriver` (no-op default) so `plugin_api`/`autopilot_output`
   reach it without a driver-type downcast. 13 framer+decoder gtest cases;
   build green (app + tests link), 27/27 comms-framework tests pass.
+- 2026-05-18 — SignalK and SocketCAN parked. NMEA 0183 and NMEA 2000
+  (serial gateway + net) cover current needs, so the two un-migrated
+  drivers are dropped from the build: `comm_drv_signalk{,_net}.{h,cpp}`
+  and `comm_drv_n2k_socketcan.{h,cpp}` are removed from `model/CMakeLists
+  .txt` (LINUX list for SocketCAN) but kept in the tree. The factory no
+  longer creates either (logs an out-of-scope message); `initIXNetSystem`
+  / `uninitIXNetSystem` now call `ix::` directly rather than through the
+  SignalK driver; `wiz_ui.cpp` drops its now-unused `comm_drv_signalk_net
+  .h` include (its SignalK discovery uses `mdns_query` only). New tracker
+  item P1.5m tracks un-parking. Build green: OpenCPN app + tests link.

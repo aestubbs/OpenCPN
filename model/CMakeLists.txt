@@ -60,8 +60,6 @@ set(
   ${MODEL_HDR_DIR}/comm_drv_n2k.h
   ${MODEL_HDR_DIR}/comm_drv_n2k_net.h
   ${MODEL_HDR_DIR}/comm_drv_registry.h
-  ${MODEL_HDR_DIR}/comm_drv_signalk.h
-  ${MODEL_HDR_DIR}/comm_drv_signalk_net.h
   ${MODEL_HDR_DIR}/comm_drv_stats.h
   ${MODEL_HDR_DIR}/comm_n0183_decoder.h
   ${MODEL_HDR_DIR}/comm_n0183_output.h
@@ -177,8 +175,6 @@ set(SRC
   ${MODEL_SRC_DIR}/comm_drv_n2k.cpp
   ${MODEL_SRC_DIR}/comm_drv_n2k_net.cpp
   ${MODEL_SRC_DIR}/comm_drv_registry.cpp
-  ${MODEL_SRC_DIR}/comm_drv_signalk.cpp
-  ${MODEL_SRC_DIR}/comm_drv_signalk_net.cpp
   ${MODEL_SRC_DIR}/comm_framer.cpp
   ${MODEL_SRC_DIR}/comm_n0183_decoder.cpp
   ${MODEL_SRC_DIR}/comm_n0183_output.cpp
@@ -253,9 +249,10 @@ set(SRC
   ${MODEL_SRC_DIR}/usb_watch_factory.cpp
 )
 
+# comm_drv_n2k_socketcan.{h,cpp} is parked -- not built (see P1.5g / P1.5m
+# in QT_MIGRATION_TASKS.md). The source is kept in the tree for the
+# eventual QCanBus rewrite.
 if (LINUX)
-  list(APPEND HDRS ${MODEL_HDR_DIR}/comm_drv_n2k_socketcan.h )
-  list(APPEND SRC ${MODEL_SRC_DIR}/comm_drv_n2k_socketcan.cpp)
   list(APPEND HDRS ${MODEL_HDR_DIR}/linux_devices.h)
   list(APPEND SRC ${MODEL_SRC_DIR}/linux_devices.cpp)
 endif ()
