@@ -33,6 +33,7 @@
 #endif
 
 #include "model/comm_navmsg.h"
+#include "model/sentence_filter.h"
 
 #ifndef __DSPORTTYPE_H__
 #include "model/ds_porttype.h"
@@ -130,6 +131,13 @@ public:
 
   bool SentencePassesFilter(const wxString &sentence,
                             FilterDirection direction) const;
+
+  /**
+   * Adaptor for the wx-free comms pipeline: build a plain-C++
+   * SentenceFilter from the wx-typed input sentence list. The wxString
+   * filter data stays here at the boundary; the pipeline gets this.
+   */
+  SentenceFilter MakeInputFilter() const;
   bool Valid;
   bool b_IsSetup;
   ConnectionParamsPanel *m_optionsPanel;

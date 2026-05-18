@@ -131,6 +131,7 @@ set(
   ${MODEL_HDR_DIR}/select.h
   ${MODEL_HDR_DIR}/select_item.h
   ${MODEL_HDR_DIR}/semantic_vers.h
+  ${MODEL_HDR_DIR}/sentence_filter.h
   ${MODEL_HDR_DIR}/ser_ports.h
   ${MODEL_HDR_DIR}/std_icon.h
   ${MODEL_HDR_DIR}/std_instance_chk.h

@@ -13,13 +13,6 @@
 
 #include "model/comm_framer.h"
 #include "model/comm_n2k_decoder.h"
-#include "model/conn_params.h"
-
-static ConnectionParams Params(dsPortType io) {
-  ConnectionParams p;
-  p.IOSelect = io;
-  return p;
-}
 
 static const std::shared_ptr<const NavAddr> kSrc =
     std::make_shared<const NavAddr>(NavAddr::Bus::N2000, "n2k-iface");
@@ -32,7 +25,7 @@ static CommFrame DataFrame() {
 }
 
 TEST(N2kDecoder, DecodesDataFrame) {
-  N2kDecoder decoder(Params(DS_TYPE_INPUT));
+  N2kDecoder decoder(DS_TYPE_INPUT);
   auto msgs = decoder.Decode(DataFrame(), kSrc);
   ASSERT_EQ(msgs.size(), 1u);
   auto n2k = std::dynamic_pointer_cast<const Nmea2000Msg>(msgs[0]);
@@ -41,23 +34,23 @@ TEST(N2kDecoder, DecodesDataFrame) {
 }
 
 TEST(N2kDecoder, IgnoresManagementFrame) {
-  N2kDecoder decoder(Params(DS_TYPE_INPUT));
+  N2kDecoder decoder(DS_TYPE_INPUT);
   CommFrame mgmt = {0xA0, 0x01, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00};
   EXPECT_TRUE(decoder.Decode(mgmt, kSrc).empty());
 }
 
 TEST(N2kDecoder, IgnoresShortFrame) {
-  N2kDecoder decoder(Params(DS_TYPE_INPUT));
+  N2kDecoder decoder(DS_TYPE_INPUT);
   EXPECT_TRUE(decoder.Decode({0x93, 0x01, 0x02}, kSrc).empty());
 }
 
 TEST(N2kDecoder, OutputOnlyConnectionDecodesNothing) {
-  N2kDecoder decoder(Params(DS_TYPE_OUTPUT));
+  N2kDecoder decoder(DS_TYPE_OUTPUT);
   EXPECT_TRUE(decoder.Decode(DataFrame(), kSrc).empty());
 }
 
 TEST(N2kDecoder, EncodeProducesFramerReadablePacket) {
-  N2kDecoder decoder(Params(DS_TYPE_INPUT_OUTPUT));
+  N2kDecoder decoder(DS_TYPE_INPUT_OUTPUT);
   // Payload deliberately contains an ESC byte (0x10) to exercise escaping.
   const std::vector<unsigned char> data = {0x01, 0x10, 0x02};
   auto msg = std::make_shared<const Nmea2000Msg>(
@@ -85,7 +78,7 @@ TEST(N2kDecoder, EncodeProducesFramerReadablePacket) {
 }
 
 TEST(N2kDecoder, EncodeUsesDestinationAddress) {
-  N2kDecoder decoder(Params(DS_TYPE_INPUT_OUTPUT));
+  N2kDecoder decoder(DS_TYPE_INPUT_OUTPUT);
   auto msg = std::make_shared<const Nmea2000Msg>(
       static_cast<uint64_t>(127250), std::vector<unsigned char>{0x00},
       std::make_shared<const NavAddr2000>(), 6);
@@ -101,7 +94,7 @@ TEST(N2kDecoder, EncodeUsesDestinationAddress) {
 }
 
 TEST(N2kDecoder, EncodeRejectsInputOnlyConnection) {
-  N2kDecoder decoder(Params(DS_TYPE_INPUT));
+  N2kDecoder decoder(DS_TYPE_INPUT);
   auto msg = std::make_shared<const Nmea2000Msg>(
       static_cast<uint64_t>(127250), std::vector<unsigned char>{0x00},
       std::make_shared<const NavAddr2000>(), 6);
@@ -109,7 +102,7 @@ TEST(N2kDecoder, EncodeRejectsInputOnlyConnection) {
 }
 
 TEST(N2kDecoder, EncodeRejectsNon2000Message) {
-  N2kDecoder decoder(Params(DS_TYPE_INPUT_OUTPUT));
+  N2kDecoder decoder(DS_TYPE_INPUT_OUTPUT);
   std::shared_ptr<const NavMsg> n0183 = std::make_shared<const Nmea0183Msg>(
       "GPGGA", "$GPGGA,,*00", std::make_shared<const NavAddr>());
   EXPECT_TRUE(decoder.Encode(n0183, nullptr).empty());

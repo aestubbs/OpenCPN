@@ -116,7 +116,7 @@ static DriverPtr MakeN0183NetDriver(const ConnectionParams* params,
   auto driver = std::make_unique<CommDriver>(
       NavAddr::Bus::N0183, params->GetStrippedDSPort(), *params,
       std::move(transport), std::make_unique<LineFramer>(),
-      std::make_unique<Nmea0183Decoder>(*params), listener);
+      std::make_unique<Nmea0183Decoder>(params->IOSelect, params->MakeInputFilter()), listener);
   driver->attributes["netAddress"] = host;
   driver->attributes["netPort"] = std::to_string(params->NetworkPort);
   driver->attributes["userComment"] = params->UserComment.ToStdString();
@@ -145,7 +145,7 @@ static DriverPtr MakeN2kSerialDriver(const ConnectionParams* params,
   auto driver = std::make_unique<CommDriver>(
       NavAddr::Bus::N2000, params->GetStrippedDSPort(), *params,
       std::move(transport), std::make_unique<N2kGatewayFramer>(),
-      std::make_unique<N2kDecoder>(*params), listener);
+      std::make_unique<N2kDecoder>(params->IOSelect), listener);
   driver->attributes["canAddress"] = std::string("-1");
   driver->attributes["userComment"] = params->UserComment.ToStdString();
   driver->attributes["ioDirection"] = DsPortTypeToString(params->IOSelect);
@@ -175,7 +175,7 @@ static DriverPtr MakeN0183SerialDriver(const ConnectionParams* params,
   auto driver = std::make_unique<CommDriver>(
       NavAddr::Bus::N0183, params->GetStrippedDSPort(), *params,
       std::move(transport), std::make_unique<LineFramer>(),
-      std::make_unique<Nmea0183Decoder>(*params), listener);
+      std::make_unique<Nmea0183Decoder>(params->IOSelect, params->MakeInputFilter()), listener);
   driver->attributes["commPort"] = params->Port.ToStdString();
   driver->attributes["userComment"] = params->UserComment.ToStdString();
   driver->attributes["ioDirection"] = DsPortTypeToString(params->IOSelect);

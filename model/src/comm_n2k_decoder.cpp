@@ -39,12 +39,12 @@ static uint64_t FrameToName(const CommFrame& frame) {
   return name;
 }
 
-N2kDecoder::N2kDecoder(const ConnectionParams& params) : m_params(params) {}
+N2kDecoder::N2kDecoder(dsPortType io_select) : m_io_select(io_select) {}
 
 std::vector<std::shared_ptr<const NavMsg>> N2kDecoder::Decode(
     const CommFrame& frame, const std::shared_ptr<const NavAddr>& src) {
   // An output-only connection ignores anything that arrives.
-  if (m_params.IOSelect == DS_TYPE_OUTPUT) return {};
+  if (m_io_select == DS_TYPE_OUTPUT) return {};
   // Need at least the data code, length, priority, the 3-byte PGN and
   // enough bytes for the NAME reinterpretation.
   if (frame.size() < 8) return {};
@@ -66,7 +66,7 @@ std::vector<CommFrame> N2kDecoder::Encode(
     const std::shared_ptr<const NavMsg>& msg,
     const std::shared_ptr<const NavAddr>& dest) {
   // An input-only connection cannot transmit.
-  if (m_params.IOSelect == DS_TYPE_INPUT) return {};
+  if (m_io_select == DS_TYPE_INPUT) return {};
 
   auto n2k = std::dynamic_pointer_cast<const Nmea2000Msg>(msg);
   if (!n2k) return {};

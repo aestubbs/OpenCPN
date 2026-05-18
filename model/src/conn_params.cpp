@@ -390,6 +390,15 @@ bool ConnectionParams::SentencePassesFilter(const wxString& sentence,
   return !listype;
 }
 
+SentenceFilter ConnectionParams::MakeInputFilter() const {
+  std::vector<std::string> patterns;
+  patterns.reserve(InputSentenceList.GetCount());
+  for (size_t i = 0; i < InputSentenceList.GetCount(); i++)
+    patterns.push_back(InputSentenceList[i].ToStdString());
+  return SentenceFilter(std::move(patterns),
+                        InputSentenceListType == WHITELIST);
+}
+
 NavAddr::Bus ConnectionParams::GetCommProtocol() const {
   if (Type == NETWORK) {
     if (NetProtocol == SIGNALK)

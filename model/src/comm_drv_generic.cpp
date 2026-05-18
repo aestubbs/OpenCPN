@@ -25,17 +25,10 @@
 #include <utility>
 #include <vector>
 
-// Qt headers first -- parsed before wx/system headers (see P1.5a).
 #include <QByteArray>
 #include <QString>
 #include <QTimer>
-
-#include <wx/wxprec.h>
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif
-
-#include <wx/log.h>
+#include <QtGlobal>  // qWarning
 
 #include "model/comm_drv_generic.h"
 
@@ -149,8 +142,8 @@ void CommDriver::OnDisconnected() {
 
 void CommDriver::OnError(const QString& message) {
   m_stats.error_count++;
-  wxLogMessage(wxString::Format("CommDriver %s: %s", iface.c_str(),
-                                message.toStdString().c_str()));
+  qWarning("CommDriver %s: %s", iface.c_str(),
+           message.toStdString().c_str());
 }
 
 void CommDriver::OnReconnectTimer() {

@@ -24,15 +24,9 @@
 #include <cstdint>
 #include <vector>
 
-// Qt headers first -- parsed before wx/system headers (see P1.5a).
 #include <QByteArray>
 #include <QTimer>
-
-#include <wx/wxprec.h>
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif
-#include <wx/log.h>
+#include <QtGlobal>  // qWarning / qInfo
 
 #include "model/comm_n2k_gateway_mgr.h"
 #include "model/comm_drv_generic.h"
@@ -158,7 +152,7 @@ void N2kGatewayManager::OnRequestTimeout() {
   }
   // Give up on this request -- non-fatal (a YDNU-02 ignores some of these)
   // -- and move on so the rest of the handshake still runs.
-  wxLogMessage("N2K gateway: no response to management request 0x%02X",
+  qWarning("N2K gateway: no response to management request 0x%02X",
                req.payload.front());
   m_queue.pop_front();
   ProcessNext();
@@ -171,7 +165,7 @@ void N2kGatewayManager::ExtractInfo(const CommFrame& frame) {
     const uint32_t low = frame[15] | (frame[16] << 8) | (frame[17] << 16) |
                          (static_cast<uint32_t>(frame[18]) << 24);
     m_mfg_code = static_cast<int>(low) >> 21;
-    wxLogMessage("N2K gateway manufacturer code: %d", m_mfg_code);
+    qInfo("N2K gateway manufacturer code: %d", m_mfg_code);
   }
 }
 

@@ -21,20 +21,15 @@
  * Implement comm_n0183_decoder.h -- the NMEA 0183 protocol decoder.
  *
  * The classification helpers mirror CommDriverN0183::SendToListener; that
- * legacy path is retired when the serial driver moves onto the framework
- * (P1.5j), at which point this becomes the single 0183 decode site.
+ * legacy path is retired when the last CommDriverN0183-based driver is, at
+ * which point this becomes the single 0183 decode site.
  */
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <string>
-
-#include <wx/wxprec.h>
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif
-#include <wx/string.h>
+#include <utility>
 
 #include "model/comm_n0183_decoder.h"
 
@@ -66,13 +61,14 @@ static std::string GetPayloadSentence(const std::string& sentence) {
   return sentence.substr(start_pos);
 }
 
-Nmea0183Decoder::Nmea0183Decoder(const ConnectionParams& params)
-    : m_params(params) {}
+Nmea0183Decoder::Nmea0183Decoder(dsPortType io_select,
+                                 SentenceFilter input_filter)
+    : m_io_select(io_select), m_input_filter(std::move(input_filter)) {}
 
 std::vector<std::shared_ptr<const NavMsg>> Nmea0183Decoder::Decode(
     const CommFrame& frame, const std::shared_ptr<const NavAddr>& src) {
   // An output-only connection ignores anything that arrives.
-  if (m_params.IOSelect == DS_TYPE_OUTPUT) return {};
+  if (m_io_select == DS_TYPE_OUTPUT) return {};
 
   const std::string payload(frame.begin(), frame.end());
   const std::string sentence = GetPayloadSentence(payload);
@@ -90,7 +86,7 @@ std::vector<std::shared_ptr<const NavMsg>> Nmea0183Decoder::Decode(
   NavMsg::State state;
   if (is_garbage)
     state = NavMsg::State::kCannotParse;
-  else if (!m_params.SentencePassesFilter(sentence, FILTER_INPUT))
+  else if (!m_input_filter.Passes(sentence))
     state = NavMsg::State::kFiltered;
   else if (has_checksum && !Is0183ChecksumOk(sentence))
     state = NavMsg::State::kBadChecksum;
@@ -112,7 +108,7 @@ std::vector<CommFrame> Nmea0183Decoder::Encode(
     const std::shared_ptr<const NavMsg>& msg,
     const std::shared_ptr<const NavAddr>& /* dest */) {
   // An input-only connection cannot transmit.
-  if (m_params.IOSelect == DS_TYPE_INPUT) return {};
+  if (m_io_select == DS_TYPE_INPUT) return {};
 
   auto msg_0183 = std::dynamic_pointer_cast<const Nmea0183Msg>(msg);
   if (!msg_0183) return {};

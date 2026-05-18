@@ -22,11 +22,13 @@
  *
  * Turns terminator-delimited NMEA 0183 frames (from a LineFramer) into
  * Nmea0183Msg objects, applying the parsing rules of CommDriverN0183:
- * v4-tag stripping, garbage / bad-checksum classification and the
- * connection's input sentence filter. Encode() is the transmit path.
+ * v4-tag stripping, garbage / bad-checksum classification and the input
+ * sentence filter. Encode() is the transmit path.
  *
- * No I/O and no Qt -- so it is unit-testable against captured sentence
- * logs with no hardware (task P1.5b, built on the P1.5i framework).
+ * wx-free (task P1.6): the decoder takes a plain dsPortType and a
+ * SentenceFilter, not a wx-typed ConnectionParams -- the factory adapts.
+ * So it is unit-testable against captured sentence logs with no hardware
+ * and no wxWidgets.
  */
 
 #ifndef COMM_N0183_DECODER_H
@@ -36,18 +38,18 @@
 #include <vector>
 
 #include "model/comm_protocol_decoder.h"
-#include "model/conn_params.h"
+#include "model/ds_porttype.h"
+#include "model/sentence_filter.h"
 
 /**
  * ProtocolDecoder for the NMEA 0183 wire protocol.
  *
- * Holds a copy of the connection's ConnectionParams -- it needs the input
- * sentence filter and the I/O direction, both per-connection configuration
- * rather than wire-protocol state.
+ * Holds the connection's I/O direction and input sentence filter -- both
+ * per-connection configuration rather than wire-protocol state.
  */
 class Nmea0183Decoder : public ProtocolDecoder {
 public:
-  explicit Nmea0183Decoder(const ConnectionParams& params);
+  Nmea0183Decoder(dsPortType io_select, SentenceFilter input_filter);
 
   /** One 0183 frame -> exactly one Nmea0183Msg (or none for an output-only
    *  connection / an empty frame). */
@@ -63,7 +65,8 @@ public:
       const std::shared_ptr<const NavAddr>& dest) override;
 
 private:
-  ConnectionParams m_params;
+  dsPortType m_io_select;
+  SentenceFilter m_input_filter;
 };
 
 #endif  // COMM_N0183_DECODER_H

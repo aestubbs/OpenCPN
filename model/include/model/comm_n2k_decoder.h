@@ -27,7 +27,7 @@
  *
  * Management packets (data code 0xA0) are not NavMsg objects -- Decode()
  * ignores them; the gateway manager picks them up via the driver's raw
- * frame tap. No I/O and no Qt -- unit-testable (task P1.5d).
+ * frame tap. No I/O, no Qt and no wxWidgets -- unit-testable (task P1.6).
  */
 
 #ifndef COMM_N2K_DECODER_H
@@ -37,12 +37,12 @@
 #include <vector>
 
 #include "model/comm_protocol_decoder.h"
-#include "model/conn_params.h"
+#include "model/ds_porttype.h"
 
 /** ProtocolDecoder for NMEA 2000 over an Actisense-format serial gateway. */
 class N2kDecoder : public ProtocolDecoder {
 public:
-  explicit N2kDecoder(const ConnectionParams& params);
+  explicit N2kDecoder(dsPortType io_select);
 
   /** One Actisense application-data frame -> one Nmea2000Msg. Empty for a
    *  management packet, an output-only connection or a too-short frame. */
@@ -58,7 +58,7 @@ public:
       const std::shared_ptr<const NavAddr>& dest) override;
 
 private:
-  ConnectionParams m_params;
+  dsPortType m_io_select;
 };
 
 #endif  // COMM_N2K_DECODER_H
