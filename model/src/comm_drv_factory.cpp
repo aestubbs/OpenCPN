@@ -40,7 +40,6 @@
 #include "model/comm_drv_generic.h"
 #include "model/comm_drv_loopback.h"
 #include "model/comm_drv_n2k_net.h"
-#include "model/comm_drv_n0183_serial.h"
 #include "model/comm_n0183_decoder.h"
 #include "model/comm_n2k_decoder.h"
 #include "model/comm_n2k_gateway_mgr.h"
@@ -157,6 +156,32 @@ static DriverPtr MakeN2kSerialDriver(const ConnectionParams* params,
   return driver;
 }
 
+/**
+ * Build an NMEA 0183 serial driver on the comms framework -- a generic
+ * CommDriver wrapping a SerialTransport + LineFramer + Nmea0183Decoder.
+ */
+static DriverPtr MakeN0183SerialDriver(const ConnectionParams* params,
+                                       DriverListener& listener) {
+  // Strip the "Serial:" prefix and any trailing device description.
+  std::string dsport = params->GetDSPort().ToStdString();
+  const auto colon = dsport.find(':');
+  std::string port =
+      colon == std::string::npos ? dsport : dsport.substr(colon + 1);
+  const auto space = port.find(' ');
+  if (space != std::string::npos) port.resize(space);
+
+  auto transport = std::make_unique<SerialTransport>(
+      QString::fromStdString(port), static_cast<qint32>(params->Baudrate));
+  auto driver = std::make_unique<CommDriver>(
+      NavAddr::Bus::N0183, params->GetStrippedDSPort(), *params,
+      std::move(transport), std::make_unique<LineFramer>(),
+      std::make_unique<Nmea0183Decoder>(*params), listener);
+  driver->attributes["commPort"] = params->Port.ToStdString();
+  driver->attributes["userComment"] = params->UserComment.ToStdString();
+  driver->attributes["ioDirection"] = DsPortTypeToString(params->IOSelect);
+  return driver;
+}
+
 void MakeLoopbackDriver() {
   auto driver = std::make_unique<LoopbackDriver>(NavMsgBus::GetInstance());
   CommDriverRegistry::GetInstance().Activate(std::move(driver));
@@ -177,9 +202,7 @@ void MakeCommDriver(const ConnectionParams* params) {
           break;
         }
         default: {
-          auto driver =
-              std::make_unique<CommDriverN0183Serial>(params, listener);
-          registry.Activate(std::move(driver));
+          registry.Activate(MakeN0183SerialDriver(params, listener));
           break;
         }
       }

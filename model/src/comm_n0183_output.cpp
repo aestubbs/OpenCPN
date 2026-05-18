@@ -37,7 +37,6 @@
 #include "model/comm_driver.h"
 #include "model/comm_drv_factory.h"
 #include "model/comm_drv_n0183_net.h"
-#include "model/comm_drv_n0183_serial.h"
 #include "model/comm_drv_registry.h"
 #include "model/comm_n0183_output.h"
 #include "model/config_vars.h"
@@ -117,14 +116,15 @@ bool CreateOutputConnection(const wxString& com_name,
     wxLogDebug("Looking for old stream %s", com_name);
 
     if (old_driver) {
-      auto drv_serial_n0183 =
-          dynamic_cast<CommDriverN0183Serial*>(old_driver.get());
-      if (drv_serial_n0183) {
-        params_save = drv_serial_n0183->GetParams();
+      // Remember the existing connection's settings so it can be restored
+      // after the temporary output stream is done.
+      if (auto* cpp =
+              dynamic_cast<ConnectionParamsProvider*>(old_driver.get())) {
+        params_save = cpp->GetConnectionParams();
         baud = params_save.Baudrate;
-        bGarmin = params_save.Garmin;
-        drv_serial_n0183->Close();  // Fast close
       }
+      // Deactivate destroys the driver, synchronously closing its port, so
+      // the temporary output driver below can claim it.
       registry.Deactivate(old_driver);
 
       b_restoreStream = true;
@@ -146,39 +146,10 @@ bool CreateOutputConnection(const wxString& com_name,
 #ifdef __ANDROID__
     wxMilliSleep(1000);
 #else
-    auto drv_serial_n0183 = dynamic_cast<CommDriverN0183Serial*>(driver);
-    if (drv_serial_n0183) {
-      if ((wxNOT_FOUND != com_name.Upper().Find("USB")) &&
-          (wxNOT_FOUND != com_name.Upper().Find("GARMIN"))) {
-        //  Wait up to 1 seconds for serial Driver secondary thread to come up
-        int timeout = 0;
-        while (!drv_serial_n0183->IsGarminThreadActive() && (timeout < 50)) {
-          wxMilliSleep(100);
-          wxYield();
-          timeout++;
-        }
-
-        if (!drv_serial_n0183->IsGarminThreadActive()) {
-          MESSAGE_LOG << "-->GPS Port:" << com_name
-                      << " ...Could not be opened for writing";
-        }
-      } else {
-        //  Wait up to 1 seconds for serial Driver secondary thread to come up
-        int timeout = 0;
-        while (!drv_serial_n0183->IsSecThreadActive() && (timeout < 50)) {
-          wxMilliSleep(100);
-          timeout++;
-        }
-
-        if (!drv_serial_n0183->IsSecThreadActive()) {
-          MESSAGE_LOG << "-->GPS Port:" << com_name
-                      << " ...Could not be opened for writing";
-        }
-      }
-    } else {
-      driver =
-          FindDriver(drivers, comx.ToStdString(), NavAddr::Bus::N0183).get();
-    }
+    // The framework serial driver opens its port synchronously in its
+    // constructor, so the temporary output driver is ready as soon as
+    // MakeCommDriver() returns -- no need to poll a worker thread.
+    driver = FindDriver(drivers, comx.ToStdString(), NavAddr::Bus::N0183).get();
 #endif
   }
 
@@ -263,91 +234,10 @@ int PrepareOutputChannel(const wxString& com_name, N0183DlgCtx dlg_ctx,
   int ret_val = 0;
   auto& registry = CommDriverRegistry::GetInstance();
 
-  // Find any existing(i.e. open) serial com port with the same name,
-  // and query its parameters.
-  const std::vector<DriverPtr>& drivers = registry.GetDrivers();
-  bool is_garmin_serial = false;
-  CommDriverN0183Serial* drv_serial_n0183(nullptr);
-
-  if (com_name.Lower().StartsWith("serial")) {
-    wxString comx;
-    comx = com_name.AfterFirst(':');  // strip "Serial: + windows description
-    comx = comx.BeforeFirst(' ');
-    DriverPtr& existing_driver = FindDriver(drivers, comx.ToStdString());
-    wxLogDebug("Looking for old stream %s", com_name);
-
-    if (existing_driver) {
-      drv_serial_n0183 =
-          dynamic_cast<CommDriverN0183Serial*>(existing_driver.get());
-      if (drv_serial_n0183) {
-        is_garmin_serial = drv_serial_n0183->GetParams().Garmin;
-      }
-    }
-  }
-
-  //  Special case for Garmin serial driver that is currently active
-  //  We shall deactivate the current driver, and allow the self-contained
-  //  Garmin stack to handle the object upload
-  //  Also, save the driver's state, and mark for re-activation
-
-  if (is_garmin_serial) {
-    params_save = drv_serial_n0183->GetParams();
-    b_restoreStream = true;
-    drv_serial_n0183->Close();  // Fast close
-    auto& me =
-        FindDriver(drivers, drv_serial_n0183->GetParams().GetStrippedDSPort(),
-                   drv_serial_n0183->GetParams().GetCommProtocol());
-    registry.Deactivate(me);
-    btempStream = true;
-  }
-  bool conn_ok =
-      CreateOutputConnection(com_name, params_save, btempStream,
-                             b_restoreStream, dlg_ctx, is_garmin_serial);
+  bool conn_ok = CreateOutputConnection(com_name, params_save, btempStream,
+                                        b_restoreStream, dlg_ctx, false);
   if (!conn_ok) return 1;
 
-#ifdef xUSE_GARMINHOST
-#ifdef __WXMSW__
-  if (com_name.Upper().Matches("*GARMIN*"))  // Garmin USB Mode
-  {
-    //        if(m_pdevmon)
-    //            m_pdevmon->StopIOThread(true);
-
-    auto drv_n0183_serial = dynamic_cast<CommDriverN0183Serial*>(driver.get());
-    drv_n0183_serial->StopGarminUSBIOThread(true);
-
-    if (!drv_n0183_serial->IsGarminThreadActive()) {
-      int v_init = Garmin_GPS_Init(wxString("usb:"));
-      if (v_init < 0) {
-        MESSAGE_LOG << "Garmin USB GPS could not be initialized, last error: "
-                    << v_init << " LastGarminError: " << GetLastGarminError();
-
-        ret_val = ERR_GARMIN_INITIALIZE;
-      } else {
-        MESSAGE_LOG << "Garmin USB Initialized, unit identifies as: "
-                    << Garmin_GPS_GetSaveString();
-      }
-    }
-    wxLogMessage("Sending Waypoint...");
-
-    // Create a RoutePointList with one item
-    RoutePointList rplist;
-    rplist.push_back(prp);
-
-    int ret1 = Garmin_GPS_SendWaypoints(wxString("usb:"), &rplist);
-
-    if (ret1 != 1) {
-      MESSAGE_LOG << "Error Sending Waypoint to Garmin USB, last error: "
-                  << GetLastGarminError();
-
-      ret_val = ERR_GARMIN_SEND_MESSAGE;
-    } else
-      ret_val = 0;
-
-    goto ret_point;
-  }
-
-#endif
-#endif
   return ret_val;
 }
 int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
@@ -383,15 +273,8 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
 #ifdef __WXMSW__
   if (com_name.Upper().Matches("*GARMIN*"))  // Garmin USB Mode
   {
-    auto drv_serial_n0183 =
-        dynamic_cast<CommDriverN0183Serial*>(target_driver.get());
-    if (drv_serial_n0183) {
-      drv_serial_n0183->Close();  // Fast close
-      auto& me = FindDriver(CommDriverRegistry::GetInstance().GetDrivers(),
-                            drv_serial_n0183->GetParams().GetStrippedDSPort(),
-                            drv_serial_n0183->GetParams().GetCommProtocol());
-      registry.Deactivate(me);
-    }
+    // Release the port so the Garmin host library can open it directly.
+    if (target_driver) registry.Deactivate(target_driver);
 
     {
       int v_init = Garmin_GPS_Init(wxString("usb:"));
@@ -422,15 +305,8 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
 
   if (g_bGarminHostUpload) {
     //  Close and abandon the tentatively opened target_driver
-    auto drv_serial_n0183 =
-        dynamic_cast<CommDriverN0183Serial*>(target_driver.get());
-    if (drv_serial_n0183) {
-      drv_serial_n0183->Close();  // Fast close
-      auto& me = FindDriver(CommDriverRegistry::GetInstance().GetDrivers(),
-                            drv_serial_n0183->GetParams().GetStrippedDSPort(),
-                            drv_serial_n0183->GetParams().GetCommProtocol());
-      registry.Deactivate(me);
-    }
+    // Release the port so the Garmin host library can open it directly.
+    if (target_driver) registry.Deactivate(target_driver);
 
     int lret_val;
     dlg_ctx.set_value(20);
@@ -871,16 +747,8 @@ int SendWaypointToGPS_N0183(RoutePoint* prp, const wxString& com_name,
 #ifdef __WXMSW__
   if (com_name.Upper().Matches("*GARMIN*"))  // Garmin USB Mode
   {
-    auto drv_serial_n0183 =
-        dynamic_cast<CommDriverN0183Serial*>(target_driver.get());
-    if (drv_serial_n0183) {
-      drv_serial_n0183->Close();  // Fast close
-      auto& me = FindDriver(CommDriverRegistry::GetInstance().GetDrivers(),
-                            drv_serial_n0183->GetParams().GetStrippedDSPort(),
-                            drv_serial_n0183->GetParams().GetCommProtocol());
-
-      registry.Deactivate(me);
-    }
+    // Release the port so the Garmin host library can open it directly.
+    if (target_driver) registry.Deactivate(target_driver);
 
     {
       int v_init = Garmin_GPS_Init(wxString("usb:"));
@@ -920,15 +788,8 @@ int SendWaypointToGPS_N0183(RoutePoint* prp, const wxString& com_name,
   // Are we using Garmin Host mode for uploads?
   if (g_bGarminHostUpload) {
     //  Close and abandon the tentatively opened target_driver
-    auto serial_n0183 =
-        dynamic_cast<CommDriverN0183Serial*>(target_driver.get());
-    if (serial_n0183) {
-      serial_n0183->Close();  // Fast close
-      auto& me = FindDriver(CommDriverRegistry::GetInstance().GetDrivers(),
-                            serial_n0183->GetParams().GetStrippedDSPort(),
-                            serial_n0183->GetParams().GetCommProtocol());
-      registry.Deactivate(me);
-    }
+    // Release the port so the Garmin host library can open it directly.
+    if (target_driver) registry.Deactivate(target_driver);
     RoutePointList rplist;
 
     wxString short_com = com_name.Mid(7);

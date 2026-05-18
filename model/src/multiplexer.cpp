@@ -43,7 +43,6 @@
 #include "model/config_vars.h"
 #include "model/conn_params.h"
 #include "model/comm_drv_registry.h"
-#include "model/comm_drv_n0183_serial.h"
 #include "model/comm_drv_n0183_net.h"
 #include "model/comm_navmsg_bus.h"
 #include "model/nmea_log.h"

@@ -55,7 +55,6 @@
 #include <wx/tokenzr.h>
 #include <wx/utils.h>
 
-#include "model/comm_drv_n0183_serial.h"
 #include "model/config_vars.h"
 #include "config.h"
 #include "model/garmin_wrapper.h"

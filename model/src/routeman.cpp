@@ -36,7 +36,6 @@
 #include "model/ais_decoder.h"
 #include "model/autopilot_output.h"
 #include "model/base_platform.h"
-#include "model/comm_drv_n0183_serial.h"
 #include "model/comm_n0183_output.h"
 #include "model/config_vars.h"
 #include "model/georef.h"
