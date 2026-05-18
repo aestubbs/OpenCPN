@@ -4,8 +4,8 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.3 done (build green, app runs). Next: P1.4
-(migrate `multiplexer`).
+**Current position:** P1.4 done (build green, app runs). Next: P1.5
+(migrate the ~15 comm drivers).
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -67,7 +67,13 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
       19 message `ObsListener` members are untouched — they subscribe to the
       per-message dispatch channel, still on wx (see P1.2); they migrate with
       that channel later.  *(dep: P1.1, P1.16)*
-- [ ] **P1.4** Migrate `multiplexer` off `wxEvtHandler`.  *(dep: P1.1)*
+- [x] **P1.4** Migrate `multiplexer` off `wxEvtHandler`. The base class was
+      already vestigial — no `Bind`/`Connect`/`CallAfter`/`QueueEvent` in the
+      cpp, and nothing uses `Multiplexer` as an event handler (P1.2 had moved
+      its only Qt-needing listener, `m_new_msgtype_lstnr`, to `ObsConnection`).
+      Dropped `: public wxEvtHandler`; header-only change, cpp untouched. The
+      `m_listeners` `ObsListener` map stays on wx with the per-message channel.
+      *(dep: P1.1)*
 - [ ] **P1.5** Migrate the ~15 comm drivers (`comm_drv_*`) to signal/callback based.  *(dep: P1.2–1.4)*
 - [ ] **P1.6** Sweep `wxString` → `QString` across `model/` and core `libs/`.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
@@ -171,3 +177,8 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   dispatch channel) is still wx. Build green; 58/59 unit tests pass (the one
   failure, `DateTimeFormatTest.LocalTimezoneCETSwedish`, is a pre-existing
   locale-dependent test unrelated to this change).
+- 2026-05-18 — P1.4 done: `Multiplexer` no longer inherits `wxEvtHandler`. The
+  base was entirely vestigial — P1.2 had already migrated the one listener
+  needing Qt, and the remaining `ObsListener` map needs no event-handler base
+  (confirmed by P1.3). Header-only change. Build green, 58/59 tests pass
+  (same unrelated locale test).

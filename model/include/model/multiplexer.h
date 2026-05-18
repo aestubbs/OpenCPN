@@ -54,12 +54,12 @@ struct MuxLogCallbacks {
  * Listen to all n0183 and n2k messages, whether they are known or not
  * i.e., anything generating an input event in the Data Monitor parlance.
  */
-class Multiplexer : public wxEvtHandler {
+class Multiplexer {
 public:
   Multiplexer(const MuxLogCallbacks& log_callbacks,
               bool& legacy_input_filter_behaviour);
 
-  ~Multiplexer() override;
+  ~Multiplexer();
 
   void LogOutputMessage(const std::shared_ptr<const NavMsg>& msg,
                         NavmsgStatus status) const;
