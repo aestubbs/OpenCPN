@@ -42,6 +42,7 @@
 #include "model/usb_watch_daemon.h"
 
 #include "data_monitor.h"
+#include "qt_event_bridge.h"
 
 class MyApp : public wxApp {
 public:
@@ -98,6 +99,9 @@ private:
   void InitRestListeners();
   ObsListener rest_activate_listener;
   ObsListener rest_reverse_listener;
+
+  /** Pumps the Qt event loop while the app is still wx-based (task P1.16). */
+  QtEventBridge m_qt_bridge;
 };
 
 wxDECLARE_APP(MyApp);

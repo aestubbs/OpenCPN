@@ -719,6 +719,10 @@ WallpaperFrame *g_wallpaper;
 bool MyApp::OnInit() {
   if (!wxApp::OnInit()) return false;
 
+  // Start pumping the Qt event loop so the Qt observable mechanism can
+  // deliver queued notifications while the app is still wx-based (P1.16).
+  m_qt_bridge.Start();
+
 #ifdef __ANDROID__
   androidEnableBackButton(false);
   androidEnableOptionItems(false);
@@ -1752,6 +1756,7 @@ void MyApp::LoadChartDatabase() {
 
 int MyApp::OnExit() {
   wxLogMessage("opencpn::MyApp starting exit.");
+  m_qt_bridge.Stop();
   m_checker.OnExit();
   m_usb_watcher.Stop();
   //  Send current nav status data to log file   // pjotrc 2010.02.09
