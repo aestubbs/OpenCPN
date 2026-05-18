@@ -103,10 +103,17 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   - [x] **P1.5b** `n0183_net` on the framework — TCP-client and UDP
         connections run on the generic `CommDriver` (`TcpClientTransport` /
         `UdpTransport` + `LineFramer` + new `Nmea0183Decoder`, 10 unit
-        tests). The factory builds the triple. TCP server-mode (a 0.0.0.0
-        listen address) and GPSD stay on the legacy `CommDriverN0183Net`:
-        server-mode needs a `TcpServerTransport` (a transport-layer
-        follow-up if wanted); GPSD is dropped from scope pending review.
+        tests). The factory builds the triple. **Out of scope:** TCP
+        server-mode (a 0.0.0.0 listen address) and GPSD — treated as edge
+        cases; the factory creates no driver for them (logs a message).
+        The legacy `CommDriverN0183Net` is kept in the tree but is no
+        longer reachable. See **P1.5k** to review whether to restore them.
+  - [ ] **P1.5k** *(review / deferred)* Decide whether NMEA 0183 network
+        **TCP server-mode** and **GPSD** are worth supporting. If yes:
+        server-mode is a `TcpServerTransport` (`QTcpServer`) and GPSD is a
+        TCP transport with a `?WATCH` connect-greeting option — both at the
+        transport layer, then the legacy `CommDriverN0183Net` can be
+        deleted. If no, delete `comm_drv_n0183_net.{h,cpp}` outright.
   - [ ] **P1.5d** `n2k_serial` on the framework — `SerialTransport` +
         `N2kGatewayFramer` + `N2kDecoder`; retires vendored `serial/serial.h`.
   - [ ] **P1.5c** `signalk_net` on the framework — `WebSocketTransport`

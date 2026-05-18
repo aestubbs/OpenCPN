@@ -40,7 +40,6 @@
 #include "model/comm_drv_n2k_net.h"
 #include "model/comm_drv_n2k_serial.h"
 #include "model/comm_drv_n0183_serial.h"
-#include "model/comm_drv_n0183_net.h"
 #include "model/comm_drv_signalk_net.h"
 #include "model/comm_n0183_decoder.h"
 #include "model/comm_navmsg_bus.h"
@@ -83,9 +82,13 @@ static bool IsMulticastAddr(const std::string& host) {
  *
  * TCP-client and UDP connections run on the P1.5i comms framework -- a
  * generic CommDriver wrapping a transport + LineFramer + Nmea0183Decoder.
- * TCP server-mode (a 0.0.0.0 listen address) and GPSD stay on the legacy
- * CommDriverN0183Net until a TcpServerTransport / GPSD transport option
- * lands (P1.5b follow-up).
+ *
+ * TCP server-mode (a 0.0.0.0 listen address) and GPSD are out of scope:
+ * they are treated as edge cases and produce no driver. The legacy
+ * CommDriverN0183Net implementation is kept in the tree but is no longer
+ * reachable from the factory. See QT_MIGRATION_TASKS.md (P1.5b follow-up)
+ * for the review note -- restoring them means a TcpServerTransport and a
+ * GPSD handshake option at the transport layer.
  */
 static DriverPtr MakeN0183NetDriver(const ConnectionParams* params,
                                     DriverListener& listener) {
@@ -100,8 +103,14 @@ static DriverPtr MakeN0183NetDriver(const ConnectionParams* params,
   else if (params->NetProtocol == UDP)
     transport = std::make_unique<UdpTransport>(QString::fromStdString(host),
                                                port, IsMulticastAddr(host));
-  else
-    return std::make_unique<CommDriverN0183Net>(params, listener);
+  else {
+    wxLogMessage(
+        "MakeCommDriver: NMEA 0183 network %s mode is out of scope -- "
+        "no driver created for %s",
+        params->NetProtocol == GPSD ? "GPSD" : "TCP server",
+        params->GetDSPort().c_str());
+    return nullptr;
+  }
 
   auto driver = std::make_unique<CommDriver>(
       NavAddr::Bus::N0183, params->GetStrippedDSPort(), std::move(transport),
@@ -152,7 +161,8 @@ void MakeCommDriver(const ConnectionParams* params) {
         default: {
           switch (params->Protocol) {
             case PROTO_NMEA0183: {
-              registry.Activate(MakeN0183NetDriver(params, listener));
+              if (auto driver = MakeN0183NetDriver(params, listener))
+                registry.Activate(std::move(driver));
               break;
             }
             case PROTO_NMEA2000: {
