@@ -28,7 +28,6 @@
 #include <wx/wxprec.h>
 
 #include "model/autopilot_output.h"
-#include "model/comm_drv_n2k_serial.h"
 #include "model/comm_drv_registry.h"
 #include "model/comm_n0183_output.h"
 #include "model/comm_vars.h"
@@ -300,13 +299,12 @@ bool UpdateAutopilotN2K(Routeman &routeman) {
   }
   if (!found) return false;
 
-  // N2K serial drivers require maintenance of an enabled PGN TX list
-  auto drv_serial = dynamic_cast<CommDriverN2KSerial *>(found);
-  if (drv_serial) {
-    drv_serial->AddTxPGN(129283);
-    drv_serial->AddTxPGN(129284);
-    drv_serial->AddTxPGN(129285);
-  }
+  // N2K serial gateway drivers maintain an enabled PGN TX list; SetTXPGN
+  // is a no-op on drivers that do not need it, and the gateway manager
+  // de-duplicates, so this can be called unconditionally each time.
+  found->SetTXPGN(129283);
+  found->SetTXPGN(129284);
+  found->SetTXPGN(129285);
   if (routeman.IsAnyRouteActive()) {
     fail_any |= !SendPGN129285(routeman, found);
     fail_any |= !SendPGN129284(routeman, found);

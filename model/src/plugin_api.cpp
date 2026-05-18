@@ -44,7 +44,6 @@
 #include "ocpn_plugin.h"
 #include "model/comm_drv_factory.h"
 #include "model/comm_drv_n2k_net.h"
-#include "model/comm_drv_n2k_serial.h"
 
 using namespace std;
 
@@ -262,21 +261,12 @@ CommDriverResult RegisterTXPGNs(DriverHandle handle,
   if (!found) {
     return RESULT_COMM_INVALID_HANDLE;
   }
-  auto dn2k = dynamic_cast<CommDriverN2K*>(found);
 
-  int nloop = 0;
-  for (size_t i = 0; i < pgn_list.size(); i++) {
-    int nTry = 5;
-    int iresult = -1;
-    nloop = 0;
-    while (nTry && iresult < 0) {
-      iresult = dn2k->SetTXPGN(pgn_list[i]);
-      nTry--;
-      nloop++;
-    }
-    if (iresult < 0) {
-      return RESULT_COMM_REGISTER_PGN_ERROR;
-    }
+  // SetTXPGN is an AbstractCommDriver virtual -- a no-op on drivers without
+  // a TX-PGN whitelist, asynchronous (and internally retried) on the N2K
+  // gateway driver -- so no driver-type downcast or retry loop is needed.
+  for (int pgn : pgn_list) {
+    if (found->SetTXPGN(pgn) < 0) return RESULT_COMM_REGISTER_PGN_ERROR;
   }
   return RESULT_COMM_NO_ERROR;
 }

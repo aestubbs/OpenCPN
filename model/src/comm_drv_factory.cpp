@@ -38,10 +38,11 @@
 #include "model/comm_drv_generic.h"
 #include "model/comm_drv_loopback.h"
 #include "model/comm_drv_n2k_net.h"
-#include "model/comm_drv_n2k_serial.h"
 #include "model/comm_drv_n0183_serial.h"
 #include "model/comm_drv_signalk_net.h"
 #include "model/comm_n0183_decoder.h"
+#include "model/comm_n2k_decoder.h"
+#include "model/comm_n2k_gateway_mgr.h"
 #include "model/comm_navmsg_bus.h"
 #include "model/comm_drv_registry.h"
 #include "model/ds_porttype.h"
@@ -123,6 +124,38 @@ static DriverPtr MakeN0183NetDriver(const ConnectionParams* params,
   return driver;
 }
 
+/**
+ * Build an NMEA 2000 serial-gateway driver on the comms framework -- a
+ * generic CommDriver wrapping a SerialTransport + N2kGatewayFramer +
+ * N2kDecoder, with an N2kGatewayManager attached for the async
+ * NGT-1 / YDNU-02 management handshake.
+ */
+static DriverPtr MakeN2kSerialDriver(const ConnectionParams* params,
+                                     DriverListener& listener) {
+  // Strip the "Serial:" prefix and any trailing device description.
+  std::string dsport = params->GetDSPort().ToStdString();
+  const auto colon = dsport.find(':');
+  std::string port =
+      colon == std::string::npos ? dsport : dsport.substr(colon + 1);
+  const auto space = port.find(' ');
+  if (space != std::string::npos) port.resize(space);
+
+  auto transport = std::make_unique<SerialTransport>(
+      QString::fromStdString(port), static_cast<qint32>(params->Baudrate));
+  auto driver = std::make_unique<CommDriver>(
+      NavAddr::Bus::N2000, params->GetStrippedDSPort(), std::move(transport),
+      std::make_unique<N2kGatewayFramer>(), std::make_unique<N2kDecoder>(*params),
+      listener);
+  driver->attributes["canAddress"] = std::string("-1");
+  driver->attributes["userComment"] = params->UserComment.ToStdString();
+  driver->attributes["ioDirection"] = DsPortTypeToString(params->IOSelect);
+
+  // The gateway manager QObject-parents itself to the driver, so it lives
+  // and dies with it; it wires itself onto the driver in its constructor.
+  new N2kGatewayManager(*driver, driver.get());
+  return driver;
+}
+
 void MakeLoopbackDriver() {
   auto driver = std::make_unique<LoopbackDriver>(NavMsgBus::GetInstance());
   CommDriverRegistry::GetInstance().Activate(std::move(driver));
@@ -139,8 +172,7 @@ void MakeCommDriver(const ConnectionParams* params) {
     case SERIAL:
       switch (params->Protocol) {
         case PROTO_NMEA2000: {
-          auto driver = std::make_unique<CommDriverN2KSerial>(params, msgbus);
-          registry.Activate(std::move(driver));
+          registry.Activate(MakeN2kSerialDriver(params, msgbus));
           break;
         }
         default: {

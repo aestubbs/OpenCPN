@@ -38,7 +38,7 @@ public:
                            std::shared_ptr<const NavAddr> addr) override = 0;
   virtual void SetListener(DriverListener& l) override;
   virtual std::shared_ptr<NavAddr2000> GetAddress(const N2kName& name);
-  virtual int SetTXPGN(int pgn) { return 0; }
+  // SetTXPGN is inherited from AbstractCommDriver (a no-op default).
 };
 
 #endif  // guard

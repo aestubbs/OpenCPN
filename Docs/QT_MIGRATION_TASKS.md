@@ -4,9 +4,9 @@
 > design rationale; this one tracks execution. Update checkboxes and the
 > **Current position** line as work proceeds.
 
-**Current position:** P1.5a, P1.5e, P1.5f, P1.5i, P1.5b done. The comms
-framework (`QT_MIGRATION_COMMS_ARCH.md`) is built and `n0183_net` (TCP
-client + UDP) is the first driver ported onto it. Next: P1.5d/c/g.
+**Current position:** P1.5a, P1.5e, P1.5f, P1.5i, P1.5b, P1.5d done.
+`n0183_net` (TCP client + UDP) and `n2k_serial` are ported onto the comms
+framework (`QT_MIGRATION_COMMS_ARCH.md`). Next: P1.5c/g.
 **Last updated:** 2026-05-18.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -98,8 +98,9 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         RX is event-loop driven (`readyRead` → `LineBuffer` framing). The
         `SerialIo`/`ThreadCtrl` worker-thread abstraction is gone — deleted
         `serial_io.h`, `std_serial_io.cpp`, `android_serial_io.cpp`. The
-        vendored `libs/serial` is no longer used here (still used by P1.5d).
-        Build green, 58/59 tests pass.
+        vendored `libs/serial` is no longer used here (it survives for
+        `ser_ports.cpp` port enumeration — P1.5h). Build green, 58/59
+        tests pass.
   - [x] **P1.5b** `n0183_net` on the framework — TCP-client and UDP
         connections run on the generic `CommDriver` (`TcpClientTransport` /
         `UdpTransport` + `LineFramer` + new `Nmea0183Decoder`, 10 unit
@@ -114,8 +115,18 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         TCP transport with a `?WATCH` connect-greeting option — both at the
         transport layer, then the legacy `CommDriverN0183Net` can be
         deleted. If no, delete `comm_drv_n0183_net.{h,cpp}` outright.
-  - [ ] **P1.5d** `n2k_serial` on the framework — `SerialTransport` +
-        `N2kGatewayFramer` + `N2kDecoder`; retires vendored `serial/serial.h`.
+  - [x] **P1.5d** `n2k_serial` on the framework — N2K serial-gateway
+        connections run on the generic `CommDriver` (`SerialTransport` +
+        new `N2kGatewayFramer` + new `N2kDecoder`, 13 unit tests). The
+        worker thread / `wxEvtHandler` / vendored `serial::Serial` are
+        gone; the legacy `comm_drv_n2k_serial.{h,cpp}` is deleted. The
+        gateway management handshake (NGT-1 startup, mfg-code probe,
+        TX-PGN enable/commit/activate, YDNU-02 mode) is a full async
+        rewrite — `N2kGatewayManager`, a QObject state machine on
+        QTimers, replacing the legacy blocking `wxMilliSleep`/`wxYield`
+        loops. `SetTXPGN` moved up to `AbstractCommDriver` so callers
+        (`plugin_api`, `autopilot_output`) need no driver-type downcast.
+        `libs/serial` stays — still used by `ser_ports.cpp` et al (P1.5h).
   - [ ] **P1.5c** `signalk_net` on the framework — `WebSocketTransport`
         (`QWebSocket`) + `PassThroughFramer` + `SignalKDecoder`; retires the
         vendored `IXWebSocket` for this driver.
@@ -313,3 +324,18 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   `TcpServerTransport` (transport layer, deferred); GPSD is out of scope
   pending review. `UdpTransport` now binds shareable (REUSEADDR), matching
   the legacy socket. Build green; framer+decoder tests pass.
+- 2026-05-18 — P1.5d done: `n2k_serial` ported onto the comms framework.
+  N2K serial-gateway connections are now a generic `CommDriver` +
+  `SerialTransport` + `N2kGatewayFramer` (the <ESC><STX>..<ESC><ETX>
+  un-escaping framer) + `N2kDecoder` (Actisense frame <-> Nmea2000Msg). The
+  legacy `comm_drv_n2k_serial.{h,cpp}` -- a `wxThread` + `wxEvtHandler`
+  driver using the vendored `serial::Serial` -- is deleted. Per the agreed
+  scope (full async port) the gateway management handshake was rewritten as
+  `N2kGatewayManager`, a QObject state machine: it sends fire-and-forget
+  init (NGT-1 startup / YDNU-02 mode), runs response-correlated probes
+  (mfg code, TX-PGN enable/commit/activate) on QTimers, and is fed 0xA0
+  management frames through a new general CommDriver frame-tap; the legacy
+  blocking `wxMilliSleep`/`wxYield` loops are gone. `SetTXPGN` moved up to
+  `AbstractCommDriver` (no-op default) so `plugin_api`/`autopilot_output`
+  reach it without a driver-type downcast. 13 framer+decoder gtest cases;
+  build green (app + tests link), 27/27 comms-framework tests pass.
