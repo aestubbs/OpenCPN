@@ -22,18 +22,18 @@
  * Implement comm_bridge.h -- handle incoming messages
  */
 
-#include <sstream>
+#include <algorithm>
 #include <string>
 
-#include <wx/wxprec.h>
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif
+#include <QDateTime>
+#include <QObject>  // QObject::tr -- translation, folded into P3.10
+#include <QString>
+#include <QStringList>
+#include <QtGlobal>  // qInfo
 
-#include <wx/event.h>
-#include <wx/string.h>
-#include <wx/tokenzr.h>
-#include <wx/fileconf.h>
+#include <wx/window.h>    // wxWindow -- GUI boundary, see GetDataMonitor()
+#include <wx/string.h>    // wxString -- config + AIS-parser boundaries
+#include <wx/confbase.h>  // wxConfigBase -- config boundary (Load/SaveConfig)
 
 #include "model/comm_ais.h"
 #include "model/comm_appmsg_bus.h"
@@ -120,7 +120,8 @@ static void LogAppMsg(const std::shared_ptr<const AppMsg>& msg,
 static void SendBasicNavdata(int vflag,
                              const BridgeLogCallbacks& log_callbacks) {
   auto msg = std::make_shared<BasicNavDataMsg>(
-      gLat, gLon, gSog, gCog, gVar, gHdt, vflag, wxDateTime::Now().GetTicks());
+      gLat, gLon, gSog, gCog, gVar, gHdt, vflag,
+      QDateTime::currentSecsSinceEpoch());
   clock_gettime(CLOCK_MONOTONIC, &msg->set_time);
   LogAppMsg(msg, "basic-navdata", log_callbacks);
   AppMsgBus::GetInstance().Notify(std::move(msg));
@@ -132,36 +133,36 @@ static inline double GeodesicRadToDeg(double rads) {
 
 static inline double MS2KNOTS(double ms) { return ms * 1.9438444924406; }
 
-static string GetPriorityKey(const NavMsgPtr& msg) {
-  string key;
+static QString GetPriorityKey(const NavMsgPtr& msg) {
+  QString key;
 
-  string this_identifier;
-  string this_address("0");
+  const QString this_address("0");
   if (msg->bus == NavAddr::Bus::N0183) {
     auto msg_0183 = std::dynamic_pointer_cast<const Nmea0183Msg>(msg);
     if (msg_0183) {
-      string source = msg->source->to_string();
+      QString source = QString::fromStdString(msg->source->to_string());
       if (msg_0183->talker == "WM" && msg_0183->type == "HVD")
         source = "WMM plugin";
-      this_identifier = msg_0183->talker;
-      this_identifier += msg_0183->type;
+      const QString this_identifier =
+          QString::fromStdString(msg_0183->talker + msg_0183->type);
       key = source + ":" + this_address + ";" + this_identifier;
     }
   } else if (msg->bus == NavAddr::Bus::N2000) {
     auto msg_n2k = std::dynamic_pointer_cast<const Nmea2000Msg>(msg);
     if (msg_n2k) {
-      this_identifier = msg_n2k->PGN.to_string();
+      const QString this_identifier =
+          QString::fromStdString(msg_n2k->PGN.to_string());
       unsigned char n_source = msg_n2k->payload.at(7);
-      wxString km = wxString::Format("N2k device address: %d", n_source);
-      key = km.ToStdString() + " ; " + "PGN: " + this_identifier;
+      key = "N2k device address: " + QString::number(n_source) + " ; " +
+            "PGN: " + this_identifier;
     }
   } else if (msg->bus == NavAddr::Bus::Signalk) {
     auto msg_sk = std::dynamic_pointer_cast<const SignalkMsg>(msg);
     if (msg_sk) {
       auto addr_sk =
           std::static_pointer_cast<const NavAddrSignalK>(msg->source);
-      string source = addr_sk->to_string();
-      key = source;  // Simplified, parsing sK for more info is expensive
+      // Simplified, parsing sK for more info is expensive
+      key = QString::fromStdString(addr_sk->to_string());
     }
   }
 
@@ -172,21 +173,18 @@ static void PresetPriorityContainer(PriorityContainer& pc,
                                     const PriorityMap& priority_map) {
   // Extract some info from the preloaded map
   // Find the key corresponding to priority 0, the highest
-  string key0;
-  for (const auto& it : priority_map) {
-    if (it.second == 0) key0 = it.first;
+  QString key0;
+  for (auto [key, prio] : priority_map.asKeyValueRange()) {
+    if (prio == 0) key0 = key;
   }
 
-  wxString this_key(key0.c_str());
-  wxStringTokenizer tkz(this_key, ";");
-  string source = tkz.GetNextToken().ToStdString();
-  string this_identifier = tkz.GetNextToken().ToStdString();
+  // Keys have the form "<source>:<address>;<identifier>".
+  const QString source = key0.section(';', 0, 0);
+  const QString this_identifier = key0.section(';', 1, 1);
 
-  wxStringTokenizer tka(source, ":");
-  tka.GetNextToken();
-  std::stringstream ss;
-  ss << tka.GetNextToken();
-  ss >> pc.active_source_address;
+  bool addr_ok = false;
+  int source_address = source.section(':', 1, 1).toInt(&addr_ok);
+  if (addr_ok) pc.active_source_address = source_address;
   pc.active_priority = 0;
   pc.active_source = source;
   pc.active_identifier = this_identifier;
@@ -194,31 +192,29 @@ static void PresetPriorityContainer(PriorityContainer& pc,
 }
 
 static void ApplyPriorityMap(PriorityMap& priority_map,
-                             const wxString& new_prio, int category) {
+                             const string& new_prio) {
   priority_map.clear();
-  wxStringTokenizer tk(new_prio, "|");
+  const QStringList entries =
+      QString::fromStdString(new_prio).split('|', Qt::SkipEmptyParts);
   int index = 0;
-  while (tk.HasMoreTokens()) {
-    wxString entry = tk.GetNextToken();
-    string s_entry(entry.c_str());
-    priority_map[s_entry] = index;
-    index++;
+  for (const QString& entry : entries) {
+    priority_map[entry] = index++;
   }
 }
 
 static string GetPriorityMap(const PriorityMap& map) {
 #define MAX_SOURCES 10
-  string sa[MAX_SOURCES];
+  QString sa[MAX_SOURCES];
   string result;
 
-  for (auto& it : map) {
-    if ((it.second >= 0) && (it.second < MAX_SOURCES)) sa[it.second] = it.first;
+  for (auto [key, prio] : map.asKeyValueRange()) {
+    if ((prio >= 0) && (prio < MAX_SOURCES)) sa[prio] = key;
   }
 
   // build the packed string result
   for (int i = 0; i < MAX_SOURCES; i++) {
-    if (!sa[i].empty()) {
-      result += sa[i];
+    if (!sa[i].isEmpty()) {
+      result += sa[i].toStdString();
       result += "|";
     }
   }
@@ -229,9 +225,9 @@ static string GetPriorityMap(const PriorityMap& map) {
 static bool IsNextLowerPriorityAvailable(const PriorityMap& map,
                                          const PriorityContainer& pc) {
   int best_prio = 100;
-  for (auto& it : map) {
-    if (it.second > pc.active_priority) {
-      best_prio = wxMin(best_prio, it.second);
+  for (int prio : map) {
+    if (prio > pc.active_priority) {
+      best_prio = std::min(best_prio, prio);
     }
   }
   return best_prio != pc.active_priority;
@@ -240,9 +236,9 @@ static bool IsNextLowerPriorityAvailable(const PriorityMap& map,
 static void SelectNextLowerPriority(const PriorityMap& map,
                                     PriorityContainer& pc) {
   int best_prio = 100;
-  for (const auto& it : map) {
-    if (it.second > pc.active_priority) {
-      best_prio = wxMin(best_prio, it.second);
+  for (int prio : map) {
+    if (prio > pc.active_priority) {
+      best_prio = std::min(best_prio, prio);
     }
   }
   pc.active_priority = best_prio;
@@ -295,7 +291,7 @@ bool CommBridge::Initialize() {
   // Initialize a listener for driver state changes
   m_driver_change_lstnr.Init(
       CommDriverRegistry::GetInstance().evt_driverlist_change,
-      [&](const wxCommandEvent& ev) { OnDriverStateChange(); });
+      [&](const ObservedEvt&) { OnDriverStateChange(); });
 
   return true;
 }
@@ -322,10 +318,7 @@ void CommBridge::OnWatchdogTimer() {
       msgbus.Notify(std::move(msg));
 
       if (m_watchdogs.position_watchdog % m_n_log_watchdog_period == 0) {
-        wxString logmsg;
-        logmsg.Printf("   ***GPS Watchdog timeout at Lat:%g   Lon: %g", gLat,
-                      gLon);
-        wxLogMessage(logmsg);
+        qInfo("   ***GPS Watchdog timeout at Lat:%g   Lon: %g", gLat, gLon);
       }
     }
 
@@ -351,7 +344,7 @@ void CommBridge::OnWatchdogTimer() {
     active_priority_velocity.recent_active_time = -1;
 
     if (g_nNMEADebug && (m_watchdogs.velocity_watchdog == 0))
-      wxLogMessage("   ***Velocity Watchdog timeout...");
+      qInfo("   ***Velocity Watchdog timeout...");
     if (m_watchdogs.velocity_watchdog % 5 == 0) {
       // Send AppMsg telling of watchdog expiry
       auto msg = std::make_shared<GPSWatchdogMsg>(
@@ -370,7 +363,7 @@ void CommBridge::OnWatchdogTimer() {
     gHdt = NAN;
     active_priority_heading.recent_active_time = -1;
     if (g_nNMEADebug && (m_watchdogs.heading_watchdog == 0))
-      wxLogMessage("   ***HDT Watchdog timeout...");
+      qInfo("   ***HDT Watchdog timeout...");
 
     // Are there any other lower priority sources?
     // If so, adopt that one.
@@ -384,7 +377,7 @@ void CommBridge::OnWatchdogTimer() {
     active_priority_variation.recent_active_time = -1;
 
     if (g_nNMEADebug && (m_watchdogs.variation_watchdog == 0))
-      wxLogMessage("   ***VAR Watchdog timeout...");
+      qInfo("   ***VAR Watchdog timeout...");
 
     // Are there any other lower priority sources?
     // If so, adopt that one.
@@ -400,7 +393,7 @@ void CommBridge::OnWatchdogTimer() {
     active_priority_satellites.recent_active_time = -1;
 
     if (g_nNMEADebug && (m_watchdogs.satellite_watchdog == 0))
-      wxLogMessage("   ***SAT Watchdog timeout...");
+      qInfo("   ***SAT Watchdog timeout...");
 
     // Are there any other lower priority sources?
     // If so, adopt that one.
@@ -546,20 +539,11 @@ std::vector<string> CommBridge::GetPriorityMaps() const {
 }
 
 void CommBridge::ApplyPriorityMaps(const std::vector<string>& new_maps) {
-  wxString new_prio_string = wxString(new_maps[0].c_str());
-  ApplyPriorityMap(priority_map_position, new_prio_string, 0);
-
-  new_prio_string = wxString(new_maps[1].c_str());
-  ApplyPriorityMap(priority_map_velocity, new_prio_string, 1);
-
-  new_prio_string = wxString(new_maps[2].c_str());
-  ApplyPriorityMap(priority_map_heading, new_prio_string, 2);
-
-  new_prio_string = wxString(new_maps[3].c_str());
-  ApplyPriorityMap(priority_map_variation, new_prio_string, 3);
-
-  new_prio_string = wxString(new_maps[4].c_str());
-  ApplyPriorityMap(priority_map_satellites, new_prio_string, 4);
+  ApplyPriorityMap(priority_map_position, new_maps[0]);
+  ApplyPriorityMap(priority_map_velocity, new_maps[1]);
+  ApplyPriorityMap(priority_map_heading, new_maps[2]);
+  ApplyPriorityMap(priority_map_variation, new_maps[3]);
+  ApplyPriorityMap(priority_map_satellites, new_maps[4]);
 }
 
 void CommBridge::PresetPriorityContainers() {
@@ -1029,13 +1013,12 @@ bool CommBridge::HandleN0183_GLL(const N0183MsgPtr& n0183_msg) {
 }
 
 bool CommBridge::HandleN0183_AIVDO(const N0183MsgPtr& n0183_msg) {
-  string str = n0183_msg->payload;
+  const string& str = n0183_msg->payload;
 
   GenericPosDatEx gpd;
-  wxString sentence(str.c_str());
-
-  AisError ais_error = AIS_GENERIC_ERROR;
-  ais_error = DecodeSingleVDO(sentence, &gpd);
+  // wxString is the boundary to the still-wx AIS parser (comm_ais); it is
+  // removed when ais_decoder de-wx'es later in P1.6b.
+  AisError ais_error = DecodeSingleVDO(wxString(str.c_str()), &gpd);
 
   if (ais_error == AIS_NoError) {
     int valid_flag = 0;
@@ -1247,22 +1230,13 @@ bool CommBridge::SaveConfig() const {
 bool CommBridge::EvalPriority(const NavMsgPtr& msg,
                               PriorityContainer& active_priority,
                               PriorityMap& priority_map) {
-  string this_key = GetPriorityKey(msg);
-  if (debug_priority) printf("This Key: %s\n", this_key.c_str());
+  const QString this_key = GetPriorityKey(msg);
+  if (debug_priority) printf("This Key: %s\n", qUtf8Printable(this_key));
 
-  // Pull some identifiers from the unique key
-  wxStringTokenizer tkz(this_key, ";");
-  wxString wxs_this_source = tkz.GetNextToken();
-  string source = wxs_this_source.ToStdString();
-  wxString wxs_this_identifier = tkz.GetNextToken();
-  string this_identifier = wxs_this_identifier.ToStdString();
-
-  wxStringTokenizer tka(wxs_this_source, ":");
-  tka.GetNextToken();
-  std::stringstream ss;
-  ss << tka.GetNextToken();
-  int source_address;
-  ss >> source_address;
+  // Pull some identifiers from the key "<source>:<address>;<identifier>".
+  const QString source = this_key.section(';', 0, 0);
+  const QString this_identifier = this_key.section(';', 1, 1);
+  int source_address = source.section(':', 1, 1).toInt();
 
   // Special case priority value linkage for N0183 messages:
   // If this is a "velocity" record, ensure that a "position"
@@ -1271,10 +1245,9 @@ bool CommBridge::EvalPriority(const NavMsgPtr& msg,
   // This ensures that the data source is fully initialized, and is reporting
   // valid, sensible velocity data.
   if (msg->bus == NavAddr::Bus::N0183) {
-    if (!strncmp(active_priority.prio_class.c_str(), "velocity", 8)) {
+    if (active_priority.prio_class == "velocity") {
       bool pos_ok = false;
-      if (!strcmp(active_priority_position.active_source.c_str(),
-                  source.c_str())) {
+      if (active_priority_position.active_source == source) {
         if (active_priority_position.recent_active_time != -1) {
           pos_ok = true;
         }
@@ -1296,9 +1269,9 @@ bool CommBridge::EvalPriority(const NavMsgPtr& msg,
   this_priority = priority_map[this_key];
 
   if (debug_priority) {
-    for (const auto& jt : priority_map) {
-      printf("               priority_map:  %s  %d\n", jt.first.c_str(),
-             jt.second);
+    for (auto [key, prio] : priority_map.asKeyValueRange()) {
+      printf("               priority_map:  %s  %d\n", qUtf8Printable(key),
+             prio);
     }
   }
 
@@ -1306,7 +1279,7 @@ bool CommBridge::EvalPriority(const NavMsgPtr& msg,
   //   If so, drop the message
   if (this_priority > active_priority.active_priority) {
     if (debug_priority)
-      printf("      Drop low priority: %s %d %d \n", source.c_str(),
+      printf("      Drop low priority: %s %d %d \n", qUtf8Printable(source),
              this_priority, active_priority.active_priority);
     return false;
   }
@@ -1317,11 +1290,10 @@ bool CommBridge::EvalPriority(const NavMsgPtr& msg,
     active_priority.active_source = source;
     active_priority.active_identifier = this_identifier;
     active_priority.active_source_address = source_address;
-    wxDateTime now = wxDateTime::Now();
-    active_priority.recent_active_time = now.GetTicks();
+    active_priority.recent_active_time = QDateTime::currentSecsSinceEpoch();
 
     if (debug_priority)
-      printf("  Restoring high priority: %s %d\n", source.c_str(),
+      printf("  Restoring high priority: %s %d\n", qUtf8Printable(source),
              this_priority);
     return true;
   }
@@ -1329,22 +1301,23 @@ bool CommBridge::EvalPriority(const NavMsgPtr& msg,
   // Do we see two sources with the same priority?
   // If so, we take the first one, and deprioritize this one.
 
-  if (!active_priority.active_source.empty()) {
-    if (debug_priority) printf("source: %s\n", source.c_str());
+  if (!active_priority.active_source.isEmpty()) {
+    if (debug_priority) printf("source: %s\n", qUtf8Printable(source));
     if (debug_priority)
-      printf("active_source: %s\n", active_priority.active_source.c_str());
+      printf("active_source: %s\n",
+             qUtf8Printable(active_priority.active_source));
 
     if (source != active_priority.active_source) {
       // Auto adjust the priority of these this message down
       // First, find the lowest priority in use in this map
       int lowest_priority = -10;  // safe enough
-      for (const auto& jt : priority_map) {
-        if (jt.second > lowest_priority) lowest_priority = jt.second;
+      for (int prio : priority_map) {
+        if (prio > lowest_priority) lowest_priority = prio;
       }
 
       priority_map[this_key] = lowest_priority + 1;
       if (debug_priority)
-        printf("          Lowering priority A: %s :%d\n", source.c_str(),
+        printf("          Lowering priority A: %s :%d\n", qUtf8Printable(source),
                priority_map[this_key]);
       return false;
     }
@@ -1356,26 +1329,26 @@ bool CommBridge::EvalPriority(const NavMsgPtr& msg,
   if (msg->bus == NavAddr::Bus::N0183) {
     auto msg_0183 = std::dynamic_pointer_cast<const Nmea0183Msg>(msg);
     if (msg_0183) {
-      if (!active_priority.active_identifier.empty()) {
+      if (!active_priority.active_identifier.isEmpty()) {
         if (debug_priority)
-          printf("this_identifier: %s\n", this_identifier.c_str());
+          printf("this_identifier: %s\n", qUtf8Printable(this_identifier));
         if (debug_priority)
           printf("active_priority.active_identifier: %s\n",
-                 active_priority.active_identifier.c_str());
+                 qUtf8Printable(active_priority.active_identifier));
 
         if (this_identifier != active_priority.active_identifier) {
           // if necessary, auto adjust the priority of this message down
           // and drop it
           if (priority_map[this_key] == active_priority.active_priority) {
             int lowest_priority = -10;  // safe enough
-            for (const auto& jt : priority_map) {
-              if (jt.second > lowest_priority) lowest_priority = jt.second;
+            for (int prio : priority_map) {
+              if (prio > lowest_priority) lowest_priority = prio;
             }
 
             priority_map[this_key] = lowest_priority + 1;
             if (debug_priority)
-              printf("          Lowering priority B: %s :%d\n", source.c_str(),
-                     priority_map[this_key]);
+              printf("          Lowering priority B: %s :%d\n",
+                     qUtf8Printable(source), priority_map[this_key]);
           }
 
           return false;
@@ -1389,20 +1362,20 @@ bool CommBridge::EvalPriority(const NavMsgPtr& msg,
   else if (msg->bus == NavAddr::Bus::N2000) {
     auto msg_n2k = std::dynamic_pointer_cast<const Nmea2000Msg>(msg);
     if (msg_n2k) {
-      if (!active_priority.active_identifier.empty()) {
+      if (!active_priority.active_identifier.isEmpty()) {
         if (this_identifier != active_priority.active_identifier) {
           // if necessary, auto adjust the priority of this message down
           // and drop it
           if (priority_map[this_key] == active_priority.active_priority) {
             int lowest_priority = -10;  // safe enough
-            for (const auto& jt : priority_map) {
-              if (jt.second > lowest_priority) lowest_priority = jt.second;
+            for (int prio : priority_map) {
+              if (prio > lowest_priority) lowest_priority = prio;
             }
 
             priority_map[this_key] = lowest_priority + 1;
             if (debug_priority)
-              printf("          Lowering priority: %s :%d\n", source.c_str(),
-                     priority_map[this_key]);
+              printf("          Lowering priority: %s :%d\n",
+                     qUtf8Printable(source), priority_map[this_key]);
           }
 
           return false;
@@ -1415,22 +1388,21 @@ bool CommBridge::EvalPriority(const NavMsgPtr& msg,
   active_priority.active_source = source;
   active_priority.active_identifier = this_identifier;
   active_priority.active_source_address = source_address;
-  wxDateTime now = wxDateTime::Now();
-  active_priority.recent_active_time = now.GetTicks();
+  active_priority.recent_active_time = QDateTime::currentSecsSinceEpoch();
   if (debug_priority)
-    printf("  Accepting high priority: %s %d\n", source.c_str(), this_priority);
+    printf("  Accepting high priority: %s %d\n", qUtf8Printable(source),
+           this_priority);
 
   if (active_priority.prio_class == "position") {
     if (this_priority != m_last_position_priority) {
       m_last_position_priority = this_priority;
 
-      wxString msg_;
-      msg_.Printf(_("GNSS position fix priority shift:") + " %s\n %s \n -> %s",
-                  this_identifier.c_str(), m_last_position_source.c_str(),
-                  source.c_str());
+      QString note = QObject::tr("GNSS position fix priority shift:");
+      note += QString(" %1\n %2 \n -> %3")
+                  .arg(this_identifier, m_last_position_source, source);
       auto& noteman = NotificationManager::GetInstance();
       noteman.AddNotification(NotificationSeverity::kInformational,
-                              msg_.ToStdString());
+                              note.toStdString());
     }
     m_last_position_source = source;
   }

@@ -2625,15 +2625,15 @@ std::vector<std::string> GetActivePriorityIdentifiers() {
 
   auto& comm_bridge = CommBridge::GetInstance();
 
-  std::string id = comm_bridge.GetPriorityContainer("position").active_source;
+  std::string id = comm_bridge.GetPriorityContainer("position").active_source.toStdString();
   result.push_back(id);
-  id = comm_bridge.GetPriorityContainer("velocity").active_source;
+  id = comm_bridge.GetPriorityContainer("velocity").active_source.toStdString();
   result.push_back(id);
-  id = comm_bridge.GetPriorityContainer("heading").active_source;
+  id = comm_bridge.GetPriorityContainer("heading").active_source.toStdString();
   result.push_back(id);
-  id = comm_bridge.GetPriorityContainer("variation").active_source;
+  id = comm_bridge.GetPriorityContainer("variation").active_source.toStdString();
   result.push_back(id);
-  id = comm_bridge.GetPriorityContainer("satellites").active_source;
+  id = comm_bridge.GetPriorityContainer("satellites").active_source.toStdString();
   result.push_back(id);
 
   return result;

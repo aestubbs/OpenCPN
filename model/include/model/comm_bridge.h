@@ -29,7 +29,10 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <unordered_map>
+#include <vector>
+
+#include <QHash>
+#include <QString>
 
 #include "model/comm_decoder.h"
 #include "model/comm_navmsg.h"
@@ -41,16 +44,16 @@ using N2000MsgPtr = std::shared_ptr<const Nmea2000Msg>;
 using SignalKMsgPtr = std::shared_ptr<const SignalkMsg>;
 using NavMsgPtr = std::shared_ptr<const NavMsg>;
 
-using PriorityMap = std::unordered_map<std::string, int>;
+using PriorityMap = QHash<QString, int>;
 
 struct PriorityContainer {
-  std::string prio_class;
+  QString prio_class;
   int active_priority;
-  std::string active_source;
-  std::string active_identifier;
+  QString active_source;
+  QString active_identifier;
   int active_source_address;
   time_t recent_active_time;
-  PriorityContainer(const std::string& cls, int prio = 0)
+  PriorityContainer(const QString& cls, int prio = 0)
       : prio_class(cls),
         active_priority(prio),
         active_source_address(-1),
@@ -200,7 +203,7 @@ private:
 
   BridgeLogCallbacks m_log_callbacks;
   int m_last_position_priority;
-  std::string m_last_position_source;
+  QString m_last_position_source;
   Watchdogs m_watchdogs;
   std::unique_ptr<WatchdogTimer> m_watchdog_timer;
 
