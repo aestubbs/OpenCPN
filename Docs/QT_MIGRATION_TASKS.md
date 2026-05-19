@@ -5,11 +5,12 @@
 > **Current position** line as work proceeds.
 
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
-the comms pipeline is on the framework and, as of P1.6a, wx-free behind a
+the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). Next: P1.6b+ — widen the wx-free boundary
-into the adjacent layers (routes, nav data, config).
-**Last updated:** 2026-05-18.
+SignalK/SocketCAN parked (P1.5m). Next: P1.6b — de-wx the decode layer
+(`comm_decoder` → `comm_bridge` → `ais_decoder`), extending the wx-free
+pipeline downstream toward nav data.
+**Last updated:** 2026-05-19.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
 Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
@@ -169,10 +170,20 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         (`android_serial_io.cpp`, deleted with P1.5e). Android is dropped for
         the migration (`QT_MIGRATION.md` §1, X.4); mobile returns natively via
         QtQuick after the core is on Qt. Desktop build green.
-- [~] **P1.6** Remove `wxString` from `model/`, working outward from a wx-free
-      core behind facade/adaptor boundaries (the wx-typed value stays at the
-      boundary; the layer below is wx-free; an adaptor bridges them — reusable
-      as each layer migrates).
+- [~] **P1.6** Remove `wxString` from `model/`, behind facade/adaptor
+      boundaries (the wx-typed value stays at the boundary; the layer below is
+      wx-free; an adaptor bridges them — reusable as each layer migrates).
+
+      **Direction of travel — follow the data flow, not the call graph.** The
+      wx-free region grows *downstream* (bytes → frames → NavMsg → nav data),
+      because a facade can only sit where the layer *outside* it is still wx.
+      `ConnectionParams` is the **terminal upstream facade**: it is pinned by
+      the wx GUI (16 `gui/` files edit it; it even embeds a
+      `ConnectionParamsPanel*`) and by config persistence
+      (`Serialize`/`Deserialize`). It de-wx'es *last*, gated on Phase 3 (GUI)
+      and P1.9 (config) — not next. (It is *not* in the plugin ABI, so plugins
+      do not pin it.) So P1.6 advances downstream into the decode layer, with
+      each new boundary at wherever that layer next hands data to wx code.
   - [x] **P1.6a** Comms pipeline de-wx'd. The framework (`CommTransport`,
         `Framer`s, `Nmea0183Decoder`/`N2kDecoder`, generic `CommDriver`,
         `N2kGatewayManager`) no longer depends on wxWidgets. New wx-free
@@ -181,10 +192,17 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         factory adapts `ConnectionParams` → wx-free pipeline inputs. Logging
         moved to Qt (`qWarning`/`qInfo`). `ConnectionParams` itself stays
         `wxString` — the boundary, shared with the wx GUI and plugin ABI.
-  - [ ] **P1.6b+** Widen the wx-free boundary outward (routes, nav data,
-        config, …) as later layers migrate — same facade pattern. Legacy
-        gateway drivers (`n2k_net` parsers etc.) are swept only when revived,
-        not pre-emptively.
+  - [~] **P1.6b** De-wx the **decode layer** — the stage downstream of the
+        (wx-free) `NavMsgBus` that turns the `NavMsg` stream into nav data
+        (positions, AIS, HUD): `comm_decoder.cpp` (~38 `wxString` refs),
+        `comm_bridge.cpp` (~32), `ais_decoder.cpp` (~117). This extends the
+        clean pipeline from *bytes-in* through to *nav-data-out* — the core
+        functionality. New boundary: wherever `comm_bridge` hands nav data to
+        the GUI.
+  - [ ] **P1.6c+** Continue downstream/adjacent layers (routes, nav object
+        DB, …) the same way. `ConnectionParams` + config and the legacy
+        gateway parsers (`n2k_net`) are swept only when their outer layer
+        migrates (Phase 3 / P1.9) or the driver is revived — not pre-emptively.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
 - [ ] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract `config_vars`.
@@ -409,3 +427,13 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   factory + ConnectionParams::MakeInputFilter) bridging. New wx-free
   SentenceFilter value type; framework logging moved to Qt. The pattern is
   reusable: P1.6b+ widens the wx-free boundary outward layer by layer.
+- 2026-05-19 — P1.6 plan corrected. Investigation confirmed ConnectionParams
+  is pinned wxString by the wx GUI (16 gui/ files; it embeds a
+  ConnectionParamsPanel*) and config Serialize/Deserialize — not by the
+  plugin ABI. So it is the terminal upstream facade and de-wx'es last (gated
+  on Phase 3 + P1.9), not next. P1.6 instead advances downstream along the
+  data flow: P1.6b de-wx's the decode layer (comm_decoder, comm_bridge,
+  ais_decoder), each new facade boundary placed where that layer hands data
+  to wx. A read-only agent audit also confirmed the comms data pipeline is
+  properly Qt-native (Qt6::Core/Network/SerialPort linked and used; no
+  wxSocket/wxThread/wxEvtHandler in the critical path).
