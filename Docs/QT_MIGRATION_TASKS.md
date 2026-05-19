@@ -9,7 +9,9 @@ the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
 SignalK/SocketCAN parked (P1.5m). P1.6b done — the decode layer
 (`comm_decoder`, `comm_bridge`, `ais_decoder`) is de-wx'd; the clean pipeline
-now runs *bytes-in → nav-data-out*. Next: P1.6c+ (downstream/adjacent layers).
+runs *bytes-in → nav-data-out*. P1.6c underway — shared model/GUI types are
+now converted *through* the boundary (GUI call sites adapted, not deferred);
+`ais_target_data` done. Next: routes / nav object DB.
 **Last updated:** 2026-05-19.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -221,10 +223,23 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
           headers (`ais_target_data.h`, `meteo_points.h`). `wxDateTime`,
           `wxTimer`/`wxEvtHandler`, `wxTextFile`/`wxFileName` stay for
           P1.7/P1.11/P1.10.
-  - [ ] **P1.6c+** Continue downstream/adjacent layers (routes, nav object
-        DB, …) the same way. `ConnectionParams` + config and the legacy
-        gateway parsers (`n2k_net`) are swept only when their outer layer
-        migrates (Phase 3 / P1.9) or the driver is revived — not pre-emptively.
+  - [~] **P1.6c+** Continue downstream/adjacent layers (routes, nav object
+        DB, …). **Strategy shift:** the remaining model types (`AisTargetData`,
+        `Route`, `RoutePoint`, …) are *shared* with the wx GUI — their
+        `wxString` surface has no wx-free facade; it *is* the boundary. From
+        P1.6c these are converted *through*: the model type goes `QString`,
+        and the wx GUI call sites are adapted now (a `wxString`⇄`QString`
+        conversion stays local at each wx widget call) rather than deferred to
+        Phase 3. `ConnectionParams` + config and the legacy gateway parsers
+        (`n2k_net`) are still swept only when their outer layer migrates
+        (Phase 3 / P1.9) or the driver is revived — not pre-emptively.
+    - [x] `ais_target_data` — `AisTargetData` is `QString` throughout: the 7
+          display-string methods (`BuildQueryResult`, `GetFullName`, …), the 5
+          free functions (`trimAISField`, `ais_get_status`, `make_hash_ERI`,
+          …) and the data fields (`m_date_string`, `MSG_14_text`,
+          `Ais8_001_22_SubArea::text`). ~8 wx GUI consumers adapted at the
+          call site. `wxDateTime` fields and the `_()` macro stay (P1.7 /
+          P3.10); a `FromWx()` helper bridges `_()` results into `QString`.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
 - [ ] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract `config_vars`.
@@ -499,3 +514,16 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   `meteo_points.h`); `wxDateTime`/`wxTimer`/`wxTextFile` stay for their
   dedicated phases (P1.7/P1.11/P1.10). The decode layer now runs Qt-typed
   end to end: bytes-in → nav-data-out.
+- 2026-05-19 — P1.6c starts; strategy shift recorded. The decode layer had a
+  wx-free facade to hide behind; the layers below it (`AisTargetData`,
+  `Route`, …) do not — these types are shared with the wx GUI and their
+  `wxString` surface *is* the boundary. Decision: convert them *through* —
+  the model type goes `QString`, wx GUI call sites are adapted now (local
+  `wxString`⇄`QString` conversions at each wx widget call), rather than
+  parking the type wx-typed until Phase 3. First file: `ais_target_data` —
+  `AisTargetData` fully `QString` (7 display-string methods, 5 free
+  functions, 3 data fields), ~8 wx GUI consumers adapted. wx⇄Qt string
+  conversions use UTF-8 explicitly (`wxString::FromUTF8` / `utf8_string()`),
+  not the locale-dependent default ctors, so translated/non-ASCII text
+  round-trips correctly. `wxDateTime` and the `_()` macro stay (P1.7/P3.10);
+  a `FromWx()` helper bridges `_()` results into `QString`.
