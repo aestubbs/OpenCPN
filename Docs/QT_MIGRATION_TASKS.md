@@ -7,12 +7,11 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6b done — the decode layer
-(`comm_decoder`, `comm_bridge`, `ais_decoder`) is de-wx'd; the clean pipeline
-runs *bytes-in → nav-data-out*. P1.6c underway — shared model/GUI types are
-converted *through* the boundary (GUI call sites adapted, not deferred);
-`ais_target_data` and the route/waypoint model (`route`, `route_point`)
-done. Next: `track`, `routeman`, then the nav object DB.
+SignalK/SocketCAN parked (P1.5m). P1.6 done — the comms pipeline,
+decode layer, AIS target data, route/waypoint/track model, route/waypoint
+management, and nav-object DB persistence all run Qt-typed end to end. The
+shared `model/wx_qt_string.h` helpers centralize the remaining wx⇄Qt
+conversions (explicit UTF-8). Next: P1.7 (`wxDateTime` → `QDateTime`).
 **Last updated:** 2026-05-19.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -173,7 +172,7 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         (`android_serial_io.cpp`, deleted with P1.5e). Android is dropped for
         the migration (`QT_MIGRATION.md` §1, X.4); mobile returns natively via
         QtQuick after the core is on Qt. Desktop build green.
-- [~] **P1.6** Remove `wxString` from `model/`, behind facade/adaptor
+- [x] **P1.6** Remove `wxString` from `model/`, behind facade/adaptor
       boundaries (the wx-typed value stays at the boundary; the layer below is
       wx-free; an adaptor bridges them — reusable as each layer migrates).
 
@@ -224,16 +223,19 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
           headers (`ais_target_data.h`, `meteo_points.h`). `wxDateTime`,
           `wxTimer`/`wxEvtHandler`, `wxTextFile`/`wxFileName` stay for
           P1.7/P1.11/P1.10.
-  - [~] **P1.6c+** Continue downstream/adjacent layers (routes, nav object
-        DB, …). **Strategy shift:** the remaining model types (`AisTargetData`,
-        `Route`, `RoutePoint`, …) are *shared* with the wx GUI — their
-        `wxString` surface has no wx-free facade; it *is* the boundary. From
-        P1.6c these are converted *through*: the model type goes `QString`,
-        and the wx GUI call sites are adapted now (a `wxString`⇄`QString`
-        conversion stays local at each wx widget call) rather than deferred to
-        Phase 3. `ConnectionParams` + config and the legacy gateway parsers
-        (`n2k_net`) are still swept only when their outer layer migrates
-        (Phase 3 / P1.9) or the driver is revived — not pre-emptively.
+  - [x] **P1.6c** Downstream/adjacent layers (routes, nav object DB).
+        **Strategy shift:** the model types at this layer (`AisTargetData`,
+        `Route`, `RoutePoint`, `Track`, `Routeman`, `WayPointman`, …) are
+        *shared* with the wx GUI — their `wxString` surface has no wx-free
+        facade; it *is* the boundary. From P1.6c these are converted
+        *through*: the model type goes `QString`, and the wx GUI call sites
+        are adapted now (a `wxString`⇄`QString` conversion stays local at
+        each wx widget call) rather than deferred to Phase 3. The shared
+        `model/wx_qt_string.h` (added during the route step) centralizes the
+        conversions with an explicit UTF-8 round-trip. `ConnectionParams` +
+        config and the legacy gateway parsers (`n2k_net`) are still swept
+        only when their outer layer migrates (Phase 3 / P1.9) or the driver
+        is revived — not pre-emptively.
     - [x] `ais_target_data` — `AisTargetData` is `QString` throughout: the 7
           display-string methods (`BuildQueryResult`, `GetFullName`, …), the 5
           free functions (`trimAISField`, `ais_get_status`, `make_hash_ERI`,
@@ -252,8 +254,27 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
           round-trip, never a locale-dependent default ctor. `wxDateTime`,
           the GUI-drawing types (`wxColour`/`wxBitmap`/`wxPen`/…) and
           `Route`'s `wxObject` base stay for P1.7 / P1.14 / later.
-    - [ ] `track`, `routeman`, `nav_object_database`/`navobj_db` — adapted
-          at their `Route`/`RoutePoint` call sites only; de-wx pending.
+    - [x] `track` — `Track` and `TrackPoint` are `QString` throughout:
+          GUIDs, names, descriptions, start/end strings, the colour-name
+          field, `GetIsoDateTime`/`GetDateTime`, TrackPoint's
+          timestamp-string ctor. ~17 consumer files adapted. `wxDateTime`,
+          `wxTimer`/`wxEvtHandler`, `wxGenericProgressDialog` stay (P1.7 /
+          P1.11 / P1.10).
+    - [x] `routeman` + `waypointman` + `markicon` — Route/Track manager and
+          waypoint-icon catalog. `Find{Route,Track,RoutePoint}ByGUID`,
+          `CreateGUID` (returns `QString`), the `GetIcon*` accessors,
+          `MarkIcon::icon_name`/`icon_description` and the
+          `std::function<wxColour(QString)> get_global_colour` callback
+          parameter all migrated. ~20 consumer files adapted. The drawing
+          types (`wxBitmap`/`wxPen`/`wxBrush`/`wxImage`/`wxImageList`/…)
+          stay for P1.14.
+    - [x] `nav_object_database` + `navobj_db` — GPX I/O and SQLite
+          persistence. ~99 + ~23 wxString sites converted to `QString`;
+          pugixml boundary uses `toUtf8().constData()`. The stop-gap
+          file-local `ws2qs`/`qs2ws` helpers earlier P1.6c steps had added
+          to `nav_object_database.cpp` are deleted; everything now routes
+          through `model/wx_qt_string.h`. `wxFileName` / `wxFileExists` /
+          `wxRenameFile` stay for P1.10.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
 - [ ] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract `config_vars`.
@@ -555,3 +576,17 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   later), the `_()` macro (P3.10). `track`, `routeman` and the nav object DB
   (`nav_object_database`, `navobj_db`) were adapted only at their
   `Route`/`RoutePoint` call sites — their own de-wx is a later P1.6c step.
+- 2026-05-19 — P1.6 closes: `track`, `routeman` (+ `WayPointman` /
+  `MarkIcon`), and the nav-object DB (`nav_object_database`, `navobj_db`)
+  de-wx'd in three steps. The route/waypoint/track data model and its
+  persistence layer now run Qt-typed end to end. Highlights: `MarkIcon`
+  migrated alongside `WayPointman` because `GetIconKey`/`GetIconDescription`
+  hand out raw pointers into the struct, so the fields had to flip with the
+  return types; pugixml in `nav_object_database` is fed via
+  `qs.toUtf8().constData()`; the stop-gap file-local `ws2qs`/`qs2ws`
+  helpers earlier route/route_point steps had added to other files are
+  deleted, everything now routes through the shared
+  `model/wx_qt_string.h`. The full P1.6 (model wxString sweep) is done;
+  `wxDateTime`/`wxTimer`/`wxBitmap`/`wxFileName`/`wxJSONValue`/`_()` etc.
+  remain for their dedicated phases (P1.7 / P1.11 / P1.14 / P1.10 / P1.12 /
+  P3.10).
