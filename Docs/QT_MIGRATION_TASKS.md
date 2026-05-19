@@ -437,3 +437,12 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   to wx. A read-only agent audit also confirmed the comms data pipeline is
   properly Qt-native (Qt6::Core/Network/SerialPort linked and used; no
   wxSocket/wxThread/wxEvtHandler in the critical path).
+- 2026-05-19 — Comms pipeline retrofitted to Qt-idiomatic types. Earlier
+  framer/decoder entries describe them as "pure C++ / no Qt / unit-testable
+  without hardware" — that was an assistant assumption, never a project
+  rationale, and is now dropped. `CommFrame` is `QByteArray`; framers,
+  decoders, `CommDriver` and `N2kGatewayManager` use `QByteArray`/`QList`/
+  `QSet`; `SentenceFilter` uses `QRegularExpression`. Direction going
+  forward: actively prefer Qt over std/pure-C++ wherever Qt offers a way;
+  the goal is a fully Qt application. `QT_MIGRATION_COMMS_ARCH.md` §3.2-3.3
+  / §4 updated accordingly.

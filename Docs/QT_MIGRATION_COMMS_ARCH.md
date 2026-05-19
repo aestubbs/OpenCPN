@@ -57,16 +57,20 @@ aware. Implementations:
 
 ### 3.2 `Framer` — boundary finding
 Stateful; buffers across `DataReceived` chunks. `Feed(QByteArray) →
-std::vector<QByteArray>` (zero or more complete frames). Implementations:
+QList<QByteArray>` (zero or more complete frames). Implementations:
 `LineFramer` (NMEA 0183, terminator-delimited), `N2kGatewayFramer` (the
 Actisense/YDEN/SeaSmart/MiniPlex format detection + ESC/STX/ETX framing),
 `PassThroughFramer` (frame-native media — each input *is* a frame).
 
 ### 3.3 `ProtocolDecoder` — the conversion layer
-Pure: `frame → NavMsg` (and the reverse, encode, for TX). May hold protocol
-state (NMEA 2000 fast-message reassembly). **No I/O, no Qt event loop** — so it
-is unit-testable against captured frame logs with no hardware. Implementations:
+`frame → NavMsg` (and the reverse, encode, for TX). May hold protocol state
+(NMEA 2000 fast-message reassembly). No transport I/O of its own — a decoder
+works the same whatever medium its frames arrived over. Implementations:
 `Nmea0183Decoder`, `N2kDecoder`, `SignalKDecoder`.
+
+Wire data is `QByteArray` throughout — frames, framer output, decoder
+in/out. Qt-idiomatic types are used across the pipeline; a Qt dependency is
+welcome (the goal is a fully Qt application).
 
 ### 3.4 `CommDriver` — lifecycle & glue
 The generic driver: a `QObject` subclassing `AbstractCommDriver` (so the
@@ -86,8 +90,8 @@ a handful of framers + 1 driver**.
 - Reconnect / watchdog / stats exist in **one** tested place, not re-derived
   per driver (the legacy divergence was a latent bug source).
 - A new medium = one `CommTransport`; a new protocol = one decoder (+ framer).
-- Decoders and framers are pure → **unit-testable with no hardware**, closing
-  the verification gap that dogs the socket drivers.
+- Decoders and framers have no transport I/O of their own → they can be
+  exercised against captured frame logs with no hardware.
 - Future media (Modbus, BLE, …) drop in without touching existing code.
 
 ## 5. Quirks that do not fully generalise
