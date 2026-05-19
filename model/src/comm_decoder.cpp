@@ -22,14 +22,11 @@
  * Implement comm_decoder-h -- incoming messages decoding support.
  */
 
-#include <wx/wxprec.h>
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif
+#include <cmath>
+#include <string>
+#include <vector>
 
-#include <wx/log.h>
-#include <wx/math.h>
-#include <wx/string.h>
+#include <wx/string.h>  // boundary to the wx libs/nmea0183 parser
 
 #include "rapidjson/document.h"
 
@@ -68,13 +65,14 @@ bool CommDecoder::ParsePosition(const LATLONG& Position, double& lat,
   return ll_valid;
 }
 
-bool CommDecoder::DecodeRMC(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
+bool CommDecoder::ParseSentence(const std::string& sentence) {
+  // wxString is the boundary to the (still-wx) libs/nmea0183 parser.
+  m_NMEA0183 << ProcessNMEA4Tags(wxString(sentence.c_str()));
+  return m_NMEA0183.PreParse() && m_NMEA0183.Parse();
+}
 
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+bool CommDecoder::DecodeRMC(std::string s, NavData& temp_data) {
+  if (!ParseSentence(s)) return false;
 
   if (m_NMEA0183.Rmc.IsDataValid == NTrue) {
     double tlat, tlon;
@@ -115,12 +113,7 @@ bool CommDecoder::DecodeRMC(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeHDM(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   temp_data.gHdm = m_NMEA0183.Hdm.DegreesMagnetic;
 
@@ -128,12 +121,7 @@ bool CommDecoder::DecodeHDM(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeTHS(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   // Handle only valid data A = Autonomous
   if (!(m_NMEA0183.Ths.ModeInd == "A")) return false;
@@ -143,12 +131,7 @@ bool CommDecoder::DecodeTHS(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeHDT(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   temp_data.gHdt = m_NMEA0183.Hdt.DegreesTrue;
 
@@ -156,12 +139,7 @@ bool CommDecoder::DecodeHDT(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeHDG(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   temp_data.gHdm = m_NMEA0183.Hdg.MagneticSensorHeadingDegrees;
 
@@ -182,12 +160,7 @@ bool CommDecoder::DecodeHDG(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeHVD(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   // Any device sending VAR=0.0 can be assumed to not really know
   // what the actual variation is, so in this case we use WMM if
@@ -206,12 +179,7 @@ bool CommDecoder::DecodeHVD(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeVTG(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   if (!std::isnan(m_NMEA0183.Vtg.SpeedKnots))
     temp_data.gSog = m_NMEA0183.Vtg.SpeedKnots;
@@ -241,12 +209,7 @@ bool CommDecoder::DecodeVTG(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeGLL(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   if (m_NMEA0183.Gll.IsDataValid == NTrue) {
     double tlat, tlon;
@@ -262,12 +225,7 @@ bool CommDecoder::DecodeGLL(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeGSV(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   if (m_NMEA0183.Gsv.MessageNumber == 1)
     temp_data.n_satellites = m_NMEA0183.Gsv.SatsInView;
@@ -276,12 +234,7 @@ bool CommDecoder::DecodeGSV(std::string s, NavData& temp_data) {
 }
 
 bool CommDecoder::DecodeGGA(std::string s, NavData& temp_data) {
-  wxString sentence(s.c_str());
-  wxString sentence3 = ProcessNMEA4Tags(sentence);
-  m_NMEA0183 << sentence3;
-
-  if (!m_NMEA0183.PreParse()) return false;
-  if (!m_NMEA0183.Parse()) return false;
+  if (!ParseSentence(s)) return false;
 
   if (m_NMEA0183.Gga.GPSQuality > 0) {
     double tlat, tlon;
@@ -445,11 +398,6 @@ bool CommDecoder::DecodeSignalK(std::string s, NavData& temp_data) {
 
 void CommDecoder::handleUpdate(const rapidjson::Value& update,
                                NavData& temp_data) {
-  wxString sfixtime = "";
-
-  if (update.HasMember("timestamp")) {
-    sfixtime = update["timestamp"].GetString();
-  }
   if (update.HasMember("source") && update["source"].HasMember("src")) {
     src_string = update["source"]["src"].GetString();
   }
@@ -457,16 +405,16 @@ void CommDecoder::handleUpdate(const rapidjson::Value& update,
   if (update.HasMember("values") && update["values"].IsArray()) {
     for (rapidjson::Value::ConstValueIterator itr = update["values"].Begin();
          itr != update["values"].End(); ++itr) {
-      updateItem(*itr, sfixtime, temp_data);
+      updateItem(*itr, temp_data);
     }
   }
 }
 
-void CommDecoder::updateItem(const rapidjson::Value& item, wxString& sfixtime,
+void CommDecoder::updateItem(const rapidjson::Value& item,
                              NavData& temp_data) {
   bool bposValid = false;
   if (item.HasMember("path") && item.HasMember("value")) {
-    const wxString& update_path = item["path"].GetString();
+    const std::string update_path = item["path"].GetString();
 
     if (update_path == "navigation.gnss.methodQuality") {
       // Record statically the GNSS status for this source in a hashmap
@@ -480,7 +428,7 @@ void CommDecoder::updateItem(const rapidjson::Value& item, wxString& sfixtime,
     }
 
     if (update_path == "navigation.position" && !item["value"].IsNull()) {
-      bposValid = updateNavigationPosition(item["value"], sfixtime, temp_data);
+      bposValid = updateNavigationPosition(item["value"], temp_data);
 
       // if "gnss.methodQuality" is reported as "no GPS", then invalidate gLat
       // This will flow upstream, eventually triggering the GPS watchdog
@@ -492,7 +440,7 @@ void CommDecoder::updateItem(const rapidjson::Value& item, wxString& sfixtime,
 
     } else if (update_path == "navigation.speedOverGround" &&
                /*bposValid &&*/ !item["value"].IsNull()) {
-      updateNavigationSpeedOverGround(item["value"], sfixtime, temp_data);
+      updateNavigationSpeedOverGround(item["value"], temp_data);
 
       // If the tracked "methodQuality" exists for this source,
       // and state was recorded as "no GPS", set SOG = 0
@@ -504,25 +452,25 @@ void CommDecoder::updateItem(const rapidjson::Value& item, wxString& sfixtime,
 
     } else if (update_path == "navigation.courseOverGroundTrue" &&
                /*bposValid &&*/ !item["value"].IsNull()) {
-      updateNavigationCourseOverGround(item["value"], sfixtime, temp_data);
+      updateNavigationCourseOverGround(item["value"], temp_data);
     } else if (update_path == "navigation.courseOverGroundMagnetic") {
     } else if (update_path ==
                "navigation.gnss.satellites")  // From GGA sats in use
     {
-      updateGnssSatellites(item["value"], sfixtime, temp_data);
+      updateGnssSatellites(item["value"], temp_data);
     } else if (update_path ==
                "navigation.gnss.satellitesInView")  // From GSV sats in view
     {
-      updateGnssSatellites(item["value"], sfixtime, temp_data);
+      updateGnssSatellites(item["value"], temp_data);
     } else if (update_path == "navigation.headingTrue") {
       if (!item["value"].IsNull())
-        updateHeadingTrue(item["value"], sfixtime, temp_data);
+        updateHeadingTrue(item["value"], temp_data);
     } else if (update_path == "navigation.headingMagnetic") {
       if (!item["value"].IsNull())
-        updateHeadingMagnetic(item["value"], sfixtime, temp_data);
+        updateHeadingMagnetic(item["value"], temp_data);
     } else if (update_path == "navigation.magneticVariation") {
       if (!item["value"].IsNull())
-        updateMagneticVariance(item["value"], sfixtime, temp_data);
+        updateMagneticVariance(item["value"], temp_data);
     } else {
       // wxLogMessage(wxString::Format("** Signal K unhandled update: %s",
       // update_path));
@@ -531,7 +479,6 @@ void CommDecoder::updateItem(const rapidjson::Value& item, wxString& sfixtime,
 }
 
 bool CommDecoder::updateNavigationPosition(const rapidjson::Value& value,
-                                           const wxString& sfixtime,
                                            NavData& temp_data) {
   if ((value.HasMember("latitude") && value["latitude"].IsDouble()) &&
       (value.HasMember("longitude") && value["longitude"].IsDouble())) {
@@ -545,7 +492,6 @@ bool CommDecoder::updateNavigationPosition(const rapidjson::Value& value,
 }
 
 void CommDecoder::updateNavigationSpeedOverGround(const rapidjson::Value& value,
-                                                  const wxString& sfixtime,
                                                   NavData& temp_data) {
   double sog_ms = value.GetDouble();
   double sog_knot = sog_ms * 1.9438444924406;  // m/s to knots
@@ -554,7 +500,7 @@ void CommDecoder::updateNavigationSpeedOverGround(const rapidjson::Value& value,
 }
 
 void CommDecoder::updateNavigationCourseOverGround(
-    const rapidjson::Value& value, const wxString& sfixtime,
+    const rapidjson::Value& value,
     NavData& temp_data) {
   double cog_rad = value.GetDouble();
   double cog_deg = GEODESIC_RAD2DEG(cog_rad);
@@ -563,7 +509,6 @@ void CommDecoder::updateNavigationCourseOverGround(
 }
 
 void CommDecoder::updateGnssSatellites(const rapidjson::Value& value,
-                                       const wxString& sfixtime,
                                        NavData& temp_data) {
   if (value.IsInt()) {
     if (value.GetInt() > 0) {
@@ -581,19 +526,16 @@ void CommDecoder::updateGnssSatellites(const rapidjson::Value& value,
 }
 
 void CommDecoder::updateHeadingTrue(const rapidjson::Value& value,
-                                    const wxString& sfixtime,
                                     NavData& temp_data) {
   temp_data.gHdt = GEODESIC_RAD2DEG(value.GetDouble());
 }
 
 void CommDecoder::updateHeadingMagnetic(const rapidjson::Value& value,
-                                        const wxString& sfixtime,
                                         NavData& temp_data) {
   temp_data.gHdm = GEODESIC_RAD2DEG(value.GetDouble());
 }
 
 void CommDecoder::updateMagneticVariance(const rapidjson::Value& value,
-                                         const wxString& sfixtime,
                                          NavData& temp_data) {
   temp_data.gVar = GEODESIC_RAD2DEG(value.GetDouble());
 }

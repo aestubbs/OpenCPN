@@ -30,8 +30,6 @@
 
 #include "rapidjson/fwd.h"  // Must be early, rapidjson known bug
 
-#include <wx/string.h>
-
 #include "model/comm_appmsg.h"
 #include "model/config_vars.h"
 #include "model/nmea_ctx_factory.h"
@@ -83,27 +81,30 @@ public:
   // SignalK
   bool DecodeSignalK(std::string s, NavData& temp_data);
   void handleUpdate(const rapidjson::Value& update, NavData& temp_data);
-  void updateItem(const rapidjson::Value& item, wxString& sfixtime,
-                  NavData& temp_data);
+  void updateItem(const rapidjson::Value& item, NavData& temp_data);
   bool updateNavigationPosition(const rapidjson::Value& value,
-                                const wxString& sfixtime, NavData& temp_data);
+                                NavData& temp_data);
   void updateNavigationSpeedOverGround(const rapidjson::Value& value,
-                                       const wxString& sfixtime,
                                        NavData& temp_data);
   void updateNavigationCourseOverGround(const rapidjson::Value& value,
-                                        const wxString& sfixtime,
                                         NavData& temp_data);
-  void updateGnssSatellites(const rapidjson::Value& value,
-                            const wxString& sfixtime, NavData& temp_data);
-  void updateHeadingTrue(const rapidjson::Value& value,
-                         const wxString& sfixtime, NavData& temp_data);
+  void updateGnssSatellites(const rapidjson::Value& value, NavData& temp_data);
+  void updateHeadingTrue(const rapidjson::Value& value, NavData& temp_data);
   void updateHeadingMagnetic(const rapidjson::Value& value,
-                             const wxString& sfixtime, NavData& temp_data);
+                             NavData& temp_data);
   void updateMagneticVariance(const rapidjson::Value& value,
-                              const wxString& sfixtime, NavData& temp_data);
+                              NavData& temp_data);
 
   std::string src_string;
   std::unordered_map<std::string, int> GNSS_quality_map;
+
+private:
+  /**
+   * Feed one NMEA 0183 sentence into m_NMEA0183 and run PreParse + Parse.
+   * The wxString here is the boundary to the (still-wx) libs/nmea0183
+   * parser; CommDecoder's own interface is wx-free.
+   */
+  bool ParseSentence(const std::string& sentence);
 };
 
 #endif  // _COMM_DECODER_H
