@@ -32,7 +32,7 @@
 #include <QtGlobal>  // qInfo
 
 #include <wx/window.h>    // wxWindow -- GUI boundary, see GetDataMonitor()
-#include <wx/string.h>    // wxString -- config + AIS-parser boundaries
+#include <wx/string.h>    // wxString -- config boundary (Load/SaveConfig)
 #include <wx/confbase.h>  // wxConfigBase -- config boundary (Load/SaveConfig)
 
 #include "model/comm_ais.h"
@@ -1016,9 +1016,7 @@ bool CommBridge::HandleN0183_AIVDO(const N0183MsgPtr& n0183_msg) {
   const string& str = n0183_msg->payload;
 
   GenericPosDatEx gpd;
-  // wxString is the boundary to the still-wx AIS parser (comm_ais); it is
-  // removed when ais_decoder de-wx'es later in P1.6b.
-  AisError ais_error = DecodeSingleVDO(wxString(str.c_str()), &gpd);
+  AisError ais_error = DecodeSingleVDO(QString::fromStdString(str), &gpd);
 
   if (ais_error == AIS_NoError) {
     int valid_flag = 0;

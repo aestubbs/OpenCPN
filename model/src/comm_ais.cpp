@@ -24,6 +24,9 @@
 #include <cmath>
 #include <memory>
 
+#include <QString>
+#include <QStringList>
+
 #include <wx/tokenzr.h>
 #include <wx/string.h>
 #include <wx/datetime.h>
@@ -38,36 +41,42 @@ static const long long lNaN = 0xfff8000000000000;
 //----------------------------------------------------------------------------------
 //      Decode a single AIVDO sentence to a Generic Position Report
 //----------------------------------------------------------------------------------
-AisError DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos) {
+AisError DecodeSingleVDO(const QString &str, GenericPosDatEx *pos) {
   //  Make some simple tests for validity
-  if (str.Len() > 128) return AIS_NMEAVDX_TOO_LONG;
+  if (str.length() > 128) return AIS_NMEAVDX_TOO_LONG;
 
-  if (!NMEA_AISCheckSumOK(str)) return AIS_NMEAVDX_CHECKSUM_BAD;
+  if (!NMEA_AISCheckSumOK(wxString(str.toStdString())))
+    return AIS_NMEAVDX_CHECKSUM_BAD;
 
   if (!pos) return AIS_GENERIC_ERROR;
 
   // if (!ctx.accumulator) return AIS_GENERIC_ERROR;
 
   //  We only process AIVDO messages
-  if (!str.Mid(1, 5).IsSameAs("AIVDO")) return AIS_GENERIC_ERROR;
+  if (str.mid(1, 5) != "AIVDO") return AIS_GENERIC_ERROR;
 
   //  Use a tokenizer to pull out the first 4 fields
-  wxStringTokenizer tkz(str, ",");
+  //  KeepEmptyParts: NMEA fields are positional and may be empty
+  QStringList tkz = str.split(',', Qt::KeepEmptyParts);
+  int ti = 0;
+  auto next_tok = [&tkz, &ti]() -> QString {
+    return ti < tkz.size() ? tkz[ti++] : QString();
+  };
 
-  wxString token;
-  token = tkz.GetNextToken();  // !xxVDx
+  QString token;
+  token = next_tok();  // !xxVDx
 
-  token = tkz.GetNextToken();
-  int nsentences = atoi(token.mb_str());
+  token = next_tok();
+  int nsentences = token.toInt();
 
-  token = tkz.GetNextToken();
-  int isentence = atoi(token.mb_str());
+  token = next_tok();
+  int isentence = token.toInt();
 
-  token = tkz.GetNextToken();  // skip 2 fields
-  token = tkz.GetNextToken();
+  token = next_tok();  // skip 2 fields
+  token = next_tok();
 
-  wxString string_to_parse;
-  string_to_parse.Clear();
+  QString string_to_parse;
+  string_to_parse.clear();
 
   //  Fill the output structure with all NANs
   pos->kLat = NAN;
@@ -81,14 +90,15 @@ AisError DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos) {
   //  Simple case only
   //  First and only part of a one-part sentence
   if ((1 == nsentences) && (1 == isentence)) {
-    string_to_parse = tkz.GetNextToken();  // the encapsulated data
+    string_to_parse = next_tok();  // the encapsulated data
   } else {
     wxASSERT_MSG(false, "Multipart AIVDO detected");
     return AIS_INCOMPLETE_MULTIPART;  // and non-zero return
   }
 
   //  Create the bit accessible string
-  AisBitstring strbit(string_to_parse.mb_str());
+  QByteArray strbit_buf = string_to_parse.toUtf8();
+  AisBitstring strbit(strbit_buf.constData());
 
   auto TargetData = std::make_unique<AisTargetData>(
       *AisTargetDataMaker::GetInstance().GetTargetData());

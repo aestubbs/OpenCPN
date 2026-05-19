@@ -23,6 +23,9 @@
  * ocpn_plugin.h GUI API funtions up to api level 1.20
  */
 #include <vector>
+
+#include <QString>
+
 #include "dychart.h"  // Must be ahead due to buggy GL includes handling
 
 #include <wx/wx.h>
@@ -551,7 +554,15 @@ bool DecodeSingleVDOMessage(const wxString& str, PlugIn_Position_Fix_Ex* pos,
 
   GenericPosDatEx gpd;
   AisError nerr = AIS_GENERIC_ERROR;
-  if (g_pAIS) nerr = g_pAIS->DecodeSingleVDO(str, &gpd, accumulator);
+  if (g_pAIS) {
+    // DecodeSingleVDO is now QString-based; convert at this wx plugin boundary
+    QString q_str = QString::fromStdString(str.ToStdString());
+    QString q_accumulator =
+        accumulator ? QString::fromStdString(accumulator->ToStdString())
+                    : QString();
+    nerr = g_pAIS->DecodeSingleVDO(q_str, &gpd, &q_accumulator);
+    if (accumulator) *accumulator = wxString(q_accumulator.toStdString());
+  }
   if (nerr == AIS_NoError) {
     pos->Lat = gpd.kLat;
     pos->Lon = gpd.kLon;

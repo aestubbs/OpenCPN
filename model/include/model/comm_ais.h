@@ -24,6 +24,8 @@
 #ifndef COMM_AIS_H_
 #define COMM_AIS_H_
 
+#include <QString>
+
 #include <wx/string.h>
 
 #include "model/ais_target_data.h"
@@ -33,7 +35,7 @@
 
 bool Parse_VDXBitstring(AisBitstring *bstr, AisTargetData *ptd);
 
-AisError DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos);
+AisError DecodeSingleVDO(const QString &str, GenericPosDatEx *pos);
 
 bool NMEA_AISCheckSumOK(const wxString &str);
 

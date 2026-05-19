@@ -29,9 +29,11 @@
 #include <memory>
 #include <vector>
 
-#include <wx/datetime.h>
-#include <wx/event.h>
-#include <wx/string.h>
+#include <QString>
+
+#include <wx/datetime.h>  // wxDateTime -- P1.7
+#include <wx/event.h>     // wxEvtHandler / wxTimer -- P1.11
+#include <wx/string.h>    // wxString -- MmsiProperties + name-file boundary
 
 #include "rapidjson/fwd.h"
 #include "model/ais_bitstring.h"
@@ -112,7 +114,7 @@ public:
 
   ~AisDecoder() override;
 
-  AisError DecodeN0183(const wxString &str);
+  AisError DecodeN0183(const QString &str);
   std::unordered_map<int, std::shared_ptr<AisTargetData>> &GetTargetList() {
     return AISTargetList;
   }
@@ -126,8 +128,8 @@ public:
   bool IsAISAlertGeneral() const { return m_bGeneralAlert; }
   void UpdateMMSItoNameFile(const wxString &mmsi, const wxString &name);
   wxString GetMMSItoNameEntry(const wxString &mmsi);
-  AisError DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos,
-                           wxString *acc);
+  AisError DecodeSingleVDO(const QString &str, GenericPosDatEx *pos,
+                           QString *acc);
   void DeletePersistentTrack(const Track *track);
   std::map<int, Track *> m_persistent_tracks;
   bool AIS_AlertPlaying() const { return m_bAIS_AlertPlaying; };
@@ -157,13 +159,13 @@ private:
   void OnTimerAIS(wxTimerEvent &event);
   void OnTimerDSC(wxTimerEvent &event);
 
-  bool NMEACheckSumOK(const wxString &str);
+  bool NMEACheckSumOK(const QString &str);
   void UpdateAllCPA();
   void UpdateOneCPA(AisTargetData *ptarget);
   void UpdateAllAlarms();
   void UpdateAllTracks();
   void UpdateOneTrack(AisTargetData *ptarget);
-  std::shared_ptr<AisTargetData> ProcessDSx(const wxString &str,
+  std::shared_ptr<AisTargetData> ProcessDSx(const QString &str,
                                             bool b_take_dsc = false);
 
   void getAISTarget(long mmsi, std::shared_ptr<AisTargetData> &pTargetData,
@@ -173,9 +175,9 @@ private:
                     bool bnewtarget, const rapidjson::Value &update);
   void updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
                   bool bnewtarget, const rapidjson::Value &item,
-                  wxString &sfixtime) const;
+                  QString &sfixtime) const;
   void CommitAISTarget(const std::shared_ptr<AisTargetData> &pTargetData,
-                       const wxString &str, bool message_valid,
+                       const QString &str, bool message_valid,
                        bool new_target);
   void InitCommListeners();
   bool HandleN0183_AIS(const N0183MsgPtr &n0183_msg);
@@ -189,7 +191,7 @@ private:
   bool HandleN2K_129810(const N2000MsgPtr &n2k_msg);
   bool HandleN2K_129793(const N2000MsgPtr &n2k_msg);
 
-  wxString m_signalk_selfid;
+  QString m_signalk_selfid;
   std::unordered_map<int, std::shared_ptr<AisTargetData>> AISTargetList;
   std::unordered_map<int, std::shared_ptr<AisTargetData>>
       AIS_AreaNotice_Sources;
@@ -221,7 +223,7 @@ private:
 
   int nsentences;
   int isentence;
-  wxString sentence_accumulator;
+  QString sentence_accumulator;
   bool m_OK;
 
   std::shared_ptr<AisTargetData> m_pLatestTargetData;
@@ -233,7 +235,7 @@ private:
   bool m_bGeneralAlert;
   std::shared_ptr<AisTargetData> m_ptentative_dsctarget;
   wxTimer m_dsc_timer;
-  wxString m_dsc_last_string;
+  QString m_dsc_last_string;
   std::vector<int> m_MMSI_MismatchVec;
 
   bool m_bAIS_AlertPlaying;

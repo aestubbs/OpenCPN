@@ -32,19 +32,22 @@
 #include <windows.h>
 #endif
 
+#include <QRegularExpression>
+#include <QString>
+#include <QStringList>
+#include <QtGlobal>  // qInfo / qWarning
+
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
 #include <wx/wx.h>
 #endif
 
-#include <wx/datetime.h>
-#include <wx/event.h>
-#include <wx/log.h>
-#include <wx/string.h>
-#include <wx/textfile.h>
-#include <wx/timer.h>
-#include <wx/tokenzr.h>
-#include <wx/filename.h>
+#include <wx/datetime.h>  // wxDateTime -- P1.7
+#include <wx/event.h>     // wxEvtHandler / wxTimer -- P1.11
+#include <wx/string.h>    // wxString -- MmsiProperties + name-file boundary
+#include <wx/textfile.h>  // wxTextFile -- P1.10
+#include <wx/timer.h>     // wxTimer -- P1.11
+#include <wx/filename.h>  // wxFileName -- P1.10
 
 // Be sure to include these before ais_decoder.h
 // to avoid a conflict with rapidjson/fwd.h
@@ -225,16 +228,16 @@ static void BuildERIShipTypeHash() {
 }
 
 // DSE Expansion characters, decode table from ITU-R M.825
-static wxString DecodeDSEExpansionCharacters(const wxString &dseData) {
-  wxString result;
+static QString DecodeDSEExpansionCharacters(const QString &dseData) {
+  QString result;
   char lookupTable[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ',
                         'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
                         'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
                         'W', 'X', 'Y', 'Z', '.', ',', '-', '/', ' '};
 
-  for (size_t i = 0; i < dseData.length(); i += 2) {
-    result.append(1,
-                  lookupTable[strtol(dseData.Mid(i, 2).data(), nullptr, 10)]);
+  for (int i = 0; i < dseData.length(); i += 2) {
+    result.append(QChar(lookupTable[strtol(
+        dseData.mid(i, 2).toStdString().c_str(), nullptr, 10)]));
   }
   return result;
 }
@@ -320,8 +323,8 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         rot_dir = -1.0;
       }
 
-      ptd->ROTIND = wxRound(rot_dir * pow((((double)ptd->ROTAIS) / 4.733),
-                                          2));  // Convert to indicated ROT
+      ptd->ROTIND = qRound(rot_dir * pow((((double)ptd->ROTAIS) / 4.733),
+                                         2));  // Convert to indicated ROT
 
       ptd->m_utc_sec = bstr->GetInt(138, 6);
 
@@ -866,7 +869,8 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
                 char t[15];
                 t[14] = 0;
                 bstr->GetStr(base + 4, subarea_len - 3, t, 14);
-                sa.text = wxString(t, wxConvUTF8);
+                sa.text =
+                    wxString(t, wxConvUTF8);  // sa.text stays wxString (P1.x)
               } else {
                 int scale_multipliers[4] = {1, 10, 100, 1000};
                 scale_factor = scale_multipliers[bstr->GetInt(base + 4, 2)];
@@ -939,16 +943,15 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
             ptd->Lat = lat_tentative;
 
             // Try to make unique name for each station based on position
-            wxString x = ptd->ShipName;
-            if (x.Find("METEO") == wxNOT_FOUND) {
-              double id1, id2;
-              wxString slat = wxString::Format("%0.3f", lat_tentative);
-              wxString slon = wxString::Format("%0.3f", lon_tentative);
-              slat.ToDouble(&id1);
-              slon.ToDouble(&id2);
-              wxString nameID = "METEO ";
-              nameID << wxString::Format("%0.3f", abs(id1) + abs(id2)).Right(3);
-              strncpy(ptd->ShipName, nameID, SHIP_NAME_LEN - 1);
+            QString x = QString::fromUtf8(ptd->ShipName);
+            if (x.indexOf("METEO") == -1) {
+              double id1 = QString::asprintf("%0.3f", lat_tentative).toDouble();
+              double id2 = QString::asprintf("%0.3f", lon_tentative).toDouble();
+              QString nameID = "METEO ";
+              nameID +=
+                  QString::asprintf("%0.3f", abs(id1) + abs(id2)).right(3);
+              strncpy(ptd->ShipName, nameID.toUtf8().constData(),
+                      SHIP_NAME_LEN - 1);
             }
 
             ptd->met_data.pos_acc = bstr->GetInt(106, 1);
@@ -1046,9 +1049,10 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
 
             // Name the station acc to site ID until message type 1
             if (!ptd->b_nameValid) {
-              wxString nameID = "METEO Site: ";
-              nameID << Site_ID;
-              strncpy(ptd->ShipName, nameID, SHIP_NAME_LEN - 1);
+              QString nameID = "METEO Site: ";
+              nameID += QString::number(Site_ID);
+              strncpy(ptd->ShipName, nameID.toUtf8().constData(),
+                      SHIP_NAME_LEN - 1);
               ptd->b_nameValid = true;
             }
 
@@ -1189,8 +1193,8 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
       if (bstr->GetBitCount() > 40) {
         int nx = ((bstr->GetBitCount() - 40) / 6) * 6;
         int nd = bstr->GetStr(41, nx, msg_14_text, 968);
-        nd = wxMax(0, nd);
-        nd = wxMin(nd, 967);
+        nd = std::max(0, nd);
+        nd = std::min(nd, 967);
         msg_14_text[nd] = 0;
         ptd->MSG_14_text = wxString(msg_14_text, wxConvUTF8);
       }
@@ -1237,9 +1241,14 @@ AisDecoder::AisDecoder(const AisDecoderCallbacks &callbacks)
             if (line.IsSameAs("+++==Non Confirmed Entry's==+++"))
               HashFile = AISTargetNamesNC;
             else {
-              wxStringTokenizer tokenizer(line, ",");
-              int mmsi = wxAtoi(tokenizer.GetNextToken());
-              wxString name = tokenizer.GetNextToken().Trim();
+              // line is wxString (wxTextFile); split via QString locally
+              QStringList parts = QString::fromStdString(line.ToStdString())
+                                      .split(',', Qt::KeepEmptyParts);
+              int mmsi = parts.size() > 0 ? parts[0].toInt() : 0;
+              wxString name =
+                  parts.size() > 1
+                      ? wxString(parts[1].trimmed().toStdString())
+                      : wxString();
               (*HashFile)[mmsi] = name;
             }
           }
@@ -1477,7 +1486,7 @@ void AisDecoder::InitCommListeners() {
 
 bool AisDecoder::HandleN0183_AIS(const N0183MsgPtr &n0183_msg) {
   std::string str = n0183_msg->payload;
-  wxString sentence(str.c_str());
+  QString sentence = QString::fromStdString(str);
   DecodeN0183(sentence);
   touch_state.Notify();
   return true;
@@ -1837,7 +1846,7 @@ bool AisDecoder::HandleN2K_129794(const N2000MsgPtr &n2k_msg) {
     Destination[sizeof(Destination) - 1] = 0;
 
     if (!N2kIsNA(ETAdate) && !N2kIsNA(ETAtime)) {
-      long secs = (ETAdate * 24 * 3600) + wxRound(ETAtime);
+      long secs = (ETAdate * 24 * 3600) + qRound(ETAtime);
       wxDateTime t((time_t)secs);
       if (t.IsValid()) {
         wxDateTime tz = t.ToUTC();
@@ -2038,35 +2047,38 @@ void AisDecoder::HandleSignalK(const SignalKMsgPtr &sK_msg) {
         (root["self"]
              .GetString());  // Verified for OpenPlotter node.js server 1.20
   }
-  if (m_signalk_selfid.IsEmpty()) {
+  if (m_signalk_selfid.isEmpty()) {
     return;  // Don't handle any messages (with out self) until we know how we
              // are
   }
   long mmsi = 0;
   int meteo_SiteID = 0;
   if (root.HasMember("context") && root["context"].IsString()) {
-    wxString context = root["context"].GetString();
+    QString context = root["context"].GetString();
     if (context == m_signalk_selfid) {
 #if 0
-            wxLogMessage("** Ignore context own ship..");
+            qInfo("** Ignore context own ship..");
 #endif
       return;
     }
-    wxString mmsi_string;
-    if (context.StartsWith("vessels.urn:mrn:imo:mmsi:", &mmsi_string) ||
-        context.StartsWith("atons.urn:mrn:imo:mmsi:", &mmsi_string) ||
-        context.StartsWith("aircraft.urn:mrn:imo:mmsi:", &mmsi_string)) {
-      //    wxLogMessage(wxString::Format("Context: %s, %s",
-      //    context.c_str(), mmsi_string));
-      if (mmsi_string.ToLong(&mmsi)) {
-        // wxLogMessage("Got MMSI from context.");
-      } else {
-        mmsi = 0;
-      }
-    } else if (context.StartsWith("meteo.urn:mrn:imo:mmsi:", &mmsi_string)) {
+    QString mmsi_string;
+    if (context.startsWith("vessels.urn:mrn:imo:mmsi:")) {
+      mmsi_string = context.mid(QString("vessels.urn:mrn:imo:mmsi:").length());
+    } else if (context.startsWith("atons.urn:mrn:imo:mmsi:")) {
+      mmsi_string = context.mid(QString("atons.urn:mrn:imo:mmsi:").length());
+    } else if (context.startsWith("aircraft.urn:mrn:imo:mmsi:")) {
+      mmsi_string =
+          context.mid(QString("aircraft.urn:mrn:imo:mmsi:").length());
+    }
+    if (!mmsi_string.isEmpty()) {
+      bool ok = false;
+      mmsi = mmsi_string.toLong(&ok);
+      if (!ok) mmsi = 0;
+    } else if (context.startsWith("meteo.urn:mrn:imo:mmsi:")) {
+      mmsi_string = context.mid(QString("meteo.urn:mrn:imo:mmsi:").length());
       // mmsi_string for a Meteo is like: 002655619:672707
-      origin_mmsi = wxAtoi(wxString(mmsi_string).BeforeFirst(':'));
-      meteo_SiteID = wxAtoi('1' + wxString(mmsi_string).AfterFirst(':'));
+      origin_mmsi = mmsi_string.section(':', 0, 0).toInt();
+      meteo_SiteID = ('1' + mmsi_string.section(':', 1)).toInt();
       // Preface "1" to distinguish e.g. "012345" from "12345"
       // Get a meteo mmsi_ID
       int meteo_mmsi = AisMeteoNewMmsi(origin_mmsi, 0, 0, 999, meteo_SiteID);
@@ -2081,8 +2093,7 @@ void AisDecoder::HandleSignalK(const SignalKMsgPtr &sK_msg) {
   }
 
   if (g_pMUX && g_pMUX->IsLogActive()) {
-    wxString logmsg;
-    logmsg.Printf("AIS :MMSI: %ld", mmsi);
+    QString logmsg = QString::asprintf("AIS :MMSI: %ld", mmsi);
     g_pMUX->LogInputMessage(sK_msg, false, false);
   }
 
@@ -2128,16 +2139,16 @@ void AisDecoder::HandleSignalK(const SignalKMsgPtr &sK_msg) {
       pTargetData->met_data.stationID = meteo_SiteID;
       /* Make a unique "shipname" for each station
          based on position inherited from meteo_SiteID */
-      wxString met_name = pTargetData->ShipName;
-      if (met_name.Find("METEO") == wxNOT_FOUND) {
-        wxString s_id;
+      QString met_name = QString::fromUtf8(pTargetData->ShipName);
+      if (met_name.indexOf("METEO") == -1) {
         int id1, id2;
-        s_id << meteo_SiteID;
-        id1 = wxAtoi(s_id.Mid(1, 3));
-        id2 = wxAtoi(s_id.Mid(4, 3));
+        QString s_id = QString::number(meteo_SiteID);
+        id1 = s_id.mid(1, 3).toInt();
+        id2 = s_id.mid(4, 3).toInt();
         met_name = "METEO ";
-        met_name << wxString::Format("%03d", (id1 + id2)).Right(3);
-        strncpy(pTargetData->ShipName, met_name, SHIP_NAME_LEN - 1);
+        met_name += QString::asprintf("%03d", (id1 + id2)).right(3);
+        strncpy(pTargetData->ShipName, met_name.toUtf8().constData(),
+                SHIP_NAME_LEN - 1);
       }
       pTargetData->b_nameValid = true;
       pTargetData->MID = 123;  // Indicates a name from SignalK
@@ -2154,7 +2165,7 @@ void AisDecoder::HandleSignalK(const SignalKMsgPtr &sK_msg) {
 
 void AisDecoder::handleUpdate(const std::shared_ptr<AisTargetData> &pTargetData,
                               bool bnewtarget, const rapidjson::Value &update) {
-  wxString sfixtime = "";
+  QString sfixtime = "";
 
   if (update.HasMember("timestamp")) {
     sfixtime = update["timestamp"].GetString();
@@ -2186,9 +2197,9 @@ void AisDecoder::handleUpdate(const std::shared_ptr<AisTargetData> &pTargetData,
 
 void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
                             bool bnewtarget, const rapidjson::Value &item,
-                            wxString &sfixtime) const {
+                            QString &sfixtime) const {
   if (item.HasMember("path") && item.HasMember("value")) {
-    const wxString &update_path = item["path"].GetString();
+    const QString update_path = item["path"].GetString();
     if (update_path == "navigation.position") {
       if (item["value"].HasMember("latitude") &&
           item["value"].HasMember("longitude")) {
@@ -2270,7 +2281,7 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
         }
       }
     } else if (update_path == "sensors.ais.class") {
-      wxString aisclass = item["value"].GetString();
+      QString aisclass = item["value"].GetString();
       if (aisclass == "A") {
         if (!pTargetData->b_isDSCtarget) pTargetData->Class = AIS_CLASS_A;
       } else if (aisclass == "B") {
@@ -2316,7 +2327,7 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
         }
       }
     } else if (update_path == "navigation.state") {
-      wxString state = item["value"].GetString();
+      QString state = item["value"].GetString();
       if (state == "motoring") {
         pTargetData->NavStatus = UNDERWAY_USING_ENGINE;
       } else if (state == "anchored") {
@@ -2345,12 +2356,13 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
         pTargetData->NavStatus = UNDEFINED;
       }
     } else if (update_path == "navigation.destination.commonName") {
-      const wxString &destination = item["value"].GetString();
+      const QString destination = item["value"].GetString();
       pTargetData->Destination[0] = '\0';
-      strncpy(pTargetData->Destination, destination.c_str(),
+      strncpy(pTargetData->Destination, destination.toUtf8().constData(),
               DESTINATION_LEN - 1);
     } else if (update_path == "navigation.destination.eta") {
-      const wxString &eta = item["value"].GetString();
+      // eta stays wxString -- feeds ParseGPXDateTime (wxChar*) -- P1.10
+      const wxString eta = item["value"].GetString();
       if (eta.Len()) {
         // Parse ISO 8601 date/time
         wxDateTime tz;
@@ -2363,7 +2375,7 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
     } else if (update_path == "navigation.specialManeuver") {
       if (strcmp("not available", item["value"].GetString()) != 0 &&
           pTargetData->IMO < 1) {
-        const wxString &bluesign = item["value"].GetString();
+        const QString bluesign = item["value"].GetString();
         if ("not engaged" == bluesign) {
           pTargetData->blue_paddle = 1;
         }
@@ -2385,7 +2397,8 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
 
       // METEO Data
     } else if (update_path == "environment.date") {
-      const wxString &issued = item["value"].GetString();
+      // issued stays wxString -- feeds ParseGPXDateTime (wxChar*) -- P1.10
+      const wxString issued = item["value"].GetString();
       if (issued.Len()) {
         // Parse ISO 8601 date/time
         wxDateTime tz;
@@ -2495,25 +2508,28 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
     } else if (update_path ==
                "environment.outside.horizontalVisibility.overRange") {
       pTargetData->met_data.hor_vis_GT = item["value"].GetBool();
-    } else if (update_path.empty()) {
+    } else if (update_path.isEmpty()) {
       if (item["value"].HasMember("name")) {
-        const wxString &name = item["value"]["name"].GetString();
-        strncpy(pTargetData->ShipName, name.c_str(), SHIP_NAME_LEN - 1);
+        const QString name = item["value"]["name"].GetString();
+        strncpy(pTargetData->ShipName, name.toUtf8().constData(),
+                SHIP_NAME_LEN - 1);
         pTargetData->b_nameValid = true;
         pTargetData->MID = 123;  // Indicates a name from SignalK
       } else if (item["value"].HasMember("registrations")) {
-        const wxString &imo = item["value"]["registrations"]["imo"].GetString();
-        pTargetData->IMO = wxAtoi(imo.Right(7));
+        const QString imo = item["value"]["registrations"]["imo"].GetString();
+        pTargetData->IMO = imo.right(7).toInt();
       } else if (item["value"].HasMember("communication")) {
-        const wxString &callsign =
+        const QString callsign =
             item["value"]["communication"]["callsignVhf"].GetString();
-        strncpy(pTargetData->CallSign, callsign.c_str(), 7);
+        strncpy(pTargetData->CallSign, callsign.toUtf8().constData(), 7);
       }
       if (item["value"].HasMember("mmsi") &&
           1994 != (pTargetData->MMSI) / 100000) {  // Meteo
         long mmsi;
-        wxString tmp = item["value"]["mmsi"].GetString();
-        if (tmp.ToLong(&mmsi)) {
+        bool ok = false;
+        QString tmp = item["value"]["mmsi"].GetString();
+        mmsi = tmp.toLong(&ok);
+        if (ok) {
           pTargetData->MMSI = mmsi;
 
           if (97 == mmsi / 10000000) {
@@ -2528,15 +2544,13 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
         }
       }
     } else {
-      wxLogMessage(wxString::Format(
-          "** AisDecoder::updateItem: unhandled path %s", update_path));
+      qInfo("** AisDecoder::updateItem: unhandled path %s",
+            qUtf8Printable(update_path));
 #if 1
       rapidjson::StringBuffer buffer;
       rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
       item.Accept(writer);
-      wxString msg("update: ");
-      msg.append(buffer.GetString());
-      wxLogMessage(msg);
+      qInfo("update: %s", buffer.GetString());
 #endif
     }
   }
@@ -2545,10 +2559,10 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
 //----------------------------------------------------------------------------------
 //      Decode a single AIVDO sentence to a Generic Position Report
 //----------------------------------------------------------------------------------
-AisError AisDecoder::DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos,
-                                     wxString *accumulator) {
+AisError AisDecoder::DecodeSingleVDO(const QString &str, GenericPosDatEx *pos,
+                                     QString *accumulator) {
   //  Make some simple tests for validity
-  if (str.Len() > 128) return AIS_NMEAVDX_TOO_LONG;
+  if (str.length() > 128) return AIS_NMEAVDX_TOO_LONG;
 
   if (!NMEACheckSumOK(str)) return AIS_NMEAVDX_CHECKSUM_BAD;
 
@@ -2557,25 +2571,30 @@ AisError AisDecoder::DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos,
   if (!accumulator) return AIS_GENERIC_ERROR;
 
   //  We only process AIVDO messages
-  if (!str.Mid(1, 5).IsSameAs("AIVDO")) return AIS_GENERIC_ERROR;
+  if (str.mid(1, 5) != "AIVDO") return AIS_GENERIC_ERROR;
 
   //  Use a tokenizer to pull out the first 4 fields
-  wxStringTokenizer tkz(str, ",");
+  //  KeepEmptyParts: NMEA fields are positional and may be empty
+  QStringList tokens = str.split(',', Qt::KeepEmptyParts);
+  int tok_idx = 0;
+  auto next_token = [&tokens, &tok_idx]() -> QString {
+    return tok_idx < tokens.size() ? tokens[tok_idx++] : QString();
+  };
 
-  wxString token;
-  token = tkz.GetNextToken();  // !xxVDx
+  QString token;
+  token = next_token();  // !xxVDx
 
-  token = tkz.GetNextToken();
-  int nsentences = atoi(token.mb_str());
+  token = next_token();
+  int nsentences = token.toInt();
 
-  token = tkz.GetNextToken();
-  int isentence = atoi(token.mb_str());
+  token = next_token();
+  int isentence = token.toInt();
 
-  token = tkz.GetNextToken();  // skip 2 fields
-  token = tkz.GetNextToken();
+  token = next_token();  // skip 2 fields
+  token = next_token();
 
-  wxString string_to_parse;
-  string_to_parse.Clear();
+  QString string_to_parse;
+  string_to_parse.clear();
 
   //  Fill the output structure with all NANs
   pos->kLat = NAN;
@@ -2589,16 +2608,16 @@ AisError AisDecoder::DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos,
   //  Simple case first
   //  First and only part of a one-part sentence
   if ((1 == nsentences) && (1 == isentence)) {
-    string_to_parse = tkz.GetNextToken();  // the encapsulated data
+    string_to_parse = next_token();  // the encapsulated data
   }
 
   else if (nsentences > 1) {
     if (1 == isentence) {
-      *accumulator = tkz.GetNextToken();  // the encapsulated data
+      *accumulator = next_token();  // the encapsulated data
     }
 
     else {
-      accumulator->Append(tkz.GetNextToken());
+      accumulator->append(next_token());
     }
 
     if (isentence == nsentences) {  // ready to parse
@@ -2606,13 +2625,13 @@ AisError AisDecoder::DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos,
     }
   }
 
-  if (string_to_parse.IsEmpty() &&
+  if (string_to_parse.isEmpty() &&
       (nsentences > 1)) {             // not ready, so return with NAN
     return AIS_INCOMPLETE_MULTIPART;  // and non-zero return
   }
 
   //  Create the bit accessible string
-  AisBitstring strbit(string_to_parse.mb_str());
+  AisBitstring strbit(string_to_parse.toUtf8().constData());
 
   //   auto TargetData = std::make_unique<AisTargetData>(
   //           *AisTargetDataMaker::GetInstance().GetTargetData());
@@ -2669,9 +2688,9 @@ AisError AisDecoder::DecodeSingleVDO(const wxString &str, GenericPosDatEx *pos,
 //      Target(s)
 //----------------------------------------------------------------------------------------
 
-AisError AisDecoder::DecodeN0183(const wxString &str) {
+AisError AisDecoder::DecodeN0183(const QString &str) {
   AisError ret = AIS_GENERIC_ERROR;
-  wxString string_to_parse;
+  QString string_to_parse;
 
   double gpsg_lat, gpsg_lon, gpsg_mins, gpsg_degs;
   double gpsg_cog, gpsg_sog, gpsg_utc_time;
@@ -2679,7 +2698,7 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
   int gpsg_utc_min = 0;
   int gpsg_utc_sec = 0;
   char gpsg_name_str[21];
-  wxString gpsg_date;
+  QString gpsg_date;
 
   bool bdecode_result = false;
 
@@ -2695,10 +2714,10 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
   double arpa_lon = 0.;
   double arpa_dist = 0.;
   double arpa_brg = 0.;
-  wxString arpa_brgunit;
-  wxString arpa_status;
-  wxString arpa_distunit;
-  wxString arpa_cogunit;
+  QString arpa_brgunit;
+  QString arpa_status;
+  QString arpa_distunit;
+  QString arpa_cogunit;
   double arpa_mins, arpa_degs;
   double arpa_utc_time;
   int arpa_utc_hour = 0;
@@ -2720,29 +2739,34 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
 
   //  Make some simple tests for validity
 
-  if (str.Len() > 128) return AIS_NMEAVDX_TOO_LONG;
+  if (str.length() > 128) return AIS_NMEAVDX_TOO_LONG;
 
   if (!NMEACheckSumOK(str)) {
     return AIS_NMEAVDX_CHECKSUM_BAD;
   }
-  if (str.Mid(1, 2).IsSameAs("CD")) {
+  if (str.mid(1, 2) == "CD") {
     ProcessDSx(str);
     return AIS_NoError;
-  } else if (str.Mid(3, 3).IsSameAs("TTM")) {
+  } else if (str.mid(3, 3) == "TTM") {
     //$--TTM,xx,x.x,x.x,a,x.x,x.x,a,x.x,x.x,a,c--c,a,a*hh <CR><LF>
     // or
     //$--TTM,xx,x.x,x.x,a,x.x,x.x,a,x.x,x.x,a,c--c,a,a,hhmmss.ss,a*hh<CR><LF>
-    wxStringTokenizer tkz(str, ",*");
+    //  KeepEmptyParts: NMEA fields are positional and may be empty
+    QStringList tkz = str.split(QRegularExpression("[,*]"), Qt::KeepEmptyParts);
+    int ti = 0;
+    auto next_tok = [&tkz, &ti]() -> QString {
+      return ti < tkz.size() ? tkz[ti++] : QString();
+    };
 
-    wxString token;
-    token = tkz.GetNextToken();  // Sentence (xxTTM)
-    token = tkz.GetNextToken();  // 1) Target Number
-    token.ToLong(&arpa_tgt_num);
-    token = tkz.GetNextToken();  // 2)Target Distance
-    token.ToDouble(&arpa_dist);
-    token = tkz.GetNextToken();  // 3) Bearing from own ship
-    token.ToDouble(&arpa_brg);
-    arpa_brgunit = tkz.GetNextToken();  // 4) Bearing Units
+    QString token;
+    token = next_tok();  // Sentence (xxTTM)
+    token = next_tok();  // 1) Target Number
+    arpa_tgt_num = token.toLong();
+    token = next_tok();  // 2)Target Distance
+    arpa_dist = token.toDouble();
+    token = next_tok();  // 3) Bearing from own ship
+    arpa_brg = token.toDouble();
+    arpa_brgunit = next_tok();  // 4) Bearing Units
     if (arpa_brgunit == "R") {
       if (std::isnan(arpa_ref_hdg)) {
         if (!std::isnan(gHdt))
@@ -2753,11 +2777,11 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
         arpa_brg += arpa_ref_hdg;
       if (arpa_brg >= 360.) arpa_brg -= 360.;
     }
-    token = tkz.GetNextToken();  // 5) Target speed
-    token.ToDouble(&arpa_sog);
-    token = tkz.GetNextToken();  // 6) Target Course
-    token.ToDouble(&arpa_cog);
-    arpa_cogunit = tkz.GetNextToken();  // 7) Course Units
+    token = next_tok();  // 5) Target speed
+    arpa_sog = token.toDouble();
+    token = next_tok();  // 6) Target Course
+    arpa_cog = token.toDouble();
+    arpa_cogunit = next_tok();  // 7) Course Units
     if (arpa_cogunit == "R") {
       if (std::isnan(arpa_ref_hdg)) {
         if (!std::isnan(gHdt))
@@ -2768,24 +2792,25 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
         arpa_cog += arpa_ref_hdg;
       if (arpa_cog >= 360.) arpa_cog -= 360.;
     }
-    token = tkz.GetNextToken();  // 8) Distance of closest-point-of-approach
-    token = tkz.GetNextToken();  // 9) Time until closest-point-of-approach "-"
-                                 // means increasing
-    arpa_distunit = tkz.GetNextToken();  // 10)Speed/ dist unit
-    token = tkz.GetNextToken();          // 11) Target name
-    if (token == "") token = wxString::Format("ARPA %ld", arpa_tgt_num);
-    int len = wxMin(token.Length(), 20);
-    strncpy(arpa_name_str, token.mb_str(), len);
+    token = next_tok();  // 8) Distance of closest-point-of-approach
+    token = next_tok();  // 9) Time until closest-point-of-approach "-"
+                         // means increasing
+    arpa_distunit = next_tok();  // 10)Speed/ dist unit
+    token = next_tok();          // 11) Target name
+    if (token == "")
+      token = QString::asprintf("ARPA %ld", arpa_tgt_num);
+    int len = std::min<int>(token.length(), 20);
+    strncpy(arpa_name_str, token.toUtf8().constData(), len);
     arpa_name_str[len] = 0;
-    arpa_status = tkz.GetNextToken();  // 12) Target Status
+    arpa_status = next_tok();  // 12) Target Status
     if (arpa_status != "L") {
       arpa_lost = false;
     } else if (arpa_status != "")
       arpa_nottracked = true;
-    wxString arpa_reftarget = tkz.GetNextToken();  // 13) Reference Target
-    if (tkz.HasMoreTokens()) {
-      token = tkz.GetNextToken();
-      token.ToDouble(&arpa_utc_time);
+    QString arpa_reftarget = next_tok();  // 13) Reference Target
+    if (ti < tkz.size()) {
+      token = next_tok();
+      arpa_utc_time = token.toDouble();
       arpa_utc_hour = (int)(arpa_utc_time / 10000.0);
       arpa_utc_min = (int)(arpa_utc_time / 100.0) - arpa_utc_hour * 100;
       arpa_utc_sec =
@@ -2808,65 +2833,75 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
     // 199 is INMARSAT-A MID, should not occur ever in AIS
     // stream + we make sure we are out of the hashes for
     // GPSGate buddies by being above 1992*
-  } else if (str.Mid(3, 3).IsSameAs("TLL")) {
+  } else if (str.mid(3, 3) == "TLL") {
     //$--TLL,xx,llll.lll,a,yyyyy.yyy,a,c--c,hhmmss.ss,a,a*hh<CR><LF>
     //"$RATLL,01,5603.370,N,01859.976,E,ALPHA,015200.36,T,*75\r\n"
-    wxStringTokenizer tkz(str, ",*");
+    //  KeepEmptyParts: NMEA fields are positional and may be empty
+    QStringList tkz = str.split(QRegularExpression("[,*]"), Qt::KeepEmptyParts);
+    int ti = 0;
+    auto next_tok = [&tkz, &ti]() -> QString {
+      return ti < tkz.size() ? tkz[ti++] : QString();
+    };
 
-    wxString token;
-    wxString aprs_tll_str = tkz.GetNextToken();  // Sentence (xxTLL)
-    token = tkz.GetNextToken();                  // 1) Target number 00 - 99
-    token.ToLong(&arpa_tgt_num);
-    token = tkz.GetNextToken();  // 2) Latitude, N/S
-    token.ToDouble(&arpa_lat);
+    QString token;
+    QString aprs_tll_str = next_tok();  // Sentence (xxTLL)
+    token = next_tok();                 // 1) Target number 00 - 99
+    arpa_tgt_num = token.toLong();
+    token = next_tok();  // 2) Latitude, N/S
+    arpa_lat = token.toDouble();
     arpa_degs = (int)(arpa_lat / 100.0);
     arpa_mins = arpa_lat - arpa_degs * 100.0;
     arpa_lat = arpa_degs + arpa_mins / 60.0;
-    token = tkz.GetNextToken();  // hemisphere N or S
-    if (token.Mid(0, 1).Contains("S") == true ||
-        token.Mid(0, 1).Contains("s") == true)
+    token = next_tok();  // hemisphere N or S
+    if (token.mid(0, 1).contains("S") == true ||
+        token.mid(0, 1).contains("s") == true)
       arpa_lat = 0. - arpa_lat;
-    token = tkz.GetNextToken();  // 3) Longitude, E/W
-    token.ToDouble(&arpa_lon);
+    token = next_tok();  // 3) Longitude, E/W
+    arpa_lon = token.toDouble();
     arpa_degs = (int)(arpa_lon / 100.0);
     arpa_mins = arpa_lon - arpa_degs * 100.0;
     arpa_lon = arpa_degs + arpa_mins / 60.0;
-    token = tkz.GetNextToken();  // hemisphere E or W
-    if (token.Mid(0, 1).Contains("W") == true ||
-        token.Mid(0, 1).Contains("w") == true)
+    token = next_tok();  // hemisphere E or W
+    if (token.mid(0, 1).contains("W") == true ||
+        token.mid(0, 1).contains("w") == true)
       arpa_lon = 0. - arpa_lon;
-    token = tkz.GetNextToken();  // 4) Target name
-    if (token == "") token = wxString::Format("ARPA %d", arpa_tgt_num);
-    int len = wxMin(token.Length(), 20);
-    strncpy(arpa_name_str, token.mb_str(), len);
+    token = next_tok();  // 4) Target name
+    if (token == "")
+      token = QString::asprintf("ARPA %d", static_cast<int>(arpa_tgt_num));
+    int len = std::min<int>(token.length(), 20);
+    strncpy(arpa_name_str, token.toUtf8().constData(), len);
     arpa_name_str[len] = 0;
-    token = tkz.GetNextToken();  // 5) UTC of data
-    token.ToDouble(&arpa_utc_time);
+    token = next_tok();  // 5) UTC of data
+    arpa_utc_time = token.toDouble();
     arpa_utc_hour = (int)(arpa_utc_time / 10000.0);
     arpa_utc_min = (int)(arpa_utc_time / 100.0) - arpa_utc_hour * 100;
     arpa_utc_sec =
         (int)arpa_utc_time - arpa_utc_hour * 10000 - arpa_utc_min * 100;
-    arpa_status =
-        tkz.GetNextToken();  // 6) Target status: L = lost,tracked
-                             // target has beenlost Q = query,target in
-                             // the process of acquisition T = tracking
+    arpa_status = next_tok();  // 6) Target status: L = lost,tracked
+                               // target has beenlost Q = query,target in
+                               // the process of acquisition T = tracking
     if (arpa_status != "L")
       arpa_lost = false;
     else if (arpa_status != "")
       arpa_nottracked = true;
-    wxString arpa_reftarget = tkz.GetNextToken();  // 7) Reference target=R,null
+    QString arpa_reftarget = next_tok();  // 7) Reference target=R,null
     mmsi = arpa_mmsi = 199200000 + arpa_tgt_num;
     // 199 is INMARSAT-A MID, should not occur ever in AIS
     // stream + we make sure we are out of the hashes for
     // GPSGate buddies by being above 1992*
-  } else if (str.Mid(3, 3).IsSameAs("OSD")) {
+  } else if (str.mid(3, 3) == "OSD") {
     //$--OSD,x.x,A,x.x,a,x.x,a,x.x,x.x,a*hh <CR><LF>
-    wxStringTokenizer tkz(str, ",*");
+    //  KeepEmptyParts: NMEA fields are positional and may be empty
+    QStringList tkz = str.split(QRegularExpression("[,*]"), Qt::KeepEmptyParts);
+    int ti = 0;
+    auto next_tok = [&tkz, &ti]() -> QString {
+      return ti < tkz.size() ? tkz[ti++] : QString();
+    };
 
-    wxString token;
-    token = tkz.GetNextToken();  // Sentence (xxOSD)
-    token = tkz.GetNextToken();  // 1) Heading (true)
-    token.ToDouble(&arpa_ref_hdg);
+    QString token;
+    token = next_tok();  // Sentence (xxOSD)
+    token = next_tok();  // 1) Heading (true)
+    arpa_ref_hdg = token.toDouble();
     // 2) speed
     // 3) Vessel Course, degrees True
     // 4) Course Reference, B/M/W/R/P (see note)
@@ -2876,33 +2911,38 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
     // 8) Vessel drift (speed) - Manually entered
     // 9) Speed Units K = km/h; N = Knots; S = statute miles/h
 
-  } else if (g_bWplUsePosition && str.Mid(3, 3).IsSameAs("WPL")) {
+  } else if (g_bWplUsePosition && str.mid(3, 3) == "WPL") {
     //** $--WPL,llll.ll,a,yyyyy.yy,a,c--c*hh<CR><LF>
-    wxStringTokenizer tkz(str, ",*");
+    //  KeepEmptyParts: NMEA fields are positional and may be empty
+    QStringList tkz = str.split(QRegularExpression("[,*]"), Qt::KeepEmptyParts);
+    int ti = 0;
+    auto next_tok = [&tkz, &ti]() -> QString {
+      return ti < tkz.size() ? tkz[ti++] : QString();
+    };
 
-    wxString token;
-    token = tkz.GetNextToken();  // Sentence (xxWPL)
-    token = tkz.GetNextToken();  // 1) Latitude, N/S
-    token.ToDouble(&aprs_lat);
+    QString token;
+    token = next_tok();  // Sentence (xxWPL)
+    token = next_tok();  // 1) Latitude, N/S
+    aprs_lat = token.toDouble();
     aprs_degs = (int)(aprs_lat / 100.0);
     aprs_mins = aprs_lat - aprs_degs * 100.0;
     aprs_lat = aprs_degs + aprs_mins / 60.0;
-    token = tkz.GetNextToken();  // 2) hemisphere N or S
-    if (token.Mid(0, 1).Contains("S") == true ||
-        token.Mid(0, 1).Contains("s") == true)
+    token = next_tok();  // 2) hemisphere N or S
+    if (token.mid(0, 1).contains("S") == true ||
+        token.mid(0, 1).contains("s") == true)
       aprs_lat = 0. - aprs_lat;
-    token = tkz.GetNextToken();  // 3) Longitude, E/W
-    token.ToDouble(&aprs_lon);
+    token = next_tok();  // 3) Longitude, E/W
+    aprs_lon = token.toDouble();
     aprs_degs = (int)(aprs_lon / 100.0);
     aprs_mins = aprs_lon - aprs_degs * 100.0;
     aprs_lon = aprs_degs + aprs_mins / 60.0;
-    token = tkz.GetNextToken();  // 4) hemisphere E or W
-    if (token.Mid(0, 1).Contains("W") == true ||
-        token.Mid(0, 1).Contains("w") == true)
+    token = next_tok();  // 4) hemisphere E or W
+    if (token.mid(0, 1).contains("W") == true ||
+        token.mid(0, 1).contains("w") == true)
       aprs_lon = 0. - aprs_lon;
-    token = tkz.GetNextToken();  // 5) Target name
-    int len = wxMin(token.Length(), 20);
-    strncpy(aprs_name_str, token.mb_str(), len + 1);
+    token = next_tok();  // 5) Target name
+    int len = std::min<int>(token.length(), 20);
+    strncpy(aprs_name_str, token.toUtf8().constData(), len + 1);
     if (0 == g_WplAction) {  // APRS position reports
       int i, hash = 0;
       aprs_name_str[len] = 0;
@@ -2921,51 +2961,56 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
       pWP->m_bIsolatedMark = true;
       InsertWpt(pWP, true);
     }
-  } else if (str.Mid(1, 5).IsSameAs("FRPOS")) {
+  } else if (str.mid(1, 5) == "FRPOS") {
     // parse a GpsGate Position message            $FRPOS,.....
 
     //  Use a tokenizer to pull out the first 9 fields
-    wxStringTokenizer tkz(str, ",*");
+    //  KeepEmptyParts: NMEA fields are positional and may be empty
+    QStringList tkz = str.split(QRegularExpression("[,*]"), Qt::KeepEmptyParts);
+    int ti = 0;
+    auto next_tok = [&tkz, &ti]() -> QString {
+      return ti < tkz.size() ? tkz[ti++] : QString();
+    };
 
-    wxString token;
-    token = tkz.GetNextToken();  // !$FRPOS
+    QString token;
+    token = next_tok();  // !$FRPOS
 
-    token = tkz.GetNextToken();  //    latitude DDMM.MMMM
-    token.ToDouble(&gpsg_lat);
+    token = next_tok();  //    latitude DDMM.MMMM
+    gpsg_lat = token.toDouble();
     gpsg_degs = (int)(gpsg_lat / 100.0);
     gpsg_mins = gpsg_lat - gpsg_degs * 100.0;
     gpsg_lat = gpsg_degs + gpsg_mins / 60.0;
 
-    token = tkz.GetNextToken();  //  hemisphere N or S
-    if (token.Mid(0, 1).Contains("S") == true ||
-        token.Mid(0, 1).Contains("s") == true)
+    token = next_tok();  //  hemisphere N or S
+    if (token.mid(0, 1).contains("S") == true ||
+        token.mid(0, 1).contains("s") == true)
       gpsg_lat = 0. - gpsg_lat;
 
-    token = tkz.GetNextToken();  // longitude DDDMM.MMMM
-    token.ToDouble(&gpsg_lon);
+    token = next_tok();  // longitude DDDMM.MMMM
+    gpsg_lon = token.toDouble();
     gpsg_degs = (int)(gpsg_lon / 100.0);
     gpsg_mins = gpsg_lon - gpsg_degs * 100.0;
     gpsg_lon = gpsg_degs + gpsg_mins / 60.0;
 
-    token = tkz.GetNextToken();  // hemisphere E or W
-    if (token.Mid(0, 1).Contains("W") == true ||
-        token.Mid(0, 1).Contains("w") == true)
+    token = next_tok();  // hemisphere E or W
+    if (token.mid(0, 1).contains("W") == true ||
+        token.mid(0, 1).contains("w") == true)
       gpsg_lon = 0. - gpsg_lon;
 
-    token = tkz.GetNextToken();  //    altitude AA.a
+    token = next_tok();  //    altitude AA.a
     //    token.toDouble(&gpsg_alt);
 
-    token = tkz.GetNextToken();  //  speed over ground SSS.SS knots
-    token.ToDouble(&gpsg_sog);
+    token = next_tok();  //  speed over ground SSS.SS knots
+    gpsg_sog = token.toDouble();
 
-    token = tkz.GetNextToken();  //  heading over ground HHH.hh degrees
-    token.ToDouble(&gpsg_cog);
+    token = next_tok();  //  heading over ground HHH.hh degrees
+    gpsg_cog = token.toDouble();
 
-    token = tkz.GetNextToken();  // date DDMMYY
+    token = next_tok();  // date DDMMYY
     gpsg_date = token;
 
-    token = tkz.GetNextToken();  // time UTC hhmmss.dd
-    token.ToDouble(&gpsg_utc_time);
+    token = next_tok();  // time UTC hhmmss.dd
+    gpsg_utc_time = token.toDouble();
     gpsg_utc_hour = (int)(gpsg_utc_time / 10000.0);
     gpsg_utc_min = (int)(gpsg_utc_time / 100.0) - gpsg_utc_hour * 100;
     gpsg_utc_sec =
@@ -2973,62 +3018,67 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
 
     // now comes the name, followed by in * and NMEA checksum
 
-    token = tkz.GetNextToken();
+    token = next_tok();
     int i, len, hash = 0;
-    len = wxMin(wxStrlen(token), 20);
-    strncpy(gpsg_name_str, token.mb_str(), len);
+    len = std::min<int>(token.length(), 20);
+    strncpy(gpsg_name_str, token.toUtf8().constData(), len);
     gpsg_name_str[len] = 0;
     for (i = 0; i < len; i++) {
       hash = hash * 10;
-      hash += (int)(token[i]);
+      hash += (int)(token[i].toLatin1());
       while (hash >= 100000) hash = hash / 100000;
     }
     // 199 is INMARSAT-A MID, should not occur ever in AIS stream
     gpsg_mmsi = 199000000 + hash;
     mmsi = gpsg_mmsi;
-  } else if (!str.Mid(3, 2).IsSameAs("VD")) {
+  } else if (str.mid(3, 2) != "VD") {
     return AIS_NMEAVDX_BAD;
   }
 
   //  OK, looks like the sentence is OK
 
   //  Use a tokenizer to pull out the first 4 fields
-  string_to_parse.Clear();
+  string_to_parse.clear();
 
-  if (str.Mid(3, 2).IsSameAs("VD")) {
-    wxStringTokenizer tkz(str, ",");
+  if (str.mid(3, 2) == "VD") {
+    //  KeepEmptyParts: NMEA fields are positional and may be empty
+    QStringList tkz = str.split(',', Qt::KeepEmptyParts);
+    int ti = 0;
+    auto next_tok = [&tkz, &ti]() -> QString {
+      return ti < tkz.size() ? tkz[ti++] : QString();
+    };
 
-    wxString token;
-    token = tkz.GetNextToken();  // !xxVDx
+    QString token;
+    token = next_tok();  // !xxVDx
 
-    token = tkz.GetNextToken();
-    nsentences = atoi(token.mb_str());
+    token = next_tok();
+    nsentences = token.toInt();
 
-    token = tkz.GetNextToken();
-    isentence = atoi(token.mb_str());
+    token = next_tok();
+    isentence = token.toInt();
 
-    token = tkz.GetNextToken();
-    long lsequence_id = 0;
-    token.ToLong(&lsequence_id);
+    token = next_tok();
+    long lsequence_id = token.toLong();
 
-    token = tkz.GetNextToken();
-    long lchannel;
-    token.ToLong(&lchannel);
+    token = next_tok();
+    long lchannel = token.toLong();
+    (void)lsequence_id;
+    (void)lchannel;
     //  Now, some decisions
 
     //  Simple case first
     //  First and only part of a one-part sentence
     if ((1 == nsentences) && (1 == isentence)) {
-      string_to_parse = tkz.GetNextToken();  // the encapsulated data
+      string_to_parse = next_tok();  // the encapsulated data
     }
 
     else if (nsentences > 1) {
       if (1 == isentence) {
-        sentence_accumulator = tkz.GetNextToken();  // the encapsulated data
+        sentence_accumulator = next_tok();  // the encapsulated data
       }
 
       else {
-        sentence_accumulator += tkz.GetNextToken();
+        sentence_accumulator += next_tok();
       }
 
       if (isentence == nsentences) {
@@ -3037,14 +3087,14 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
     }
   }
 
-  if (mmsi || (!string_to_parse.IsEmpty() &&
-               (string_to_parse.Len() < AIS_MAX_MESSAGE_LEN))) {
+  if (mmsi || (!string_to_parse.isEmpty() &&
+               (string_to_parse.length() < AIS_MAX_MESSAGE_LEN))) {
     //  Create the bit accessible string
-    wxCharBuffer abuf = string_to_parse.ToUTF8();
-    if (!abuf.data())  // badly formed sentence?
+    QByteArray abuf = string_to_parse.toUtf8();
+    if (abuf.isNull())  // badly formed sentence?
       return AIS_GENERIC_ERROR;
 
-    AisBitstring strbit(abuf.data());
+    AisBitstring strbit(abuf.constData());
 
     //  Extract the MMSI
     if (!mmsi) mmsi = strbit.GetInt(9, 30);
@@ -3137,7 +3187,7 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
         // want to persist it's track...
         else if (props->m_bVDM) {
           // Only single line VDM messages to be translated
-          if (str.Mid(3, 9).IsSameAs("VDM,1,1,,")) {
+          if (str.mid(3, 9) == "VDM,1,1,,") {
             int message_ID = strbit.GetInt(1, 6);  // Parse on message ID
             // Only translate the dynamic positionreport messages (1, 2, 3 or
             // 18)
@@ -3145,24 +3195,24 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
               // set OwnShip to prevent target from being drawn
               pTargetData->b_OwnShip = true;
               // Rename nmea sentence to AIVDO and calc a new checksum
-              wxString aivdostr = str;
+              QString aivdostr = str;
               aivdostr.replace(1, 5, "AIVDO");
               unsigned char calculated_checksum = 0;
-              wxString::iterator j;
-              for (j = aivdostr.begin() + 1; j != aivdostr.end() && *j != '*';
-                   ++j)
-                calculated_checksum ^= static_cast<unsigned char>(*j);
-              // if i is not at least 3 positons befoere end, there is no
+              int j;
+              for (j = 1; j < aivdostr.length() && aivdostr[j] != '*'; ++j)
+                calculated_checksum ^=
+                    static_cast<unsigned char>(aivdostr[j].toLatin1());
+              // if j is not at least 3 positons before end, there is no
               // checksum added so also no need to add one now.
-              if (j <= aivdostr.end() - 3)
+              if (j <= aivdostr.length() - 3)
                 aivdostr.replace(
-                    j + 1, j + 3,
-                    wxString::Format(_("%02X"), calculated_checksum));
+                    j + 1, 2,
+                    QString::asprintf("%02X", calculated_checksum));
 
               gps_watchdog_timeout_ticks =
                   60;  // increase watchdog time up to 1 minute
               // add the changed sentence into nmea message system
-              std::string full_sentence = aivdostr.ToStdString();
+              std::string full_sentence = aivdostr.toStdString();
               auto address = std::make_shared<NavAddr0183>("virtual");
               // We notify based on full message, including the Talker ID
               // Notify message listener
@@ -3198,7 +3248,8 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
         pTargetData->m_utc_hour = gpsg_utc_hour;
         pTargetData->m_utc_min = gpsg_utc_min;
         pTargetData->m_utc_sec = gpsg_utc_sec;
-        pTargetData->m_date_string = gpsg_date;
+        pTargetData->m_date_string =
+            wxString(gpsg_date.toStdString());  // m_date_string stays wxString
         pTargetData->MMSI = gpsg_mmsi;
         pTargetData->NavStatus = 0;  // underway
         pTargetData->Lat = gpsg_lat;
@@ -3220,7 +3271,7 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
         pTargetData->m_utc_sec = arpa_utc_sec;
         pTargetData->MMSI = arpa_mmsi;
         pTargetData->NavStatus = 15;  // undefined
-        if (str.Mid(3, 3).IsSameAs("TLL")) {
+        if (str.mid(3, 3) == "TLL") {
           if (!bnewtarget) {
             int age_of_last =
                 (now.GetTicks() - pTargetData->PositionReportTicks);
@@ -3232,7 +3283,7 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
           }
           pTargetData->Lat = arpa_lat;
           pTargetData->Lon = arpa_lon;
-        } else if (str.Mid(3, 3).IsSameAs("TTM")) {
+        } else if (str.mid(3, 3) == "TTM") {
           if (arpa_dist != 0.)  // Not a new or turned off target
             ll_gc_ll(gLat, gLon, arpa_brg, arpa_dist, &pTargetData->Lat,
                      &pTargetData->Lon);
@@ -3320,12 +3371,12 @@ AisError AisDecoder::DecodeN0183(const wxString &str) {
 }
 
 void AisDecoder::CommitAISTarget(
-    const std::shared_ptr<AisTargetData> &pTargetData, const wxString &str,
+    const std::shared_ptr<AisTargetData> &pTargetData, const QString &str,
     bool message_valid, bool new_target) {
   m_pLatestTargetData = pTargetData;
 
-  if (!str.IsEmpty()) {  // NMEA0183 message
-    if (str.Mid(3, 3).IsSameAs("VDO"))
+  if (!str.isEmpty()) {  // NMEA0183 message
+    if (str.mid(3, 3) == "VDO")
       pTargetData->b_OwnShip = true;
     else
       pTargetData->b_OwnShip = false;
@@ -3438,7 +3489,7 @@ void AisDecoder::getAISTarget(long mmsi,
     pSelectAIS->DeleteSelectablePoint((void *)mmsi, SELTYPE_AISTARGET);
 }
 
-std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const wxString &str,
+std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const QString &str,
                                                       bool b_take_dsc) {
   double dsc_lat = 0.;
   double dsc_lon = 0.;
@@ -3453,8 +3504,8 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const wxString &str,
   int dse_mmsi = 0;
   double dse_cog = 0.;
   double dse_sog = 0.;
-  wxString dse_shipName = "";
-  wxString dseSymbol;
+  QString dse_shipName = "";
+  QString dseSymbol;
 
   unsigned mmsi = 0;
 
@@ -3462,57 +3513,62 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const wxString &str,
 
   // parse a DSC Position message            $CDDSx,.....
   //  Use a tokenizer to pull out the first 9 fields
-  wxStringTokenizer tkz(str, ",*");
+  //  KeepEmptyParts: NMEA fields are positional and may be empty
+  QStringList tkz = str.split(QRegularExpression("[,*]"), Qt::KeepEmptyParts);
+  int ti = 0;
+  auto next_tok = [&tkz, &ti]() -> QString {
+    return ti < tkz.size() ? tkz[ti++] : QString();
+  };
 
-  wxString token;
-  token = tkz.GetNextToken();  // !$CDDS
+  QString token;
+  token = next_tok();  // !$CDDS
 
-  if (str.Mid(3, 3).IsSameAs("DSC")) {
+  if (str.mid(3, 3) == "DSC") {
     m_dsc_last_string = str;
 
-    token = tkz.GetNextToken();  // format specifier
-    token.ToLong(
-        &dsc_fmt);  // (02-area,12-distress,16-allships,20-individual,...)
+    token = next_tok();  // format specifier
+    dsc_fmt =
+        token.toLong();  // (02-area,12-distress,16-allships,20-individual,...)
 
-    token = tkz.GetNextToken();  // address i.e. mmsi*10 for received msg, or
-                                 // area spec or sender mmsi for (12) and (16)
+    token = next_tok();  // address i.e. mmsi*10 for received msg, or
+                         // area spec or sender mmsi for (12) and (16)
     if (dsc_fmt == 12 || dsc_fmt == 16) {
-      dsc_mmsi = wxAtoi(token.Mid(0, 9));
+      dsc_mmsi = token.mid(0, 9).toInt();
     } else {
-      token.ToDouble(&dsc_addr);
+      dsc_addr = token.toDouble();
       dsc_mmsi = 0 - (int)(dsc_addr / 10);  // as per NMEA 0183 3.01
     }
 
-    token = tkz.GetNextToken();  // category
-    token.ToLong(&dsc_cat);      // 12 - Distress (relayed)
+    token = next_tok();      // category
+    dsc_cat = token.toLong();  // 12 - Distress (relayed)
 
-    token = tkz.GetNextToken();  // nature of distress or telecommand1
-    if (!token.IsSameAs("")) {   // 00-12 = nature of distress
-      token.ToLong(&dsc_nature);
+    token = next_tok();   // nature of distress or telecommand1
+    if (token != "") {    // 00-12 = nature of distress
+      dsc_nature = token.toLong();
     } else
       dsc_nature = 99;
 
-    token = tkz.GetNextToken();  // comm type or telecommand2
+    token = next_tok();  // comm type or telecommand2
 
-    token = tkz.GetNextToken();  // position or channel/freq
-    token.ToDouble(&dsc_tmp);
+    token = next_tok();  // position or channel/freq
+    dsc_tmp = token.toDouble();
 
-    token = tkz.GetNextToken();  // time or tel. no.
-    token = tkz.GetNextToken();  // mmsi of ship in distress, relay
-    if (dsc_fmt == 16 && dsc_cat == 12 && !token.IsSameAs("")) {
-      // wxString dmmsi = token.Mid(0,9);
+    token = next_tok();  // time or tel. no.
+    token = next_tok();  // mmsi of ship in distress, relay
+    if (dsc_fmt == 16 && dsc_cat == 12 && token != "") {
+      // QString dmmsi = token.mid(0,9);
       dsc_tx_mmsi = dsc_mmsi;  // mmsi of relay issuer
-      dsc_mmsi = wxAtoi(token.Mid(0, 9));
+      dsc_mmsi = token.mid(0, 9).toInt();
     }
-    token = tkz.GetNextToken();  // nature of distress, relay
+    token = next_tok();  // nature of distress, relay
     if (dsc_fmt == 16 && dsc_cat == 12) {
-      if (!token.IsSameAs("")) {  // 00-12 = nature of distress
-        token.ToLong(&dsc_nature);
+      if (token != "") {  // 00-12 = nature of distress
+        dsc_nature = token.toLong();
       } else
         dsc_nature = 99;
     }
-    token = tkz.GetNextToken();  // acknowledgement
-    token = tkz.GetNextToken();  // expansion indicator
+    token = next_tok();  // acknowledgement
+    token = next_tok();  // expansion indicator
 
     dsc_quadrant = (int)(dsc_tmp / 1000000000.0);
 
@@ -3547,47 +3603,46 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const wxString &str,
     }
     if (dsc_fmt != 02) mmsi = (int)dsc_mmsi;
 
-  } else if (str.Mid(3, 3).IsSameAs("DSE")) {
-    token = tkz.GetNextToken();  // total number of sentences
-    token = tkz.GetNextToken();  // sentence number
-    token = tkz.GetNextToken();  // query/rely flag
-    token = tkz.GetNextToken();  // vessel MMSI
-    dse_mmsi = wxAtoi(token.Mid(
-        0, 9));  // ITU-R M.493-10 �5.2
-                 // token.ToDouble(&dse_addr);
+  } else if (str.mid(3, 3) == "DSE") {
+    token = next_tok();  // total number of sentences
+    token = next_tok();  // sentence number
+    token = next_tok();  // query/rely flag
+    token = next_tok();  // vessel MMSI
+    dse_mmsi = token.mid(0, 9).toInt();  // ITU-R M.493-10 �5.2
+                                         // dse_addr = token.toDouble();
                  // 0 - (int)(dse_addr / 10);  // as per NMEA 0183 3.01
 
 #if 0
-    token = tkz.GetNextToken();  // code field
+    token = next_tok();  // code field
     token =
-        tkz.GetNextToken();  // data field - position - 2*4 digits latlon .mins
-    token.ToDouble(&dse_tmp);
+        next_tok();  // data field - position - 2*4 digits latlon .mins
+    dse_tmp = token.toDouble();
     dse_lat = (int)(dse_tmp / 10000.0);
     dse_lon = (int)(dse_tmp - dse_lat * 10000.0);
     dse_lat = dse_lat / 600000.0;
     dse_lon = dse_lon / 600000.0;
 #endif
                  // DSE Sentence may contain multiple dse expansion data items
-    while (tkz.HasMoreTokens()) {
-      dseSymbol = tkz.GetNextToken();  // dse expansion data symbol
-      token = tkz.GetNextToken();      // dse expansion data
-      if (dseSymbol.IsSameAs("00")) {  // Position
-        token.ToDouble(&dse_tmp);
+    while (ti < tkz.size()) {
+      dseSymbol = next_tok();   // dse expansion data symbol
+      token = next_tok();       // dse expansion data
+      if (dseSymbol == "00") {  // Position
+        dse_tmp = token.toDouble();
         dse_lat = (int)(dse_tmp / 10000.0);
         dse_lon = (int)(dse_tmp - dse_lat * 10000.0);
         dse_lat = dse_lat / 600000.0;
         dse_lon = dse_lon / 600000.0;
-      } else if (dseSymbol.IsSameAs("01")) {  // Source & Datum
-      } else if (dseSymbol.IsSameAs("02")) {  // SOG
-        token.ToDouble(&dse_tmp);
+      } else if (dseSymbol == "01") {  // Source & Datum
+      } else if (dseSymbol == "02") {  // SOG
+        dse_tmp = token.toDouble();
         dse_sog = dse_tmp / 10.0;
-      } else if (dseSymbol.IsSameAs("03")) {  // COG
-        token.ToDouble(&dse_tmp);
+      } else if (dseSymbol == "03") {  // COG
+        dse_tmp = token.toDouble();
         dse_cog = dse_tmp / 10.0;
-      } else if (dseSymbol.IsSameAs("04")) {  // Station Information
+      } else if (dseSymbol == "04") {  // Station Information
         dse_shipName = DecodeDSEExpansionCharacters(token);
-      } else if (dseSymbol.IsSameAs("05")) {  // Geographic Information
-      } else if (dseSymbol.IsSameAs("06")) {  // Persons On Board
+      } else if (dseSymbol == "05") {  // Geographic Information
+      } else if (dseSymbol == "06") {  // Persons On Board
       }
     }
     mmsi = abs((int)dse_mmsi);
@@ -3661,10 +3716,10 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const wxString &str,
         m_ptentative_dsctarget->Lon =
             m_ptentative_dsctarget->Lon +
             ((m_ptentative_dsctarget->Lon) >= 0 ? dse_lon : -dse_lon);
-        if (!dse_shipName.empty()) {
+        if (!dse_shipName.isEmpty()) {
           memset(m_ptentative_dsctarget->ShipName, '\0', SHIP_NAME_LEN);
           snprintf(m_ptentative_dsctarget->ShipName, dse_shipName.length(),
-                   "%s", dse_shipName.ToAscii().data());
+                   "%s", dse_shipName.toLatin1().constData());
         }
         m_ptentative_dsctarget->COG = dse_cog;
         m_ptentative_dsctarget->SOG = dse_sog;
@@ -3724,15 +3779,15 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const wxString &str,
   return pTargetData;
 }
 
-bool AisDecoder::NMEACheckSumOK(const wxString &str_in) {
+bool AisDecoder::NMEACheckSumOK(const QString &str_in) {
   unsigned char checksum_value = 0;
   int sentence_hex_sum;
 
-  wxCharBuffer buf = str_in.ToUTF8();
-  if (!buf.data()) return false;  // cannot decode string
+  QByteArray buf = str_in.toUtf8();
+  if (buf.isNull()) return false;  // cannot decode string
 
   char str_ascii[AIS_MAX_MESSAGE_LEN + 1];
-  strncpy(str_ascii, buf.data(), AIS_MAX_MESSAGE_LEN);
+  strncpy(str_ascii, buf.constData(), AIS_MAX_MESSAGE_LEN);
   str_ascii[AIS_MAX_MESSAGE_LEN] = '\0';
 
   int string_length = strlen(str_ascii);
@@ -4393,50 +4448,55 @@ ArrayOfMmsiProperties g_MMSI_Props_Array;
 
 MmsiProperties::MmsiProperties(wxString &spec) {
   Init();
-  wxStringTokenizer tkz(spec, ";");
-  wxString s;
+  // spec / m_ShipName stay wxString (config boundary); tokenize locally as
+  // QString
+  QStringList tkz =
+      QString::fromStdString(spec.ToStdString()).split(';', Qt::KeepEmptyParts);
+  int ti = 0;
+  auto next_tok = [&tkz, &ti]() -> QString {
+    return ti < tkz.size() ? tkz[ti++] : QString();
+  };
+  QString s;
 
-  s = tkz.GetNextToken();
-  long mmsil;
-  s.ToLong(&mmsil);
-  MMSI = (int)mmsil;
+  s = next_tok();
+  MMSI = s.toInt();
 
-  s = tkz.GetNextToken();
-  if (s.Len()) {
-    if (s.Upper() == "ALWAYS")
+  s = next_tok();
+  if (s.length()) {
+    if (s.toUpper() == "ALWAYS")
       TrackType = TRACKTYPE_ALWAYS;
-    else if (s.Upper() == "NEVER")
+    else if (s.toUpper() == "NEVER")
       TrackType = TRACKTYPE_NEVER;
   }
 
-  s = tkz.GetNextToken();
-  if (s.Len()) {
-    if (s.Upper() == "IGNORE") m_bignore = true;
+  s = next_tok();
+  if (s.length()) {
+    if (s.toUpper() == "IGNORE") m_bignore = true;
   }
 
-  s = tkz.GetNextToken();
-  if (s.Len()) {
-    if (s.Upper() == "MOB") m_bMOB = true;
+  s = next_tok();
+  if (s.length()) {
+    if (s.toUpper() == "MOB") m_bMOB = true;
   }
 
-  s = tkz.GetNextToken();
-  if (s.Len()) {
-    if (s.Upper() == "VDM") m_bVDM = true;
+  s = next_tok();
+  if (s.length()) {
+    if (s.toUpper() == "VDM") m_bVDM = true;
   }
 
-  s = tkz.GetNextToken();
-  if (s.Len()) {
-    if (s.Upper() == "FOLLOWER") m_bFollower = true;
+  s = next_tok();
+  if (s.length()) {
+    if (s.toUpper() == "FOLLOWER") m_bFollower = true;
   }
 
-  s = tkz.GetNextToken();
-  if (s.Len()) {
-    if (s.Upper() == "PERSIST") m_bPersistentTrack = true;
+  s = next_tok();
+  if (s.length()) {
+    if (s.toUpper() == "PERSIST") m_bPersistentTrack = true;
   }
 
-  s = tkz.GetNextToken();
-  if (s.Len()) {
-    m_ShipName = s.Upper();
+  s = next_tok();
+  if (s.length()) {
+    m_ShipName = wxString(s.toUpper().toStdString());
   }
 }
 
@@ -4596,12 +4656,16 @@ wxString GetShipNameFromFile(int nmmsi) {
     if (infile) {
       std::string line;
       while (getline(infile, line)) {
-        wxStringTokenizer tokenizer(wxString::FromUTF8(line.c_str()), ",");
-        if (nmmsi == wxAtoi(tokenizer.GetNextToken())) {
-          name = tokenizer.GetNextToken().Trim();
+        QStringList parts =
+            QString::fromUtf8(line.c_str()).split(',', Qt::KeepEmptyParts);
+        int file_mmsi = parts.size() > 0 ? parts[0].toInt() : 0;
+        if (nmmsi == file_mmsi) {
+          // name stays wxString (name-file boundary)
+          name = parts.size() > 1
+                     ? wxString(parts[1].trimmed().toStdString())
+                     : wxString();
           break;
-        } else
-          tokenizer.GetNextToken();
+        }
       }
     }
     infile.close();
@@ -4621,9 +4685,15 @@ void AisDecoder::UpdateMMSItoNameFile(const wxString &mmsi,
   if (infile) {
     std::string line;
     while (getline(infile, line)) {
-      wxStringTokenizer tokenizer(wxString::FromUTF8(line.c_str()), ",");
-      wxString file_mmsi = tokenizer.GetNextToken();
-      wxString file_name = tokenizer.GetNextToken().Trim();
+      QStringList parts =
+          QString::fromUtf8(line.c_str()).split(',', Qt::KeepEmptyParts);
+      // file_mmsi / file_name stay wxString (mmsi_name_map keyed by wxString)
+      wxString file_mmsi = parts.size() > 0
+                               ? wxString(parts[0].toStdString())
+                               : wxString();
+      wxString file_name = parts.size() > 1
+                               ? wxString(parts[1].trimmed().toStdString())
+                               : wxString();
       mmsi_name_map[file_mmsi] = file_name;
     }
     infile.close();
