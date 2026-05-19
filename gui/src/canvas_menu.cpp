@@ -622,7 +622,7 @@ void CanvasMenuHandler::CanvasPopupMenu(int x, int y, int seltype) {
                api_121->kContextMenuDisableAistarget))) {
           auto myptarget = g_pAIS->Get_Target_Data_From_MMSI(m_FoundAIS_MMSI);
           if (!g_bBasicMenus && myptarget) {
-            name = myptarget->GetFullName();
+            name = wxString::FromUTF8(myptarget->GetFullName().toStdString());
             if (name.IsEmpty()) name.Printf("%d", m_FoundAIS_MMSI);
             name.Prepend(" ( ").Append(" )");
           } else

@@ -3983,7 +3983,7 @@ void ChartCanvas::OnRolloverPopupTimerEvent(wxTimerEvent &event) {
         m_AISRollover_MMSI = FoundAIS_MMSI;
 
         if (!m_pAISRolloverWin->IsActive()) {
-          wxString s = ptarget->GetRolloverString();
+          wxString s = wxString::FromUTF8(ptarget->GetRolloverString().toStdString());
           m_pAISRolloverWin->SetString(s);
 
           m_pAISRolloverWin->SetBestPosition(mouse_x, mouse_y, 16, 16,
@@ -10725,7 +10725,8 @@ void ChartCanvas::ShowObjectQueryWindow(int x, int y, float zlat, float zlon) {
       for (std::vector<Ais8_001_22_SubArea>::iterator sa =
                (*an)->sub_areas.begin();
            sa != (*an)->sub_areas.end(); ++sa)
-        if (!sa->text.empty()) objText << sa->text;
+        if (!sa->text.isEmpty())
+          objText << wxString::FromUTF8(sa->text.toStdString());
       objText << "<br>expires: " << (*an)->expiry_time.Format();
       objText << "<hr noshade>";
     }

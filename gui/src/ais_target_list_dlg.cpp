@@ -57,7 +57,7 @@ END_EVENT_TABLE()
 static bool g_bsort_once;
 
 static int ItemCompare(AisTargetData *pAISTarget1, AisTargetData *pAISTarget2) {
-  wxString s1, s2;
+  QString s1, s2;
   double n1 = 0.;
   double n2 = 0.;
   bool b_cmptype_num = false;
@@ -137,13 +137,13 @@ static int ItemCompare(AisTargetData *pAISTarget1, AisTargetData *pAISTarget2) {
       if ((t1->NavStatus <= 15) && (t1->NavStatus >= 0)) {
         if (t1->Class == AIS_SART) {
           if (t1->NavStatus == RESERVED_14)
-            s1 = _("Active");
+            s1 = QString::fromStdString(_("Active").ToStdString());
           else if (t1->NavStatus == UNDEFINED)
-            s1 = _("Testing");
+            s1 = QString::fromStdString(_("Testing").ToStdString());
         } else
           s1 = ais_get_status(t1->NavStatus);
       } else
-        s1 = _("-");
+        s1 = QString::fromStdString(_("-").ToStdString());
 
       if ((t1->Class == AIS_ATON) || (t1->Class == AIS_BASE) ||
           (t1->Class == AIS_CLASS_B) || (t1->Class == AIS_METEO))
@@ -152,13 +152,13 @@ static int ItemCompare(AisTargetData *pAISTarget1, AisTargetData *pAISTarget2) {
       if ((t2->NavStatus <= 15) && (t2->NavStatus >= 0)) {
         if (t2->Class == AIS_SART) {
           if (t2->NavStatus == RESERVED_14)
-            s2 = _("Active");
+            s2 = QString::fromStdString(_("Active").ToStdString());
           else if (t2->NavStatus == UNDEFINED)
-            s2 = _("Testing");
+            s2 = QString::fromStdString(_("Testing").ToStdString());
         } else
           s2 = ais_get_status(t2->NavStatus);
       } else
-        s2 = _("-");
+        s2 = QString::fromStdString(_("-").ToStdString());
 
       if ((t2->Class == AIS_ATON) || (t2->Class == AIS_BASE) ||
           (t2->Class == AIS_CLASS_B) || (t2->Class == AIS_METEO))
@@ -271,8 +271,8 @@ static int ItemCompare(AisTargetData *pAISTarget1, AisTargetData *pAISTarget2) {
   }
 
   if (!b_cmptype_num) {
-    if (g_bAisTargetList_sortReverse) return s2.Cmp(s1);
-    return s1.Cmp(s2);
+    if (g_bAisTargetList_sortReverse) return s2.compare(s1);
+    return s1.compare(s2);
   } else {
     //    If numeric sort values are equal, secondary sort is on Range_NM
     if (g_bAisTargetList_sortReverse) {
@@ -1088,7 +1088,7 @@ void AISTargetListDialog::OnEditFindTarget(wxCommandEvent &event) {
     for (const auto &it : m_pdecoder->GetTargetList()) {
       auto pAISTarget = it.second;
       if (NULL != pAISTarget) {
-        wxString s = pAISTarget->GetFullName();
+        wxString s = wxString::FromUTF8(pAISTarget->GetFullName().toStdString());
         if (name == s) {
           found = true;
           int selMMSI = pAISTarget->MMSI;
@@ -1110,7 +1110,7 @@ void AISTargetListDialog::OnEditFindTarget(wxCommandEvent &event) {
       for (const auto &it : m_pdecoder->GetTargetList()) {
         auto pAISTarget = it.second;
         if (NULL != pAISTarget) {
-          wxString s = pAISTarget->GetFullName();
+          wxString s = wxString::FromUTF8(pAISTarget->GetFullName().toStdString());
           if (s.Find(name) != wxNOT_FOUND) {
             found = true;
             int selMMSI = pAISTarget->MMSI;

@@ -29,9 +29,10 @@
 #include <vector>
 #include <unordered_map>
 
+#include <QString>
+
 #include <wx/datetime.h>
 #include <wx/intl.h>
-#include <wx/string.h>
 
 #include "model/meteo_points.h"
 #include "model/navutil_base.h"
@@ -43,7 +44,7 @@
 
 #define AIS_TARGETDATA_MAX_CANVAS 6
 
-void make_hash_ERI(int key, const wxString& description);
+void make_hash_ERI(int key, const QString& description);
 void clear_hash_ERI(void);
 
 typedef enum ais_nav_status {
@@ -125,7 +126,7 @@ struct Ais8_001_22_SubArea {
   int right_bound_deg;
   float angles[4];
   float dists_m[4];
-  wxString text;
+  QString text;
 };
 
 typedef std::vector<Ais8_001_22_SubArea> Ais8_001_22_SubAreaList;
@@ -155,13 +156,13 @@ public:
   AisTargetData(AisTargetCallbacks callbacks);
   ~AisTargetData();
 
-  wxString BuildQueryResult(void);
-  wxString GetRolloverString(void);
-  wxString Get_vessel_type_string(bool b_short = false);
-  wxString Get_class_string(bool b_short = false);
-  wxString GetFullName(void);
-  wxString GetCountryCode(bool b_CntryLongStr);
-  wxString GetNatureofDistress(int dscnature);
+  QString BuildQueryResult(void);
+  QString GetRolloverString(void);
+  QString Get_vessel_type_string(bool b_short = false);
+  QString Get_class_string(bool b_short = false);
+  QString GetFullName(void);
+  QString GetCountryCode(bool b_CntryLongStr);
+  QString GetNatureofDistress(int dscnature);
   void Toggle_AIS_CPA(void);
   void ToggleShowTrack(void);
   void CloneFrom(AisTargetData* q);
@@ -238,7 +239,7 @@ public:
   int m_utc_hour;
   int m_utc_min;
   int m_utc_sec;
-  wxString m_date_string;
+  QString m_date_string;
 
   wxDateTime m_ack_time;
   bool b_in_ack_timeout;
@@ -246,7 +247,7 @@ public:
   double Range_NM;
   double Brg;
 
-  wxString MSG_14_text;
+  QString MSG_14_text;
 
   // Per target collision parameters
   bool bCPA_Valid;
@@ -297,10 +298,10 @@ private:
   AisTargetCallbacks m_callbacks;
 };
 
-wxString trimAISField(char* data);
-wxString ais_get_status(int index);
+QString trimAISField(char* data);
+QString ais_get_status(int index);
 
-wxString ais_get_type(int index);
-wxString ais_get_short_type(int index);
+QString ais_get_type(int index);
+QString ais_get_short_type(int index);
 
 #endif

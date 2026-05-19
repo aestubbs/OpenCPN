@@ -23,6 +23,8 @@
 
 #include <unordered_map>
 
+#include <QString>
+
 #include <wx/datetime.h>
 #include <wx/intl.h>
 #include <wx/string.h>
@@ -33,58 +35,64 @@
 #include "model/navutil_base.h"
 #include "model/own_ship.h"
 
-static std::unordered_map<int, wxString> s_ERI_hash;
+// Helper: convert a wxString (typically the result of the _() translation
+// macro, still in use pending P3.10) into a QString.
+static inline QString FromWx(const wxString &s) {
+  return QString::fromStdString(s.utf8_string());
+}
 
-void make_hash_ERI(int key, const wxString &description) {
+static std::unordered_map<int, QString> s_ERI_hash;
+
+void make_hash_ERI(int key, const QString &description) {
   s_ERI_hash[key] = description;
 }
 
 void clear_hash_ERI() { s_ERI_hash.clear(); }
 
-static wxString FormatTimeAdaptive(int seconds) {
+static QString FormatTimeAdaptive(int seconds) {
   int m = seconds / 60;
   if (seconds < 100)
-    return wxString::Format("%3ds", seconds);
+    return QString::asprintf("%3ds", seconds);
   else if (seconds < 3600) {
     int m = seconds / 60;
     int s = seconds % 60;
-    return wxString::Format("%2dmin %02ds", m, s);
+    return QString::asprintf("%2dmin %02ds", m, s);
   }
   int h = seconds / 3600;
   m -= h * 60;
-  return wxString::Format("%2dh %02dmin", h, m);
+  return QString::asprintf("%2dh %02dmin", h, m);
 }
 
-static wxString html_escape(const wxString &src) {
+static QString html_escape(const QString &src) {
   // Escape &, <, > as well as single and double quotes for HTML.
-  wxString ret = src;
+  QString ret = src;
 
-  ret.Replace("<", "&lt;");
-  ret.Replace(">", "&gt;");
+  ret.replace("<", "&lt;");
+  ret.replace(">", "&gt;");
 
   // only < and > in 6 bits AIS ascii
-  // ret.Replace("\"", "&quot;");
-  // ret.Replace("&", "&amp;");
-  // ret.Replace("'", "&#39;");
+  // ret.replace("\"", "&quot;");
+  // ret.replace("&", "&amp;");
+  // ret.replace("'", "&#39;");
 
   // Do we care about multiple spaces?
-  //   ret.Replace(" ", "&nbsp;");
+  //   ret.replace(" ", "&nbsp;");
   return ret;
 }
 
-wxString trimAISField(char *data) {
+QString trimAISField(char *data) {
   //  Clip any unused characters (@) from data
 
-  wxString field = wxString::From8BitData(data);
-  while (field.Right(1) == '@' || field.Right(1) == ' ') field.RemoveLast();
+  QString field = QString::fromLatin1(data);
+  while (field.endsWith('@') || field.endsWith(' ')) field.chop(1);
 
   //  And remove any leading spaces to properly sort and display
-  field.Trim(false);
+  while (field.startsWith(' ')) field.remove(0, 1);
 
   return field;
 }
 
-wxString ais_get_status(int index) {
+QString ais_get_status(int index) {
   static const wxString ais_status[] = {
       _("Underway using Engine"),
       _("At Anchor"),
@@ -109,24 +117,24 @@ wxString ais_get_status(int index) {
       _("AtoN Real (On Position)"),
       _("AtoN Real(Off Position)")};
 
-  return ais_status[index];
+  return FromWx(ais_status[index]);
 }
 
-wxString ais_meteo_get_trend(int tend) {
-  wxString trend = "";
+static QString ais_meteo_get_trend(int tend) {
+  QString trend = "";
   if (tend < 3) {
     if (tend == 0)
-      trend = _("steady");
+      trend = FromWx(_("steady"));
     else if (tend == 1)
-      trend = _("decreasing");
+      trend = FromWx(_("decreasing"));
     else if (tend == 2)
-      trend = _("increasing");
+      trend = FromWx(_("increasing"));
   }
   return trend;
 }
 
-wxString aisMeteoPrecipType(int precip) {
-  wxString prec = "";
+static QString aisMeteoPrecipType(int precip) {
+  QString prec = "";
   switch (precip) {
     case 0:
       prec = "Reserved";
@@ -153,8 +161,8 @@ wxString aisMeteoPrecipType(int precip) {
   return prec;
 }
 
-wxString aisMeteoWaterLevelRef(int refID) {
-  wxString ref = "";
+static QString aisMeteoWaterLevelRef(int refID) {
+  QString ref = "";
   switch (refID) {
     case 0:
       ref = "MLLW";
@@ -415,17 +423,17 @@ void AisTargetData::CloneFrom(AisTargetData *q) {
 AisTargetData::~AisTargetData() { m_ptrack.clear(); }
 // AisTargetData::~AisTargetData() { m_pMetPoint.clear(); }  //TODO Needed?
 
-wxString AisTargetData::GetFullName() {
-  wxString retName;
+QString AisTargetData::GetFullName() {
+  QString retName;
   if (b_nameValid) {
-    wxString shipName = trimAISField(ShipName);
+    QString shipName = trimAISField(ShipName);
     if (shipName == "Unknown")
-      retName = wxGetTranslation(shipName);
+      retName = FromWx(wxGetTranslation(wxString::FromUTF8(shipName.toStdString())));
     else
       retName = shipName;
 
     if (strlen(ShipNameExtension)) {
-      wxString shipNameExt = trimAISField(ShipNameExtension);
+      QString shipNameExt = trimAISField(ShipNameExtension);
       retName += shipNameExt;
     }
   }
@@ -433,122 +441,125 @@ wxString AisTargetData::GetFullName() {
   return retName;
 }
 
-wxString AisTargetData::BuildQueryResult() {
-  wxString html;
+QString AisTargetData::BuildQueryResult() {
+  QString html;
   wxDateTime now = wxDateTime::Now();
 
-  wxString tableStart =
+  QString tableStart =
       "\n<table width=100% border=0 cellpadding=1 cellspacing=0>\n";
 
-  wxString tableEnd = "</table>\n\n";
-  wxString rowStart = "<tr><td><font size=-2>";
-  wxString rowStartH = "<tr><td nowrap>";
-  wxString rowSeparator = "</font></td><td></td><td><b>";
-  wxString rowSeparatorH = "</td><td></td><td>";
-  wxString colSeparator = "<td></td>";
-  wxString rowEnd = "</b></td></tr>\n";
-  wxString vertSpacer = "<tr><td></td></tr>\n\n";
+  QString tableEnd = "</table>\n\n";
+  QString rowStart = "<tr><td><font size=-2>";
+  QString rowStartH = "<tr><td nowrap>";
+  QString rowSeparator = "</font></td><td></td><td><b>";
+  QString rowSeparatorH = "</td><td></td><td>";
+  QString colSeparator = "<td></td>";
+  QString rowEnd = "</b></td></tr>\n";
+  QString vertSpacer = "<tr><td></td></tr>\n\n";
 
-  wxString IMOstr, MMSIstr, ClassStr;
+  QString IMOstr, MMSIstr, ClassStr;
 
-  html << tableStart << "<tr><td nowrap colspan=2>";
+  html += tableStart + "<tr><td nowrap colspan=2>";
   if (b_nameValid) {
-    html << "<font size=+2><i><b>" << GetFullName();
-    html << "</b></i></font>&nbsp;&nbsp;<b>";
+    html += "<font size=+2><i><b>" + GetFullName();
+    html += "</b></i></font>&nbsp;&nbsp;<b>";
   }
 
   if ((Class != AIS_ATON) && (Class != AIS_BASE) && (Class != AIS_GPSG_BUDDY) &&
       (Class != AIS_SART) && (Class != AIS_METEO)) {
-    html << trimAISField(CallSign) << "</b>" << rowEnd;
+    html += trimAISField(CallSign) + "</b>" + rowEnd;
 
     if (Class != AIS_CLASS_B) {
-      if (IMO > 0) IMOstr = wxString::Format("%08d", abs(IMO));
+      if (IMO > 0) IMOstr = QString::asprintf("%08d", abs(IMO));
     }
   } else
-    html << "</b>" << rowEnd;
+    html += "</b>" + rowEnd;
 
-  html << vertSpacer;
+  html += vertSpacer;
 
   if (Class != AIS_GPSG_BUDDY) {
-    MMSIstr = wxString::Format("%09d", abs(MMSI));
+    MMSIstr = QString::asprintf("%09d", abs(MMSI));
   }
-  ClassStr = wxGetTranslation(Get_class_string(false));
+  ClassStr =
+      FromWx(wxGetTranslation(wxString::FromUTF8(Get_class_string(false).toStdString())));
 
   if (Class == AIS_ATON) {
-    wxString cls("AtoN: ");
+    QString cls("AtoN: ");
     cls += Get_vessel_type_string(false);
-    ClassStr = wxGetTranslation(cls);
+    ClassStr = FromWx(wxGetTranslation(wxString::FromUTF8(cls.toStdString())));
   }
 
   if (b_SarAircraftPosnReport) {
     int airtype = (MMSI % 1000) / 100;
-    ClassStr = airtype == 5 ? _("SAR Helicopter") : _("SAR Aircraft");
+    ClassStr = FromWx(airtype == 5 ? _("SAR Helicopter") : _("SAR Aircraft"));
   }
 
-  if (IMOstr.Length())
-    html << "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
-            "cellspacing=0>"
-         << rowStart << _("MMSI")
-         << "</font></td><td>&nbsp;</td><td><font size=-2>" << _("Class")
-         << "</font></td><td>&nbsp;</td><td align=right><font size=-2>"
-         << _("IMO") << "</font></td></tr>" << rowStartH << "<b>" << MMSIstr
-         << "</b></td><td>&nbsp;</td><td><b>" << ClassStr
-         << "</b></td><td>&nbsp;</td><td align=right><b>" << IMOstr << rowEnd
-         << "</table></td></tr>";
+  if (IMOstr.length())
+    html += "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
+            "cellspacing=0>" +
+            rowStart + FromWx(_("MMSI")) +
+            "</font></td><td>&nbsp;</td><td><font size=-2>" +
+            FromWx(_("Class")) +
+            "</font></td><td>&nbsp;</td><td align=right><font size=-2>" +
+            FromWx(_("IMO")) + "</font></td></tr>" + rowStartH + "<b>" +
+            MMSIstr + "</b></td><td>&nbsp;</td><td><b>" + ClassStr +
+            "</b></td><td>&nbsp;</td><td align=right><b>" + IMOstr + rowEnd +
+            "</table></td></tr>";
 
   else if (Class == AIS_METEO) {
-    MMSIstr = wxString::Format("%09d", abs(met_data.original_mmsi));
-    html << "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
-            "cellspacing=0>"
-         << rowStart << _("MMSI")
-         << "</font></td><td>&nbsp;</td><td align=right><font size=-2>"
-         << _("Class") << "</font></td></tr>" << rowStartH << "<b>" << MMSIstr
-         << "</b></td><td>&nbsp;</td><td align=right><b>"
-         << "<font size=-1>" << ClassStr << rowEnd << rowStart
-         << "<b>ID: " << MMSI;
+    MMSIstr = QString::asprintf("%09d", abs(met_data.original_mmsi));
+    html += "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
+            "cellspacing=0>" +
+            rowStart + FromWx(_("MMSI")) +
+            "</font></td><td>&nbsp;</td><td align=right><font size=-2>" +
+            FromWx(_("Class")) + "</font></td></tr>" + rowStartH + "<b>" +
+            MMSIstr + "</b></td><td>&nbsp;</td><td align=right><b>" +
+            "<font size=-1>" + ClassStr + rowEnd + rowStart +
+            "<b>ID: " + QString::number(MMSI);
     if (met_data.stationID) {  // Facilitate to find a Meteo target on SignalK
-      wxString SK_ID = wxString::Format("%06d", (met_data.stationID - 1000000));
-      html << "<td>&nbsp;</td><td align=right>"
-           << "SK-ID: " << SK_ID;
+      QString SK_ID = QString::asprintf("%06d", (met_data.stationID - 1000000));
+      html += QString("<td>&nbsp;</td><td align=right>") + "SK-ID: " + SK_ID;
     }
-    html << rowEnd << "</b></table></td></tr>";
+    html += rowEnd + "</b></table></td></tr>";
   } else
-    html << "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
-            "cellspacing=0>"
-         << rowStart << _("MMSI")
-         << "</font></td><td>&nbsp;</td><td align=right><font size=-2>"
-         << _("Class") << "</font></td></tr>" << rowStartH << "<b>" << MMSIstr
-         << "</b></td><td>&nbsp;</td><td align=right><b>" << ClassStr << rowEnd
-         << "</table></td></tr>";
-  html << "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
-          "cellspacing=0>"
-       << rowStart;
+    html += "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
+            "cellspacing=0>" +
+            rowStart + FromWx(_("MMSI")) +
+            "</font></td><td>&nbsp;</td><td align=right><font size=-2>" +
+            FromWx(_("Class")) + "</font></td></tr>" + rowStartH + "<b>" +
+            MMSIstr + "</b></td><td>&nbsp;</td><td align=right><b>" + ClassStr +
+            rowEnd + "</table></td></tr>";
+  html += "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
+          "cellspacing=0>" +
+          rowStart;
   if ((Class != AIS_SART) && (Class != AIS_ARPA)) {
-    html << ((Class == AIS_BASE || Class == AIS_ATON || Class == AIS_METEO)
-                 ? _("Nation")
-                 : _("Flag"))
-         << rowEnd << "</font></td></tr>" << rowStartH << "<font size=-1><b>"
-         << GetCountryCode(true);
+    html += FromWx((Class == AIS_BASE || Class == AIS_ATON ||
+                    Class == AIS_METEO)
+                       ? _("Nation")
+                       : _("Flag")) +
+            rowEnd + "</font></td></tr>" + rowStartH + "<font size=-1><b>" +
+            GetCountryCode(true);
   }
-  if (Class == AIS_CLASS_B && MMSIstr.StartsWith("8")) {
-    html << "<td align=right>" << _("Handheld");
+  if (Class == AIS_CLASS_B && MMSIstr.startsWith("8")) {
+    html += QString("<td align=right>") + FromWx(_("Handheld"));
   }
-  html << rowEnd << "</font></table></td></tr>";
+  html += rowEnd + "</font></table></td></tr>";
 
-  wxString navStatStr;
+  QString navStatStr;
   if ((Class != AIS_BASE) && (Class != AIS_CLASS_B) && (Class != AIS_SART) &&
       (Class != AIS_METEO)) {
-    html << vertSpacer;
+    html += vertSpacer;
     if ((NavStatus <= 21) && (NavStatus >= 0))
-      navStatStr = wxGetTranslation(ais_get_status(NavStatus));
+      navStatStr = FromWx(
+          wxGetTranslation(wxString::FromUTF8(ais_get_status(NavStatus).toStdString())));
   } else if (Class == AIS_SART) {
     if (NavStatus == RESERVED_14)
-      navStatStr = _("Active");
+      navStatStr = FromWx(_("Active"));
     else if (NavStatus == UNDEFINED)
-      navStatStr = _("Testing");
+      navStatStr = FromWx(_("Testing"));
   }
 
-  wxString sart_sub_type;
+  QString sart_sub_type;
   if (Class == AIS_SART) {
     int mmsi_start = MMSI / 1000000;
     switch (mmsi_start) {
@@ -562,32 +573,33 @@ wxString AisTargetData::BuildQueryResult() {
         sart_sub_type = "EPIRB";
         break;
       default:
-        sart_sub_type = _("Unknown");
+        sart_sub_type = FromWx(_("Unknown"));
         break;
     }
   }
 
-  wxString AISTypeStr, UNTypeStr, sizeString;
+  QString AISTypeStr, UNTypeStr, sizeString;
   if ((Class != AIS_BASE) && (Class != AIS_SART) && (Class != AIS_DSC) &&
       (Class != AIS_METEO)) {
     //      Ship type
-    AISTypeStr = wxGetTranslation(Get_vessel_type_string());
+    AISTypeStr = FromWx(
+        wxGetTranslation(wxString::FromUTF8(Get_vessel_type_string().toStdString())));
 
     if (b_isEuroInland && UN_shiptype) {
       auto it = s_ERI_hash.find(UN_shiptype);
-      wxString type;
+      QString type;
       if (it == s_ERI_hash.end())
-        type = _("Undefined");
+        type = FromWx(_("Undefined"));
       else
         type = it->second;
 
-      UNTypeStr = wxGetTranslation(type);
+      UNTypeStr = FromWx(wxGetTranslation(wxString::FromUTF8(type.toStdString())));
     }
 
     if (b_SarAircraftPosnReport) {
-      AISTypeStr.Clear();
-      UNTypeStr.Clear();
-      navStatStr.Clear();
+      AISTypeStr.clear();
+      UNTypeStr.clear();
+      navStatStr.clear();
     }
 
     //  Dimensions
@@ -596,174 +608,166 @@ wxString AisTargetData::BuildQueryResult() {
         Class != AIS_BUOY) {
       if ((Class == AIS_CLASS_B) || (Class == AIS_ATON)) {
         sizeString =
-            wxString::Format("%dm x %dm", (DimA + DimB), (DimC + DimD));
+            QString::asprintf("%dm x %dm", (DimA + DimB), (DimC + DimD));
       } else if (!b_SarAircraftPosnReport) {
         if ((DimA + DimB + DimC + DimD) == 0) {
           if (b_isEuroInland) {
             if (Euro_Length == 0.0) {
               if (Euro_Draft > 0.01) {
-                sizeString << wxString::Format("---m x ---m x %4.1fm",
-                                               Euro_Draft);
+                sizeString += QString::asprintf("---m x ---m x %4.1fm",
+                                                Euro_Draft);
               } else {
-                sizeString << "---m x ---m x ---m";
+                sizeString += "---m x ---m x ---m";
               }
             } else {
               if (Euro_Draft > 0.01) {
-                sizeString << wxString::Format("%5.1fm x %4.1fm x %4.1fm",
-                                               Euro_Length, Euro_Beam,
-                                               Euro_Draft);
+                sizeString += QString::asprintf("%5.1fm x %4.1fm x %4.1fm",
+                                                Euro_Length, Euro_Beam,
+                                                Euro_Draft);
               } else {
-                sizeString << wxString::Format("%5.1fm x %4.1fm x ---m\n\n",
-                                               Euro_Length, Euro_Beam);
+                sizeString += QString::asprintf("%5.1fm x %4.1fm x ---m\n\n",
+                                                Euro_Length, Euro_Beam);
               }
             }
           } else {
             if (Draft > 0.01) {
-              sizeString << wxString::Format("---m x ---m x %4.1fm", Draft);
+              sizeString += QString::asprintf("---m x ---m x %4.1fm", Draft);
             } else {
-              sizeString << "---m x ---m x ---m";
+              sizeString += "---m x ---m x ---m";
             }
           }
         } else if (Draft < 0.01) {
-          sizeString << wxString::Format("%dm x %dm x ---m", (DimA + DimB),
-                                         (DimC + DimD));
+          sizeString += QString::asprintf("%dm x %dm x ---m", (DimA + DimB),
+                                          (DimC + DimD));
         } else {
-          sizeString << wxString::Format("%dm x %dm x %4.1fm", (DimA + DimB),
-                                         (DimC + DimD), Draft);
+          sizeString += QString::asprintf("%dm x %dm x %4.1fm", (DimA + DimB),
+                                          (DimC + DimD), Draft);
         }
       }
     }
   }
 
   if (Class == AIS_SART) {
-    html << "<tr><td colspan=2>"
-         << "<b>" << AISTypeStr;
-    if (sart_sub_type.Length()) html << " (" << sart_sub_type << "), ";
-    html << navStatStr;
-    html << rowEnd << "<tr><td colspan=2>"
-         << "<b>" << sizeString << rowEnd;
+    html += QString("<tr><td colspan=2>") + "<b>" + AISTypeStr;
+    if (sart_sub_type.length())
+      html += QString(" (") + sart_sub_type + "), ";
+    html += navStatStr;
+    html += rowEnd + "<tr><td colspan=2>" + "<b>" + sizeString + rowEnd;
   }
 
   else if (Class == AIS_ATON) {
-    html << "<tr><td colspan=2>"
-         << "<b>" << navStatStr;
-    html << rowEnd << "<tr><td colspan=2>"
-         << "<b>" << sizeString << rowEnd;
+    html += QString("<tr><td colspan=2>") + "<b>" + navStatStr;
+    html += rowEnd + "<tr><td colspan=2>" + "<b>" + sizeString + rowEnd;
   } else if (Class == AIS_DSC && (ShipType == 12 || ShipType == 16)) {
     if (ShipType == 16) {  // Distress relay
-      html << "<tr><td colspan=2>"
-           << "<b>" << _("Distress relay");
+      html += QString("<tr><td colspan=2>") + "<b>" + FromWx(_("Distress relay"));
       if (m_dscTXmmsi > 2000000) {
-        wxString mmsirelay = wxString::Format(" %09d", abs(m_dscTXmmsi));
-        html << " " << _("by:") << mmsirelay;
+        QString mmsirelay = QString::asprintf(" %09d", abs(m_dscTXmmsi));
+        html += QString(" ") + FromWx(_("by:")) + mmsirelay;
       }
-      html << "<b>" << sizeString << rowEnd;
+      html += QString("<b>") + sizeString + rowEnd;
     }
-    html << "<tr><td colspan=2>" << _("Nature of distress: ") << rowEnd
-         << "<tr><td colspan=2>";
+    html += QString("<tr><td colspan=2>") + FromWx(_("Nature of distress: ")) +
+            rowEnd + "<tr><td colspan=2>";
     if (m_dscNature < 13) {
-      html << "<tr><td colspan=2>"
-           << "<b>" << GetNatureofDistress(m_dscNature) << "<b>" << sizeString
-           << rowEnd << "<tr><td colspan=2>";
+      html += QString("<tr><td colspan=2>") + "<b>" +
+              GetNatureofDistress(m_dscNature) + "<b>" + sizeString + rowEnd +
+              "<tr><td colspan=2>";
     }
   } else if ((Class != AIS_BASE) && (Class != AIS_DSC)) {
-    html << "<tr><td colspan=2>"
-         << "<b>" << AISTypeStr;
-    if (navStatStr.Length()) html << ", " << navStatStr;
-    if (UNTypeStr.Length()) html << " (UN Type " << UNTypeStr << ")";
-    html << rowEnd << "<tr><td colspan=2>"
-         << "<b>" << sizeString << rowEnd;
+    html += QString("<tr><td colspan=2>") + "<b>" + AISTypeStr;
+    if (navStatStr.length()) html += QString(", ") + navStatStr;
+    if (UNTypeStr.length()) html += QString(" (UN Type ") + UNTypeStr + ")";
+    html += rowEnd + "<tr><td colspan=2>" + "<b>" + sizeString + rowEnd;
   }
 
-  if (MSG_14_text.Len()) {
+  if (MSG_14_text.length()) {
     // The safety message is displayed for all target's AIS Query
     // For an Active SART a Target Alert is also created.
-    html << rowStart << "<tr><td colspan=1>" << _("Safety Broadcast Message")
-         << rowEnd << rowStartH << "<b>" << MSG_14_text << "</b>" << rowEnd;
+    html += rowStart + "<tr><td colspan=1>" +
+            FromWx(_("Safety Broadcast Message")) + rowEnd + rowStartH + "<b>" +
+            MSG_14_text + "</b>" + rowEnd;
   }
 
   if (b_positionOnceValid) {
-    wxString posTypeStr;
-    if (b_positionDoubtful) posTypeStr << _(" (Last Known)");
+    QString posTypeStr;
+    if (b_positionDoubtful) posTypeStr += FromWx(_(" (Last Known)"));
 
     now.MakeGMT();
     int target_age = now.GetTicks() - PositionReportTicks;
-    //   wxLogMessage(wxString::Format("** PositionReportTicks %ld %ld %d",
-    //                                 now.GetTicks(), PositionReportTicks,
-    //                                 target_age));
 
-    html << vertSpacer << rowStart << _("Position") << posTypeStr
-         << "</font></td><td align=right><font size=-2>" << _("Report Age")
-         << "</font></td></tr>"
+    html += vertSpacer + rowStart + FromWx(_("Position")) + posTypeStr +
+            "</font></td><td align=right><font size=-2>" +
+            FromWx(_("Report Age")) + "</font></td></tr>"
 
-         << rowStartH << "<b>" << toSDMM(1, Lat)
-         << "</b></td><td align=right><b>" << FormatTimeAdaptive(target_age)
-         << rowEnd << rowStartH << "<b>" << toSDMM(2, Lon);
+            + rowStartH + "<b>" + FromWx(toSDMM(1, Lat)) +
+            "</b></td><td align=right><b>" + FormatTimeAdaptive(target_age) +
+            rowEnd + rowStartH + "<b>" + FromWx(toSDMM(2, Lon));
     if (Class != AIS_METEO)
-      html << rowEnd;
+      html += rowEnd;
     else {
-      wxString meteoTime =
-          wxString::Format(" %02d:%02d", met_data.hour, met_data.minute);
-      html << " </td><td align=right></b></font><font size=-3>"
-           << _("Issued (UTC)") << "</font><font size=-1><b>" << meteoTime
-           << "</font>" << rowEnd;
+      QString meteoTime =
+          QString::asprintf(" %02d:%02d", met_data.hour, met_data.minute);
+      html += QString(" </td><td align=right></b></font><font size=-3>") +
+              FromWx(_("Issued (UTC)")) + "</font><font size=-1><b>" +
+              meteoTime + "</font>" + rowEnd;
     }
   }
 
-  wxString courseStr, sogStr, hdgStr, rotStr, rngStr, brgStr, destStr, etaStr;
+  QString courseStr, sogStr, hdgStr, rotStr, rngStr, brgStr, destStr, etaStr;
 
   if (Class == AIS_GPSG_BUDDY) {
     long month, year, day;
-    m_date_string.Mid(0, 2).ToLong(&day);
-    m_date_string.Mid(2, 2).ToLong(&month);
-    m_date_string.Mid(4, 2).ToLong(&year);
+    day = m_date_string.mid(0, 2).toLong();
+    month = m_date_string.mid(2, 2).toLong();
+    year = m_date_string.mid(4, 2).toLong();
     wxDateTime date;
     date.SetDay(day);
     date.SetMonth((wxDateTime::Month)(month - 1));
     date.SetYear(year + 2000);
 
-    wxString f_date = date.FormatISODate();
+    QString f_date = FromWx(date.FormatISODate());
 
-    html << vertSpacer << rowStart << _("Report as of") << rowEnd << rowStartH
-         << "<b>" << f_date + "</b> at <b>"
-         << wxString::Format("%d:%d UTC ", m_utc_hour, m_utc_min) << rowEnd;
+    html += vertSpacer + rowStart + FromWx(_("Report as of")) + rowEnd +
+            rowStartH + "<b>" + f_date + "</b> at <b>" +
+            QString::asprintf("%d:%d UTC ", m_utc_hour, m_utc_min) + rowEnd;
   } else {
     if (Class == AIS_CLASS_A && !b_SarAircraftPosnReport) {
-      html << vertSpacer << rowStart << _("Destination")
-           << "</font></td><td align=right><font size=-2>" << _("ETA (UTC)")
-           << "</font></td></tr>\n"
-           << rowStartH << "<b>";
-      wxString dest = trimAISField(Destination);
-      if (dest.Length())
-        html << html_escape(dest);
+      html += vertSpacer + rowStart + FromWx(_("Destination")) +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("ETA (UTC)")) + "</font></td></tr>\n" + rowStartH +
+              "<b>";
+      QString dest = trimAISField(Destination);
+      if (dest.length())
+        html += html_escape(dest);
       else
-        html << "---";
-      html << "</b></td><td nowrap align=right><b>";
+        html += "---";
+      html += "</b></td><td nowrap align=right><b>";
 
       if ((ETA_Mo) && (ETA_Hr < 24)) {
         int yearOffset = 0;
         if (now.GetMonth() > (ETA_Mo - 1)) yearOffset = 1;
         wxDateTime eta(ETA_Day, wxDateTime::Month(ETA_Mo - 1),
                        now.GetYear() + yearOffset, ETA_Hr, ETA_Min);
-        html << eta.Format("%b %d %H:%M");
+        html += FromWx(eta.Format("%b %d %H:%M"));
       } else
-        html << "---";
-      html << rowEnd;
+        html += "---";
+      html += rowEnd;
     }
 
     if (Class == AIS_CLASS_A || Class == AIS_CLASS_B || Class == AIS_ARPA ||
         Class == AIS_APRS || Class == AIS_SART || Class == AIS_BUOY) {
-      int crs = wxRound(COG);
+      int crs = qRound(COG);
       if (crs < 360) {
-        wxString magString, trueString;
+        QString magString, trueString;
         if (g_bShowMag)
-          magString << wxString::Format(
-              wxString("%03d%c(M)"), static_cast<int>(m_callbacks.get_mag(COG)),
+          magString += QString::asprintf(
+              "%03d%c(M)", static_cast<int>(m_callbacks.get_mag(COG)),
               0x00B0);
         if (g_bShowTrue)
-          trueString << wxString::Format(wxString("%03d%c "), (int)crs, 0x00B0);
+          trueString += QString::asprintf("%03d%c ", (int)crs, 0x00B0);
 
-        courseStr << trueString << magString;
+        courseStr += trueString + magString;
       } else if (COG == 360.0)
         courseStr = "---";
       else if (crs == 360)
@@ -773,32 +777,34 @@ wxString AisTargetData::BuildQueryResult() {
 
       if ((SOG <= 102.2) || b_SarAircraftPosnReport) {
         if (speed_show < 10.0)
-          sogStr = wxString::Format("%.2f ", speed_show) + getUsrSpeedUnit();
+          sogStr =
+              QString::asprintf("%.2f ", speed_show) + FromWx(getUsrSpeedUnit());
         else if (speed_show < 100.0)
-          sogStr = wxString::Format("%.1f ", speed_show) + getUsrSpeedUnit();
+          sogStr =
+              QString::asprintf("%.1f ", speed_show) + FromWx(getUsrSpeedUnit());
         else
-          sogStr = wxString::Format("%.0f ", speed_show) + getUsrSpeedUnit();
-      }
-      //                sogStr = wxString::Format( "%5.2f " +
-      //                getUsrSpeedUnit(), toUsrSpeed( SOG ) );
-      else
+          sogStr =
+              QString::asprintf("%.0f ", speed_show) + FromWx(getUsrSpeedUnit());
+      } else
         sogStr = "---";
 
       if ((int)HDG != 511)
-        hdgStr = wxString::Format("%03d&deg;", (int)HDG);
+        hdgStr = QString::asprintf("%03d&deg;", (int)HDG);
       else
         hdgStr = "---";
 
       if (ROTAIS != -128) {
         if (ROTAIS == 127)
-          rotStr << "> 5&deg;/30s " << _("Right");
+          rotStr += QString("> 5&deg;/30s ") + FromWx(_("Right"));
         else if (ROTAIS == -127)
-          rotStr << "> 5&deg;/30s " << _("Left");
+          rotStr += QString("> 5&deg;/30s ") + FromWx(_("Left"));
         else {
           if (ROTIND > 0)
-            rotStr << wxString::Format("%3d&deg;/Min ", ROTIND) << _("Right");
+            rotStr += QString::asprintf("%3d&deg;/Min ", ROTIND) +
+                      FromWx(_("Right"));
           else if (ROTIND < 0)
-            rotStr << wxString::Format("%3d&deg;/Min ", -ROTIND) << _("Left");
+            rotStr += QString::asprintf("%3d&deg;/Min ", -ROTIND) +
+                      FromWx(_("Left"));
           else
             rotStr = "0";
         }
@@ -808,282 +814,293 @@ wxString AisTargetData::BuildQueryResult() {
   }
 
   if (b_positionOnceValid && bGPSValid && (Range_NM >= 0.))
-    rngStr = FormatDistanceAdaptive(Range_NM);
+    rngStr = FromWx(FormatDistanceAdaptive(Range_NM));
   else
     rngStr = "---";
 
-  int brg = (int)wxRound(Brg);
+  int brg = (int)qRound(Brg);
   if (Brg > 359.5) brg = 0;
   if (b_positionOnceValid && bGPSValid && (Brg >= 0.) && (Range_NM > 0.) &&
       (fabs(Lat) < 85.)) {
-    wxString magString, trueString;
+    QString magString, trueString;
     if (g_bShowMag)
-      magString << wxString::Format(wxString("%03d%c(M)"),
-                                    static_cast<int>(m_callbacks.get_mag(Brg)),
-                                    0x00B0);
+      magString += QString::asprintf(
+          "%03d%c(M)", static_cast<int>(m_callbacks.get_mag(Brg)), 0x00B0);
     if (g_bShowTrue)
-      trueString << wxString::Format(wxString("%03d%c "), (int)Brg, 0x00B0);
+      trueString += QString::asprintf("%03d%c ", (int)Brg, 0x00B0);
 
-    brgStr << trueString << magString;
+    brgStr += trueString + magString;
   } else
     brgStr = "---";
 
-  wxString turnRateHdr;  // Blank if ATON or BASE or Special Position Report (9)
+  QString turnRateHdr;  // Blank if ATON or BASE or Special Position Report (9)
   if ((Class != AIS_ATON) && (Class != AIS_BASE) && (Class != AIS_DSC) &&
       (Class != AIS_METEO)) {
-    html << vertSpacer
-         << "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
-            "cellspacing=0>"
-         << rowStart << _("Speed")
-         << "</font></td><td>&nbsp;</td><td><font size=-2>" << _("Course")
-         << "</font></td><td>&nbsp;</td><td align=right><font size=-2>";
-    if (!b_SarAircraftPosnReport) html << _("Heading");
+    html += vertSpacer +
+            "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
+            "cellspacing=0>" +
+            rowStart + FromWx(_("Speed")) +
+            "</font></td><td>&nbsp;</td><td><font size=-2>" +
+            FromWx(_("Course")) +
+            "</font></td><td>&nbsp;</td><td align=right><font size=-2>";
+    if (!b_SarAircraftPosnReport) html += FromWx(_("Heading"));
 
-    html << "</font></td></tr>" << rowStartH << "<b>" << sogStr
-         << "</b></td><td>&nbsp;</td><td><b>" << courseStr
-         << "</b></td><td>&nbsp;</td><td align=right><b>";
-    if (!b_SarAircraftPosnReport) html << hdgStr;
-    html << rowEnd << "</table></td></tr>" << vertSpacer;
+    html += QString("</font></td></tr>") + rowStartH + "<b>" + sogStr +
+            "</b></td><td>&nbsp;</td><td><b>" + courseStr +
+            "</b></td><td>&nbsp;</td><td align=right><b>";
+    if (!b_SarAircraftPosnReport) html += hdgStr;
+    html += rowEnd + "</table></td></tr>" + vertSpacer;
 
-    if (!b_SarAircraftPosnReport) turnRateHdr = _("Turn Rate");
+    if (!b_SarAircraftPosnReport) turnRateHdr = FromWx(_("Turn Rate"));
   }
   if (Class != AIS_METEO) {
-    html << "<tr><td colspan=2><table width=100% border=0 cellpadding=0 "
-            "cellspacing=0>"
-         << rowStart << _("Range")
-         << "</font></td><td>&nbsp;</td><td><font size=-2>" << _("Bearing")
-         << "</font></td><td>&nbsp;</td><td align=right><font size=-2>"
-         << turnRateHdr << "</font></td></tr>" << rowStartH << "<b>" << rngStr
-         << "</b></td><td>&nbsp;</td><td><b>" << brgStr
-         << "</b></td><td>&nbsp;</td><td align=right><b>";
-    if (!b_SarAircraftPosnReport) html << rotStr;
-    html << rowEnd << "</table></td></tr>" << vertSpacer;
+    html += QString("<tr><td colspan=2><table width=100% border=0 "
+                    "cellpadding=0 cellspacing=0>") +
+            rowStart + FromWx(_("Range")) +
+            "</font></td><td>&nbsp;</td><td><font size=-2>" +
+            FromWx(_("Bearing")) +
+            "</font></td><td>&nbsp;</td><td align=right><font size=-2>" +
+            turnRateHdr + "</font></td></tr>" + rowStartH + "<b>" + rngStr +
+            "</b></td><td>&nbsp;</td><td><b>" + brgStr +
+            "</b></td><td>&nbsp;</td><td align=right><b>";
+    if (!b_SarAircraftPosnReport) html += rotStr;
+    html += rowEnd + "</table></td></tr>" + vertSpacer;
   }
 
   if (bCPA_Valid && Class != AIS_METEO) {
-    wxString tcpaStr;
-    tcpaStr << "</b> " << _("in ") << "</td><td align=right><b>"
-            << FormatTimeAdaptive((int)(TCPA * 60.));
+    QString tcpaStr;
+    tcpaStr += QString("</b> ") + FromWx(_("in ")) +
+               "</td><td align=right><b>" +
+               FormatTimeAdaptive((int)(TCPA * 60.));
 
-    html << /*vertSpacer << */ rowStart << "<font size=-2>" << _("CPA")
-         << "</font>" << rowEnd << rowStartH << "<b>"
-         << FormatDistanceAdaptive(CPA) << tcpaStr << rowEnd;
+    html += /*vertSpacer + */ rowStart + "<font size=-2>" + FromWx(_("CPA")) +
+            "</font>" + rowEnd + rowStartH + "<b>" +
+            FromWx(FormatDistanceAdaptive(CPA)) + tcpaStr + rowEnd;
   }
 
   if (Class != AIS_BASE && Class != AIS_METEO) {
     if (blue_paddle == 1) {
-      html << rowStart << _("Inland Blue Flag") << rowEnd << rowStartH << "<b>"
-           << _("Clear") << rowEnd;
+      html += rowStart + FromWx(_("Inland Blue Flag")) + rowEnd + rowStartH +
+              "<b>" + FromWx(_("Clear")) + rowEnd;
     } else if (blue_paddle == 2) {
-      html << rowStart << _("Inland Blue Flag") << rowEnd << rowStartH << "<b>"
-           << _("Set") << rowEnd;
+      html += rowStart + FromWx(_("Inland Blue Flag")) + rowEnd + rowStartH +
+              "<b>" + FromWx(_("Set")) + rowEnd;
     }
   }
 
   if (b_SarAircraftPosnReport) {
-    wxString altStr;
+    QString altStr;
     if (altitude != 4095)
-      altStr.Printf("%4d m", altitude);
+      altStr = QString::asprintf("%4d m", altitude);
     else
-      altStr = _("Unknown");
+      altStr = FromWx(_("Unknown"));
 
-    html << rowStart << _("Altitude")
-         << "</font></td><td>&nbsp;</td><td><font size=-0>" << rowStartH
-         << "<b>" << altStr << "</b></td><td>&nbsp;</td><td><b>" << rowEnd
-         << "</table></td></tr>" << vertSpacer;
+    html += rowStart + FromWx(_("Altitude")) +
+            "</font></td><td>&nbsp;</td><td><font size=-0>" + rowStartH +
+            "<b>" + altStr + "</b></td><td>&nbsp;</td><td><b>" + rowEnd +
+            "</table></td></tr>" + vertSpacer;
   }
 
   if (Class == AIS_METEO) {
     if (met_data.wind_kn < 122) {
       double userwindspeed = toUsrWindSpeed(met_data.wind_kn);
-      wxString wspeed =
-          wxString::Format("%0.1f %s %d%c", userwindspeed,
-                           getUsrWindSpeedUnit(), met_data.wind_dir, 0x00B0);
+      QString wspeed = FromWx(wxString::Format(
+          "%0.1f %s %d%c", userwindspeed, getUsrWindSpeedUnit(),
+          met_data.wind_dir, 0x00B0));
 
       double userwindgustspeed = toUsrWindSpeed(met_data.wind_gust_kn);
-      wxString wspeedGust = wxString::Format("%.0f %s %d%c", userwindgustspeed,
-                                             getUsrWindSpeedUnit(),
-                                             met_data.wind_gust_dir, 0x00B0);
+      QString wspeedGust = FromWx(wxString::Format(
+          "%.0f %s %d%c", userwindgustspeed, getUsrWindSpeedUnit(),
+          met_data.wind_gust_dir, 0x00B0));
       if (met_data.wind_gust_kn >= 126) wspeedGust = "";
 
-      html << vertSpacer << rowStart << _("Wind speed")
-           << "</font></td><td align=right><font size=-2>" << _("Wind gust")
-           << "</font></td></tr>" << rowStartH << "<b>" << wspeed
-           << "</b></td><td align=right><b>" << wspeedGust << rowEnd;
+      html += vertSpacer + rowStart + FromWx(_("Wind speed")) +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("Wind gust")) + "</font></td></tr>" + rowStartH + "<b>" +
+              wspeed + "</b></td><td align=right><b>" + wspeedGust + rowEnd;
     }
 
     if (met_data.water_lev_dev < 30. || met_data.water_level > -32. ||
         met_data.current < 25.5) {
-      wxString wlevel_txt = _("Water level deviation");
-      wxString wlevel;
+      QString wlevel_txt = FromWx(_("Water level deviation"));
+      QString wlevel;
       if (met_data.water_lev_dev < 30.) {
         double userlevel = toUsrDepth(met_data.water_lev_dev);
-        wlevel =
-            wxString::Format("%.1f %s %s", userlevel, getUsrDepthUnit(),
-                             ais_meteo_get_trend(met_data.water_lev_trend));
+        wlevel = FromWx(wxString::Format(
+            "%.1f %s %s", userlevel, getUsrDepthUnit(),
+            wxString::FromUTF8(ais_meteo_get_trend(met_data.water_lev_trend)
+                         .toStdString())));
         if (met_data.vertical_ref < 14) {
-          wlevel_txt = _("Water level dev. Ref: ");
-          wlevel_txt << aisMeteoWaterLevelRef(met_data.vertical_ref);
+          wlevel_txt = FromWx(_("Water level dev. Ref: "));
+          wlevel_txt += aisMeteoWaterLevelRef(met_data.vertical_ref);
         }
 
         if (met_data.water_lev_dev >= 30.) wlevel = "";
 
       } else if (met_data.water_level > -32.) {
         double userlevel = toUsrDepth(met_data.water_level);
-        wlevel =
-            wxString::Format("%.1f %s %s", userlevel, getUsrDepthUnit(),
-                             ais_meteo_get_trend(met_data.water_lev_trend));
-        wlevel_txt = _("Water level");
+        wlevel = FromWx(wxString::Format(
+            "%.1f %s %s", userlevel, getUsrDepthUnit(),
+            wxString::FromUTF8(ais_meteo_get_trend(met_data.water_lev_trend)
+                         .toStdString())));
+        wlevel_txt = FromWx(_("Water level"));
         if (met_data.water_level <= -32.) wlevel = "";
       }
 
-      wxString current = wxString::Format("%.1f kts %d%c", met_data.current,
-                                          met_data.curr_dir, 0x00B0);
+      QString current = QString::asprintf(
+          "%.1f kts %d%c", met_data.current, met_data.curr_dir, 0x00B0);
       if (met_data.current >= 25.5) current = "";
 
-      html << vertSpacer << rowStart << wlevel_txt
-           << "</font></td><td align=right><font size=-2>"
-           << _("Surface current ") << "</font></td></tr>" << rowStartH << "<b>"
-           << wlevel << "</b></td><td align=right><b>" << current << rowEnd;
+      html += vertSpacer + rowStart + wlevel_txt +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("Surface current ")) + "</font></td></tr>" + rowStartH +
+              "<b>" + wlevel + "</b></td><td align=right><b>" + current +
+              rowEnd;
     }
 
     if (met_data.wave_height < 24.6 || met_data.swell_height < 24.6) {
       double userwave = toUsrDepth(met_data.wave_height);
-      wxString wave = wxString::Format("%.1f %s %d%c %d %s ", userwave,
-                                       getUsrDepthUnit(), met_data.wave_dir,
-                                       0x00B0, met_data.wave_period, _("s"));
+      QString wave = FromWx(wxString::Format(
+          "%.1f %s %d%c %d %s ", userwave, getUsrDepthUnit(), met_data.wave_dir,
+          0x00B0, met_data.wave_period, _("s")));
       if (met_data.wave_height >= 24.6) wave = "";
 
       double userswell = toUsrDepth(met_data.swell_height);
-      wxString swell = wxString::Format("%.1f %s %d%c %d %s", userswell,
-                                        getUsrDepthUnit(), met_data.swell_dir,
-                                        0x00B0, met_data.swell_per, _("s"));
+      QString swell = FromWx(wxString::Format(
+          "%.1f %s %d%c %d %s", userswell, getUsrDepthUnit(),
+          met_data.swell_dir, 0x00B0, met_data.swell_per, _("s")));
       if (met_data.swell_height >= 25.) swell = "";
 
-      html << vertSpacer << rowStart << _("Waves height & period")
-           << "</font></td><td align=right><font size=-2>"
-           << _("Swell height & period ") << "</font></td></tr>" << rowStartH
-           << "<b>" << wave << "</b></td><td align=right><b>" << swell
-           << rowEnd;
+      html += vertSpacer + rowStart + FromWx(_("Waves height & period")) +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("Swell height & period ")) + "</font></td></tr>" +
+              rowStartH + "<b>" + wave + "</b></td><td align=right><b>" +
+              swell + rowEnd;
     }
 
     if (met_data.air_temp != -102.4 || met_data.airpress < 1310) {
       double usertemp = toUsrTemp(met_data.air_temp);
-      wxString airtemp =
-          wxString::Format("%.1f%c%s", usertemp, 0x00B0, getUsrTempUnit());
+      QString airtemp = FromWx(
+          wxString::Format("%.1f%c%s", usertemp, 0x00B0, getUsrTempUnit()));
       if (met_data.air_temp == -102.4) airtemp = "";
 
-      wxString airpress =
-          wxString::Format("%d hPa %s", met_data.airpress,
-                           ais_meteo_get_trend(met_data.airpress_tend));
+      QString airpress = FromWx(wxString::Format(
+          "%d hPa %s", met_data.airpress,
+          wxString::FromUTF8(ais_meteo_get_trend(met_data.airpress_tend).toStdString())));
       const int ap = met_data.airpress;
       if (ap < 800 || ap >= 1310) airpress = "";
 
-      html << vertSpacer << rowStart << _("Air Temperatur")
-           << "</font></td><td align=right><font size=-2>" << _("Air pressure")
-           << "</font></td></tr>" << rowStartH << "<b>" << airtemp
-           << "</b></td><td align=right><b>" << airpress << rowEnd;
+      html += vertSpacer + rowStart + FromWx(_("Air Temperatur")) +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("Air pressure")) + "</font></td></tr>" + rowStartH +
+              "<b>" + airtemp + "</b></td><td align=right><b>" + airpress +
+              rowEnd;
     }
 
     if (met_data.rel_humid < 101 || met_data.dew_point < 50.) {
-      wxString humid = wxString::Format("%d%c", met_data.rel_humid, '%');
+      QString humid = QString::asprintf("%d%c", met_data.rel_humid, '%');
       if (met_data.rel_humid >= 101) humid = "";
 
       double usertempDew = toUsrTemp(met_data.dew_point);
-      wxString dewpoint =
-          wxString::Format("%.1f%c%s", usertempDew, 0x00B0, getUsrTempUnit());
+      QString dewpoint = FromWx(
+          wxString::Format("%.1f%c%s", usertempDew, 0x00B0, getUsrTempUnit()));
       if (met_data.dew_point >= 50.) dewpoint = "";
 
-      html << vertSpacer << rowStart << _("Relative Humidity")
-           << "</font></td><td align=right><font size=-2>" << _("Dew Point ")
-           << "</font></td></tr>" << rowStartH << "<b>" << humid
-           << "</b></td><td align=right><b>" << dewpoint << rowEnd;
+      html += vertSpacer + rowStart + FromWx(_("Relative Humidity")) +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("Dew Point ")) + "</font></td></tr>" + rowStartH +
+              "<b>" + humid + "</b></td><td align=right><b>" + dewpoint +
+              rowEnd;
     }
 
     if (met_data.water_temp < 50.1 || met_data.seastate < 13) {
       double usertemp = toUsrTemp(met_data.water_temp);
-      wxString watertemp =
-          wxString::Format("%.1f%c%s", usertemp, 0x00B0, getUsrTempUnit());
+      QString watertemp = FromWx(
+          wxString::Format("%.1f%c%s", usertemp, 0x00B0, getUsrTempUnit()));
       if (met_data.water_temp >= 50.1) watertemp = "";
 
-      wxString seastate = wxString::Format("%d Bf ", met_data.seastate);
+      QString seastate = QString::asprintf("%d Bf ", met_data.seastate);
       if (met_data.seastate == 13) seastate = "";
 
-      html << vertSpacer << rowStart << _("Water Temperatur")
-           << "</font></td><td align=right><font size=-2>" << _("Sea state")
-           << "</font></td></tr>" << rowStartH << "<b>" << watertemp
-           << "</b></td><td align=right><b>" << seastate << rowEnd;
+      html += vertSpacer + rowStart + FromWx(_("Water Temperatur")) +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("Sea state")) + "</font></td></tr>" + rowStartH + "<b>" +
+              watertemp + "</b></td><td align=right><b>" + seastate + rowEnd;
     }
 
     if (met_data.precipitation < 7 || met_data.hor_vis < 12.7) {
-      wxString precip =
-          wxString::Format("%s", aisMeteoPrecipType(met_data.precipitation));
+      QString precip = aisMeteoPrecipType(met_data.precipitation);
       if (met_data.precipitation >= 6) precip = "";
 
       double userVisDist = toUsrDistance(met_data.hor_vis);
-      wxString horVis =
-          wxString::Format("%s%.1f %s", (met_data.hor_vis_GT ? ">" : ""),
-                           userVisDist, getUsrDistanceUnit());
+      QString horVis = FromWx(wxString::Format(
+          "%s%.1f %s", (met_data.hor_vis_GT ? ">" : ""), userVisDist,
+          getUsrDistanceUnit()));
       if (met_data.hor_vis >= 12.7) horVis = "";
-      html << vertSpacer << rowStart << _("Precipitation")
-           << "</font></td><td align=right><font size=-2>"
-           << _("Horizontal Visibility") << "</font></td></tr>" << rowStartH
-           << "<b>" << precip << "</b></td><td align=right><b>" << horVis
-           << rowEnd;
+      html += vertSpacer + rowStart + FromWx(_("Precipitation")) +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("Horizontal Visibility")) + "</font></td></tr>" +
+              rowStartH + "<b>" + precip + "</b></td><td align=right><b>" +
+              horVis + rowEnd;
     }
 
     if (met_data.salinity < 50. || met_data.ice < 2) {
-      wxString sal = wxString::Format("%.1f%c", met_data.salinity, 0x2030);
+      QString sal = QString::asprintf("%.1f%c", met_data.salinity, 0x2030);
       if (met_data.salinity >= 50.) sal = "";
 
-      wxString icestatus = _("No");
-      if (met_data.ice == 1) icestatus = _("Yes");
+      QString icestatus = FromWx(_("No"));
+      if (met_data.ice == 1) icestatus = FromWx(_("Yes"));
       if (met_data.ice >= 2) icestatus = "";
 
-      html << vertSpacer << rowStart << _("Sea salinity")
-           << "</font></td><td align=right><font size=-2>" << _("Ice status")
-           << "</font></td></tr>" << rowStartH << "<b>" << sal
-           << "</b></td><td align=right><b>" << icestatus << rowEnd;
+      html += vertSpacer + rowStart + FromWx(_("Sea salinity")) +
+              "</font></td><td align=right><font size=-2>" +
+              FromWx(_("Ice status")) + "</font></td></tr>" + rowStartH +
+              "<b>" + sal + "</b></td><td align=right><b>" + icestatus +
+              rowEnd;
     }
   }
-  html << "</table>";
+  html += "</table>";
   return html;
 }
 
-wxString AisTargetData::GetRolloverString() {
-  wxString result;
-  wxString t;
+QString AisTargetData::GetRolloverString() {
+  QString result;
+  QString t;
   if (b_nameValid) {
-    result.Append("\"");
-    result.Append(GetFullName());
-    result.Append("\" ");
+    result.append("\"");
+    result.append(GetFullName());
+    result.append("\" ");
   }
   if (Class != AIS_GPSG_BUDDY) {
-    t.Printf("%09d", abs(MMSI));
-    result.Append(t);
-    result.Append(" ");
-    result.Append(GetCountryCode(false));
+    t = QString::asprintf("%09d", abs(MMSI));
+    result.append(t);
+    result.append(" ");
+    result.append(GetCountryCode(false));
   }
   t = trimAISField(CallSign);
-  if (t.Len()) {
-    result.Append(" (");
-    result.Append(t);
-    result.Append(")");
+  if (t.length()) {
+    result.append(" (");
+    result.append(t);
+    result.append(")");
   }
   if (g_bAISRolloverShowClass || (Class == AIS_SART)) {
-    if (result.Len()) result.Append("\n");
-    result.Append("[");
+    if (result.length()) result.append("\n");
+    result.append("[");
     if (Class == AIS_ATON) {
-      result.Append(wxGetTranslation(Get_class_string(true)));
-      result.Append(": ");
-      result.Append(wxGetTranslation(Get_vessel_type_string(false)));
+      result.append(FromWx(
+          wxGetTranslation(wxString::FromUTF8(Get_class_string(true).toStdString()))));
+      result.append(": ");
+      result.append(FromWx(wxGetTranslation(
+          wxString::FromUTF8(Get_vessel_type_string(false).toStdString()))));
     } else if (b_SarAircraftPosnReport) {
       int airtype = (MMSI % 1000) / 100;
-      result.Append(airtype == 5 ? _("SAR Helicopter") : _("SAR Aircraft"));
+      result.append(
+          FromWx(airtype == 5 ? _("SAR Helicopter") : _("SAR Aircraft")));
     } else
-      result.Append(wxGetTranslation(Get_class_string(false)));
+      result.append(FromWx(
+          wxGetTranslation(wxString::FromUTF8(Get_class_string(false).toStdString()))));
 
-    result.Append("] ");
+    result.append("] ");
     if ((Class != AIS_ATON) && (Class != AIS_BASE)) {
       if (Class == AIS_SART) {
         int mmsi_start = MMSI / 1000000;
@@ -1097,155 +1114,163 @@ wxString AisTargetData::GetRolloverString() {
             result += "EPIRB";
             break;
           default:
-            result += _("Unknown");
+            result += FromWx(_("Unknown"));
             break;
         }
       }
 
       if (Class != AIS_SART && Class != AIS_METEO) {
         if (!b_SarAircraftPosnReport)
-          result.Append(wxGetTranslation(Get_vessel_type_string(false)));
+          result.append(FromWx(wxGetTranslation(
+              wxString::FromUTF8(Get_vessel_type_string(false).toStdString()))));
       }
 
       if ((Class != AIS_CLASS_B) && (Class != AIS_SART) && Class != AIS_DSC &&
           Class != AIS_METEO && !b_SarAircraftPosnReport) {
         if ((NavStatus <= 15) && (NavStatus >= 0)) {
-          result.Append(" (");
-          result.Append(wxGetTranslation(ais_get_status(NavStatus)));
-          result.Append(")");
+          result.append(" (");
+          result.append(FromWx(wxGetTranslation(
+              wxString::FromUTF8(ais_get_status(NavStatus).toStdString()))));
+          result.append(")");
         }
       } else if (Class == AIS_SART) {
-        result.Append(" (");
+        result.append(" (");
         if (NavStatus == RESERVED_14)
-          result.Append(_("Active"));
+          result.append(FromWx(_("Active")));
         else if (NavStatus == UNDEFINED)
-          result.Append(_("Testing"));
-        result.Append(")");
+          result.append(FromWx(_("Testing")));
+        result.append(")");
       } else if (Class == AIS_DSC) {
-        result.Append(" (");
-        result.Append(GetNatureofDistress(m_dscNature));
-        result.Append(")");
+        result.append(" (");
+        result.append(GetNatureofDistress(m_dscNature));
+        result.append(")");
       }
     }
   }
 
   if (g_bAISRolloverShowCOG && ((SOG <= 102.2) || b_SarAircraftPosnReport) &&
       !((Class == AIS_ATON) || (Class == AIS_BASE) || (Class == AIS_METEO))) {
-    if (result.Len()) result << "\n";
+    if (result.length()) result += "\n";
 
     double speed_show = toUsrSpeed(SOG);
     if (speed_show < 10.0)
-      result << wxString::Format("SOG %.2f ", speed_show) << getUsrSpeedUnit()
-             << " ";
+      result += QString::asprintf("SOG %.2f ", speed_show) +
+                FromWx(getUsrSpeedUnit()) + " ";
     else if (speed_show < 100.0)
-      result << wxString::Format("SOG %.1f ", speed_show) << getUsrSpeedUnit()
-             << " ";
+      result += QString::asprintf("SOG %.1f ", speed_show) +
+                FromWx(getUsrSpeedUnit()) + " ";
     else
-      result << wxString::Format("SOG %.0f ", speed_show) << getUsrSpeedUnit()
-             << " ";
+      result += QString::asprintf("SOG %.0f ", speed_show) +
+                FromWx(getUsrSpeedUnit()) + " ";
 
-    int crs = wxRound(COG);
+    int crs = qRound(COG);
     if (b_positionOnceValid) {
       if (crs < 360) {
-        wxString magString, trueString;
+        QString magString, trueString;
         if (g_bShowMag)
-          magString << wxString::Format(
-              wxString("%03d%c(M)  "),
-              static_cast<int>(m_callbacks.get_mag(COG)), 0x00B0);
+          magString += QString::asprintf(
+              "%03d%c(M)  ", static_cast<int>(m_callbacks.get_mag(COG)),
+              0x00B0);
         if (g_bShowTrue)
-          trueString << wxString::Format(wxString("%03d%c "), (int)crs, 0x00B0);
+          trueString += QString::asprintf("%03d%c ", (int)crs, 0x00B0);
 
-        result << trueString << magString;
+        result += trueString + magString;
       }
 
       else if (COG == 360.0)
-        result << _(" COG Unavailable");
+        result += FromWx(_(" COG Unavailable"));
       else if (crs == 360)
-        result << wxString(" COG 000\u00B0");
+        result += QString(" COG 000\u00B0");
     } else
-      result << _(" COG Unavailable");
+      result += FromWx(_(" COG Unavailable"));
   }
 
   if (g_bAISRolloverShowCPA && bCPA_Valid && Class != AIS_METEO) {
-    if (result.Len()) result << "\n";
-    result << _("CPA") << " " << FormatDistanceAdaptive(CPA) << " " << _("in")
-           << " " << wxString::Format("%.0f", TCPA) << " " << _("min");
+    if (result.length()) result += "\n";
+    result += FromWx(_("CPA")) + " " + FromWx(FormatDistanceAdaptive(CPA)) +
+              " " + FromWx(_("in")) + " " + QString::asprintf("%.0f", TCPA) +
+              " " + FromWx(_("min"));
   }
   if (Class == AIS_METEO) {
     if (met_data.wind_kn < 122) {
-      if (result.Len()) result << "\n";
+      if (result.length()) result += "\n";
       double userwindspeed = toUsrWindSpeed(met_data.wind_kn);
-      result << _("Wind speed");
-      result << wxString::Format(": %0.1f %s", userwindspeed,
-                                 getUsrWindSpeedUnit())
-             << wxString::Format(" %d%c ", met_data.wind_dir, 0x00B0);
+      result += FromWx(_("Wind speed"));
+      result += FromWx(wxString::Format(": %0.1f %s", userwindspeed,
+                                        getUsrWindSpeedUnit())) +
+                QString::asprintf(" %d%c ", met_data.wind_dir, 0x00B0);
     }
 
     if (met_data.water_lev_dev < 30.) {
-      if (result.Len()) result << "\n";
-      result << _("Water level deviation");
+      if (result.length()) result += "\n";
+      result += FromWx(_("Water level deviation"));
       double userdepth;
       userdepth = toUsrDepth(met_data.water_lev_dev);
-      result << wxString::Format(": %.1f %s", userdepth, getUsrDepthUnit());
+      result += FromWx(
+          wxString::Format(": %.1f %s", userdepth, getUsrDepthUnit()));
 
     } else if (met_data.water_level > -32.) {
-      if (result.Len()) result << "\n";
-      result << _("Water level");
+      if (result.length()) result += "\n";
+      result += FromWx(_("Water level"));
       double userdepth;
       userdepth = toUsrDepth(met_data.water_level);
-      result << wxString::Format(": %.1f %s", userdepth, getUsrDepthUnit());
+      result += FromWx(
+          wxString::Format(": %.1f %s", userdepth, getUsrDepthUnit()));
     }
 
     if (met_data.current < 25.) {
-      if (result.Len()) result << "\n";
-      result << _("Current");
-      result << wxString::Format(": %.1f ", met_data.current) << _("kts")
-             << wxString::Format(" %d%c ", met_data.curr_dir, 0x00B0);
+      if (result.length()) result += "\n";
+      result += FromWx(_("Current"));
+      result += QString::asprintf(": %.1f ", met_data.current) +
+                FromWx(_("kts")) +
+                QString::asprintf(" %d%c ", met_data.curr_dir, 0x00B0);
     }
 
     if (met_data.wave_height < 24.6) {
-      if (result.Len()) result << "\n";
+      if (result.length()) result += "\n";
       double userwh = toUsrDepth(met_data.wave_height);
-      result << _("Wave height")
-             << wxString::Format(": %.1f %s", userwh, getUsrDepthUnit())
-             << " / " << met_data.wave_period << " " << _("s");
+      result += FromWx(_("Wave height")) +
+                FromWx(wxString::Format(": %.1f %s", userwh,
+                                        getUsrDepthUnit())) +
+                " / " + QString::number(met_data.wave_period) + " " +
+                FromWx(_("s"));
     }
 
     if (met_data.water_temp < 50.) {
-      if (result.Len()) result << "\n";
+      if (result.length()) result += "\n";
       double usertemp = toUsrTemp(met_data.water_temp);
-      result << _("Water temp");
-      result << wxString::Format(": %.1f%c", usertemp, 0x00B0)
-             << getUsrTempUnit();
+      result += FromWx(_("Water temp"));
+      result += QString::asprintf(": %.1f%c", usertemp, 0x00B0) +
+                FromWx(getUsrTempUnit());
     }
 
     if (met_data.air_temp != -102.4) {
-      if (result.Len()) result << "\n";
+      if (result.length()) result += "\n";
       double usertemp = toUsrTemp(met_data.air_temp);
-      result << _("Air temp");
-      result << wxString::Format(": %.1f%c", usertemp, 0x00B0)
-             << getUsrTempUnit() << " ";
+      result += FromWx(_("Air temp"));
+      result += QString::asprintf(": %.1f%c", usertemp, 0x00B0) +
+                FromWx(getUsrTempUnit()) + " ";
     }
 
     if (met_data.airpress > 799 && met_data.airpress < 1310) {
-      if (met_data.air_temp == -102.4 && result.Len()) result << "\n";
-      result << _("Air press");
-      result << wxString::Format(": %d hPa", met_data.airpress);
+      if (met_data.air_temp == -102.4 && result.length()) result += "\n";
+      result += FromWx(_("Air press"));
+      result += QString::asprintf(": %d hPa", met_data.airpress);
     }
 
     if (met_data.hor_vis < 12.) {
-      if (result.Len()) result << "\n";
+      if (result.length()) result += "\n";
       double userVisDist = toUsrDistance(met_data.hor_vis);
-      wxString horVis =
+      QString horVis = FromWx(
           wxString::Format(": %s%.1f %s", (met_data.hor_vis_GT ? ">" : ""),
-                           userVisDist, getUsrDistanceUnit());
-      result << _("Visibility") << horVis;
+                           userVisDist, getUsrDistanceUnit()));
+      result += FromWx(_("Visibility")) + horVis;
     }
   }
   return result;
 }
 
-wxString AisTargetData::Get_vessel_type_string(bool b_short) {
+QString AisTargetData::Get_vessel_type_string(bool b_short) {
   int i = 19;
   if (Class == AIS_ATON) {
     i = ShipType + 20;
@@ -1326,40 +1351,40 @@ wxString AisTargetData::Get_vessel_type_string(bool b_short) {
     return ais_get_short_type(i);
 }
 
-wxString AisTargetData::Get_class_string(bool b_short) {
+QString AisTargetData::Get_class_string(bool b_short) {
   switch (Class) {
     case AIS_CLASS_A:
-      return _("A");
+      return FromWx(_("A"));
     case AIS_CLASS_B:
-      return _("B");
+      return FromWx(_("B"));
     case AIS_ATON:
-      return b_short ? _("AtoN") : _("Aid to Navigation");
+      return FromWx(b_short ? _("AtoN") : _("Aid to Navigation"));
     case AIS_BASE:
-      return b_short ? _("Base") : _("Base Station");
+      return FromWx(b_short ? _("Base") : _("Base Station"));
     case AIS_GPSG_BUDDY:
-      return b_short ? _("Buddy") : _("GPSGate Buddy");
+      return FromWx(b_short ? _("Buddy") : _("GPSGate Buddy"));
     case AIS_DSC:
       if (ShipType == 12 || (ShipType == 16 && m_dscNature < 13))
-        return b_short ? _("DSC") : _("DSC Distress");
+        return FromWx(b_short ? _("DSC") : _("DSC Distress"));
       else
-        return b_short ? _("DSC") : _("DSC Position Report");
+        return FromWx(b_short ? _("DSC") : _("DSC Position Report"));
     case AIS_SART:
-      return b_short ? _("SART") : _("SART");
+      return FromWx(b_short ? _("SART") : _("SART"));
     case AIS_ARPA:
-      return b_short ? _("ARPA") : _("ARPA");
+      return FromWx(b_short ? _("ARPA") : _("ARPA"));
     case AIS_BUOY:
-      return b_short ? _("Buoy") : _("BUOY");
+      return FromWx(b_short ? _("Buoy") : _("BUOY"));
     case AIS_APRS:
-      return b_short ? _("APRS") : _("APRS Position Report");
+      return FromWx(b_short ? _("APRS") : _("APRS Position Report"));
     case AIS_METEO:
-      return b_short ? _("Meteo") : _("Meteorologic");
+      return FromWx(b_short ? _("Meteo") : _("Meteorologic"));
 
     default:
-      return b_short ? _("Unk") : _("Unknown");
+      return FromWx(b_short ? _("Unk") : _("Unknown"));
   }
 }
 
-wxString AisTargetData::GetNatureofDistress(int dscnature) {
+QString AisTargetData::GetNatureofDistress(int dscnature) {
   // Natures of distress from: Rec. ITU-R M.493-10.
   wxString dscDistressType[] = {_("Fire, explosion"),
                                 _("Flooding"),
@@ -1374,7 +1399,8 @@ wxString AisTargetData::GetNatureofDistress(int dscnature) {
                                 _("Man overboard"),
                                 "-",
                                 _("EPIRB emission")};
-  if (dscnature >= 0 && dscnature < 13) return dscDistressType[dscnature];
+  if (dscnature >= 0 && dscnature < 13)
+    return FromWx(dscDistressType[dscnature]);
 
   return "";
 }
@@ -1394,7 +1420,10 @@ bool AisTargetData::IsValidMID(int mid) {
 
 // Get country name and code according to ITU 2023-02
 // (http://www.itu.int/en/ITU-R/terrestrial/fmd/Pages/mid.aspx)
-wxString AisTargetData::GetCountryCode(bool b_CntryLongStr) {
+QString AisTargetData::GetCountryCode(bool b_CntryLongStr) {
+  // The country lookup is computed as a wxString (the _() translation macro,
+  // still in use pending P3.10) and converted to QString on return.
+  auto computeWx = [&]() -> wxString {
   if (Class == AIS_BUOY || Class == AIS_ARPA) return "";
   /***** Check for a valid MID *****/
   // Meteo adaption
@@ -1973,9 +2002,11 @@ wxString AisTargetData::GetCountryCode(bool b_CntryLongStr) {
 #else
   return "";
 #endif
+  };  // computeWx
+  return FromWx(computeWx());
 }
 
-wxString ais_get_type(int index) {
+QString ais_get_type(int index) {
   static const wxString ais_type[] = {
       _("Fishing Vessel"),                            // 30        0
       _("Towing Vessel"),                             // 31        1
@@ -2037,10 +2068,10 @@ wxString ais_get_type(int index) {
       _("Buoy or similar")                            // xx        57
   };
 
-  return ais_type[index];
+  return FromWx(ais_type[index]);
 }
 
-wxString ais_get_short_type(int index) {
+QString ais_get_short_type(int index) {
   static const wxString short_ais_type[] = {
       _("F/V"),       // 30        0
       _("Tow"),       // 31        1
@@ -2102,5 +2133,5 @@ wxString ais_get_short_type(int index) {
       _("APRS"),            // xx        56
       _("Buoy or similar")  // xx        57
   };
-  return short_ais_type[index];
+  return FromWx(short_ais_type[index]);
 }

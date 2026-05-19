@@ -954,7 +954,7 @@ void MMSIEditDialog::Persist() {
     else if (m_props->m_ShipName == wxEmptyString) {
       auto proptarget = g_pAIS->Get_Target_Data_From_MMSI(m_props->MMSI);
       if (proptarget) {
-        wxString s = proptarget->GetFullName();
+        wxString s = wxString::FromUTF8(proptarget->GetFullName().toStdString());
         m_props->m_ShipName = s;
       } else {
         wxString GetShipNameFromFile(int);
@@ -1005,7 +1005,7 @@ void MMSIEditDialog::OnMMSIChanged(wxCommandEvent& event) {
     if (shipName.IsEmpty()) {
       auto target = g_pAIS->Get_Target_Data_From_MMSI(wxAtoi(mmsi));
       if (target) {
-        shipName = target->GetFullName();
+        shipName = wxString::FromUTF8(target->GetFullName().toStdString());
       }
     }
 

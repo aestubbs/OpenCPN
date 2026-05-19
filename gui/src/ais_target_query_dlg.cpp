@@ -144,10 +144,11 @@ void AISTargetQueryDialog::OnIdTrkCreateClick(wxCommandEvent &event) {
 
         Track *t = new Track();
 
-        t->SetName(wxString::Format("AIS %s (%u) %s %s",
-                                    td->GetFullName().c_str(), td->MMSI,
-                                    wxDateTime::Now().FormatISODate().c_str(),
-                                    wxDateTime::Now().FormatISOTime().c_str()));
+        t->SetName(wxString::Format(
+            "AIS %s (%u) %s %s",
+            wxString::FromUTF8(td->GetFullName().toStdString()).c_str(), td->MMSI,
+            wxDateTime::Now().FormatISODate().c_str(),
+            wxDateTime::Now().FormatISOTime().c_str()));
         for (const AISTargetTrackPoint &ptrack_point : td->m_ptrack) {
           vector2D point(ptrack_point.m_lon, ptrack_point.m_lat);
           tp1 = t->AddNewPoint(point, wxDateTime(ptrack_point.m_time).ToUTC());
@@ -463,7 +464,7 @@ void AISTargetQueryDialog::RenderHTMLQuery(AisTargetData *td) {
       "color=#%02x%02x%02x><center>",
       bg.Red(), bg.Green(), bg.Blue(), fg.Red(), fg.Green(), fg.Blue());
 
-  html << td->BuildQueryResult();
+  html << wxString::FromUTF8(td->BuildQueryResult().toStdString());
 
   html << "</center></font></body></html>";
 

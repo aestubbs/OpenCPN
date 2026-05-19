@@ -95,7 +95,8 @@ wxString OCPNListCtrl::GetTargetColumnData(AisTargetData* pAISTarget,
             (pAISTarget->Class == AIS_SART))
           ret = _("-");
         else {
-          wxString uret = trimAISField(pAISTarget->ShipName);
+          wxString uret = wxString::FromUTF8(trimAISField(pAISTarget->ShipName)
+                                       .toStdString());
           if (uret == "Unknown")
             ret = wxGetTranslation(uret);
           else
@@ -107,7 +108,7 @@ wxString OCPNListCtrl::GetTargetColumnData(AisTargetData* pAISTarget,
         break;
 
       case tlCALL:
-        ret = trimAISField(pAISTarget->CallSign);
+        ret = wxString::FromUTF8(trimAISField(pAISTarget->CallSign).toStdString());
         break;
 
       case tlMMSI:
@@ -122,7 +123,8 @@ wxString OCPNListCtrl::GetTargetColumnData(AisTargetData* pAISTarget,
           int airtype = (pAISTarget->MMSI % 1000) / 100;
           ret = airtype == 5 ? _("SAR Helicopter") : _("SAR Aircraft");
         } else
-          ret = wxGetTranslation(pAISTarget->Get_class_string(true));
+          ret = wxGetTranslation(
+              wxString::FromUTF8(pAISTarget->Get_class_string(true).toStdString()));
         break;
 
       case tlTYPE:
@@ -132,7 +134,8 @@ wxString OCPNListCtrl::GetTargetColumnData(AisTargetData* pAISTarget,
             pAISTarget->b_SarAircraftPosnReport)
           ret = _("-");
         else
-          ret = wxGetTranslation(pAISTarget->Get_vessel_type_string(false));
+          ret = wxGetTranslation(wxString::FromUTF8(
+              pAISTarget->Get_vessel_type_string(false).toStdString()));
         break;
 
       case tlNAVSTATUS: {
@@ -143,7 +146,8 @@ wxString OCPNListCtrl::GetTargetColumnData(AisTargetData* pAISTarget,
             ret = _("Testing");
         } else {
           if ((pAISTarget->NavStatus <= 20) && (pAISTarget->NavStatus >= 0))
-            ret = wxGetTranslation(ais_get_status(pAISTarget->NavStatus));
+            ret = wxGetTranslation(wxString::FromUTF8(
+                ais_get_status(pAISTarget->NavStatus).toStdString()));
           else
             ret = _("-");
         }
@@ -218,7 +222,8 @@ wxString OCPNListCtrl::GetTargetColumnData(AisTargetData* pAISTarget,
         break;
       }
       case tlFLAG: {
-        ret = wxGetTranslation(pAISTarget->GetCountryCode(true));
+        ret = wxGetTranslation(
+            wxString::FromUTF8(pAISTarget->GetCountryCode(true).toStdString()));
 
         if (ret.IsEmpty()) {
           ret = _("-");

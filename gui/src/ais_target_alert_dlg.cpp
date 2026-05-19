@@ -218,7 +218,7 @@ bool AISTargetAlertDialog::GetAlertText() {
     auto td_found = m_pdecoder->Get_Target_Data_From_MMSI(Get_Dialog_MMSI());
 
     if (td_found) {
-      m_alert_text = td_found->BuildQueryResult();
+      m_alert_text = wxString::FromUTF8(td_found->BuildQueryResult().toStdString());
       return true;
     } else
       return false;

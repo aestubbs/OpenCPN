@@ -147,6 +147,13 @@ int origin_mmsi = 0;
 void AISshipNameCache(AisTargetData *pTargetData,
                       AIS_Target_Name_Hash *AISTargetNamesC,
                       AIS_Target_Name_Hash *AISTargetNamesNC, long mmsi);
+// Local wrapper: the ERI ship-type table uses the _() translation macro
+// (wxString, still in use pending P3.10) while make_hash_ERI now takes a
+// QString.  Adapt here so the table entries below stay unchanged.
+static void make_hash_ERI(int key, const wxString &description) {
+  ::make_hash_ERI(key, QString::fromStdString(description.utf8_string()));
+}
+
 static void BuildERIShipTypeHash() {
   make_hash_ERI(8000, _("Vessel, type unknown"));
   make_hash_ERI(8150, _("Freightbarge"));
@@ -1196,7 +1203,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         nd = std::max(0, nd);
         nd = std::min(nd, 967);
         msg_14_text[nd] = 0;
-        ptd->MSG_14_text = wxString(msg_14_text, wxConvUTF8);
+        ptd->MSG_14_text = QString::fromUtf8(msg_14_text);
       }
       parse_result = true;  // so far so good
 
@@ -1247,7 +1254,7 @@ AisDecoder::AisDecoder(const AisDecoderCallbacks &callbacks)
               int mmsi = parts.size() > 0 ? parts[0].toInt() : 0;
               wxString name =
                   parts.size() > 1
-                      ? wxString(parts[1].trimmed().toStdString())
+                      ? wxString::FromUTF8(parts[1].trimmed().toStdString())
                       : wxString();
               (*HashFile)[mmsi] = name;
             }
@@ -3248,8 +3255,7 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
         pTargetData->m_utc_hour = gpsg_utc_hour;
         pTargetData->m_utc_min = gpsg_utc_min;
         pTargetData->m_utc_sec = gpsg_utc_sec;
-        pTargetData->m_date_string =
-            wxString(gpsg_date.toStdString());  // m_date_string stays wxString
+        pTargetData->m_date_string = gpsg_date;
         pTargetData->MMSI = gpsg_mmsi;
         pTargetData->NavStatus = 0;  // underway
         pTargetData->Lat = gpsg_lat;
@@ -3868,8 +3874,9 @@ void AisDecoder::UpdateOneTrack(AisTargetData *ptarget) {
       if (0 == m_persistent_tracks.count(ptarget->MMSI)) {
         t = new Track();
         t->SetName(wxString::Format(
-            "AIS %s (%u) %s %s", ptarget->GetFullName().c_str(), ptarget->MMSI,
-            wxDateTime::Now().FormatISODate().c_str(),
+            "AIS %s (%u) %s %s",
+            wxString::FromUTF8(ptarget->GetFullName().toStdString()).c_str(),
+            ptarget->MMSI, wxDateTime::Now().FormatISODate().c_str(),
             wxDateTime::Now().FormatISOTime().c_str()));
         g_TrackList.push_back(t);
         new_track.Notify(t);
@@ -4496,7 +4503,7 @@ MmsiProperties::MmsiProperties(wxString &spec) {
 
   s = next_tok();
   if (s.length()) {
-    m_ShipName = wxString(s.toUpper().toStdString());
+    m_ShipName = wxString::FromUTF8(s.toUpper().toStdString());
   }
 }
 
@@ -4593,7 +4600,8 @@ void AISshipNameCache(AisTargetData *pTargetData,
              (pTargetData->MID == 124)) {  // 124: Has got a name from n2k
       //  This message contains ship static data, so has a name field
       pTargetData->b_nameFromCache = false;
-      ship_name = trimAISField(pTargetData->ShipName);
+      ship_name =
+          wxString::FromUTF8(trimAISField(pTargetData->ShipName).toStdString());
       AIS_Target_Name_Hash::iterator itC = AISTargetNamesC->find(mmsi);
       AIS_Target_Name_Hash::iterator itNC = AISTargetNamesNC->find(mmsi);
       if (itC !=
@@ -4662,7 +4670,7 @@ wxString GetShipNameFromFile(int nmmsi) {
         if (nmmsi == file_mmsi) {
           // name stays wxString (name-file boundary)
           name = parts.size() > 1
-                     ? wxString(parts[1].trimmed().toStdString())
+                     ? wxString::FromUTF8(parts[1].trimmed().toStdString())
                      : wxString();
           break;
         }
@@ -4689,10 +4697,10 @@ void AisDecoder::UpdateMMSItoNameFile(const wxString &mmsi,
           QString::fromUtf8(line.c_str()).split(',', Qt::KeepEmptyParts);
       // file_mmsi / file_name stay wxString (mmsi_name_map keyed by wxString)
       wxString file_mmsi = parts.size() > 0
-                               ? wxString(parts[0].toStdString())
+                               ? wxString::FromUTF8(parts[0].toStdString())
                                : wxString();
       wxString file_name = parts.size() > 1
-                               ? wxString(parts[1].trimmed().toStdString())
+                               ? wxString::FromUTF8(parts[1].trimmed().toStdString())
                                : wxString();
       mmsi_name_map[file_mmsi] = file_name;
     }

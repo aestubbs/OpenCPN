@@ -1741,7 +1741,7 @@ static void AISDrawTarget(AisTargetData *td, ocpnDC &dc, ViewPort &vp,
     if (true_scale_display <
         g_Show_Target_Name_Scale) {  // from which scale to display name
 
-      wxString tgt_name = td->GetFullName();
+      wxString tgt_name = wxString::FromUTF8(td->GetFullName().toStdString());
       tgt_name = tgt_name.substr(0, tgt_name.find("Unknown", 0));
 
       if (tgt_name != wxEmptyString) {
