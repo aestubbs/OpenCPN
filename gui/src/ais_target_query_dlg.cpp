@@ -146,11 +146,15 @@ void AISTargetQueryDialog::OnIdTrkCreateClick(wxCommandEvent &event) {
 
         Track *t = new Track();
 
-        t->SetName(wxString::Format(
-            "AIS %s (%u) %s %s",
-            wxString::FromUTF8(td->GetFullName().toStdString()).c_str(), td->MMSI,
-            wxDateTime::Now().FormatISODate().c_str(),
-            wxDateTime::Now().FormatISOTime().c_str()));
+        {
+          wxString iso_date = wxDateTime::Now().FormatISODate();
+          wxString iso_time = wxDateTime::Now().FormatISOTime();
+          t->SetName(QString::asprintf(
+              "AIS %s (%u) %s %s",
+              qUtf8Printable(td->GetFullName()), td->MMSI,
+              static_cast<const char *>(iso_date.mb_str()),
+              static_cast<const char *>(iso_time.mb_str())));
+        }
         for (const AISTargetTrackPoint &ptrack_point : td->m_ptrack) {
           vector2D point(ptrack_point.m_lon, ptrack_point.m_lat);
           tp1 = t->AddNewPoint(point, wxDateTime(ptrack_point.m_time).ToUTC());

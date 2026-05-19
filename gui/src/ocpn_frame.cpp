@@ -3134,7 +3134,7 @@ void MyFrame::TrackOn() {
   }
 
   wxJSONValue v;
-  wxString name = g_pActiveTrack->GetName();
+  wxString name = QString_to_wxString(g_pActiveTrack->GetName());
   if (name.IsEmpty()) {
     TrackPoint *tp = g_pActiveTrack->GetPoint(0);
     if (tp->GetCreateTime().IsValid())
@@ -3144,7 +3144,7 @@ void MyFrame::TrackOn() {
       name = _("(Unnamed Track)");
   }
   v["Name"] = name;
-  v["GUID"] = g_pActiveTrack->m_GUID;
+  v["GUID"] = QString_to_wxString(g_pActiveTrack->m_GUID);
   wxString msg_id("OCPN_TRK_ACTIVATED");
   SendJSONMessageToAllPlugins(msg_id, v);
   g_FlushNavobjChangesTimeout =
@@ -3157,7 +3157,7 @@ Track *MyFrame::TrackOff(bool do_add_point) {
   if (g_pActiveTrack) {
     wxJSONValue v;
     wxString msg_id("OCPN_TRK_DEACTIVATED");
-    v["GUID"] = g_pActiveTrack->m_GUID;
+    v["GUID"] = QString_to_wxString(g_pActiveTrack->m_GUID);
     SendJSONMessageToAllPlugins(msg_id, v);
 
     g_pActiveTrack->Stop(do_add_point);
@@ -6250,8 +6250,8 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
     v["Track_ID"] = trk_id;
     for (Track *ptrack : g_TrackList) {
       wxString name = wxEmptyString;
-      if (ptrack->m_GUID == trk_id) {
-        name = ptrack->GetName();
+      if (ptrack->m_GUID == wxString_to_QString(trk_id)) {
+        name = QString_to_wxString(ptrack->GetName());
         if (name.IsEmpty()) {
           TrackPoint *rp = ptrack->GetPoint(0);
           if (rp && rp->GetCreateTime().IsValid())
@@ -6369,7 +6369,7 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
         }
       } else {  // track
         for (Track *ptrack : g_TrackList) {
-          wxString name = ptrack->GetName();
+          wxString name = QString_to_wxString(ptrack->GetName());
           if (name.IsEmpty()) {
             TrackPoint *tp = ptrack->GetPoint(0);
             if (tp && tp->GetCreateTime().IsValid())
@@ -6380,7 +6380,7 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
           }
           v[i]["error"] = false;
           v[i]["name"] = name;
-          v[i]["GUID"] = ptrack->m_GUID;
+          v[i]["GUID"] = QString_to_wxString(ptrack->m_GUID);
           v[i]["active"] = g_pActiveTrack == ptrack;
           i++;
         }

@@ -53,6 +53,7 @@
 #include "track_printout.h"
 
 #include "model/track.h"
+#include "model/wx_qt_string.h"
 
 #include "dychart.h"
 #include "gui_lib.h"
@@ -160,7 +161,7 @@ void TrackPrintout::DrawPage(wxDC* dc, int page) {
   int header_text_offset_x = 2;
   int header_text_offset_y = 2;
 
-  dc->DrawText(m_track->GetName(), 150, 20);
+  dc->DrawText(QString_to_wxString(m_track->GetName()), 150, 20);
 
   int current_x = m_margin_x;
   int current_y = m_margin_y;

@@ -27,6 +27,8 @@
 
 #include <wx/progdlg.h>
 
+#include <QString>
+
 #include <deque>
 #include <list>
 #include <vector>
@@ -58,7 +60,7 @@ struct SubTrack {
  */
 class TrackPoint {
 public:
-  TrackPoint(double lat, double lon, wxString ts = "");
+  TrackPoint(double lat, double lon, QString ts = QString());
   TrackPoint(double lat, double lon, wxDateTime dt);
   TrackPoint(TrackPoint *orig);
   ~TrackPoint();
@@ -107,7 +109,7 @@ private:
    * Time zone information will be correctly interpreted when the timestamp is
    * read via GetCreateTime() which will return a wxDateTime object in UTC.
    */
-  void SetCreateTime(wxString ts);
+  void SetCreateTime(QString ts);
   std::string m_stimestring;
 };
 
@@ -147,37 +149,31 @@ public:
 
   /* Return the name of the track, or the start date/time of the track if no
    * name has been set. */
-  wxString GetName(bool auto_if_empty = false) const {
-    if (!auto_if_empty || !m_TrackNameString.IsEmpty()) {
-      return m_TrackNameString;
-    } else {
-      return GetDateTime(_("(Unnamed Track)"));
-    }
-  }
-  void SetName(const wxString name) { m_TrackNameString = name; }
+  QString GetName(bool auto_if_empty = false) const;
+  void SetName(const QString name) { m_TrackNameString = name; }
 
   /* Return the start date/time of the track, formatted as ISO 8601 timestamp.
    * The separator between date and time is a space character. */
-  wxString GetIsoDateTime(
-      const wxString label_for_invalid_date = _("(Unknown Date)")) const;
+  QString GetIsoDateTime(const QString &label_for_invalid_date) const;
+  QString GetIsoDateTime() const;
 
   /* Return the start date/time of the track, formatted using the global
    * timezone settings. */
-  wxString GetDateTime(
-      const wxString label_for_invalid_date = _("(Unknown Date)")) const;
+  QString GetDateTime(const QString &label_for_invalid_date) const;
+  QString GetDateTime() const;
 
-  wxString m_GUID;
+  QString m_GUID;
   bool m_bIsInLayer;
   int m_LayerID;
 
-  wxString m_TrackDescription;
+  QString m_TrackDescription;
 
-  wxString m_TrackStartString;
-  wxString m_TrackEndString;
+  QString m_TrackStartString;
+  QString m_TrackEndString;
 
   int m_width;
   wxPenStyle m_style;
-  wxString m_Colour;
+  QString m_Colour;
 
   bool m_bVisible;
   bool m_bListed;
@@ -189,7 +185,7 @@ public:
   int m_HighlightedTrackPoint;
 
   void Clone(Track *psourcetrack, int start_nPoint, int end_nPoint,
-             const wxString &suffix);
+             const QString &suffix);
 
 protected:
   void DouglasPeuckerReducer(std::vector<TrackPoint *> &list,
@@ -217,7 +213,7 @@ private:
   //                const LLBBox &box, double scale, int &last, int level, int
   //                pos);
   //
-  wxString m_TrackNameString;
+  QString m_TrackNameString;
 };
 
 class Route;

@@ -795,7 +795,8 @@ void CanvasMenuHandler::CanvasPopupMenu(int x, int y, int seltype) {
         !(api_121->GetContextMenuMask() & api_121->kContextMenuDisableTrack)) {
       name = wxEmptyString;
       if (!g_bBasicMenus && m_pSelectedTrack)
-        name = " ( " + m_pSelectedTrack->GetName(true) + " )";
+        name = " ( " +
+               QString_to_wxString(m_pSelectedTrack->GetName(true)) + " )";
       else
         name = wxEmptyString;
       bool blay = false;
@@ -2020,7 +2021,7 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
             } else if ((pimis->m_in_menu.IsSameAs("Track")) &&
                        m_pSelectedTrack) {
               object_type = "Track";
-              object_ident = m_pSelectedTrack->m_GUID.ToStdString();
+              object_ident = m_pSelectedTrack->m_GUID.toStdString();
             } else if ((pimis->m_in_menu.IsSameAs("AIS")) && m_FoundAIS_MMSI) {
               object_type = "AIS";
               wxString sAIS = wxString::Format("%d", m_FoundAIS_MMSI);

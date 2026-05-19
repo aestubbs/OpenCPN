@@ -294,7 +294,7 @@ static TrackPoint *GPXLoadTrackPoint1(pugi::xml_node &wpt_node) {
   }  // for
 
   // Create trackpoint
-  return new TrackPoint(rlat, rlon, TimeString);
+  return new TrackPoint(rlat, rlon, ws2qs(TimeString));
 }
 
 Track *GPXLoadTrack1(pugi::xml_node &trk_node, bool b_fullviz, bool b_layer,
@@ -399,16 +399,16 @@ Track *GPXLoadTrack1(pugi::xml_node &trk_node, bool b_fullviz, bool b_layer,
                  gpxx_child; gpxx_child = gpxx_child.next_sibling()) {
               wxString gpxx_name = wxString::FromUTF8(gpxx_child.name());
               if (gpxx_name.EndsWith("DisplayColor"))
-                pTentTrack->m_Colour =
-                    wxString::FromUTF8(gpxx_child.first_child().value());
+                pTentTrack->m_Colour = ws2qs(
+                    wxString::FromUTF8(gpxx_child.first_child().value()));
             }
           }
         }  // extensions
       }
     }
 
-    pTentTrack->SetName(TrackName);
-    pTentTrack->m_TrackDescription = DescString;
+    pTentTrack->SetName(ws2qs(TrackName));
+    pTentTrack->m_TrackDescription = ws2qs(DescString);
 
     if (b_propviz)
       pTentTrack->SetVisible(b_viz);
@@ -844,16 +844,16 @@ static bool GPXCreateTrk(pugi::xml_node node, Track *pTrack,
                          unsigned int flags) {
   pugi::xml_node child;
 
-  if (pTrack->GetName().Len()) {
-    wxCharBuffer buffer = pTrack->GetName().ToUTF8();
+  if (pTrack->GetName().length()) {
+    wxCharBuffer buffer = qs2ws(pTrack->GetName()).ToUTF8();
     if (buffer.data()) {
       child = node.append_child("name");
       child.append_child(pugi::node_pcdata).set_value(buffer.data());
     }
   }
 
-  if (pTrack->m_TrackDescription.Len()) {
-    wxCharBuffer buffer = pTrack->m_TrackDescription.ToUTF8();
+  if (pTrack->m_TrackDescription.length()) {
+    wxCharBuffer buffer = qs2ws(pTrack->m_TrackDescription).ToUTF8();
     if (buffer.data()) {
       child = node.append_child("desc");
       child.append_child(pugi::node_pcdata).set_value(buffer.data());
@@ -885,22 +885,23 @@ static bool GPXCreateTrk(pugi::xml_node node, Track *pTrack,
   pugi::xml_node child_ext = node.append_child("extensions");
 
   child = child_ext.append_child("opencpn:guid");
-  child.append_child(pugi::node_pcdata).set_value(pTrack->m_GUID.mb_str());
+  child.append_child(pugi::node_pcdata)
+      .set_value(qs2ws(pTrack->m_GUID).mb_str());
 
   child = child_ext.append_child("opencpn:viz");
   child.append_child(pugi::node_pcdata)
       .set_value(pTrack->IsVisible() == true ? "1" : "0");
 
-  if (pTrack->m_TrackStartString.Len()) {
-    wxCharBuffer buffer = pTrack->m_TrackStartString.ToUTF8();
+  if (pTrack->m_TrackStartString.length()) {
+    wxCharBuffer buffer = qs2ws(pTrack->m_TrackStartString).ToUTF8();
     if (buffer.data()) {
       child = child_ext.append_child("opencpn:start");
       child.append_child(pugi::node_pcdata).set_value(buffer.data());
     }
   }
 
-  if (pTrack->m_TrackEndString.Len()) {
-    wxCharBuffer buffer = pTrack->m_TrackEndString.ToUTF8();
+  if (pTrack->m_TrackEndString.length()) {
+    wxCharBuffer buffer = qs2ws(pTrack->m_TrackEndString).ToUTF8();
     if (buffer.data()) {
       child = child_ext.append_child("opencpn:end");
       child.append_child(pugi::node_pcdata).set_value(buffer.data());
@@ -920,7 +921,8 @@ static bool GPXCreateTrk(pugi::xml_node node, Track *pTrack,
   if (pTrack->m_Colour != "") {
     pugi::xml_node gpxx_ext = child_ext.append_child("gpxx:TrackExtension");
     child = gpxx_ext.append_child("gpxx:DisplayColor");
-    child.append_child(pugi::node_pcdata).set_value(pTrack->m_Colour.mb_str());
+    child.append_child(pugi::node_pcdata)
+        .set_value(qs2ws(pTrack->m_Colour).mb_str());
   }
 
   if (flags & RT_OUT_NO_RTPTS) return true;

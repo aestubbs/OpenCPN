@@ -43,6 +43,7 @@
 #include "model/ocpn_utils.h"
 #include "model/pincode.h"
 #include "model/rest_server.h"
+#include "model/wx_qt_string.h"
 
 #include "mongoose.h"
 #include "observable_evt.h"
@@ -683,7 +684,8 @@ void RestServer::HandleTrack(pugi::xml_node object,
   bool add = true;
   bool overwrite_one = false;
 
-  Track* duplicate = m_route_ctx.find_track_by_guid(track->m_GUID);
+  Track* duplicate =
+      m_route_ctx.find_track_by_guid(QString_to_wxString(track->m_GUID));
   if (duplicate) {
     if (!m_overwrite && !evt_data.force) {
       auto result = m_dlg_ctx.run_accept_object_dlg(

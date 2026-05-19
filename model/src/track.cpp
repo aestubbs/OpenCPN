@@ -67,9 +67,12 @@ of segments will be higher, though it should be managable with tracks with
 millions of points.
 */
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include <QString>
 
 #include <wx/colour.h>
 #include <wx/datetime.h>
@@ -90,6 +93,7 @@ millions of points.
 #include "model/own_ship.h"
 #include "model/routeman.h"
 #include "model/select.h"
+#include "model/wx_qt_string.h"
 #include "ocpn_plugin.h"
 #include "model/navobj_db.h"
 
@@ -117,7 +121,7 @@ private:
 };
 #endif
 
-TrackPoint::TrackPoint(double lat, double lon, wxString ts)
+TrackPoint::TrackPoint(double lat, double lon, QString ts)
     : m_lat(lat), m_lon(lon), m_GPXTrkSegNo(1) {
   SetCreateTime(ts);
 }
@@ -142,16 +146,19 @@ wxDateTime TrackPoint::GetCreateTime() {
 }
 
 void TrackPoint::SetCreateTime(wxDateTime dt) {
-  wxString ts;
-  if (dt.IsValid())
-    ts = dt.FormatISODate().Append("T").Append(dt.FormatISOTime()).Append("Z");
+  QString ts;
+  if (dt.IsValid()) {
+    wxString wts =
+        dt.FormatISODate().Append("T").Append(dt.FormatISOTime()).Append("Z");
+    ts = wxString_to_QString(wts);
+  }
 
   SetCreateTime(ts);
 }
 
-void TrackPoint::SetCreateTime(wxString ts) {
-  if (ts.Length()) {
-    m_stimestring = ts.mb_str();
+void TrackPoint::SetCreateTime(QString ts) {
+  if (ts.length()) {
+    m_stimestring = ts.toStdString();
   } else
     m_stimestring = "";
 }
@@ -172,7 +179,7 @@ Track::Track() {
   m_width = WIDTH_UNDEFINED;
   m_style = wxPENSTYLE_INVALID;
 
-  m_GUID = pWayPointMan->CreateGUID(NULL);
+  m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(NULL));
   m_bIsInLayer = false;
   m_btemp = false;
 
@@ -279,7 +286,7 @@ Track *ActiveTrack::DoExtendDaily() {
   for (Track *ptrack : g_TrackList) {
     if (!ptrack->m_bIsInLayer && ptrack->m_GUID != m_GUID) {
       // Do not consider automatically named AIS target tracks
-      if (ptrack->GetName().StartsWith(("AIS"))) continue;
+      if (ptrack->GetName().startsWith("AIS")) continue;
 
       TrackPoint *track_node = ptrack->GetLastPoint();
       if (!track_node->GetCreateTime().IsValid())
@@ -301,10 +308,11 @@ Track *ActiveTrack::DoExtendDaily() {
     int begin = 1;
     if (pLastPoint->GetCreateTime() == pExtendPoint->GetCreateTime()) begin = 2;
     pSelect->DeleteAllSelectableTrackSegments(pExtendTrack);
-    wxString suffix = "";
-    if (GetName().IsNull()) {
+    QString suffix;
+    if (GetName().isNull()) {
       suffix = pExtendTrack->GetName();
-      if (suffix.IsNull()) suffix = wxDateTime::Today().FormatISODate();
+      if (suffix.isNull())
+        suffix = wxString_to_QString(wxDateTime::Today().FormatISODate());
     }
     pExtendTrack->Clone(this, begin, GetnPoints(), suffix);
     pSelect->AddAllSelectableTrackSegments(pExtendTrack);
@@ -312,13 +320,14 @@ Track *ActiveTrack::DoExtendDaily() {
 
     return pExtendTrack;
   } else {
-    if (GetName().IsNull()) SetName(wxDateTime::Today().FormatISODate());
+    if (GetName().isNull())
+      SetName(wxString_to_QString(wxDateTime::Today().FormatISODate()));
     return NULL;
   }
 }
 
 void Track::Clone(Track *psourcetrack, int start_nPoint, int end_nPoint,
-                  const wxString &suffix) {
+                  const QString &suffix) {
   if (psourcetrack->m_bIsInLayer) return;
 
   m_TrackNameString = psourcetrack->m_TrackNameString + suffix;
@@ -465,7 +474,7 @@ void ActiveTrack::AddPointNow(bool do_add_point) {
               DistGreatCircle(m_fixedTP->m_lat, m_fixedTP->m_lon,
                               m_lastStoredTP->m_lat, m_lastStoredTP->m_lon);
           double xte = GetXTE(m_fixedTP, m_lastStoredTP, m_removeTP);
-          if (xte < m_allowedMaxXTE / wxMax(1.0, 2.0 - dist * 2.0)) {
+          if (xte < m_allowedMaxXTE / std::max(1.0, 2.0 - dist * 2.0)) {
             TrackPoints.pop_back();
             TrackPoints.pop_back();
             TrackPoints.push_back(m_lastStoredTP);
@@ -614,7 +623,8 @@ void Track::Finalize() {
           new_level[i].m_box.Expand(SubTracks[level - 1][p + 1].m_box);
 
         int left = i << level;
-        int right = wxMin(left + (1 << level), TrackPoints.size() - 1);
+        int right =
+            std::min<int>(left + (1 << level), TrackPoints.size() - 1);
         new_level[i].m_scale = ComputeScale(left, right);
       }
     }
@@ -647,7 +657,7 @@ void Track::InsertSubTracks(LLBBox &box, int level, int pos) {
     SubTracks[level][pos].m_scale = 0;
   else {
     int left = pos << level;
-    int right = wxMin(left + (1 << level), TrackPoints.size() - 1);
+    int right = std::min<int>(left + (1 << level), TrackPoints.size() - 1);
     SubTracks[level][pos].m_scale = ComputeScale(left, right);
   }
 
@@ -687,7 +697,7 @@ TrackPoint *Track::AddNewPoint(vector2D point, wxDateTime time) {
   wxJSONValue v;
   v["lat"] = tPoint->m_lat;
   v["lon"] = tPoint->m_lon;
-  v["Track_ID"] = m_GUID;
+  v["Track_ID"] = QString_to_wxString(m_GUID);
   std::string msg_id("OCPN_TRK_POINT_ADDED");
   JsonEvent::getInstance().Notify(msg_id, std::make_shared<wxJSONValue>(v));
 
@@ -976,24 +986,40 @@ double Track::GetXTE(TrackPoint *fm1, TrackPoint *fm2, TrackPoint *to) {
   ;
 }
 
-wxString Track::GetIsoDateTime(const wxString label_for_invalid_date) const {
-  wxString name;
+QString Track::GetName(bool auto_if_empty) const {
+  if (!auto_if_empty || !m_TrackNameString.isEmpty()) {
+    return m_TrackNameString;
+  }
+  return GetDateTime(wxString_to_QString(_("(Unnamed Track)")));
+}
+
+QString Track::GetIsoDateTime(const QString &label_for_invalid_date) const {
+  QString name;
   TrackPoint *rp = NULL;
   if ((int)TrackPoints.size() > 0) rp = TrackPoints[0];
   if (rp && rp->GetCreateTime().IsValid())
-    name = rp->GetCreateTime().FormatISOCombined(' ');
+    name = wxString_to_QString(rp->GetCreateTime().FormatISOCombined(' '));
   else
     name = label_for_invalid_date;
   return name;
 }
 
-wxString Track::GetDateTime(const wxString label_for_invalid_date) const {
-  wxString name;
+QString Track::GetIsoDateTime() const {
+  return GetIsoDateTime(wxString_to_QString(_("(Unknown Date)")));
+}
+
+QString Track::GetDateTime(const QString &label_for_invalid_date) const {
+  QString name;
   TrackPoint *rp = NULL;
   if ((int)TrackPoints.size() > 0) rp = TrackPoints[0];
   if (rp && rp->GetCreateTime().IsValid())
-    name = ocpn::toUsrDateTimeFormat(rp->GetCreateTime().FromUTC());
+    name = wxString_to_QString(
+        ocpn::toUsrDateTimeFormat(rp->GetCreateTime().FromUTC()));
   else
     name = label_for_invalid_date;
   return name;
+}
+
+QString Track::GetDateTime() const {
+  return GetDateTime(wxString_to_QString(_("(Unknown Date)")));
 }

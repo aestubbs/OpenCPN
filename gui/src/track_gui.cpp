@@ -170,12 +170,11 @@ void TrackGui::Draw(ChartCanvas *cc, ocpnDC &dc, ViewPort &VP,
     col = basic_colour;
     // Render tracks associated with persistent AIS targets as a contrasting
     // color
-    if (m_track.GetName().StartsWith("AIS")) col = GetGlobalColor("TEAL1");
+    if (m_track.GetName().startsWith("AIS")) col = GetGlobalColor("TEAL1");
   } else {
     for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
          i++) {
-      if (m_track.m_Colour ==
-          wxString::FromUTF8(::GpxxColorNames[i].toStdString())) {
+      if (m_track.m_Colour == ::GpxxColorNames[i]) {
         col = ::GpxxColors[i];
         break;
       }

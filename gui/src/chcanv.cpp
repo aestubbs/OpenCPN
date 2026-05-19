@@ -4228,10 +4228,10 @@ void ChartCanvas::OnRolloverPopupTimerEvent(wxTimerEvent &event) {
           else
             s.Append(_("Layer Track: "));
 
-          if (pt->GetName().IsEmpty())
+          if (pt->GetName().isEmpty())
             s.Append(_("(unnamed)"));
           else
-            s.Append(pt->GetName());
+            s.Append(QString_to_wxString(pt->GetName()));
           double tlenght = pt->Length();
           s << "\n" << _("Total Track: ") << FormatDistanceAdaptive(tlenght);
           if (pt->GetLastPoint()->GetTimeString() &&
@@ -7719,7 +7719,7 @@ ChartCanvas::GetCanvasContextAtPoint(int x, int y) {
     if (m_pSelectedTrack) {
       rstruct->object_type =
           HostApi121::PiContextObjectType::kObjectTracksegment;
-      rstruct->object_ident = m_pSelectedTrack->m_GUID.ToStdString();
+      rstruct->object_ident = m_pSelectedTrack->m_GUID.toStdString();
     }
   }
 

@@ -70,6 +70,7 @@
 #include "model/route_point.h"
 #include "model/select.h"
 #include "model/track.h"
+#include "model/wx_qt_string.h"
 #include "N2KParser.h"
 
 #if !defined(NAN)
@@ -3873,11 +3874,13 @@ void AisDecoder::UpdateOneTrack(AisTargetData *ptarget) {
       Track *t;
       if (0 == m_persistent_tracks.count(ptarget->MMSI)) {
         t = new Track();
-        t->SetName(wxString::Format(
+        wxString iso_date = wxDateTime::Now().FormatISODate();
+        wxString iso_time = wxDateTime::Now().FormatISOTime();
+        t->SetName(QString::asprintf(
             "AIS %s (%u) %s %s",
-            wxString::FromUTF8(ptarget->GetFullName().toStdString()).c_str(),
-            ptarget->MMSI, wxDateTime::Now().FormatISODate().c_str(),
-            wxDateTime::Now().FormatISOTime().c_str()));
+            qUtf8Printable(ptarget->GetFullName()), ptarget->MMSI,
+            static_cast<const char *>(iso_date.mb_str()),
+            static_cast<const char *>(iso_time.mb_str())));
         g_TrackList.push_back(t);
         new_track.Notify(t);
         m_persistent_tracks[ptarget->MMSI] = t;

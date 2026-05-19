@@ -31,6 +31,7 @@
 #include "model/navobj_db.h"
 #include "model/navutil_base.h"
 #include "model/own_ship.h"
+#include "model/wx_qt_string.h"
 #include "model/plugin_comm.h"
 #include "model/route.h"
 #include "model/routeman.h"
@@ -1137,10 +1138,11 @@ bool TrackPropDlg::UpdateProperties() {
     bSizerLinks->Fit(m_scrolledWindowLinks);
   }
 
-  m_tName->SetValue(m_pTrack->GetName());
-  m_tFrom->SetValue(m_pTrack->m_TrackStartString);
-  m_tTo->SetValue(m_pTrack->m_TrackEndString);
-  if (m_tDescription) m_tDescription->SetValue(m_pTrack->m_TrackDescription);
+  m_tName->SetValue(QString_to_wxString(m_pTrack->GetName()));
+  m_tFrom->SetValue(QString_to_wxString(m_pTrack->m_TrackStartString));
+  m_tTo->SetValue(QString_to_wxString(m_pTrack->m_TrackEndString));
+  if (m_tDescription)
+    m_tDescription->SetValue(QString_to_wxString(m_pTrack->m_TrackDescription));
 
   m_tTotDistance->SetValue("");
   m_tTimeEnroute->SetValue("");
@@ -1298,7 +1300,8 @@ void TrackPropDlg::OnExtendBtnClick(wxCommandEvent& event) {
       begin = 1;
     }
     pSelect->DeleteAllSelectableTrackSegments(m_pExtendTrack);
-    m_pExtendTrack->Clone(m_pTrack, begin, m_pTrack->GetnPoints(), _("_plus"));
+    m_pExtendTrack->Clone(m_pTrack, begin, m_pTrack->GetnPoints(),
+                          wxString_to_QString(_("_plus")));
     pSelect->AddAllSelectableTrackSegments(m_pExtendTrack);
     pSelect->DeleteAllSelectableTrackSegments(m_pTrack);
     NavObj_dB::GetInstance().DeleteTrack(m_pTrack);
@@ -1324,8 +1327,9 @@ void TrackPropDlg::OnSplitBtnClick(wxCommandEvent& event) {
   if ((m_nSelected > 1) && (m_nSelected < m_pTrack->GetnPoints())) {
     Track* pHead = new Track();
     Track* pTail = new Track();
-    pHead->Clone(m_pTrack, 0, m_nSelected - 1, _("_A"));
-    pTail->Clone(m_pTrack, m_nSelected - 1, m_pTrack->GetnPoints(), _("_B"));
+    pHead->Clone(m_pTrack, 0, m_nSelected - 1, wxString_to_QString(_("_A")));
+    pTail->Clone(m_pTrack, m_nSelected - 1, m_pTrack->GetnPoints(),
+                 wxString_to_QString(_("_B")));
 
     g_TrackList.push_back(pHead);
     NavObj_dB::GetInstance().InsertTrack(pHead);
@@ -1355,9 +1359,12 @@ void TrackPropDlg::OnTrackPropCopyTxtClick(wxCommandEvent& event) {
   wxString csvString;
 
   csvString << this->GetTitle() << eol << _("Name") << tab
-            << m_pTrack->GetName() << eol << _("Depart From") << tab
-            << m_pTrack->m_TrackStartString << eol << _("Destination") << tab
-            << m_pTrack->m_TrackEndString << eol << _("Total distance") << tab
+            << QString_to_wxString(m_pTrack->GetName()) << eol
+            << _("Depart From") << tab
+            << QString_to_wxString(m_pTrack->m_TrackStartString) << eol
+            << _("Destination") << tab
+            << QString_to_wxString(m_pTrack->m_TrackEndString) << eol
+            << _("Total distance") << tab
             << m_tTotDistance->GetValue() << eol << _("Speed") << tab
             << m_tAvgSpeed->GetValue() << eol
             << _("Departure Time") + " " + _("(m/d/y h:m)") << tab
@@ -1470,7 +1477,8 @@ void TrackPropDlg::OnToRouteBtnClick(wxCommandEvent& event) {
 void TrackPropDlg::OnExportBtnClick(wxCommandEvent& event) {
   wxString suggested_name = _("track");
   std::vector<Track*> list = {m_pTrack};
-  if (m_pTrack->GetName() != "") suggested_name = m_pTrack->GetName();
+  if (m_pTrack->GetName() != "")
+    suggested_name = QString_to_wxString(m_pTrack->GetName());
   ExportGPXTracks(this, &list, suggested_name);
 }
 
@@ -1711,17 +1719,17 @@ void TrackPropDlg::OnShowTimeTZ(wxCommandEvent& event) {
 bool TrackPropDlg::SaveChanges() {
   if (m_pTrack && !m_pTrack->m_bIsInLayer) {
     //  Get User input Text Fields
-    m_pTrack->SetName(m_tName->GetValue());
-    m_pTrack->m_TrackStartString = m_tFrom->GetValue();
-    m_pTrack->m_TrackEndString = m_tTo->GetValue();
+    m_pTrack->SetName(wxString_to_QString(m_tName->GetValue()));
+    m_pTrack->m_TrackStartString = wxString_to_QString(m_tFrom->GetValue());
+    m_pTrack->m_TrackEndString = wxString_to_QString(m_tTo->GetValue());
     if (m_tDescription)
-      m_pTrack->m_TrackDescription = m_tDescription->GetValue();
+      m_pTrack->m_TrackDescription =
+          wxString_to_QString(m_tDescription->GetValue());
     m_pTrack->SetVisible(m_cbShow->GetValue());
     if (m_cColor->GetSelection() == 0)
       m_pTrack->m_Colour = "";
     else
-      m_pTrack->m_Colour = wxString::FromUTF8(
-          ::GpxxColorNames[m_cColor->GetSelection() - 1].toStdString());
+      m_pTrack->m_Colour = ::GpxxColorNames[m_cColor->GetSelection() - 1];
     m_pTrack->m_style = (wxPenStyle)::StyleValues[m_cStyle->GetSelection()];
     m_pTrack->m_width = ::WidthValues[m_cWidth->GetSelection()];
 
@@ -1733,8 +1741,8 @@ bool TrackPropDlg::SaveChanges() {
   if (m_pTrack && m_pTrack->IsRunning()) {
     wxJSONValue v;
     v["Changed"] = true;
-    v["Name"] = m_pTrack->GetName();
-    v["GUID"] = m_pTrack->m_GUID;
+    v["Name"] = QString_to_wxString(m_pTrack->GetName());
+    v["GUID"] = QString_to_wxString(m_pTrack->m_GUID);
     wxString msg_id("OCPN_TRK_ACTIVATED");
     SendJSONMessageToAllPlugins(msg_id, v);
   }

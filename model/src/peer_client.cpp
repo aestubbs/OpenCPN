@@ -414,7 +414,7 @@ static bool CheckObjects(const std::string& api_key, PeerData& peer_data) {
     if (result != 0) return false;
   }
   for (const auto& t : peer_data.tracks) {
-    std::string guid = t->m_GUID.ToStdString();
+    std::string guid = t->m_GUID.toStdString();
     std::string full_url = url.str() + guid;
     struct MemoryStruct chunk;
     if (ApiGet(full_url, &chunk) != 200) {

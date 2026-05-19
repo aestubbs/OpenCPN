@@ -1032,7 +1032,7 @@ wxArrayString GetRouteGUIDArray() {
 wxArrayString GetTrackGUIDArray() {
   wxArrayString result;
   for (Track* ptrack : g_TrackList) {
-    result.Add(ptrack->m_GUID);
+    result.Add(QString_to_wxString(ptrack->m_GUID));
   }
 
   return result;
@@ -1081,13 +1081,15 @@ wxArrayString GetTrackGUIDArray(OBJECT_LAYER_REQ req) {
   for (Track* ptrack : g_TrackList) {
     switch (req) {
       case OBJECTS_ALL:
-        result.Add(ptrack->m_GUID);
+        result.Add(QString_to_wxString(ptrack->m_GUID));
         break;
       case OBJECTS_NO_LAYERS:
-        if (!ptrack->m_bIsInLayer) result.Add(ptrack->m_GUID);
+        if (!ptrack->m_bIsInLayer)
+          result.Add(QString_to_wxString(ptrack->m_GUID));
         break;
       case OBJECTS_ONLY_LAYERS:
-        if (ptrack->m_bIsInLayer) result.Add(ptrack->m_GUID);
+        if (ptrack->m_bIsInLayer)
+          result.Add(QString_to_wxString(ptrack->m_GUID));
         break;
     }
   }
@@ -1221,10 +1223,10 @@ bool AddPlugInTrack(PlugIn_Track* ptrack, bool b_permanent) {
     pwpnode = pwpnode->GetNext();  // PlugInWaypoint
   }
 
-  track->SetName(ptrack->m_NameString);
-  track->m_TrackStartString = ptrack->m_StartString;
-  track->m_TrackEndString = ptrack->m_EndString;
-  track->m_GUID = ptrack->m_GUID;
+  track->SetName(wxString_to_QString(ptrack->m_NameString));
+  track->m_TrackStartString = wxString_to_QString(ptrack->m_StartString);
+  track->m_TrackEndString = wxString_to_QString(ptrack->m_EndString);
+  track->m_GUID = wxString_to_QString(ptrack->m_GUID);
   track->m_btemp = (b_permanent == false);
 
   g_TrackList.push_back(track);
@@ -1543,7 +1545,7 @@ wxString GetSelectedRouteGUID_Plugin() {
 wxString GetSelectedTrackGUID_Plugin() {
   ChartCanvas* cc = gFrame->GetFocusCanvas();
   if (cc && cc->GetSelectedTrack()) {
-    return cc->GetSelectedTrack()->m_GUID;
+    return QString_to_wxString(cc->GetSelectedTrack()->m_GUID);
   }
   return wxEmptyString;
 }
@@ -1586,10 +1588,10 @@ std::unique_ptr<PlugIn_Track> GetTrack_Plugin(const wxString& GUID) {
   std::unique_ptr<PlugIn_Track> tk =
       std::unique_ptr<PlugIn_Track>(new PlugIn_Track);
   PlugIn_Track* dst_track = tk.get();
-  dst_track->m_NameString = pTrack->GetName();
-  dst_track->m_StartString = pTrack->m_TrackStartString;
-  dst_track->m_EndString = pTrack->m_TrackEndString;
-  dst_track->m_GUID = pTrack->m_GUID;
+  dst_track->m_NameString = QString_to_wxString(pTrack->GetName());
+  dst_track->m_StartString = QString_to_wxString(pTrack->m_TrackStartString);
+  dst_track->m_EndString = QString_to_wxString(pTrack->m_TrackEndString);
+  dst_track->m_GUID = QString_to_wxString(pTrack->m_GUID);
 
   for (int i = 0; i < pTrack->GetnPoints(); i++) {
     TrackPoint* ptp = pTrack->GetPoint(i);

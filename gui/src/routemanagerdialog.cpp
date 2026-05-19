@@ -142,8 +142,10 @@ static int wxCALLBACK SortTracksOnName(wxIntPtr item1, wxIntPtr item2,
 int wxCALLBACK SortTracksOnName(long item1, long item2, long list)
 #endif
 {
-  return SortRouteTrack(sort_track_name_dir, ((Track *)item1)->GetName(),
-                        ((Track *)item2)->GetName());
+  return SortRouteTrack(
+      sort_track_name_dir,
+      QString_to_wxString(((Track *)item1)->GetName()),
+      QString_to_wxString(((Track *)item2)->GetName()));
 }
 
 static int SortDouble(const int order, const double &it1, const double &it2) {
@@ -186,8 +188,10 @@ int wxCALLBACK SortTracksOnDate(long item1, long item2, long list)
 #endif
 {
   // Sort date/time using ISO format, which is sortable as a string.
-  return SortRouteTrack(sort_track_date_dir, ((Track *)item1)->GetIsoDateTime(),
-                        ((Track *)item2)->GetIsoDateTime());
+  return SortRouteTrack(
+      sort_track_date_dir,
+      QString_to_wxString(((Track *)item1)->GetIsoDateTime()),
+      QString_to_wxString(((Track *)item2)->GetIsoDateTime()));
 }
 
 static int sort_wp_key;
@@ -1949,7 +1953,7 @@ void RouteManagerDialog::OnTrkMenuSelected(wxCommandEvent &event) {
                                            wxLIST_STATE_SELECTED);
         if (item == -1) break;
         Track *track = (Track *)m_pTrkListCtrl->GetItemData(item);
-        csvString << track->GetName() << "\t"
+        csvString << QString_to_wxString(track->GetName()) << "\t"
                   << wxString::Format("%.1f", track->Length()) << "\t"
                   << "\n";
       }
@@ -2069,8 +2073,8 @@ void RouteManagerDialog::UpdateTrkListCtrl() {
 
     if (!trk->IsListed()) continue;
 
-    if (!trk->GetName(true).Upper().Contains(
-            m_tFilterTrk->GetValue().Upper())) {
+    if (!trk->GetName(true).toUpper().contains(
+            wxString_to_QString(m_tFilterTrk->GetValue().Upper()))) {
       continue;
     }
 
@@ -2087,10 +2091,12 @@ void RouteManagerDialog::UpdateTrkListCtrl() {
     }
     long idx = m_pTrkListCtrl->InsertItem(li);
 
-    m_pTrkListCtrl->SetItem(idx, colTRKNAME, trk->GetName(true));
+    m_pTrkListCtrl->SetItem(idx, colTRKNAME,
+                            QString_to_wxString(trk->GetName(true)));
     // Populate the track start date/time, formatted using the global timezone
     // settings.
-    m_pTrkListCtrl->SetItem(idx, colTRKDATE, trk->GetDateTime());
+    m_pTrkListCtrl->SetItem(idx, colTRKDATE,
+                            QString_to_wxString(trk->GetDateTime()));
 
     wxString len;
     len.Printf("%5.2f", trk->Length());
@@ -2305,7 +2311,7 @@ void RouteManagerDialog::OnTrkExportClick(wxCommandEvent &event) {
     if (ptrack_to_export) {
       list.push_back(ptrack_to_export);
       if (ptrack_to_export->GetName() != "")
-        suggested_name = ptrack_to_export->GetName();
+        suggested_name = QString_to_wxString(ptrack_to_export->GetName());
     }
   }
 

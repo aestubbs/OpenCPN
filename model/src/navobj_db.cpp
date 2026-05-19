@@ -803,7 +803,7 @@ void NavObj_dB::LoadNavObjects() {
 }
 
 bool NavObj_dB::InsertTrack(Track* track) {
-  if (TrackExists(m_db, track->m_GUID.ToStdString())) return false;
+  if (TrackExists(m_db, track->m_GUID.toStdString())) return false;
 
   bool rv = false;
   char* errMsg = 0;
@@ -815,7 +815,7 @@ bool NavObj_dB::InsertTrack(Track* track) {
 
   // Insert a new track
   wxString sql = wxString::Format("INSERT INTO tracks (guid) VALUES ('%s')",
-                                  track->m_GUID.ToStdString().c_str());
+                                  track->m_GUID.toStdString().c_str());
   if (!executeSQL(m_db, sql)) {
     sqlite3_exec(m_db, "COMMIT", 0, 0, &errMsg);
     return false;
@@ -827,7 +827,7 @@ bool NavObj_dB::InsertTrack(Track* track) {
   for (int i = 0; i < track->GetnPoints(); i++) {
     auto point = track->GetPoint(i);
     //  Add the bare trkpoint
-    InsertTrackPoint(m_db, track->m_GUID.ToStdString(), point->m_lat,
+    InsertTrackPoint(m_db, track->m_GUID.toStdString(), point->m_lat,
                      point->m_lon, point->GetTimeString(), i);
   }
 
@@ -838,7 +838,7 @@ bool NavObj_dB::InsertTrack(Track* track) {
     for (auto it = list->begin(); it != list->end(); ++it) {
       Hyperlink* link = *it;
       if (!TrackHtmlLinkExists(m_db, link->GUID)) {
-        InsertTrackHTML(m_db, track->m_GUID.ToStdString(), link->GUID,
+        InsertTrackHTML(m_db, track->m_GUID.toStdString(), link->GUID,
                         link->DescrText.ToStdString(), link->Link.ToStdString(),
                         link->LType.ToStdString());
       }
@@ -855,7 +855,7 @@ bool NavObj_dB::UpdateTrack(Track* track) {
   bool rv = false;
   char* errMsg = 0;
 
-  if (!TrackExists(m_db, track->m_GUID.ToStdString())) return false;
+  if (!TrackExists(m_db, track->m_GUID.toStdString())) return false;
 
   sqlite3_exec(m_db, "BEGIN TRANSACTION", 0, 0, &errMsg);
   if (errMsg) {
@@ -869,7 +869,7 @@ bool NavObj_dB::UpdateTrack(Track* track) {
   const char* sql = "DELETE FROM trk_points WHERE track_guid = ?";
   sqlite3_stmt* stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
-    sqlite3_bind_text(stmt, 1, track->m_GUID.ToStdString().c_str(), -1,
+    sqlite3_bind_text(stmt, 1, track->m_GUID.toStdString().c_str(), -1,
                       SQLITE_TRANSIENT);
   } else {
     ReportError("UpdateTrack:prepare");
@@ -889,7 +889,7 @@ bool NavObj_dB::UpdateTrack(Track* track) {
     auto point = track->GetPoint(i);
     //  Add the bare point
     if (point) {
-      InsertTrackPoint(m_db, track->m_GUID.ToStdString(), point->m_lat,
+      InsertTrackPoint(m_db, track->m_GUID.toStdString(), point->m_lat,
                        point->m_lon, point->GetTimeString(), i);
     }
   }
@@ -916,22 +916,25 @@ bool NavObj_dB::UpdateDBTrackAttributes(Track* track) {
 
   sqlite3_stmt* stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
-    sqlite3_bind_text(stmt, 1, track->GetName().ToStdString().c_str(), -1,
+    sqlite3_bind_text(stmt, 1, track->GetName().toStdString().c_str(), -1,
                       SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, track->m_TrackDescription.ToStdString().c_str(),
+    sqlite3_bind_text(stmt, 2, track->m_TrackDescription.toStdString().c_str(),
                       -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt, 3, track->m_bVisible);
-    sqlite3_bind_text(stmt, 4, track->m_TrackStartString.ToStdString().c_str(),
+    sqlite3_bind_text(stmt, 4, track->m_TrackStartString.toStdString().c_str(),
                       -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, track->m_TrackEndString.ToStdString().c_str(),
+    sqlite3_bind_text(stmt, 5, track->m_TrackEndString.toStdString().c_str(),
                       -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt, 6, track->m_width);
     sqlite3_bind_int(stmt, 7,
                      (int)(track->m_style));  // track->m_style.c_str(),
-    sqlite3_bind_text(stmt, 8, track->m_Colour.ToStdString().c_str(), -1,
+    sqlite3_bind_text(stmt, 8, track->m_Colour.toStdString().c_str(), -1,
                       SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 9, track->m_GUID.c_str(), track->m_GUID.size(),
-                      SQLITE_TRANSIENT);
+    {
+      std::string guid_str = track->m_GUID.toStdString();
+      sqlite3_bind_text(stmt, 9, guid_str.c_str(), guid_str.size(),
+                        SQLITE_TRANSIENT);
+    }
   } else {
     return false;
   }
@@ -947,7 +950,7 @@ bool NavObj_dB::UpdateDBTrackAttributes(Track* track) {
   // Update the HTML links
   // The list of links is freshly rebuilt when this method is called
   // So start by deleting all existing bcomments
-  DeleteAllCommentsForTrack(m_db, track->m_GUID.ToStdString());
+  DeleteAllCommentsForTrack(m_db, track->m_GUID.toStdString());
 
   // Now add all the links to db
   int NbrOfLinks = track->m_TrackHyperlinkList->size();
@@ -957,7 +960,7 @@ bool NavObj_dB::UpdateDBTrackAttributes(Track* track) {
       Hyperlink* link = *it;
 
       if (!TrackHtmlLinkExists(m_db, link->GUID)) {
-        InsertTrackHTML(m_db, track->m_GUID.ToStdString(), link->GUID,
+        InsertTrackHTML(m_db, track->m_GUID.toStdString(), link->GUID,
                         link->DescrText.ToStdString(), link->Link.ToStdString(),
                         link->LType.ToStdString());
       } else {
@@ -991,13 +994,13 @@ bool NavObj_dB::UpdateDBTrackAttributes(Track* track) {
 
 bool NavObj_dB::AddTrackPoint(Track* track, TrackPoint* point) {
   //  If track does not yet exist in dB, return
-  if (!TrackExists(m_db, track->m_GUID.ToStdString())) return false;
+  if (!TrackExists(m_db, track->m_GUID.toStdString())) return false;
 
   // Get next point order
   int this_point_index = track->GetnPoints();
 
   // Add the linked point to the dB
-  if (!InsertTrackPoint(m_db, track->m_GUID.ToStdString(), point->m_lat,
+  if (!InsertTrackPoint(m_db, track->m_GUID.toStdString(), point->m_lat,
                         point->m_lon, point->GetTimeString(),
                         this_point_index - 1))
     return false;
@@ -1060,17 +1063,17 @@ bool NavObj_dB::LoadAllTracks() {
     while (sqlite3_step(stmtp) == SQLITE_ROW) {
       if (!new_trk) {
         new_trk = new Track;
-        new_trk->m_GUID = guid;
+        new_trk->m_GUID = QString::fromStdString(guid);
 
         // Set all the track attributes
         new_trk->SetVisible(visibility == 1);
-        new_trk->SetName(name.c_str());
-        new_trk->m_TrackDescription = description.c_str();
-        new_trk->m_TrackStartString = start_string.c_str();
-        new_trk->m_TrackEndString = end_string.c_str();
+        new_trk->SetName(QString::fromStdString(name));
+        new_trk->m_TrackDescription = QString::fromStdString(description);
+        new_trk->m_TrackStartString = QString::fromStdString(start_string);
+        new_trk->m_TrackEndString = QString::fromStdString(end_string);
         new_trk->m_width = width;
         new_trk->m_style = (wxPenStyle)style;
-        new_trk->m_Colour = color;
+        new_trk->m_Colour = QString::fromStdString(color);
       }
 
       double latitude = sqlite3_column_double(stmtp, 0);
@@ -1079,7 +1082,8 @@ bool NavObj_dB::LoadAllTracks() {
           reinterpret_cast<const char*>(sqlite3_column_text(stmtp, 2));
       int point_order = sqlite3_column_int(stmtp, 3);
 
-      auto point = new TrackPoint(latitude, longitude, timestamp);
+      auto point = new TrackPoint(latitude, longitude,
+                                  QString::fromStdString(timestamp));
 
       point->m_GPXTrkSegNo = GPXTrkSeg;
       new_trk->AddPoint(point);
@@ -1100,7 +1104,7 @@ bool NavObj_dB::LoadAllTracks() {
       sqlite3_stmt* stmt;
 
       if (sqlite3_prepare_v2(m_db, sqlh, -1, &stmt, nullptr) == SQLITE_OK) {
-        sqlite3_bind_text(stmt, 1, new_trk->m_GUID.ToStdString().c_str(), -1,
+        sqlite3_bind_text(stmt, 1, new_trk->m_GUID.toStdString().c_str(), -1,
                           SQLITE_TRANSIENT);
 
         while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -1139,7 +1143,7 @@ bool NavObj_dB::LoadAllTracks() {
 
 bool NavObj_dB::DeleteTrack(Track* track) {
   if (!track) return false;
-  std::string track_guid = track->m_GUID.ToStdString();
+  std::string track_guid = track->m_GUID.toStdString();
   const char* sql = "DELETE FROM tracks WHERE guid = ?";
   sqlite3_stmt* stmt;
 

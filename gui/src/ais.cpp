@@ -1805,14 +1805,13 @@ static void AISDrawTarget(AisTargetData *td, ocpnDC &dc, ViewPort &vp,
     itt = g_pAIS->m_persistent_tracks.find(td->MMSI);
     if (itt != g_pAIS->m_persistent_tracks.end()) {
       auto *ptrack = itt->second;
-      if (ptrack->m_Colour == wxEmptyString) {
+      if (ptrack->m_Colour.isEmpty()) {
         c = GetGlobalColor("TEAL1");
         dc.SetPen(wxPen(c, 2.0 * AIS_nominal_line_width_pix));
       } else {
         for (unsigned int i = 0;
              i < sizeof(::GpxxColorNames) / sizeof(QString); i++) {
-          if (ptrack->m_Colour ==
-              wxString::FromUTF8(::GpxxColorNames[i].toStdString())) {
+          if (ptrack->m_Colour == ::GpxxColorNames[i]) {
             c = ::GpxxColors[i];
             dc.SetPen(wxPen(c, 2.0 * AIS_nominal_line_width_pix));
             break;

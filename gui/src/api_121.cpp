@@ -836,8 +836,9 @@ static bool IsAIS_CPAVisible(wxString ais_mmsi) {
 }
 
 static void SetTrackVisibility(const wxString& track_GUID, bool viz) {
+  QString guid_qs = wxString_to_QString(track_GUID);
   for (Track* ptrack : g_TrackList) {
-    if (ptrack->m_GUID == track_GUID) {
+    if (ptrack->m_GUID == guid_qs) {
       ptrack->SetVisible(viz);
       break;
     }
