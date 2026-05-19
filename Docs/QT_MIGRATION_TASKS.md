@@ -10,8 +10,9 @@ the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 SignalK/SocketCAN parked (P1.5m). P1.6b done — the decode layer
 (`comm_decoder`, `comm_bridge`, `ais_decoder`) is de-wx'd; the clean pipeline
 runs *bytes-in → nav-data-out*. P1.6c underway — shared model/GUI types are
-now converted *through* the boundary (GUI call sites adapted, not deferred);
-`ais_target_data` done. Next: routes / nav object DB.
+converted *through* the boundary (GUI call sites adapted, not deferred);
+`ais_target_data` and the route/waypoint model (`route`, `route_point`)
+done. Next: `track`, `routeman`, then the nav object DB.
 **Last updated:** 2026-05-19.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -240,6 +241,19 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
           `Ais8_001_22_SubArea::text`). ~8 wx GUI consumers adapted at the
           call site. `wxDateTime` fields and the `_()` macro stay (P1.7 /
           P3.10); a `FromWx()` helper bridges `_()` results into `QString`.
+    - [x] `route` + `route_point` — the route/waypoint data model.
+          `Route` and `RoutePoint` are `QString` throughout: GUIDs, names,
+          descriptions, icon names, the colour-*name* field, the
+          `GpxxColorNames[]` table, all method params/returns; `wxArrayString`
+          → `QStringList`. ~30 consumer files adapted at the call site.
+          Introduced `model/wx_qt_string.h` — shared inline UTF-8 converters
+          (`wxString_to_QString`/`QString_to_wxString`); every wx⇄Qt string
+          conversion in the migration now goes through an explicit UTF-8
+          round-trip, never a locale-dependent default ctor. `wxDateTime`,
+          the GUI-drawing types (`wxColour`/`wxBitmap`/`wxPen`/…) and
+          `Route`'s `wxObject` base stay for P1.7 / P1.14 / later.
+    - [ ] `track`, `routeman`, `nav_object_database`/`navobj_db` — adapted
+          at their `Route`/`RoutePoint` call sites only; de-wx pending.
 - [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
 - [ ] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract `config_vars`.
@@ -527,3 +541,17 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   not the locale-dependent default ctors, so translated/non-ASCII text
   round-trips correctly. `wxDateTime` and the `_()` macro stay (P1.7/P3.10);
   a `FromWx()` helper bridges `_()` results into `QString`.
+- 2026-05-19 — P1.6c: the route/waypoint model (`route`, `route_point`)
+  de-wx'd. `Route` and `RoutePoint` are `QString` throughout — GUIDs, names,
+  descriptions, icon names, the colour-name field, the `GpxxColorNames[]`
+  table, all method params/returns; `wxArrayString` → `QStringList`. ~30
+  consumer files across `gui/` and `model/` adapted at the call site (the
+  ripple of `m_GUID` / `GetName()` etc.). Added `model/wx_qt_string.h` —
+  shared inline UTF-8 converters `wxString_to_QString`/`QString_to_wxString`;
+  the whole migration's wx⇄Qt string conversions now route through these
+  (explicit UTF-8, never a locale-dependent default ctor). Deferred and left
+  untouched: `wxDateTime` (P1.7), the GUI-drawing types `wxColour`/
+  `wxBitmap`/`wxPen`/`wxRect`/… and `Route`'s `wxObject` base (P1.14 /
+  later), the `_()` macro (P3.10). `track`, `routeman` and the nav object DB
+  (`nav_object_database`, `navobj_db`) were adapted only at their
+  `Route`/`RoutePoint` call sites — their own de-wx is a later P1.6c step.
