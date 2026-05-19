@@ -26,6 +26,8 @@
 
 #include <functional>
 
+#include <QString>
+
 #include <wx/bitmap.h>
 #include <wx/brush.h>
 #include <wx/dynarray.h>
@@ -91,14 +93,14 @@ struct RoutePropDlgCtx {
 
 struct RoutemanDlgCtx {
   std::function<bool()> confirm_delete_ais_mob;
-  std::function<wxColour(wxString)> get_global_colour;
+  std::function<wxColour(QString)> get_global_colour;
   std::function<void()> show_with_fresh_fonts;
   std::function<void()> clear_console_background;
   std::function<void()> route_mgr_dlg_update_list_ctrl;
 
   RoutemanDlgCtx()
       : confirm_delete_ais_mob([]() { return true; }),
-        get_global_colour([](wxString c) { return *wxBLACK; }),
+        get_global_colour([](QString c) { return *wxBLACK; }),
         show_with_fresh_fonts([]() {}),
         clear_console_background([]() {}),
         route_mgr_dlg_update_list_ctrl([]() {}) {}
@@ -122,8 +124,8 @@ public:
 
   bool IsRouteValid(Route *pRoute);
 
-  Route *FindRouteByGUID(const wxString &guid);
-  Track *FindTrackByGUID(const wxString &guid);
+  Route *FindRouteByGUID(const QString &guid);
+  Track *FindTrackByGUID(const QString &guid);
   Route *FindRouteContainingWaypoint(RoutePoint *pWP);
   Route *FindRouteContainingWaypoint(const std::string &guid);
   Route *FindVisibleRouteContainingWaypoint(RoutePoint *pWP);
@@ -241,8 +243,8 @@ public:
   wxBrush *GetActiveRoutePointBrush(void) { return m_pActiveRoutePointBrush; }
   wxBrush *GetRoutePointBrush(void) { return m_pRoutePointBrush; }
 
-  wxString GetRouteReverseMessage(void);
-  wxString GetRouteResequenceMessage(void);
+  QString GetRouteReverseMessage(void);
+  QString GetRouteResequenceMessage(void);
   struct RoutemanDlgCtx &GetDlgContext() { return m_route_dlg_ctx; }
   NMEA0183 GetNMEA0183() { return m_NMEA0183; }
   EventVar &GetMessageSentEventVar() { return on_message_sent; }
@@ -307,7 +309,7 @@ private:
 //   WayPointman
 //----------------------------------------------------------------------------
 
-typedef std::function<wxColour(wxString)> GlobalColourFunc;
+typedef std::function<wxColour(QString)> GlobalColourFunc;
 
 class WayPointman {
   friend class WayPointmanGui;
@@ -315,8 +317,8 @@ class WayPointman {
 public:
   WayPointman(GlobalColourFunc colour_func);
   ~WayPointman();
-  wxBitmap *GetIconBitmap(const wxString &icon_key) const;
-  bool GetIconPrescaled(const wxString &icon_key) const;
+  wxBitmap *GetIconBitmap(const QString &icon_key) const;
+  bool GetIconPrescaled(const QString &icon_key) const;
   int GetIconIndex(const wxBitmap *pbm) const;
   int GetIconImageListIndex(const wxBitmap *pbm) const;
 
@@ -327,24 +329,24 @@ public:
   int GetFIconImageListIndex(const wxBitmap *pbm) const;
 
   int GetNumIcons(void) { return m_pIconArray->Count(); }
-  wxString CreateGUID(RoutePoint *pRP);
+  QString CreateGUID(RoutePoint *pRP);
   RoutePoint *FindWaypointByGuid(const std::string &guid);
   RoutePoint *GetNearbyWaypoint(double lat, double lon, double radius_meters);
   RoutePoint *GetOtherNearbyWaypoint(double lat, double lon,
                                      double radius_meters,
-                                     const wxString &guid);
+                                     const QString &guid);
   bool IsReallyVisible(RoutePoint *pWP);
   bool SharedWptsExist();
   void DeleteAllWaypoints(bool b_delete_used);
-  RoutePoint *FindRoutePointByGUID(const wxString &guid);
+  RoutePoint *FindRoutePointByGUID(const QString &guid);
   void DestroyWaypoint(RoutePoint *pRp, bool b_update_changeset = true);
   void ClearRoutePointFonts(void);
 
-  bool DoesIconExist(const wxString &icon_key) const;
+  bool DoesIconExist(const QString &icon_key) const;
   wxBitmap GetIconBitmapForList(int index, int height) const;
-  wxString *GetIconDescription(int index) const;
-  wxString *GetIconKey(int index) const;
-  wxString GetIconDescription(wxString icon_key) const;
+  QString *GetIconDescription(int index) const;
+  QString *GetIconKey(int index) const;
+  QString GetIconDescription(QString icon_key) const;
 
   wxImageList *Getpmarkicon_image_list(int nominal_height);
 

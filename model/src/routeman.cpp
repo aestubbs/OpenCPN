@@ -29,6 +29,8 @@
 #include <time.h>
 #include <vector>
 
+#include <QtGlobal>
+
 #include <wx/wxprec.h>
 #include <wx/image.h>
 #include <wx/jsonval.h>
@@ -47,6 +49,7 @@
 #include "model/route.h"
 #include "model/routeman.h"
 #include "model/track.h"
+#include "model/wx_qt_string.h"
 
 #include "observable_globvar.h"
 
@@ -55,10 +58,6 @@
 #endif
 
 bool g_bPluginHandleAutopilotRoute;
-
-static wxString qs2ws(const QString &qs) {
-  return wxString::FromUTF8(qs.toStdString());
-}
 
 Routeman *g_pRouteMan;
 Route *pAISMOBRoute;
@@ -75,12 +74,12 @@ void appendOSDirSlash(wxString *pString);
 
 static void ActivatePersistedRoute(Routeman *routeman) {
   if (g_active_route == "") {
-    wxLogWarning("\"Persist route\" but no persisted route configured");
+    qWarning("\"Persist route\" but no persisted route configured");
     return;
   }
-  Route *route = routeman->FindRouteByGUID(g_active_route);
+  Route *route = routeman->FindRouteByGUID(wxString_to_QString(g_active_route));
   if (!route) {
-    wxLogWarning("Persisted route GUID not available");
+    qWarning("Persisted route GUID not available");
     return;
   }
   routeman->ActivateRoute(route);  // FIXME (leamas) better start point
@@ -225,8 +224,8 @@ RoutePoint *Routeman::FindBestActivatePoint(Route *pR, double lat, double lon,
 bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
   g_bAllowShipToActive = false;
   wxJSONValue v;
-  v["Route_activated"] = qs2ws(pRouteToActivate->m_RouteNameString);
-  v["GUID"] = qs2ws(pRouteToActivate->m_GUID);
+  v["Route_activated"] = QString_to_wxString(pRouteToActivate->m_RouteNameString);
+  v["GUID"] = QString_to_wxString(pRouteToActivate->m_GUID);
   json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_ACTIVATED");
   if (g_bPluginHandleAutopilotRoute) return true;
 
@@ -264,7 +263,7 @@ bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
   }
 
   pActiveRoute = pRouteToActivate;
-  g_active_route = qs2ws(pActiveRoute->GetGUID());
+  g_active_route = QString_to_wxString(pActiveRoute->GetGUID());
 
   if (pStartPoint) {
     pActivePoint = pStartPoint;
@@ -289,8 +288,8 @@ bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
 bool Routeman::ActivateRoutePoint(Route *pA, RoutePoint *pRP_target) {
   g_bAllowShipToActive = false;
   wxJSONValue v;
-  v["GUID"] = qs2ws(pRP_target->m_GUID);
-  v["WP_activated"] = qs2ws(pRP_target->GetName());
+  v["GUID"] = QString_to_wxString(pRP_target->m_GUID);
+  v["WP_activated"] = QString_to_wxString(pRP_target->GetName());
 
   json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_WPT_ACTIVATED");
 
@@ -366,9 +365,9 @@ bool Routeman::ActivateNextPoint(Route *pr, bool skipped) {
     pActivePoint->m_bIsActive = false;
 
     v["isSkipped"] = skipped;
-    v["GUID"] = qs2ws(pActivePoint->m_GUID);
-    v["GUID_WP_arrived"] = qs2ws(pActivePoint->m_GUID);
-    v["WP_arrived"] = qs2ws(pActivePoint->GetName());
+    v["GUID"] = QString_to_wxString(pActivePoint->m_GUID);
+    v["GUID_WP_arrived"] = QString_to_wxString(pActivePoint->m_GUID);
+    v["WP_arrived"] = QString_to_wxString(pActivePoint->GetName());
   }
   int n_index_active = pActiveRoute->GetIndexOf(pActivePoint);
   if (n_index_active < 0) return false;
@@ -389,8 +388,8 @@ bool Routeman::ActivateNextPoint(Route *pr, bool skipped) {
     }
   }
   if (result) {
-    v["Next_WP"] = qs2ws(pActivePoint->GetName());
-    v["GUID_Next_WP"] = qs2ws(pActivePoint->m_GUID);
+    v["Next_WP"] = QString_to_wxString(pActivePoint->GetName());
+    v["GUID_Next_WP"] = QString_to_wxString(pActivePoint->m_GUID);
 
     pActivePoint->m_bBlink = true;
     pActivePoint->m_bIsActive = true;
@@ -425,12 +424,12 @@ bool Routeman::DeactivateRoute(bool b_arrival) {
 
     wxJSONValue v;
     if (!b_arrival) {
-      v["Route_deactivated"] = qs2ws(pActiveRoute->m_RouteNameString);
-      v["GUID"] = qs2ws(pActiveRoute->m_GUID);
+      v["Route_deactivated"] = QString_to_wxString(pActiveRoute->m_RouteNameString);
+      v["GUID"] = QString_to_wxString(pActiveRoute->m_GUID);
       json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_DEACTIVATED");
     } else {
-      v["GUID"] = qs2ws(pActiveRoute->m_GUID);
-      v["Route_ended"] = qs2ws(pActiveRoute->m_RouteNameString);
+      v["GUID"] = QString_to_wxString(pActiveRoute->m_GUID);
+      v["Route_ended"] = QString_to_wxString(pActiveRoute->m_RouteNameString);
       json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_ENDED");
     }
   }
@@ -474,7 +473,7 @@ bool Routeman::UpdateAutopilot() {
   if (XTEDir < 0) {
     leg_info.Xte = -leg_info.Xte;  // Left side of the track -> negative XTE
   }
-  leg_info.wp_name = qs2ws(pActivePoint->GetName().left(maxName));
+  leg_info.wp_name = QString_to_wxString(pActivePoint->GetName().left(maxName));
   leg_info.arrival = m_bArrival;
 
   json_leg_info.Notify(std::make_shared<ActiveLegDat>(leg_info), "");
@@ -504,7 +503,7 @@ bool Routeman::UpdateAutopilot() {
   if (XTEDir < 0) {
     leg_info.Xte = -leg_info.Xte;  // Left side of the track -> negative XTE
   }
-  leg_info.wp_name = qs2ws(pActivePoint->GetName().left(maxName));
+  leg_info.wp_name = QString_to_wxString(pActivePoint->GetName().left(maxName));
   leg_info.arrival = m_bArrival;
 
   json_leg_info.Notify(std::make_shared<ActiveLegDat>(leg_info), "");
@@ -877,15 +876,17 @@ void Routeman::SetColorScheme(ColorScheme cs, double displayDPmm) {
   int track_scaled_line_width = g_track_line_width;
   if (g_btouch) {
     // 0.4 mm nominal, but not less than 2 pixel
-    double nominal_line_width_pix = wxMax(2.0, floor(displayDPmm * 0.4));
+    double nominal_line_width_pix = std::max(2.0, floor(displayDPmm * 0.4));
 
-    double sline_width = wxMax(nominal_line_width_pix, g_route_line_width);
+    double sline_width =
+        std::max(nominal_line_width_pix, (double)g_route_line_width);
     sline_width *= g_ChartScaleFactorExp;
-    scaled_line_width = wxMax(sline_width, 2);
+    scaled_line_width = std::max(sline_width, 2.0);
 
-    double tsline_width = wxMax(nominal_line_width_pix, g_track_line_width);
+    double tsline_width =
+        std::max(nominal_line_width_pix, (double)g_track_line_width);
     tsline_width *= g_ChartScaleFactorExp;
-    track_scaled_line_width = wxMax(tsline_width, 2);
+    track_scaled_line_width = std::max(tsline_width, 2.0);
   }
 
   m_pActiveRoutePointPen = wxThePenList->FindOrCreatePen(
@@ -915,26 +916,26 @@ void Routeman::SetColorScheme(ColorScheme cs, double displayDPmm) {
       m_route_dlg_ctx.get_global_colour("PLRTE"), wxBRUSHSTYLE_SOLID);
 }
 
-wxString Routeman::GetRouteReverseMessage() {
-  return wxString(
+QString Routeman::GetRouteReverseMessage() {
+  return wxString_to_QString(
       _("Waypoints can be renamed to reflect the new order, the names will be "
         "'001', '002' etc.\n\nDo you want to rename the waypoints?"));
 }
 
-wxString Routeman::GetRouteResequenceMessage() {
-  return wxString(
+QString Routeman::GetRouteResequenceMessage() {
+  return wxString_to_QString(
       _("Waypoints will be renamed to reflect the natural order, the names "
         "will be '001', '002' etc.\n\nDo you want to rename the waypoints?"));
 }
 
-Route *Routeman::FindRouteByGUID(const wxString &guid) {
+Route *Routeman::FindRouteByGUID(const QString &guid) {
   for (Route *pRoute : *pRouteList) {
     if (pRoute->m_GUID == guid) return pRoute;
   }
   return NULL;
 }
 
-Track *Routeman::FindTrackByGUID(const wxString &guid) {
+Track *Routeman::FindTrackByGUID(const QString &guid) {
   for (Track *pTrack : g_TrackList) {
     if (pTrack->m_GUID == guid) return pTrack;
   }
@@ -1101,26 +1102,26 @@ wxImage WayPointman::CreateDimImage(wxImage &image, double factor) {
   return wxImage(new_img);
 }
 
-bool WayPointman::DoesIconExist(const wxString &icon_key) const {
+bool WayPointman::DoesIconExist(const QString &icon_key) const {
   MarkIcon *pmi;
   unsigned int i;
 
   for (i = 0; i < m_pIconArray->GetCount(); i++) {
     pmi = (MarkIcon *)m_pIconArray->Item(i);
-    if (pmi->icon_name.IsSameAs(icon_key)) return true;
+    if (pmi->icon_name == icon_key) return true;
   }
 
   return false;
 }
 
-wxBitmap *WayPointman::GetIconBitmap(const wxString &icon_key) const {
+wxBitmap *WayPointman::GetIconBitmap(const QString &icon_key) const {
   wxBitmap *pret = NULL;
   MarkIcon *pmi = NULL;
   unsigned int i;
 
   for (i = 0; i < m_pIconArray->GetCount(); i++) {
     pmi = (MarkIcon *)m_pIconArray->Item(i);
-    if (pmi->icon_name.IsSameAs(icon_key)) break;
+    if (pmi->icon_name == icon_key) break;
   }
 
   if (i == m_pIconArray->GetCount())  // key not found
@@ -1149,13 +1150,13 @@ wxBitmap *WayPointman::GetIconBitmap(const wxString &icon_key) const {
   return pret;
 }
 
-bool WayPointman::GetIconPrescaled(const wxString &icon_key) const {
+bool WayPointman::GetIconPrescaled(const QString &icon_key) const {
   MarkIcon *pmi = NULL;
   unsigned int i;
 
   for (i = 0; i < m_pIconArray->GetCount(); i++) {
     pmi = (MarkIcon *)m_pIconArray->Item(i);
-    if (pmi->icon_name.IsSameAs(icon_key)) break;
+    if (pmi->icon_name == icon_key) break;
   }
 
   if (i == m_pIconArray->GetCount())  // key not found
@@ -1200,10 +1201,10 @@ wxBitmap WayPointman::GetIconBitmapForList(int index, int height) const {
         int h1 = h;
         int w1 = w;
         if (h0 > h)
-          w1 = wxRound((double)w0 * ((double)h / (double)h0));
+          w1 = qRound((double)w0 * ((double)h / (double)h0));
 
         else if (w0 > w)
-          h1 = wxRound((double)h0 * ((double)w / (double)w0));
+          h1 = qRound((double)h0 * ((double)w / (double)w0));
 
         icon_resized = pmi->iconImage.Rescale(w1, h1);
         icon_resized = pmi->iconImage.Resize(
@@ -1219,8 +1220,8 @@ wxBitmap WayPointman::GetIconBitmapForList(int index, int height) const {
   return pret;
 }
 
-wxString *WayPointman::GetIconDescription(int index) const {
-  wxString *pret = NULL;
+QString *WayPointman::GetIconDescription(int index) const {
+  QString *pret = NULL;
 
   if (index >= 0) {
     MarkIcon *pmi = (MarkIcon *)m_pIconArray->Item(index);
@@ -1229,21 +1230,20 @@ wxString *WayPointman::GetIconDescription(int index) const {
   return pret;
 }
 
-wxString WayPointman::GetIconDescription(wxString icon_key) const {
+QString WayPointman::GetIconDescription(QString icon_key) const {
   MarkIcon *pmi;
   unsigned int i;
 
   for (i = 0; i < m_pIconArray->GetCount(); i++) {
     pmi = (MarkIcon *)m_pIconArray->Item(i);
-    if (pmi->icon_name.IsSameAs(icon_key))
-      return wxString(pmi->icon_description);
+    if (pmi->icon_name == icon_key) return pmi->icon_description;
   }
 
-  return "";
+  return QString();
 }
 
-wxString *WayPointman::GetIconKey(int index) const {
-  wxString *pret = NULL;
+QString *WayPointman::GetIconKey(int index) const {
+  QString *pret = NULL;
 
   if ((index >= 0) && ((unsigned int)index < m_pIconArray->GetCount())) {
     MarkIcon *pmi = (MarkIcon *)m_pIconArray->Item(index);
@@ -1290,10 +1290,10 @@ int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
       int h1 = h;
       int w1 = w;
       if (h0 > h)
-        w1 = wxRound((double)w0 * ((double)h / (double)h0));
+        w1 = qRound((double)w0 * ((double)h / (double)h0));
 
       else if (w0 > w)
-        h1 = wxRound((double)h0 * ((double)w / (double)w0));
+        h1 = qRound((double)h0 * ((double)w / (double)w0));
 
       icon_larger = pmi->iconImage.Rescale(w1, h1).Resize(
           wxSize(w, h), wxPoint(w / 2 - w1 / 2, h / 2 - h1 / 2));
@@ -1321,7 +1321,7 @@ int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
     int xm = xbmp.GetWidth() / 2;
     int ym = xbmp.GetHeight() / 2;
     int dp = xm / 2;
-    int width = wxMax(xm / 10, 2);
+    int width = std::max(xm / 10, 2);
     wxPen red(m_get_global_colour("URED"), width);
     mdc.SetPen(red);
     mdc.DrawLine(xm - dp, ym - dp, xm + dp, ym + dp);
@@ -1344,7 +1344,7 @@ int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
     xm = fbmp.GetWidth() / 2;
     ym = fbmp.GetHeight() / 2;
     dp = xm / 2;
-    width = wxMax(xm / 10, 2);
+    width = std::max(xm / 10, 2);
     wxPen fred(m_get_global_colour("UGREN"), width);
     fmdc.SetPen(fred);
     fmdc.DrawLine(xm - dp, ym + dp, xm + dp, ym + dp);
@@ -1371,11 +1371,11 @@ int WayPointman::GetFIconImageListIndex(const wxBitmap *pbm) const {
 }
 
 //  Create the unique identifier
-wxString WayPointman::CreateGUID(RoutePoint *pRP) {
-  return GpxDocument::GetUUID();
+QString WayPointman::CreateGUID(RoutePoint *pRP) {
+  return wxString_to_QString(GpxDocument::GetUUID());
 }
 
-RoutePoint *WayPointman::FindRoutePointByGUID(const wxString &guid) {
+RoutePoint *WayPointman::FindRoutePointByGUID(const QString &guid) {
   for (RoutePoint *prp : *m_pWayPointList) {
     if (prp->m_GUID == guid) return (prp);
   }
@@ -1398,7 +1398,7 @@ RoutePoint *WayPointman::GetNearbyWaypoint(double lat, double lon,
 
 RoutePoint *WayPointman::GetOtherNearbyWaypoint(double lat, double lon,
                                                 double radius_meters,
-                                                const wxString &guid) {
+                                                const QString &guid) {
   //    Iterate on the RoutePoint list, checking distance
 
   for (RoutePoint *pr : *m_pWayPointList) {
@@ -1468,7 +1468,7 @@ void WayPointman::DeleteAllWaypoints(bool b_delete_used) {
 
 RoutePoint *WayPointman::FindWaypointByGuid(const std::string &guid) {
   for (RoutePoint *rp : *m_pWayPointList) {
-    if (guid == rp->m_GUID) return rp;
+    if (rp->m_GUID.toStdString() == guid) return rp;
   }
   return 0;
 }

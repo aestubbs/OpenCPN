@@ -1308,8 +1308,8 @@ void MarkInfoDlg::DefautlBtnClicked(wxCommandEvent& event) {
     if (retcode == wxID_OK) {
       double value;
       if (m_SaveDefaultDlg->IconCB->GetValue()) {
-        g_default_wp_icon =
-            *pWayPointMan->GetIconKey(m_bcomboBoxIcon->GetSelection());
+        g_default_wp_icon = QString_to_wxString(
+            *pWayPointMan->GetIconKey(m_bcomboBoxIcon->GetSelection()));
       }
       if (m_SaveDefaultDlg->RangRingsCB->GetValue()) {
         g_iWaypointRangeRingsNumber =
@@ -1607,11 +1607,11 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
 
     if (fillCombo) {
       for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
-        wxString* ps = pWayPointMan->GetIconDescription(i);
+        QString* ps = pWayPointMan->GetIconDescription(i);
         wxBitmap bmp =
             pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight());
 
-        m_bcomboBoxIcon->Append(*ps, bmp);
+        m_bcomboBoxIcon->Append(QString_to_wxString(*ps), bmp);
       }
     }
     // find the correct item in the combo box
@@ -1649,10 +1649,9 @@ void MarkInfoDlg::OnFocusEvent(wxFocusEvent& event) {
 }
 
 void MarkInfoDlg::OnBitmapCombClick(wxCommandEvent& event) {
-  wxString* icon_name =
+  QString* icon_name =
       pWayPointMan->GetIconKey(m_bcomboBoxIcon->GetSelection());
-  if (icon_name && icon_name->Length())
-    m_pRoutePoint->SetIconName(wxString_to_QString(*icon_name));
+  if (icon_name && icon_name->length()) m_pRoutePoint->SetIconName(*icon_name);
   m_pRoutePoint->ReLoadIcon();
   SaveChanges();
   // pConfig->UpdateWayPoint( m_pRoutePoint );
@@ -1689,10 +1688,9 @@ bool MarkInfoDlg::SaveChanges() {
     m_pRoutePoint->m_bShowName = m_checkBoxShowName->GetValue();
     m_pRoutePoint->SetPosition(fromDMM(m_textLatitude->GetValue()),
                                fromDMM(m_textLongitude->GetValue()));
-    wxString* icon_name =
+    QString* icon_name =
         pWayPointMan->GetIconKey(m_bcomboBoxIcon->GetSelection());
-    if (icon_name && icon_name->Length())
-      m_pRoutePoint->SetIconName(wxString_to_QString(*icon_name));
+    if (icon_name && icon_name->length()) m_pRoutePoint->SetIconName(*icon_name);
     m_pRoutePoint->ReLoadIcon();
     m_pRoutePoint->SetShowWaypointRangeRings(
         (bool)(m_ChoiceWaypointRangeRingsNumber->GetSelection() != 0));

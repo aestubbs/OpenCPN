@@ -4696,7 +4696,9 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
     case 7: {
       // Load the waypoints. Both of these routines are very slow to execute
       // which is why they have been to defered until here
-      auto colour_func = [](wxString c) { return GetGlobalColor(c); };
+      auto colour_func = [](QString c) {
+        return GetGlobalColor(QString_to_wxString(c));
+      };
       pWayPointMan = new WayPointman(colour_func);
       WayPointmanGui(*pWayPointMan)
           .SetColorScheme(global_color_scheme, g_Platform->GetDisplayDPmm());
@@ -4714,10 +4716,12 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
 
       //    Re-enable anchor watches if set in config file
       if (!g_AW1GUID.IsEmpty()) {
-        pAnchorWatchPoint1 = pWayPointMan->FindRoutePointByGUID(g_AW1GUID);
+        pAnchorWatchPoint1 =
+            pWayPointMan->FindRoutePointByGUID(wxString_to_QString(g_AW1GUID));
       }
       if (!g_AW2GUID.IsEmpty()) {
-        pAnchorWatchPoint2 = pWayPointMan->FindRoutePointByGUID(g_AW2GUID);
+        pAnchorWatchPoint2 =
+            pWayPointMan->FindRoutePointByGUID(wxString_to_QString(g_AW2GUID));
       }
 
       // Import Layer-wise any .gpx files from /layers directory

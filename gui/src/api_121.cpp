@@ -55,8 +55,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
   dst->IconName = QString_to_wxString(src->GetIconName());
   dst->m_MarkName = QString_to_wxString(src->GetName());
   dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
-  dst->IconDescription = pWayPointMan->GetIconDescription(
-      QString_to_wxString(src->GetIconName()));
+  dst->IconDescription = QString_to_wxString(pWayPointMan->GetIconDescription(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
   dst->m_CreateTime = src->GetCreateTime();  // not const
   dst->m_GUID = QString_to_wxString(src->m_GUID);
@@ -176,7 +175,8 @@ static bool AddPlugInRouteExV3(HostApi121::Route* proute, bool b_permanent) {
   while (pwpnode) {
     pwaypointex = pwpnode->GetData();
 
-    pWP = pWayPointMan->FindRoutePointByGUID(pwaypointex->m_GUID);
+    pWP = pWayPointMan->FindRoutePointByGUID(
+        wxString_to_QString(pwaypointex->m_GUID));
     if (!pWP) {
       pWP = CreateNewPoint(pwaypointex, b_permanent);
       pWP->m_bIsolatedMark = false;
@@ -232,7 +232,8 @@ static bool UpdatePlugInRouteExV3(HostApi121::Route* proute) {
   bool b_found = false;
 
   // Find the Route
-  Route* pRoute = g_pRouteMan->FindRouteByGUID(proute->m_GUID);
+  Route* pRoute =
+      g_pRouteMan->FindRouteByGUID(wxString_to_QString(proute->m_GUID));
   if (pRoute) b_found = true;
 
   if (b_found) {
@@ -253,8 +254,7 @@ static void PlugInExFromRoutePoint(PlugIn_Waypoint_Ex* dst,
   dst->IconName = QString_to_wxString(src->GetIconName());
   dst->m_MarkName = QString_to_wxString(src->GetName());
   dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
-  dst->IconDescription = pWayPointMan->GetIconDescription(
-      QString_to_wxString(src->GetIconName()));
+  dst->IconDescription = QString_to_wxString(pWayPointMan->GetIconDescription(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
   dst->m_CreateTime = src->GetCreateTime();  // not const
   dst->m_GUID = QString_to_wxString(src->m_GUID);
@@ -390,7 +390,7 @@ static wxString NavToHerePI(double lat, double lon) {
 }
 
 static bool ActivateRoutePI(wxString route_guid, bool activate) {
-  Route* route = g_pRouteMan->FindRouteByGUID(route_guid);
+  Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(route_guid));
   if (!route) return false;
 
   if (activate) {
@@ -438,7 +438,7 @@ static std::shared_ptr<HostApi121::PiPointContext> GetContextAtPoint(
 
 static wxBitmap GetObjectIcon_PlugIn(const wxString& name) {
   if (pWayPointMan)
-    return *pWayPointMan->GetIconBitmap(name);
+    return *pWayPointMan->GetIconBitmap(wxString_to_QString(name));
   else
     return wxNullBitmap;
 }
@@ -463,7 +463,7 @@ static void RouteInsertWaypoint(int canvas_index, wxString route_guid,
       static_cast<ChartCanvas*>(GetCanvasByIndex(canvas_index));
   if (!parent) return;
 
-  Route* route = g_pRouteMan->FindRouteByGUID(route_guid);
+  Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(route_guid));
   if (!route) return;
 
   if (route->m_bIsInLayer) return;
@@ -483,7 +483,7 @@ static void RouteInsertWaypoint(int canvas_index, wxString route_guid,
 }
 
 static void RouteAppendWaypoint(int canvas_index, wxString route_guid) {
-  Route* route = g_pRouteMan->FindRouteByGUID(route_guid);
+  Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(route_guid));
   if (!route) return;
 
   ChartCanvas* parent =
@@ -520,19 +520,19 @@ static bool IsRouteBeingCreated(int canvas_index) {
 }
 
 static bool AreRouteWaypointNamesVisible(wxString route_guid) {
-  Route* route = g_pRouteMan->FindRouteByGUID(route_guid);
+  Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(route_guid));
   if (!route) return false;
   return route->AreWaypointNamesVisible();
 }
 
 static void ShowRouteWaypointNames(wxString route_guid, bool show) {
-  Route* route = g_pRouteMan->FindRouteByGUID(route_guid);
+  Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(route_guid));
   if (!route) return;
   route->ShowWaypointNames(show);
 }
 
 static void NavigateToWaypoint(wxString waypoint_guid) {
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(waypoint_guid);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(waypoint_guid));
   if (!prp) return;
 
   RoutePoint* pWP_src =
@@ -888,7 +888,7 @@ bool HostApi121::UpdateRoute(HostApi121::Route* route) {
 }
 
 std::unique_ptr<HostApi121::Route> HostApi121::GetRoute(const wxString& guid) {
-  ::Route* route = g_pRouteMan->FindRouteByGUID(guid);
+  ::Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(guid));
   if (!route) return nullptr;
 
   auto dst_route = std::make_unique<HostApi121::Route>();

@@ -889,7 +889,7 @@ bool AddSingleWaypoint(PlugIn_Waypoint* pwaypoint, bool b_permanent) {
 bool DeleteSingleWaypoint(wxString& GUID) {
   //  Find the RoutePoint
   bool b_found = false;
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(GUID));
 
   if (prp) b_found = true;
 
@@ -905,7 +905,7 @@ bool DeleteSingleWaypoint(wxString& GUID) {
 bool UpdateSingleWaypoint(PlugIn_Waypoint* pwaypoint) {
   //  Find the RoutePoint
   bool b_found = false;
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(pwaypoint->m_GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(pwaypoint->m_GUID));
 
   if (prp) b_found = true;
 
@@ -1002,7 +1002,7 @@ static void PlugInFromRoutePoint(PlugIn_Waypoint* dst,
 
 bool GetSingleWaypoint(wxString GUID, PlugIn_Waypoint* pwaypoint) {
   //  Find the RoutePoint
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(GUID));
 
   if (!prp) return false;
 
@@ -1101,8 +1101,8 @@ wxArrayString GetIconNameArray() {
   wxArrayString result;
 
   for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
-    wxString* ps = pWayPointMan->GetIconKey(i);
-    result.Add(*ps);
+    QString* ps = pWayPointMan->GetIconKey(i);
+    result.Add(QString_to_wxString(*ps));
   }
   return result;
 }
@@ -1173,7 +1173,7 @@ bool DeletePlugInRoute(wxString& GUID) {
   bool b_found = false;
 
   //  Find the Route
-  Route* pRoute = g_pRouteMan->FindRouteByGUID(GUID);
+  Route* pRoute = g_pRouteMan->FindRouteByGUID(wxString_to_QString(GUID));
   if (pRoute) {
     g_pRouteMan->DeleteRoute(pRoute);
     b_found = true;
@@ -1185,7 +1185,7 @@ bool UpdatePlugInRoute(PlugIn_Route* proute) {
   bool b_found = false;
 
   //  Find the Route
-  Route* pRoute = g_pRouteMan->FindRouteByGUID(proute->m_GUID);
+  Route* pRoute = g_pRouteMan->FindRouteByGUID(wxString_to_QString(proute->m_GUID));
   if (pRoute) b_found = true;
 
   if (b_found) {
@@ -1243,7 +1243,7 @@ bool DeletePlugInTrack(wxString& GUID) {
   bool b_found = false;
 
   //  Find the Route
-  Track* pTrack = g_pRouteMan->FindTrackByGUID(GUID);
+  Track* pTrack = g_pRouteMan->FindTrackByGUID(wxString_to_QString(GUID));
   if (pTrack) {
     NavObj_dB::GetInstance().DeleteTrack(pTrack);
     RoutemanGui(*g_pRouteMan).DeleteTrack(pTrack);
@@ -1260,7 +1260,7 @@ bool UpdatePlugInTrack(PlugIn_Track* ptrack) {
   bool b_found = false;
 
   //  Find the Track
-  Track* pTrack = g_pRouteMan->FindTrackByGUID(ptrack->m_GUID);
+  Track* pTrack = g_pRouteMan->FindTrackByGUID(wxString_to_QString(ptrack->m_GUID));
   if (pTrack) b_found = true;
 
   if (b_found) {
@@ -1558,7 +1558,7 @@ std::unique_ptr<PlugIn_Waypoint> GetWaypoint_Plugin(const wxString& GUID) {
 
 std::unique_ptr<PlugIn_Route> GetRoute_Plugin(const wxString& GUID) {
   std::unique_ptr<PlugIn_Route> r;
-  Route* route = g_pRouteMan->FindRouteByGUID(GUID);
+  Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(GUID));
   if (route == nullptr) return r;
 
   r = std::unique_ptr<PlugIn_Route>(new PlugIn_Route);
@@ -1582,7 +1582,7 @@ std::unique_ptr<PlugIn_Route> GetRoute_Plugin(const wxString& GUID) {
 std::unique_ptr<PlugIn_Track> GetTrack_Plugin(const wxString& GUID) {
   std::unique_ptr<PlugIn_Track> t;
   //  Find the Track
-  Track* pTrack = g_pRouteMan->FindTrackByGUID(GUID);
+  Track* pTrack = g_pRouteMan->FindTrackByGUID(wxString_to_QString(GUID));
   if (!pTrack) return t;
 
   std::unique_ptr<PlugIn_Track> tk =
@@ -1803,7 +1803,7 @@ void PlugIn_Waypoint_Ex::InitDefaults() {
 }
 
 bool PlugIn_Waypoint_Ex::GetFSStatus() {
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(m_GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(m_GUID));
   if (!prp) return false;
 
   if (prp->m_bIsInRoute && !prp->IsShared()) return false;
@@ -1813,7 +1813,7 @@ bool PlugIn_Waypoint_Ex::GetFSStatus() {
 
 int PlugIn_Waypoint_Ex::GetRouteMembershipCount() {
   // Search all routes to count the membership of this point
-  RoutePoint* pWP = pWayPointMan->FindRoutePointByGUID(m_GUID);
+  RoutePoint* pWP = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(m_GUID));
   if (!pWP) return 0;
 
   int nCount = 0;
@@ -1886,7 +1886,7 @@ void PlugIn_Waypoint_ExV2::InitDefaults() {
 PlugIn_Waypoint_ExV2::~PlugIn_Waypoint_ExV2() {}
 
 bool PlugIn_Waypoint_ExV2::GetFSStatus() {
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(m_GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(m_GUID));
   if (!prp) return false;
   if (prp->m_bIsInRoute && !prp->IsShared()) return false;
   return true;
@@ -1894,7 +1894,7 @@ bool PlugIn_Waypoint_ExV2::GetFSStatus() {
 
 int PlugIn_Waypoint_ExV2::GetRouteMembershipCount() {
   // Search all routes to count the membership of this point
-  RoutePoint* pWP = pWayPointMan->FindRoutePointByGUID(m_GUID);
+  RoutePoint* pWP = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(m_GUID));
   if (!pWP) return 0;
 
   int nCount = 0;
@@ -1941,8 +1941,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
   dst->IconName = QString_to_wxString(src->GetIconName());
   dst->m_MarkName = QString_to_wxString(src->GetName());
   dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
-  dst->IconDescription = pWayPointMan->GetIconDescription(
-      QString_to_wxString(src->GetIconName()));
+  dst->IconDescription = QString_to_wxString(pWayPointMan->GetIconDescription(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
   dst->m_CreateTime = src->GetCreateTime();  // not const
   dst->m_GUID = QString_to_wxString(src->m_GUID);
@@ -1987,7 +1986,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
 
 bool GetSingleWaypointExV2(wxString GUID, PlugIn_Waypoint_ExV2* pwaypoint) {
   //  Find the RoutePoint
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(GUID));
 
   if (!prp) return false;
 
@@ -2095,7 +2094,7 @@ bool AddSingleWaypointExV2(PlugIn_Waypoint_ExV2* pwaypointex,
 bool UpdateSingleWaypointExV2(PlugIn_Waypoint_ExV2* pwaypoint) {
   //  Find the RoutePoint
   bool b_found = false;
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(pwaypoint->m_GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(pwaypoint->m_GUID));
 
   if (prp) b_found = true;
 
@@ -2192,7 +2191,7 @@ bool AddPlugInRouteExV2(PlugIn_Route_ExV2* proute, bool b_permanent) {
   while (pwpnode) {
     pwaypointex = pwpnode->GetData();
 
-    pWP = pWayPointMan->FindRoutePointByGUID(pwaypointex->m_GUID);
+    pWP = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(pwaypointex->m_GUID));
     if (!pWP) {
       pWP = CreateNewPoint(pwaypointex, b_permanent);
       pWP->m_bIsolatedMark = false;
@@ -2243,7 +2242,7 @@ bool UpdatePlugInRouteExV2(PlugIn_Route_ExV2* proute) {
   bool b_found = false;
 
   // Find the Route
-  Route* pRoute = g_pRouteMan->FindRouteByGUID(proute->m_GUID);
+  Route* pRoute = g_pRouteMan->FindRouteByGUID(wxString_to_QString(proute->m_GUID));
   if (pRoute) b_found = true;
 
   if (b_found) {
@@ -2258,7 +2257,7 @@ bool UpdatePlugInRouteExV2(PlugIn_Route_ExV2* proute) {
 
 std::unique_ptr<PlugIn_Route_ExV2> GetRouteExV2_Plugin(const wxString& GUID) {
   std::unique_ptr<PlugIn_Route_ExV2> r;
-  Route* route = g_pRouteMan->FindRouteByGUID(GUID);
+  Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(GUID));
   if (route == nullptr) return r;
 
   r = std::unique_ptr<PlugIn_Route_ExV2>(new PlugIn_Route_ExV2);
@@ -2302,8 +2301,7 @@ static void PlugInExFromRoutePoint(PlugIn_Waypoint_Ex* dst,
   dst->IconName = QString_to_wxString(src->GetIconName());
   dst->m_MarkName = QString_to_wxString(src->GetName());
   dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
-  dst->IconDescription = pWayPointMan->GetIconDescription(
-      QString_to_wxString(src->GetIconName()));
+  dst->IconDescription = QString_to_wxString(pWayPointMan->GetIconDescription(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
   dst->m_CreateTime = src->GetCreateTime();  // not const
   dst->m_GUID = QString_to_wxString(src->m_GUID);
@@ -2392,7 +2390,7 @@ RoutePoint* CreateNewPoint(const PlugIn_Waypoint_Ex* src, bool b_permanent) {
 }
 bool GetSingleWaypointEx(wxString GUID, PlugIn_Waypoint_Ex* pwaypoint) {
   //  Find the RoutePoint
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(GUID));
 
   if (!prp) return false;
 
@@ -2434,7 +2432,7 @@ bool AddSingleWaypointEx(PlugIn_Waypoint_Ex* pwaypointex, bool b_permanent) {
 bool UpdateSingleWaypointEx(PlugIn_Waypoint_Ex* pwaypoint) {
   //  Find the RoutePoint
   bool b_found = false;
-  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(pwaypoint->m_GUID);
+  RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(pwaypoint->m_GUID));
 
   if (prp) b_found = true;
 
@@ -2520,7 +2518,7 @@ bool AddPlugInRouteEx(PlugIn_Route_Ex* proute, bool b_permanent) {
   while (pwpnode) {
     pwaypointex = pwpnode->GetData();
 
-    pWP = pWayPointMan->FindRoutePointByGUID(pwaypointex->m_GUID);
+    pWP = pWayPointMan->FindRoutePointByGUID(wxString_to_QString(pwaypointex->m_GUID));
     if (!pWP) {
       pWP = CreateNewPoint(pwaypointex, b_permanent);
       pWP->m_bIsolatedMark = false;
@@ -2571,7 +2569,7 @@ bool UpdatePlugInRouteEx(PlugIn_Route_Ex* proute) {
   bool b_found = false;
 
   //  Find the Route
-  Route* pRoute = g_pRouteMan->FindRouteByGUID(proute->m_GUID);
+  Route* pRoute = g_pRouteMan->FindRouteByGUID(wxString_to_QString(proute->m_GUID));
   if (pRoute) b_found = true;
 
   if (b_found) {
@@ -2591,7 +2589,7 @@ std::unique_ptr<PlugIn_Waypoint_Ex> GetWaypointEx_Plugin(const wxString& GUID) {
 
 std::unique_ptr<PlugIn_Route_Ex> GetRouteEx_Plugin(const wxString& GUID) {
   std::unique_ptr<PlugIn_Route_Ex> r;
-  Route* route = g_pRouteMan->FindRouteByGUID(GUID);
+  Route* route = g_pRouteMan->FindRouteByGUID(wxString_to_QString(GUID));
   if (route == nullptr) return r;
 
   r = std::unique_ptr<PlugIn_Route_Ex>(new PlugIn_Route_Ex);

@@ -24,7 +24,8 @@
 #ifndef MARKICON_H_
 #define MARKICON_H_
 
-#include <wx/string.h>
+#include <QString>
+
 #include <wx/bitmap.h>
 
 class MarkIcon {
@@ -37,8 +38,8 @@ public:
     listIndex = 0;
   }
   wxBitmap *piconBitmap;
-  wxString icon_name;
-  wxString icon_description;
+  QString icon_name;
+  QString icon_description;
   bool preScaled;
 
   unsigned int icon_texture, tex_w, tex_h;

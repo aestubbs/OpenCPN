@@ -204,7 +204,8 @@ RoutePoint *GPXLoadWaypoint1(pugi::xml_node &wpt_node, wxString def_symbol_name,
   // Create waypoint
 
   if (b_layer) {
-    if (GuidString.IsEmpty()) GuidString = pWayPointMan->CreateGUID(NULL);
+    if (GuidString.IsEmpty())
+      GuidString = qs2ws(pWayPointMan->CreateGUID(NULL));
   }
 
   pWP = new RoutePoint(rlat, rlon, ws2qs(SymString), ws2qs(NameString),
@@ -528,7 +529,7 @@ Route *GPXLoadRoute1(pugi::xml_node &wpt_node, bool b_fullviz, bool b_layer,
             // HACK FOR TESTING NAVOBJ_DB
             return nullptr;
 
-            pTentRoute->m_GUID = ws2qs(pWayPointMan->CreateGUID(NULL));
+            pTentRoute->m_GUID = pWayPointMan->CreateGUID(NULL);
             route_existing = true;
           }
         }
@@ -557,7 +558,7 @@ Route *GPXLoadRoute1(pugi::xml_node &wpt_node, bool b_fullviz, bool b_layer,
             new_wpt = false;
           } else {
             if (route_existing)
-              tpWp->m_GUID = ws2qs(pWayPointMan->CreateGUID(NULL));
+              tpWp->m_GUID = pWayPointMan->CreateGUID(NULL);
             pWp = tpWp;
           }
         }

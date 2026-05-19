@@ -860,19 +860,17 @@ void RoutePointGui::EnableDragHandle(bool bEnable) {
 
 void RoutePointGui::ReLoadIcon() {
   if (!pWayPointMan) return;
-  bool icon_exists =
-      pWayPointMan->DoesIconExist(QString_to_wxString(m_point.m_IconName));
+  bool icon_exists = pWayPointMan->DoesIconExist(m_point.m_IconName);
 
-  wxString iconUse = QString_to_wxString(m_point.m_IconName);
+  QString iconUse = m_point.m_IconName;
   if (!icon_exists) {
     //  Try all lower case as a favor in the case where imported waypoints use
     //  mixed case names
-    wxString tentative_icon =
-        QString_to_wxString(m_point.m_IconName).Lower();
+    QString tentative_icon = m_point.m_IconName.toLower();
     if (pWayPointMan->DoesIconExist(tentative_icon)) {
       // if found, convert point's icon name permanently.
-      m_point.m_IconName = wxString_to_QString(tentative_icon);
-      iconUse = QString_to_wxString(m_point.m_IconName);
+      m_point.m_IconName = tentative_icon;
+      iconUse = m_point.m_IconName;
     }
     //      Icon name is not in the standard or user lists, so add to the list a
     //      generic placeholder

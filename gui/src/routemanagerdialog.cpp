@@ -1545,8 +1545,9 @@ void RouteManagerDialog::OnRteReverseClick(wxCommandEvent &event) {
   if (!route) return;
   if (route->m_bIsInLayer) return;
 
-  int ask_return = OCPNMessageBox(this, g_pRouteMan->GetRouteReverseMessage(),
-                                  _("Rename Waypoints?"), wxYES_NO | wxCANCEL);
+  int ask_return = OCPNMessageBox(
+      this, QString_to_wxString(g_pRouteMan->GetRouteReverseMessage()),
+      _("Rename Waypoints?"), wxYES_NO | wxCANCEL);
   if (ask_return != wxID_CANCEL) {
     bool rename = (ask_return == wxID_YES);
 

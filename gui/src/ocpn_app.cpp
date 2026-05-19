@@ -102,6 +102,7 @@
 #include "model/ais_decoder.h"
 #include "model/ais_state_vars.h"
 #include "model/certificates.h"
+#include "model/wx_qt_string.h"
 #include "model/cmdline.h"
 #include "model/comm_bridge.h"
 #include "model/comm_drv_factory.h"
@@ -443,7 +444,8 @@ EVT_ACTIVATE_APP(MyApp::OnActivateApp)
 END_EVENT_TABLE()
 
 static void ActivateRoute(const std::string &guid) {
-  Route *route = g_pRouteMan->FindRouteByGUID(guid);
+  Route *route =
+      g_pRouteMan->FindRouteByGUID(QString::fromStdString(guid));
   if (!route) {
     wxLogMessage("Cannot activate guid: no such route");
     return;
@@ -464,7 +466,8 @@ static void ActivateRoute(const std::string &guid) {
 }
 
 static void ReverseRoute(const std::string &guid) {
-  Route *route = g_pRouteMan->FindRouteByGUID(guid);
+  Route *route =
+      g_pRouteMan->FindRouteByGUID(QString::fromStdString(guid));
   if (!route) {
     wxLogMessage("Cannot activate guid: no such route");
     return;

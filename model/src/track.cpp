@@ -179,7 +179,7 @@ Track::Track() {
   m_width = WIDTH_UNDEFINED;
   m_style = wxPENSTYLE_INVALID;
 
-  m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(NULL));
+  m_GUID = pWayPointMan->CreateGUID(NULL);
   m_bIsInLayer = false;
   m_btemp = false;
 

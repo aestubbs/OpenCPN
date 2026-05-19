@@ -14,6 +14,8 @@
 #include <sys/types.h>
 #endif
 
+#include <QString>
+
 #include <wx/app.h>
 #include <wx/event.h>
 #include <wx/fileconf.h>
@@ -299,7 +301,7 @@ public:
 
 protected:
   void Work() override {
-    auto colour_func = [](wxString c) { return *wxBLACK; };
+    auto colour_func = [](QString c) { return *wxBLACK; };
     pWayPointMan = new WayPointman(colour_func);
     pRouteList = new RouteList;
     g_BasePlatform = new BasePlatform();
@@ -394,7 +396,7 @@ public:
 
 protected:
   void Work() override {
-    auto colour_func = [](wxString c) { return *wxBLACK; };
+    auto colour_func = [](QString c) { return *wxBLACK; };
     pWayPointMan = new WayPointman(colour_func);
     pRouteList = new RouteList;
     g_BasePlatform = new BasePlatform();

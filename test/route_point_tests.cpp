@@ -1,5 +1,7 @@
 #include <memory>
 
+#include <QString>
+
 #include <gtest/gtest.h>
 #include <wx/colour.h>
 #include <wx/string.h>
@@ -12,7 +14,7 @@ class RoutePointScaleTest : public ::testing::Test {
 protected:
   void SetUp() override {
     waypoints = std::make_unique<WayPointman>(
-        [](wxString) { return wxColour(0, 0, 0); });
+        [](QString) { return wxColour(0, 0, 0); });
     pWayPointMan = waypoints.get();
   }
 

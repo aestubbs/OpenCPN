@@ -9722,8 +9722,7 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
                 g_Platform->GetSelectRadiusPix() / m_true_scale_ppm;
             RoutePoint *pNearbyPoint = pWayPointMan->GetOtherNearbyWaypoint(
                 m_pRoutePointEditTarget->m_lat, m_pRoutePointEditTarget->m_lon,
-                nearby_radius_meters,
-                QString_to_wxString(m_pRoutePointEditTarget->m_GUID));
+                nearby_radius_meters, m_pRoutePointEditTarget->m_GUID);
             if (pNearbyPoint && !pNearbyPoint->m_bIsInLayer &&
                 pWayPointMan->IsReallyVisible(pNearbyPoint)) {
               bool duplicate =
@@ -9996,8 +9995,7 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
                 g_Platform->GetSelectRadiusPix() / m_true_scale_ppm;
             RoutePoint *pNearbyPoint = pWayPointMan->GetOtherNearbyWaypoint(
                 m_pRoutePointEditTarget->m_lat, m_pRoutePointEditTarget->m_lon,
-                nearby_radius_meters,
-                QString_to_wxString(m_pRoutePointEditTarget->m_GUID));
+                nearby_radius_meters, m_pRoutePointEditTarget->m_GUID);
             if (pNearbyPoint && !pNearbyPoint->m_bIsInLayer &&
                 pWayPointMan->IsReallyVisible(pNearbyPoint)) {
               bool duplicate = false;  // don't create duplicate point in routes

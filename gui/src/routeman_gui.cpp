@@ -24,6 +24,8 @@
 
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
+#include "model/wx_qt_string.h"
+
 // For compilers that support precompilation, includes "wx.h".
 #include <wx/wxprec.h>
 
@@ -68,7 +70,9 @@ static bool ConfirmDeleteAisMob() {
 RoutemanDlgCtx RoutemanGui::GetDlgCtx() {
   RoutemanDlgCtx ctx;
   ctx.confirm_delete_ais_mob = []() { return ConfirmDeleteAisMob(); };
-  ctx.get_global_colour = [](wxString c) { return GetGlobalColor(c); };
+  ctx.get_global_colour = [](QString c) {
+    return GetGlobalColor(QString_to_wxString(c));
+  };
   ctx.show_with_fresh_fonts = [] {
     if (console && !g_bhide_route_console) console->ShowWithFreshFonts();
   };

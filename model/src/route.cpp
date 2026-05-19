@@ -68,7 +68,7 @@ Route::Route() {
   m_hiliteWidth = 0;
 
   pRoutePointList = new RoutePointList;
-  m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(NULL));
+  m_GUID = pWayPointMan->CreateGUID(NULL);
   m_btemp = false;
 
   m_ArrivalRadius = g_n_arrival_circle_radius;  // Nautical Miles

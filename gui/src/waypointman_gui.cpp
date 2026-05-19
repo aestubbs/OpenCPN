@@ -41,12 +41,13 @@
 #include "model/MarkIcon.h"
 #include "model/route_point.h"
 #include "model/svg_utils.h"
+#include "model/wx_qt_string.h"
 
 #include "ocpn_plugin.h"
 #include "styles.h"
 
 static int CompareMarkIcons(MarkIcon *mi1, MarkIcon *mi2) {
-  return (mi1->icon_name.CmpNoCase(mi2->icon_name));
+  return QString::compare(mi1->icon_name, mi2->icon_name, Qt::CaseInsensitive);
 }
 
 void WayPointmanGui::ProcessUserIcons(ocpnStyle::Style *style,
@@ -134,7 +135,7 @@ MarkIcon *WayPointmanGui::ProcessIcon(wxImage image, const wxString &key,
   // avoid adding duplicates
   for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->GetCount(); i++) {
     pmi = (MarkIcon *)m_waypoint_man.m_pIconArray->Item(i);
-    if (pmi->icon_name.IsSameAs(key)) {
+    if (pmi->icon_name == wxString_to_QString(key)) {
       newIcon = false;
       delete pmi->piconBitmap;
       break;
@@ -143,7 +144,7 @@ MarkIcon *WayPointmanGui::ProcessIcon(wxImage image, const wxString &key,
 
   if (newIcon) {
     pmi = new MarkIcon;
-    pmi->icon_name = key;  // Used for sorting
+    pmi->icon_name = wxString_to_QString(key);  // Used for sorting
     if (add_in_front)
       m_waypoint_man.m_pIconArray->Insert(pmi, 0);
     else {
@@ -152,8 +153,8 @@ MarkIcon *WayPointmanGui::ProcessIcon(wxImage image, const wxString &key,
   }
 
   wxBitmap *pbm = new wxBitmap(image);
-  pmi->icon_name = key;
-  pmi->icon_description = description;
+  pmi->icon_name = wxString_to_QString(key);
+  pmi->icon_description = wxString_to_QString(description);
   pmi->piconBitmap = NULL;
   pmi->icon_texture = 0; /* invalidate */
   pmi->preScaled = false;
@@ -471,7 +472,7 @@ void WayPointmanGui::ProcessDefaultIcons(double displayDPmm) {
     for (unsigned int j = 0; j < legacy_count; j++) {
       MarkIcon *pmiLegacy =
           (MarkIcon *)m_waypoint_man.m_pLegacyIconArray->Item(j);
-      if (pmiLegacy->icon_name.IsSameAs(pmi->icon_name)) {
+      if (pmiLegacy->icon_name == pmi->icon_name) {
         noAdd = true;
         break;
       }
@@ -558,7 +559,7 @@ MarkIcon *WayPointmanGui::ProcessLegacyIcon(wxString fileName,
   for (unsigned int i = 0; i < m_waypoint_man.m_pLegacyIconArray->GetCount();
        i++) {
     pmi = (MarkIcon *)m_waypoint_man.m_pLegacyIconArray->Item(i);
-    if (pmi->icon_name.IsSameAs(key)) {
+    if (pmi->icon_name == wxString_to_QString(key)) {
       newIcon = false;
       delete pmi->piconBitmap;
       break;
@@ -567,12 +568,12 @@ MarkIcon *WayPointmanGui::ProcessLegacyIcon(wxString fileName,
 
   if (newIcon) {
     pmi = new MarkIcon;
-    pmi->icon_name = key;  // Used for sorting
+    pmi->icon_name = wxString_to_QString(key);  // Used for sorting
     m_waypoint_man.m_pLegacyIconArray->Add(pmi);
   }
 
-  pmi->icon_name = key;
-  pmi->icon_description = description;
+  pmi->icon_name = wxString_to_QString(key);
+  pmi->icon_description = wxString_to_QString(description);
   pmi->piconBitmap = NULL;
   pmi->icon_texture = 0; /* invalidate */
   pmi->preScaled = false;
@@ -593,7 +594,7 @@ MarkIcon *WayPointmanGui::ProcessExtendedIcon(wxImage &image,
   auto size = m_waypoint_man.m_pExtendedIconArray->GetCount();
   for (unsigned int i = 0; i < size; i++) {
     pmi = (MarkIcon *)m_waypoint_man.m_pExtendedIconArray->Item(i);
-    if (pmi->icon_name.IsSameAs(key)) {
+    if (pmi->icon_name == wxString_to_QString(key)) {
       newIcon = false;
       delete pmi->piconBitmap;
       break;
@@ -602,15 +603,15 @@ MarkIcon *WayPointmanGui::ProcessExtendedIcon(wxImage &image,
 
   if (newIcon) {
     pmi = new MarkIcon;
-    pmi->icon_name = key;  // Used for sorting
+    pmi->icon_name = wxString_to_QString(key);  // Used for sorting
     m_waypoint_man.m_pExtendedIconArray->Add(pmi);
   }
 
   wxRect rClip = CropImageOnAlpha(image);
   wxImage imageClip = image.GetSubImage(rClip);
 
-  pmi->icon_name = key;
-  pmi->icon_description = description;
+  pmi->icon_name = wxString_to_QString(key);
+  pmi->icon_description = wxString_to_QString(description);
   pmi->piconBitmap = new wxBitmap(imageClip);
   pmi->icon_texture = 0; /* invalidate */
   pmi->preScaled = false;

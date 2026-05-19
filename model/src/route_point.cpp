@@ -83,7 +83,7 @@ RoutePoint::RoutePoint() {
 
   m_HyperlinkList = new HyperlinkList;
 
-  m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(this));
+  m_GUID = pWayPointMan->CreateGUID(this);
 
   m_IconName = "";
 
@@ -150,7 +150,7 @@ RoutePoint::RoutePoint(RoutePoint *orig) {
   SetPlannedSpeed(orig->GetPlannedSpeed());
 
   m_bIsInLayer = orig->m_bIsInLayer;
-  m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(this));
+  m_GUID = pWayPointMan->CreateGUID(this);
 
   m_SelectNode = NULL;
   m_ManagerNode = NULL;
@@ -222,7 +222,7 @@ RoutePoint::RoutePoint(double lat, double lon, const QString &icon_ident,
   if (!pGUID.isEmpty())
     m_GUID = pGUID;
   else
-    m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(this));
+    m_GUID = pWayPointMan->CreateGUID(this);
 
   //      Get Icon bitmap
   m_IconName = icon_ident;

@@ -83,6 +83,7 @@
 #include "model/ais_decoder.h"
 #include "model/ais_state_vars.h"
 #include "model/ais_target_data.h"
+#include "model/wx_qt_string.h"
 #include "model/cmdline.h"
 #include "model/comm_drv_factory.h"
 #include "model/comm_util.h"
@@ -2439,17 +2440,17 @@ void options::CreatePanel_Routes(size_t parent, int border_size,
 
   if (fillCombo) {
     for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
-      wxString* ps = pWayPointMan->GetIconDescription(i);
+      QString* ps = pWayPointMan->GetIconDescription(i);
       wxBitmap bmp = pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight());
 
-      pWaypointDefaultIconChoice->Append(*ps, bmp);
+      pWaypointDefaultIconChoice->Append(QString_to_wxString(*ps), bmp);
     }
   }
 
   // find the correct item in the combo box
   int iconToSelect = -1;
   for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
-    if (*pWayPointMan->GetIconKey(i) == g_default_wp_icon) {
+    if (*pWayPointMan->GetIconKey(i) == wxString_to_QString(g_default_wp_icon)) {
       iconToSelect = i;
       pWaypointDefaultIconChoice->Select(iconToSelect);
       break;
@@ -2463,17 +2464,18 @@ void options::CreatePanel_Routes(size_t parent, int border_size,
 
   if (fillCombo) {
     for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
-      wxString* ps = pWayPointMan->GetIconDescription(i);
+      QString* ps = pWayPointMan->GetIconDescription(i);
       wxBitmap bmp = pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight());
 
-      pRoutepointDefaultIconChoice->Append(*ps, bmp);
+      pRoutepointDefaultIconChoice->Append(QString_to_wxString(*ps), bmp);
     }
   }
 
   // find the correct item in the combo box
   iconToSelect = -1;
   for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
-    if (*pWayPointMan->GetIconKey(i) == g_default_routepoint_icon) {
+    if (*pWayPointMan->GetIconKey(i) ==
+        wxString_to_QString(g_default_routepoint_icon)) {
       iconToSelect = i;
       pRoutepointDefaultIconChoice->Select(iconToSelect);
       break;
@@ -7190,13 +7192,15 @@ void options::ApplyChanges(wxCommandEvent& event) {
   g_n_arrival_circle_radius =
       wxClip(g_n_arrival_circle_radius, 0.001, 0.6);  // Correct abnormally
 
-  wxString* icon_name =
+  QString* icon_name =
       pWayPointMan->GetIconKey(pWaypointDefaultIconChoice->GetSelection());
-  if (icon_name && icon_name->Length()) g_default_wp_icon = *icon_name;
+  if (icon_name && icon_name->length())
+    g_default_wp_icon = QString_to_wxString(*icon_name);
 
   icon_name =
       pWayPointMan->GetIconKey(pRoutepointDefaultIconChoice->GetSelection());
-  if (icon_name && icon_name->Length()) g_default_routepoint_icon = *icon_name;
+  if (icon_name && icon_name->length())
+    g_default_routepoint_icon = QString_to_wxString(*icon_name);
 
   g_bUseWptScaMin = pScaMinChckB->GetValue();
   g_iWpt_ScaMin = wxAtoi(m_pText_ScaMin->GetValue());

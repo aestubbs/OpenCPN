@@ -1123,8 +1123,7 @@ bool RoutePropDlgImpl::IsThisRouteExtendable() {
       double rlon = pLastPoint->m_lon;
 
       m_pExtendPoint = pWayPointMan->GetOtherNearbyWaypoint(
-          rlat, rlon, nearby_radius_meters,
-          QString_to_wxString(pLastPoint->m_GUID));
+          rlat, rlon, nearby_radius_meters, pLastPoint->m_GUID);
       if (m_pExtendPoint) {
         wxArrayPtrVoid* pCloseWPRouteArray =
             g_pRouteMan->GetRouteArrayContaining(m_pExtendPoint);

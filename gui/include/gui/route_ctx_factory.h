@@ -30,6 +30,7 @@
 #include "model/nav_object_database.h"
 #include "model/routeman.h"
 #include "model/track.h"
+#include "model/wx_qt_string.h"
 
 extern WayPointman* pWayPointMan;
 extern Routeman* g_pRouteMan;
@@ -39,11 +40,11 @@ RouteCtx RouteCtxFactory() {
   RouteCtx ctx;
   ctx.find_route_by_guid = [](wxString guid) {
     if (!g_pRouteMan) return static_cast<Route*>(0);
-    return g_pRouteMan->FindRouteByGUID(guid);
+    return g_pRouteMan->FindRouteByGUID(wxString_to_QString(guid));
   };
   ctx.find_track_by_guid = [](wxString guid) {
     if (!g_pRouteMan) return static_cast<Track*>(0);
-    return g_pRouteMan->FindTrackByGUID(guid);
+    return g_pRouteMan->FindTrackByGUID(wxString_to_QString(guid));
   };
   ctx.find_wpt_by_guid = [](wxString guid) {
     if (!pWayPointMan) return static_cast<RoutePoint*>(0);

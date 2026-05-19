@@ -1508,9 +1508,9 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
     case ID_RT_MENU_REVERSE: {
       if (m_pSelectedRoute->m_bIsInLayer) break;
 
-      int ask_return =
-          OCPNMessageBox(parent, g_pRouteMan->GetRouteReverseMessage(),
-                         _("Rename Waypoints?"), wxYES_NO | wxCANCEL);
+      int ask_return = OCPNMessageBox(
+          parent, QString_to_wxString(g_pRouteMan->GetRouteReverseMessage()),
+          _("Rename Waypoints?"), wxYES_NO | wxCANCEL);
 
       if (ask_return != wxID_CANCEL) {
         pSelect->DeleteAllSelectableRouteSegments(m_pSelectedRoute);
@@ -1542,9 +1542,10 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
       if (m_pSelectedRoute) {
         if (m_pSelectedRoute->m_bIsInLayer) break;
 
-        int ask_return =
-            OCPNMessageBox(parent, g_pRouteMan->GetRouteResequenceMessage(),
-                           _("Rename Waypoints?"), wxYES_NO | wxCANCEL);
+        int ask_return = OCPNMessageBox(
+            parent,
+            QString_to_wxString(g_pRouteMan->GetRouteResequenceMessage()),
+            _("Rename Waypoints?"), wxYES_NO | wxCANCEL);
 
         if (ask_return != wxID_CANCEL) {
           m_pSelectedRoute->RenameRoutePoints();
