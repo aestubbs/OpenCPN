@@ -7,9 +7,9 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). Next: P1.6b — de-wx the decode layer
-(`comm_decoder` → `comm_bridge` → `ais_decoder`), extending the wx-free
-pipeline downstream toward nav data.
+SignalK/SocketCAN parked (P1.5m). P1.6b underway — the decode layer is being
+de-wx'd along the data flow: `comm_decoder` and `comm_bridge` done, leaving
+`ais_decoder` (the largest unit, ~117 `wxString` refs).
 **Last updated:** 2026-05-19.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -194,11 +194,22 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         `wxString` — the boundary, shared with the wx GUI and plugin ABI.
   - [~] **P1.6b** De-wx the **decode layer** — the stage downstream of the
         (wx-free) `NavMsgBus` that turns the `NavMsg` stream into nav data
-        (positions, AIS, HUD): `comm_decoder.cpp` (~38 `wxString` refs),
-        `comm_bridge.cpp` (~32), `ais_decoder.cpp` (~117). This extends the
-        clean pipeline from *bytes-in* through to *nav-data-out* — the core
-        functionality. New boundary: wherever `comm_bridge` hands nav data to
-        the GUI.
+        (positions, AIS, HUD). This extends the clean pipeline from *bytes-in*
+        through to *nav-data-out* — the core functionality.
+    - [x] `comm_decoder.cpp` — wx-free internals; one `wxString` boundary to
+          the still-wx `libs/nmea0183` parser (`ParseSentence`).
+    - [x] `comm_bridge.cpp` — the priority-source machinery is now Qt-native:
+          `PriorityMap` is `QHash<QString,int>` and `PriorityContainer`'s
+          string fields are `QString`; keys are built/parsed with `QString`.
+          Watchdog logging on `qInfo`, `QDateTime` timestamps. `std::string`
+          survives only at the two pinned boundaries — the plugin ABI
+          (`GetPriorityMaps`/`GetActivePriorityIdentifiers` in `ocpn_plugin.h`,
+          adapted with `toStdString` in `ocpn_plugin_gui.cpp`) and config
+          (`Load/SaveConfig`, P1.9). Other remaining wx: the `wxWindow` GUI
+          lookup (`GetDataMonitor`) and a `wxString` hand-off to the still-wx
+          AIS parser.
+    - [ ] `ais_decoder.cpp` (~117 `wxString` refs) — the largest unit; also
+          the AIS-parser boundary `comm_bridge` currently bridges to.
   - [ ] **P1.6c+** Continue downstream/adjacent layers (routes, nav object
         DB, …) the same way. `ConnectionParams` + config and the legacy
         gateway parsers (`n2k_net`) are swept only when their outer layer
@@ -446,3 +457,19 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   forward: actively prefer Qt over std/pure-C++ wherever Qt offers a way;
   the goal is a fully Qt application. `QT_MIGRATION_COMMS_ARCH.md` §3.2-3.3
   / §4 updated accordingly.
+- 2026-05-19 — P1.6b in progress: `comm_decoder` and `comm_bridge` de-wx'd.
+  The decode layer's wxString sweep follows the data flow — `comm_decoder`
+  (NMEA/N2K/SignalK → `NavData`) then `comm_bridge` (the `NavData` →
+  global-nav-state stage). `comm_bridge` is converted Qt-first, not merely
+  de-wx'd: per the post-`71721d90a` direction (actively prefer Qt over
+  std/pure-C++), the priority-source machinery's representation is now Qt —
+  `PriorityMap` is `QHash<QString,int>`, `PriorityContainer`'s string fields
+  are `QString`. Watchdog logging is `qInfo`, timestamps `QDateTime`.
+  `std::string` is kept deliberately, and only, at the two boundaries that
+  pin it: the plugin ABI (`GetPriorityMaps`/`UpdateAndApplyPriorityMaps`/
+  `GetActivePriorityIdentifiers`, exported via `ocpn_plugin.h` — a fixed
+  signature, adapted at the call site in `ocpn_plugin_gui.cpp`) and config
+  persistence (`Load/SaveConfig`, P1.9). Other remaining wx in `comm_bridge`:
+  the `wxWindow` data-monitor GUI lookup and a `wxString` hand-off to the
+  still-wx AIS parser. `ais_decoder` (~117 refs, and that AIS-parser
+  boundary) is the remaining P1.6b file.
