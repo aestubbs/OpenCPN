@@ -34,7 +34,8 @@
 #define COMM_N2K_DECODER_H
 
 #include <memory>
-#include <vector>
+
+#include <QList>
 
 #include "model/comm_protocol_decoder.h"
 #include "model/ds_porttype.h"
@@ -46,14 +47,14 @@ public:
 
   /** One Actisense application-data frame -> one Nmea2000Msg. Empty for a
    *  management packet, an output-only connection or a too-short frame. */
-  std::vector<std::shared_ptr<const NavMsg>> Decode(
+  QList<std::shared_ptr<const NavMsg>> Decode(
       const CommFrame& frame,
       const std::shared_ptr<const NavAddr>& src) override;
 
   /** An Nmea2000Msg -> one escaped Actisense TX packet. Empty for a
    *  non-N2K message or an input-only connection. dest, when a NavAddr2000,
    *  supplies the N2K destination node address (else broadcast, 255). */
-  std::vector<CommFrame> Encode(
+  QList<CommFrame> Encode(
       const std::shared_ptr<const NavMsg>& msg,
       const std::shared_ptr<const NavAddr>& dest) override;
 

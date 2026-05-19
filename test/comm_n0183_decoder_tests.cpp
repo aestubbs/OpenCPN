@@ -1,21 +1,20 @@
 /**
- * Unit tests for Nmea0183Decoder (task P1.5b).
+ * Unit tests for Nmea0183Decoder.
  *
- * The decoder is pure -- these run with no transport, no Qt event loop and
- * no hardware, exercising it against literal sentence frames.
+ * Wire data is QByteArray; the decoder needs no transport or hardware.
  */
 
 #include <memory>
-#include <string>
-#include <vector>
+
+#include <QByteArray>
 
 #include <gtest/gtest.h>
 
 #include "model/comm_n0183_decoder.h"
 
-/** A frame is the byte vector a LineFramer hands the decoder. */
+/** A CommFrame from a string literal. */
 static CommFrame Frame(const std::string& s) {
-  return CommFrame(s.begin(), s.end());
+  return QByteArray::fromStdString(s);
 }
 
 static const std::shared_ptr<const NavAddr> kSrc =
@@ -28,7 +27,7 @@ static const char* kGoodGga =
 TEST(Nmea0183Decoder, DecodesValidSentence) {
   Nmea0183Decoder decoder(DS_TYPE_INPUT, SentenceFilter());
   auto msgs = decoder.Decode(Frame(kGoodGga), kSrc);
-  ASSERT_EQ(msgs.size(), 1u);
+  ASSERT_EQ(msgs.size(), 1);
   EXPECT_EQ(msgs[0]->state, NavMsg::State::kOk);
   EXPECT_EQ(msgs[0]->source, kSrc);
 }
@@ -39,53 +38,52 @@ TEST(Nmea0183Decoder, FlagsBadChecksum) {
   std::string bad(kGoodGga);
   bad.replace(bad.size() - 2, 2, "00");
   auto msgs = decoder.Decode(Frame(bad), kSrc);
-  ASSERT_EQ(msgs.size(), 1u);
+  ASSERT_EQ(msgs.size(), 1);
   EXPECT_EQ(msgs[0]->state, NavMsg::State::kBadChecksum);
 }
 
 TEST(Nmea0183Decoder, FlagsGarbageWithControlChar) {
   Nmea0183Decoder decoder(DS_TYPE_INPUT, SentenceFilter());
   auto msgs = decoder.Decode(Frame("$GP\x01GA,1,2,3*00"), kSrc);
-  ASSERT_EQ(msgs.size(), 1u);
+  ASSERT_EQ(msgs.size(), 1);
   EXPECT_EQ(msgs[0]->state, NavMsg::State::kCannotParse);
 }
 
 TEST(Nmea0183Decoder, StripsV4TagPrefix) {
   Nmea0183Decoder decoder(DS_TYPE_INPUT, SentenceFilter());
   // Anything before the '$' (here a v4 tag block) is dropped.
-  auto msgs = decoder.Decode(Frame(std::string("\\s:GP01*5C\\") + kGoodGga),
-                             kSrc);
-  ASSERT_EQ(msgs.size(), 1u);
+  auto msgs =
+      decoder.Decode(Frame(std::string("\\s:GP01*5C\\") + kGoodGga), kSrc);
+  ASSERT_EQ(msgs.size(), 1);
   EXPECT_EQ(msgs[0]->state, NavMsg::State::kOk);
 }
 
 TEST(Nmea0183Decoder, OutputOnlyConnectionDecodesNothing) {
   Nmea0183Decoder decoder(DS_TYPE_OUTPUT, SentenceFilter());
-  EXPECT_TRUE(decoder.Decode(Frame(kGoodGga), kSrc).empty());
+  EXPECT_TRUE(decoder.Decode(Frame(kGoodGga), kSrc).isEmpty());
 }
 
 TEST(Nmea0183Decoder, AppliesInputSentenceFilter) {
   // Blacklist the GP talker; the GGA sentence is GP-talker.
-  Nmea0183Decoder decoder(DS_TYPE_INPUT,
-                          SentenceFilter({"GP"}, /*is_whitelist=*/false));
+  Nmea0183Decoder decoder(
+      DS_TYPE_INPUT, SentenceFilter({QByteArray("GP")}, /*is_whitelist=*/false));
   auto msgs = decoder.Decode(Frame(kGoodGga), kSrc);
-  ASSERT_EQ(msgs.size(), 1u);
+  ASSERT_EQ(msgs.size(), 1);
   EXPECT_EQ(msgs[0]->state, NavMsg::State::kFiltered);
 }
 
 TEST(Nmea0183Decoder, EmptyOrSentenceLessFrameYieldsNothing) {
   Nmea0183Decoder decoder(DS_TYPE_INPUT, SentenceFilter());
-  EXPECT_TRUE(decoder.Decode(Frame("no sentence here"), kSrc).empty());
-  EXPECT_TRUE(decoder.Decode(Frame(""), kSrc).empty());
+  EXPECT_TRUE(decoder.Decode(Frame("no sentence here"), kSrc).isEmpty());
+  EXPECT_TRUE(decoder.Decode(Frame(""), kSrc).isEmpty());
 }
 
 TEST(Nmea0183Decoder, EncodeAppendsCrlf) {
   Nmea0183Decoder decoder(DS_TYPE_INPUT_OUTPUT, SentenceFilter());
   auto msg = std::make_shared<const Nmea0183Msg>("GPGGA", kGoodGga, kSrc);
   auto frames = decoder.Encode(msg, nullptr);
-  ASSERT_EQ(frames.size(), 1u);
-  const std::string out(frames[0].begin(), frames[0].end());
-  EXPECT_EQ(out, std::string(kGoodGga) + "\r\n");
+  ASSERT_EQ(frames.size(), 1);
+  EXPECT_EQ(frames[0].toStdString(), std::string(kGoodGga) + "\r\n");
 }
 
 TEST(Nmea0183Decoder, EncodeDoesNotDoubleTerminate) {
@@ -93,20 +91,19 @@ TEST(Nmea0183Decoder, EncodeDoesNotDoubleTerminate) {
   auto msg = std::make_shared<const Nmea0183Msg>(
       "GPGGA", std::string(kGoodGga) + "\r\n", kSrc);
   auto frames = decoder.Encode(msg, nullptr);
-  ASSERT_EQ(frames.size(), 1u);
-  const std::string out(frames[0].begin(), frames[0].end());
-  EXPECT_EQ(out, std::string(kGoodGga) + "\r\n");
+  ASSERT_EQ(frames.size(), 1);
+  EXPECT_EQ(frames[0].toStdString(), std::string(kGoodGga) + "\r\n");
 }
 
 TEST(Nmea0183Decoder, EncodeRejectsInputOnlyConnection) {
   Nmea0183Decoder decoder(DS_TYPE_INPUT, SentenceFilter());
   auto msg = std::make_shared<const Nmea0183Msg>("GPGGA", kGoodGga, kSrc);
-  EXPECT_TRUE(decoder.Encode(msg, nullptr).empty());
+  EXPECT_TRUE(decoder.Encode(msg, nullptr).isEmpty());
 }
 
 TEST(Nmea0183Decoder, EncodeRejectsNon0183Message) {
   Nmea0183Decoder decoder(DS_TYPE_INPUT_OUTPUT, SentenceFilter());
-  std::shared_ptr<const NavMsg> n2k = std::make_shared<const Nmea2000Msg>(
-      static_cast<uint64_t>(129025));
-  EXPECT_TRUE(decoder.Encode(n2k, nullptr).empty());
+  std::shared_ptr<const NavMsg> n2k =
+      std::make_shared<const Nmea2000Msg>(static_cast<uint64_t>(129025));
+  EXPECT_TRUE(decoder.Encode(n2k, nullptr).isEmpty());
 }

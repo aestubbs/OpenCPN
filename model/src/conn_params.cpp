@@ -40,6 +40,7 @@
 #include <wx/tokenzr.h>
 
 #include "model/conn_params.h"
+#include "model/sentence_filter.h"
 
 #include "ocpn_plugin.h"
 
@@ -391,10 +392,10 @@ bool ConnectionParams::SentencePassesFilter(const wxString& sentence,
 }
 
 SentenceFilter ConnectionParams::MakeInputFilter() const {
-  std::vector<std::string> patterns;
+  QList<QByteArray> patterns;
   patterns.reserve(InputSentenceList.GetCount());
   for (size_t i = 0; i < InputSentenceList.GetCount(); i++)
-    patterns.push_back(InputSentenceList[i].ToStdString());
+    patterns.append(QByteArray::fromStdString(InputSentenceList[i].ToStdString()));
   return SentenceFilter(std::move(patterns),
                         InputSentenceListType == WHITELIST);
 }

@@ -35,7 +35,8 @@
 #define COMM_N0183_DECODER_H
 
 #include <memory>
-#include <vector>
+
+#include <QList>
 
 #include "model/comm_protocol_decoder.h"
 #include "model/ds_porttype.h"
@@ -53,14 +54,14 @@ public:
 
   /** One 0183 frame -> exactly one Nmea0183Msg (or none for an output-only
    *  connection / an empty frame). */
-  std::vector<std::shared_ptr<const NavMsg>> Decode(
+  QList<std::shared_ptr<const NavMsg>> Decode(
       const CommFrame& frame,
       const std::shared_ptr<const NavAddr>& src) override;
 
   /** An Nmea0183Msg -> one wire frame, CR/LF terminated. Empty for a
    *  non-0183 message or an input-only connection. NMEA 0183 has no
    *  destination address, so dest is ignored. */
-  std::vector<CommFrame> Encode(
+  QList<CommFrame> Encode(
       const std::shared_ptr<const NavMsg>& msg,
       const std::shared_ptr<const NavAddr>& dest) override;
 

@@ -34,7 +34,8 @@
 #define COMM_PROTOCOL_DECODER_H
 
 #include <memory>
-#include <vector>
+
+#include <QList>
 
 #include "model/comm_framer.h"
 #include "model/comm_navmsg.h"
@@ -62,7 +63,7 @@ public:
    *               received messages; a decoder may refine it (e.g. an N2K
    *               decoder fills in the per-message node address).
    */
-  virtual std::vector<std::shared_ptr<const NavMsg>> Decode(
+  virtual QList<std::shared_ptr<const NavMsg>> Decode(
       const CommFrame& frame, const std::shared_ptr<const NavAddr>& src) = 0;
 
   /**
@@ -76,7 +77,7 @@ public:
    * An empty result means this decoder cannot encode the message (wrong
    * protocol, or a receive-only protocol / connection).
    */
-  virtual std::vector<CommFrame> Encode(
+  virtual QList<CommFrame> Encode(
       const std::shared_ptr<const NavMsg>& msg,
       const std::shared_ptr<const NavAddr>& dest) = 0;
 };

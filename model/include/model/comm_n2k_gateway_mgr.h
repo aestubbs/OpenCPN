@@ -37,12 +37,10 @@
 #ifndef COMM_N2K_GATEWAY_MGR_H
 #define COMM_N2K_GATEWAY_MGR_H
 
-#include <cstdint>
-#include <deque>
-#include <set>
-#include <vector>
-
+#include <QByteArray>
+#include <QList>
 #include <QObject>
+#include <QSet>
 
 #include "model/comm_framer.h"  // CommFrame
 
@@ -84,12 +82,12 @@ private Q_SLOTS:
 private:
   /** One queued gateway management request. */
   struct MgmtRequest {
-    std::vector<uint8_t> payload;  ///< bytes following the 0xA1 command code
-    bool wants_response;           ///< await a 0xA0 ack keyed on payload[0]
+    QByteArray payload;   ///< bytes following the 0xA1 command code
+    bool wants_response;  ///< await a 0xA0 ack keyed on payload[0]
     int retries_left;
   };
 
-  void Enqueue(std::vector<uint8_t> payload, bool wants_response);
+  void Enqueue(QByteArray payload, bool wants_response);
   void EnqueueTxPgn(int pgn);
   void ProcessNext();
   void SendCurrent();
@@ -97,13 +95,12 @@ private:
 
   /** Wrap a management payload in the Actisense <ESC><STX>0xA1...<ESC><ETX>
    *  packet with its checksum. */
-  static std::vector<uint8_t> BuildMgmtMessage(
-      const std::vector<uint8_t>& payload);
+  static QByteArray BuildMgmtMessage(const QByteArray& payload);
 
   CommDriver& m_driver;
   QTimer* m_timeout_timer;
-  std::deque<MgmtRequest> m_queue;
-  std::set<int> m_tx_pgns;  ///< PGNs registered for TX, re-sent on reconnect
+  QList<MgmtRequest> m_queue;
+  QSet<int> m_tx_pgns;  ///< PGNs registered for TX, re-sent on reconnect
   int m_mfg_code;           ///< gateway manufacturer code, 0 until probed
 };
 

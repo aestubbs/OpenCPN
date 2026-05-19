@@ -21,11 +21,10 @@
  * Implement comm_drv_generic.h -- the generic communication driver.
  */
 
-#include <cstdint>
 #include <utility>
-#include <vector>
 
 #include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QTimer>
 #include <QtGlobal>  // qWarning
@@ -99,16 +98,14 @@ void CommDriver::Close() {
 }
 
 void CommDriver::OnDataReceived(const QByteArray& data) {
-  const auto* begin = reinterpret_cast<const uint8_t*>(data.constData());
-  const std::vector<uint8_t> bytes(begin, begin + data.size());
-  m_stats.rx_count += bytes.size();
+  m_stats.rx_count += data.size();
   m_stats.available = true;
 
   // Data is flowing -- (re)arm the no-data watchdog.
   if (m_watchdog_timeout.count() > 0)
     m_watchdog_timer->start(static_cast<int>(m_watchdog_timeout.count()));
 
-  for (const CommFrame& frame : m_framer->Feed(bytes)) {
+  for (const CommFrame& frame : m_framer->Feed(data)) {
     // The raw-frame tap sees every frame before decoding.
     if (m_frame_observer) m_frame_observer(frame);
     for (auto& msg : m_decoder->Decode(frame, m_source_addr))
@@ -159,14 +156,12 @@ void CommDriver::OnWatchdogTimer() {
 
 bool CommDriver::SendMessage(std::shared_ptr<const NavMsg> msg,
                              std::shared_ptr<const NavAddr> addr) {
-  const std::vector<CommFrame> frames = m_decoder->Encode(msg, addr);
-  if (frames.empty()) return false;
+  const QList<CommFrame> frames = m_decoder->Encode(msg, addr);
+  if (frames.isEmpty()) return false;
 
   bool ok = true;
   for (const CommFrame& frame : frames) {
-    const QByteArray ba(reinterpret_cast<const char*>(frame.data()),
-                        static_cast<qsizetype>(frame.size()));
-    if (m_transport->Write(ba))
+    if (m_transport->Write(frame))
       m_stats.tx_count += frame.size();
     else
       ok = false;

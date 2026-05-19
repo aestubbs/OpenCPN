@@ -1,18 +1,33 @@
 /**
- * Unit tests for N2kDecoder (task P1.5d).
+ * Unit tests for N2kDecoder.
  *
- * Pure -- no transport, no Qt, no hardware. Encode() output is checked by
- * feeding it back through N2kGatewayFramer, which un-escapes and de-frames.
+ * Wire data is QByteArray. Encode() output is checked by feeding it back
+ * through N2kGatewayFramer, which un-escapes and de-frames.
  */
 
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <vector>
+
+#include <QByteArray>
 
 #include <gtest/gtest.h>
 
 #include "model/comm_framer.h"
 #include "model/comm_n2k_decoder.h"
+
+/** A QByteArray from a list of byte values. */
+static QByteArray Bytes(std::initializer_list<int> values) {
+  QByteArray b;
+  for (int v : values) b.append(static_cast<char>(v));
+  return b;
+}
+
+/** Read byte i of a frame as an unsigned value. */
+static uint8_t Byte(const QByteArray& b, int i) {
+  return static_cast<uint8_t>(b.at(i));
+}
 
 static const std::shared_ptr<const NavAddr> kSrc =
     std::make_shared<const NavAddr>(NavAddr::Bus::N2000, "n2k-iface");
@@ -21,13 +36,13 @@ static const std::shared_ptr<const NavAddr> kSrc =
 // 3-byte PGN (127250 = 0x01F112, little-endian), destination, source, then
 // padding so the frame is long enough for the NAME reinterpretation.
 static CommFrame DataFrame() {
-  return {0x93, 0x08, 0x02, 0x12, 0xF1, 0x01, 0xFF, 0x01, 0xAA, 0xBB};
+  return Bytes({0x93, 0x08, 0x02, 0x12, 0xF1, 0x01, 0xFF, 0x01, 0xAA, 0xBB});
 }
 
 TEST(N2kDecoder, DecodesDataFrame) {
   N2kDecoder decoder(DS_TYPE_INPUT);
   auto msgs = decoder.Decode(DataFrame(), kSrc);
-  ASSERT_EQ(msgs.size(), 1u);
+  ASSERT_EQ(msgs.size(), 1);
   auto n2k = std::dynamic_pointer_cast<const Nmea2000Msg>(msgs[0]);
   ASSERT_TRUE(n2k);
   EXPECT_EQ(n2k->PGN.pgn, 127250u);
@@ -35,18 +50,18 @@ TEST(N2kDecoder, DecodesDataFrame) {
 
 TEST(N2kDecoder, IgnoresManagementFrame) {
   N2kDecoder decoder(DS_TYPE_INPUT);
-  CommFrame mgmt = {0xA0, 0x01, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00};
-  EXPECT_TRUE(decoder.Decode(mgmt, kSrc).empty());
+  CommFrame mgmt = Bytes({0xA0, 0x01, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00});
+  EXPECT_TRUE(decoder.Decode(mgmt, kSrc).isEmpty());
 }
 
 TEST(N2kDecoder, IgnoresShortFrame) {
   N2kDecoder decoder(DS_TYPE_INPUT);
-  EXPECT_TRUE(decoder.Decode({0x93, 0x01, 0x02}, kSrc).empty());
+  EXPECT_TRUE(decoder.Decode(Bytes({0x93, 0x01, 0x02}), kSrc).isEmpty());
 }
 
 TEST(N2kDecoder, OutputOnlyConnectionDecodesNothing) {
   N2kDecoder decoder(DS_TYPE_OUTPUT);
-  EXPECT_TRUE(decoder.Decode(DataFrame(), kSrc).empty());
+  EXPECT_TRUE(decoder.Decode(DataFrame(), kSrc).isEmpty());
 }
 
 TEST(N2kDecoder, EncodeProducesFramerReadablePacket) {
@@ -58,23 +73,25 @@ TEST(N2kDecoder, EncodeProducesFramerReadablePacket) {
       std::make_shared<const NavAddr2000>(), 6);
 
   auto frames = decoder.Encode(msg, nullptr);
-  ASSERT_EQ(frames.size(), 1u);
+  ASSERT_EQ(frames.size(), 1);
 
   // The framer un-escapes and de-frames -- a faithful packet round-trips.
   N2kGatewayFramer framer;
   auto app = framer.Feed(frames[0]);
-  ASSERT_EQ(app.size(), 1u);
+  ASSERT_EQ(app.size(), 1);
   const CommFrame& a = app[0];
-  ASSERT_GE(a.size(), 8u + data.size());
-  EXPECT_EQ(a[0], 0x94);               // PC-to-gateway TX data code
-  EXPECT_EQ(a[1], data.size() + 6);    // declared length
-  EXPECT_EQ(a[2], 6);                  // priority
-  EXPECT_EQ(a[3], 0x12);               // PGN little-endian
-  EXPECT_EQ(a[4], 0xF1);
-  EXPECT_EQ(a[5], 0x01);
-  EXPECT_EQ(a[6], 255);                // broadcast destination
-  EXPECT_EQ(a[7], data.size());        // data length
-  EXPECT_EQ(CommFrame(a.begin() + 8, a.begin() + 8 + data.size()), data);
+  ASSERT_GE(a.size(), 8 + static_cast<int>(data.size()));
+  EXPECT_EQ(Byte(a, 0), 0x94);              // PC-to-gateway TX data code
+  EXPECT_EQ(Byte(a, 1), data.size() + 6);   // declared length
+  EXPECT_EQ(Byte(a, 2), 6);                 // priority
+  EXPECT_EQ(Byte(a, 3), 0x12);              // PGN little-endian
+  EXPECT_EQ(Byte(a, 4), 0xF1);
+  EXPECT_EQ(Byte(a, 5), 0x01);
+  EXPECT_EQ(Byte(a, 6), 255);               // broadcast destination
+  EXPECT_EQ(Byte(a, 7), data.size());       // data length
+  EXPECT_EQ(a.mid(8, static_cast<int>(data.size())),
+            QByteArray(reinterpret_cast<const char*>(data.data()),
+                       static_cast<qsizetype>(data.size())));
 }
 
 TEST(N2kDecoder, EncodeUsesDestinationAddress) {
@@ -86,11 +103,11 @@ TEST(N2kDecoder, EncodeUsesDestinationAddress) {
       "n2k-iface", static_cast<unsigned char>(0x42));
 
   auto frames = decoder.Encode(msg, dest);
-  ASSERT_EQ(frames.size(), 1u);
+  ASSERT_EQ(frames.size(), 1);
   N2kGatewayFramer framer;
   auto app = framer.Feed(frames[0]);
-  ASSERT_EQ(app.size(), 1u);
-  EXPECT_EQ(app[0][6], 0x42);  // destination node, not broadcast
+  ASSERT_EQ(app.size(), 1);
+  EXPECT_EQ(Byte(app[0], 6), 0x42);  // destination node, not broadcast
 }
 
 TEST(N2kDecoder, EncodeRejectsInputOnlyConnection) {
@@ -98,12 +115,12 @@ TEST(N2kDecoder, EncodeRejectsInputOnlyConnection) {
   auto msg = std::make_shared<const Nmea2000Msg>(
       static_cast<uint64_t>(127250), std::vector<unsigned char>{0x00},
       std::make_shared<const NavAddr2000>(), 6);
-  EXPECT_TRUE(decoder.Encode(msg, nullptr).empty());
+  EXPECT_TRUE(decoder.Encode(msg, nullptr).isEmpty());
 }
 
 TEST(N2kDecoder, EncodeRejectsNon2000Message) {
   N2kDecoder decoder(DS_TYPE_INPUT_OUTPUT);
   std::shared_ptr<const NavMsg> n0183 = std::make_shared<const Nmea0183Msg>(
       "GPGGA", "$GPGGA,,*00", std::make_shared<const NavAddr>());
-  EXPECT_TRUE(decoder.Encode(n0183, nullptr).empty());
+  EXPECT_TRUE(decoder.Encode(n0183, nullptr).isEmpty());
 }

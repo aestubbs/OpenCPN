@@ -23,18 +23,17 @@
 
 #include "model/comm_framer.h"
 
-std::vector<CommFrame> N2kGatewayFramer::Feed(
-    const std::vector<uint8_t>& bytes) {
-  std::vector<CommFrame> frames;
-  for (uint8_t b : bytes) {
+QList<CommFrame> N2kGatewayFramer::Feed(const QByteArray& bytes) {
+  QList<CommFrame> frames;
+  for (char b : bytes) {
     if (m_in_msg) {
       if (m_got_esc) {
         // The byte after an ESC decides the escape sequence.
         m_got_esc = false;
         if (b == kN2kEscape) {
-          m_frame.push_back(b);  // <ESC><ESC> -> a literal ESC
+          m_frame.append(b);  // <ESC><ESC> -> a literal ESC
         } else if (b == kN2kEndOfText) {
-          frames.push_back(m_frame);  // <ESC><ETX> -> packet complete
+          frames.append(m_frame);  // <ESC><ETX> -> packet complete
           m_frame.clear();
           m_in_msg = false;
         } else if (b == kN2kStartOfText) {
@@ -45,7 +44,7 @@ std::vector<CommFrame> N2kGatewayFramer::Feed(
         }
       } else {
         m_got_esc = (b == kN2kEscape);
-        if (!m_got_esc) m_frame.push_back(b);
+        if (!m_got_esc) m_frame.append(b);
       }
     } else if (b == kN2kStartOfText) {
       // Opens a packet only when preceded by an ESC; m_got_esc is
@@ -56,7 +55,7 @@ std::vector<CommFrame> N2kGatewayFramer::Feed(
       if (m_got_sot) {
         m_got_sot = false;
         m_in_msg = true;
-        m_frame.push_back(b);
+        m_frame.append(b);
       }
     }
   }

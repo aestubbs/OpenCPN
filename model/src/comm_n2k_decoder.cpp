@@ -23,6 +23,8 @@
 
 #include <cstdint>
 #include <cstring>
+#include <utility>
+#include <vector>
 
 #include "model/comm_n2k_decoder.h"
 
@@ -31,17 +33,22 @@ static constexpr uint8_t kMsgTypeN2kTx = 0x94;
 /** Actisense data code prefixing a gateway management packet. */
 static constexpr uint8_t kMsgTypeMgmt = 0xA0;
 
+/** Read frame byte i as an unsigned value (QByteArray indexes as char). */
+static uint8_t Byte(const CommFrame& frame, int i) {
+  return static_cast<uint8_t>(frame.at(i));
+}
+
 /** Reinterpret the first eight frame bytes as an N2K node NAME, as the
  *  legacy driver did -- used only to key the NavAddr2000. */
 static uint64_t FrameToName(const CommFrame& frame) {
   uint64_t name = 0;
-  std::memcpy(&name, frame.data(), sizeof(name));
+  std::memcpy(&name, frame.constData(), sizeof(name));
   return name;
 }
 
 N2kDecoder::N2kDecoder(dsPortType io_select) : m_io_select(io_select) {}
 
-std::vector<std::shared_ptr<const NavMsg>> N2kDecoder::Decode(
+QList<std::shared_ptr<const NavMsg>> N2kDecoder::Decode(
     const CommFrame& frame, const std::shared_ptr<const NavAddr>& src) {
   // An output-only connection ignores anything that arrives.
   if (m_io_select == DS_TYPE_OUTPUT) return {};
@@ -50,19 +57,24 @@ std::vector<std::shared_ptr<const NavMsg>> N2kDecoder::Decode(
   if (frame.size() < 8) return {};
   // Management packets are handled by the gateway manager via the raw
   // frame tap, not turned into bus messages.
-  if (frame[0] == kMsgTypeMgmt) return {};
+  if (Byte(frame, 0) == kMsgTypeMgmt) return {};
 
-  const uint64_t pgn = static_cast<uint64_t>(frame[3]) |
-                       (static_cast<uint64_t>(frame[4]) << 8) |
-                       (static_cast<uint64_t>(frame[5]) << 16);
+  const uint64_t pgn = static_cast<uint64_t>(Byte(frame, 3)) |
+                       (static_cast<uint64_t>(Byte(frame, 4)) << 8) |
+                       (static_cast<uint64_t>(Byte(frame, 5)) << 16);
 
   const std::string iface = src ? src->iface : std::string();
   auto addr = std::make_shared<NavAddr2000>(iface, N2kName(FrameToName(frame)));
-  auto msg = std::make_shared<const Nmea2000Msg>(pgn, frame, addr);
+
+  // Nmea2000Msg carries its payload as std::vector<unsigned char> -- the
+  // message-bus type, converted here at the NavMsg boundary.
+  const auto* begin = reinterpret_cast<const unsigned char*>(frame.constData());
+  std::vector<unsigned char> payload(begin, begin + frame.size());
+  auto msg = std::make_shared<const Nmea2000Msg>(pgn, payload, addr);
   return {std::move(msg)};
 }
 
-std::vector<CommFrame> N2kDecoder::Encode(
+QList<CommFrame> N2kDecoder::Encode(
     const std::shared_ptr<const NavMsg>& msg,
     const std::shared_ptr<const NavAddr>& dest) {
   // An input-only connection cannot transmit.
@@ -83,13 +95,13 @@ std::vector<CommFrame> N2kDecoder::Encode(
   // Append a byte to the packet body: ESC-escape it and add to the
   // running checksum sum.
   auto add = [&](uint8_t b) {
-    if (b == kN2kEscape) buf.push_back(kN2kEscape);
-    buf.push_back(b);
+    if (b == static_cast<uint8_t>(kN2kEscape)) buf.append(kN2kEscape);
+    buf.append(static_cast<char>(b));
     byte_sum += b;
   };
 
-  buf.push_back(kN2kEscape);
-  buf.push_back(kN2kStartOfText);
+  buf.append(kN2kEscape);
+  buf.append(kN2kStartOfText);
   add(kMsgTypeN2kTx);
   add(static_cast<uint8_t>(data.size() + 6));  // length excludes escaped bytes
   add(static_cast<uint8_t>(n2k->priority));
@@ -103,10 +115,11 @@ std::vector<CommFrame> N2kDecoder::Encode(
   byte_sum %= 256;
   const uint8_t checksum =
       static_cast<uint8_t>(byte_sum == 0 ? 0 : 256 - byte_sum);
-  buf.push_back(checksum);
-  if (checksum == kN2kEscape) buf.push_back(checksum);  // escape the checksum
-  buf.push_back(kN2kEscape);
-  buf.push_back(kN2kEndOfText);
+  buf.append(static_cast<char>(checksum));
+  if (checksum == static_cast<uint8_t>(kN2kEscape))
+    buf.append(kN2kEscape);  // escape the checksum
+  buf.append(kN2kEscape);
+  buf.append(kN2kEndOfText);
 
-  return {std::move(buf)};
+  return {buf};
 }

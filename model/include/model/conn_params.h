@@ -33,7 +33,12 @@
 #endif
 
 #include "model/comm_navmsg.h"
-#include "model/sentence_filter.h"
+
+// SentenceFilter is only forward-declared here: it pulls in Qt headers, and
+// conn_params.h is included by many (still wx) GUI translation units where
+// Qt-after-wx header ordering breaks. Consumers of MakeInputFilter() include
+// sentence_filter.h themselves.
+class SentenceFilter;
 
 #ifndef __DSPORTTYPE_H__
 #include "model/ds_porttype.h"

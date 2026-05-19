@@ -24,22 +24,23 @@
  * discrete protocol frames. Byte-stream media (serial, TCP, UDP) need real
  * framing -- finding sentence/packet boundaries in a buffered stream;
  * frame-native media (CAN, WebSocket) hand over frames pre-built and use
- * PassThroughFramer. See Docs/QT_MIGRATION_COMMS_ARCH.md (task P1.5i).
+ * PassThroughFramer. See docs/QT_MIGRATION_COMMS_ARCH.md.
  *
- * Framers are deliberately pure -- no Qt, no I/O -- so they are
- * unit-testable against captured byte logs with no hardware.
+ * Wire data is carried as QByteArray throughout the comms pipeline.
  */
 
 #ifndef COMM_FRAMER_H
 #define COMM_FRAMER_H
 
 #include <cstdint>
-#include <vector>
+
+#include <QByteArray>
+#include <QList>
 
 #include "model/comm_buffers.h"
 
 /** One complete protocol frame. */
-using CommFrame = std::vector<uint8_t>;
+using CommFrame = QByteArray;
 
 /**
  * Turns a raw byte stream into discrete frames.
@@ -52,7 +53,7 @@ class Framer {
 public:
   virtual ~Framer() = default;
 
-  virtual std::vector<CommFrame> Feed(const std::vector<uint8_t>& bytes) = 0;
+  virtual QList<CommFrame> Feed(const QByteArray& bytes) = 0;
 };
 
 /**
@@ -61,10 +62,14 @@ public:
  */
 class LineFramer : public Framer {
 public:
-  std::vector<CommFrame> Feed(const std::vector<uint8_t>& bytes) override {
-    std::vector<CommFrame> frames;
-    for (uint8_t b : bytes) m_buffer.Put(b);
-    while (m_buffer.HasLine()) frames.push_back(m_buffer.GetLine());
+  QList<CommFrame> Feed(const QByteArray& bytes) override {
+    QList<CommFrame> frames;
+    for (char b : bytes) m_buffer.Put(static_cast<uint8_t>(b));
+    while (m_buffer.HasLine()) {
+      const std::vector<uint8_t> line = m_buffer.GetLine();
+      frames.append(QByteArray(reinterpret_cast<const char*>(line.data()),
+                               static_cast<qsizetype>(line.size())));
+    }
     return frames;
   }
 
@@ -78,17 +83,17 @@ private:
  */
 class PassThroughFramer : public Framer {
 public:
-  std::vector<CommFrame> Feed(const std::vector<uint8_t>& bytes) override {
-    if (bytes.empty()) return {};
+  QList<CommFrame> Feed(const QByteArray& bytes) override {
+    if (bytes.isEmpty()) return {};
     return {bytes};
   }
 };
 
 // Control bytes of the Actisense serial paketizing format:
 //   <ESC><STX> <application data, ESC-escaped> <CRC> <ESC><ETX>
-constexpr uint8_t kN2kEscape = 0x10;       ///< DLE
-constexpr uint8_t kN2kStartOfText = 0x02;  ///< STX
-constexpr uint8_t kN2kEndOfText = 0x03;    ///< ETX
+constexpr char kN2kEscape = 0x10;       ///< DLE
+constexpr char kN2kStartOfText = 0x02;  ///< STX
+constexpr char kN2kEndOfText = 0x03;    ///< ETX
 
 /**
  * Framer for NMEA 2000 gateways speaking the Actisense binary serial format
@@ -101,13 +106,13 @@ constexpr uint8_t kN2kEndOfText = 0x03;    ///< ETX
  */
 class N2kGatewayFramer : public Framer {
 public:
-  std::vector<CommFrame> Feed(const std::vector<uint8_t>& bytes) override;
+  QList<CommFrame> Feed(const QByteArray& bytes) override;
 
 private:
-  CommFrame m_frame;          ///< application data of the packet in progress
-  bool m_in_msg = false;      ///< between <ESC><STX> and <ESC><ETX>
-  bool m_got_esc = false;     ///< previous byte was an unescaped ESC
-  bool m_got_sot = false;     ///< an <ESC><STX> opener was just seen
+  CommFrame m_frame;       ///< application data of the packet in progress
+  bool m_in_msg = false;   ///< between <ESC><STX> and <ESC><ETX>
+  bool m_got_esc = false;  ///< previous byte was an unescaped ESC
+  bool m_got_sot = false;  ///< an <ESC><STX> opener was just seen
 };
 
 #endif  // COMM_FRAMER_H

@@ -22,7 +22,7 @@
  */
 
 #include <cstdint>
-#include <vector>
+#include <utility>
 
 #include <QByteArray>
 #include <QTimer>
@@ -44,9 +44,9 @@ static constexpr int kMaxRetries = 2;
 // Tells an NGT-1 to clear its RX filter (forward every PGN) and switches a
 // Yacht Devices YDNU-02 into N2K mode -- the same three payload bytes serve
 // both. Sent fire-and-forget; the gateways do not acknowledge it.
-static const std::vector<uint8_t> kInitSequence = {0x11, 0x02, 0x00};
+static const QByteArray kInitSequence = QByteArray::fromHex("110200");
 // Probes the gateway for its device NAME / manufacturer code.
-static const std::vector<uint8_t> kMfgProbe = {0x42};
+static const QByteArray kMfgProbe = QByteArray::fromHex("42");
 
 N2kGatewayManager::N2kGatewayManager(CommDriver& driver, QObject* parent)
     : QObject(parent), m_driver(driver), m_timeout_timer(new QTimer(this)),
@@ -81,7 +81,8 @@ void N2kGatewayManager::OnTransportConnected() {
 }
 
 int N2kGatewayManager::RequestTxPgn(int pgn) {
-  if (!m_tx_pgns.insert(pgn).second) return 0;  // already registered
+  if (m_tx_pgns.contains(pgn)) return 0;  // already registered
+  m_tx_pgns.insert(pgn);
   if (m_driver.GetDriverStats().available) {
     EnqueueTxPgn(pgn);
     ProcessNext();
@@ -90,61 +91,64 @@ int N2kGatewayManager::RequestTxPgn(int pgn) {
   return 0;
 }
 
-void N2kGatewayManager::Enqueue(std::vector<uint8_t> payload,
-                                bool wants_response) {
-  m_queue.push_back(
+void N2kGatewayManager::Enqueue(QByteArray payload, bool wants_response) {
+  m_queue.append(
       {std::move(payload), wants_response, wants_response ? kMaxRetries : 0});
 }
 
 void N2kGatewayManager::EnqueueTxPgn(int pgn) {
   // Enable, commit and activate the PGN in the gateway's TX whitelist.
-  const std::vector<uint8_t> enable = {
-      0x47, static_cast<uint8_t>(pgn & 0xff),
-      static_cast<uint8_t>((pgn >> 8) & 0xff),
-      static_cast<uint8_t>((pgn >> 16) & 0xff),
-      0x00, 0x01, 0xFF, 0xFF, 0xFF, 0xFF};
+  QByteArray enable;
+  enable.append(static_cast<char>(0x47));
+  enable.append(static_cast<char>(pgn & 0xff));
+  enable.append(static_cast<char>((pgn >> 8) & 0xff));
+  enable.append(static_cast<char>((pgn >> 16) & 0xff));
+  enable.append(static_cast<char>(0x00));
+  enable.append(static_cast<char>(0x01));
+  enable.append(4, static_cast<char>(0xFF));
   Enqueue(enable, /*wants_response=*/true);
-  Enqueue({0x01}, /*wants_response=*/true);  // commit
-  Enqueue({0x4B}, /*wants_response=*/true);  // activate
+  Enqueue(QByteArray(1, 0x01), /*wants_response=*/true);  // commit
+  Enqueue(QByteArray(1, 0x4B), /*wants_response=*/true);  // activate
 }
 
 void N2kGatewayManager::ProcessNext() {
   // Busy while a correlated request awaits its reply.
-  if (m_timeout_timer->isActive() || m_queue.empty()) return;
+  if (m_timeout_timer->isActive() || m_queue.isEmpty()) return;
   SendCurrent();
 }
 
 void N2kGatewayManager::SendCurrent() {
-  const MgmtRequest& req = m_queue.front();
-  const std::vector<uint8_t> wire = BuildMgmtMessage(req.payload);
-  m_driver.WriteRaw(QByteArray(reinterpret_cast<const char*>(wire.data()),
-                               static_cast<qsizetype>(wire.size())));
-  if (req.wants_response) {
+  const MgmtRequest& req = m_queue.first();
+  const bool wants_response = req.wants_response;
+  m_driver.WriteRaw(BuildMgmtMessage(req.payload));
+  if (wants_response) {
     m_timeout_timer->start(kResponseTimeoutMs);
   } else {
-    m_queue.pop_front();
+    m_queue.removeFirst();
     ProcessNext();  // chain through consecutive fire-and-forget requests
   }
 }
 
 void N2kGatewayManager::OnFrame(const CommFrame& frame) {
   // Only management replies are of interest here.
-  if (frame.size() < 3 || frame[0] != kMgmtReply) return;
+  if (frame.size() < 3 || static_cast<uint8_t>(frame.at(0)) != kMgmtReply)
+    return;
   ExtractInfo(frame);
 
-  if (m_queue.empty()) return;
-  const MgmtRequest& req = m_queue.front();
+  if (m_queue.isEmpty()) return;
+  const MgmtRequest& req = m_queue.first();
   // The reply sub-code (frame[2]) echoes the request's first payload byte.
-  if (req.wants_response && frame[2] == req.payload.front()) {
+  if (req.wants_response && !req.payload.isEmpty() &&
+      frame.at(2) == req.payload.at(0)) {
     m_timeout_timer->stop();
-    m_queue.pop_front();
+    m_queue.removeFirst();
     ProcessNext();
   }
 }
 
 void N2kGatewayManager::OnRequestTimeout() {
-  if (m_queue.empty()) return;
-  MgmtRequest& req = m_queue.front();
+  if (m_queue.isEmpty()) return;
+  MgmtRequest& req = m_queue.first();
   if (req.retries_left > 0) {
     req.retries_left--;
     SendCurrent();
@@ -153,39 +157,46 @@ void N2kGatewayManager::OnRequestTimeout() {
   // Give up on this request -- non-fatal (a YDNU-02 ignores some of these)
   // -- and move on so the rest of the handshake still runs.
   qWarning("N2K gateway: no response to management request 0x%02X",
-               req.payload.front());
-  m_queue.pop_front();
+           req.payload.isEmpty() ? 0 : static_cast<uint8_t>(req.payload.at(0)));
+  m_queue.removeFirst();
   ProcessNext();
 }
 
 void N2kGatewayManager::ExtractInfo(const CommFrame& frame) {
   // Sub-code 0x42 reply carries the 8-byte device NAME at offset 15; the
   // manufacturer code is bits 21+ of its low word.
-  if (frame[2] == 0x42 && frame.size() >= 19) {
-    const uint32_t low = frame[15] | (frame[16] << 8) | (frame[17] << 16) |
-                         (static_cast<uint32_t>(frame[18]) << 24);
+  if (frame.at(2) == 0x42 && frame.size() >= 19) {
+    const uint32_t low =
+        static_cast<uint8_t>(frame.at(15)) |
+        (static_cast<uint32_t>(static_cast<uint8_t>(frame.at(16))) << 8) |
+        (static_cast<uint32_t>(static_cast<uint8_t>(frame.at(17))) << 16) |
+        (static_cast<uint32_t>(static_cast<uint8_t>(frame.at(18))) << 24);
     m_mfg_code = static_cast<int>(low) >> 21;
     qInfo("N2K gateway manufacturer code: %d", m_mfg_code);
   }
 }
 
-std::vector<uint8_t> N2kGatewayManager::BuildMgmtMessage(
-    const std::vector<uint8_t>& payload) {
-  std::vector<uint8_t> msg = {kN2kEscape, kN2kStartOfText, kMgmtCode};
+QByteArray N2kGatewayManager::BuildMgmtMessage(const QByteArray& payload) {
+  QByteArray msg;
+  msg.append(kN2kEscape);
+  msg.append(kN2kStartOfText);
+  msg.append(static_cast<char>(kMgmtCode));
   int byte_sum = kMgmtCode;
 
   const uint8_t len = static_cast<uint8_t>(payload.size());
-  msg.push_back(len);
+  msg.append(static_cast<char>(len));
   byte_sum += len;
-  for (uint8_t b : payload) {
-    if (b == kN2kEscape) msg.push_back(kN2kEscape);  // escape payload bytes
-    msg.push_back(b);
+  for (char c : payload) {
+    const uint8_t b = static_cast<uint8_t>(c);
+    if (b == static_cast<uint8_t>(kN2kEscape))
+      msg.append(kN2kEscape);  // escape payload bytes
+    msg.append(c);
     byte_sum += b;
   }
 
   byte_sum %= 256;
-  msg.push_back(static_cast<uint8_t>(byte_sum == 0 ? 0 : 256 - byte_sum));
-  msg.push_back(kN2kEscape);
-  msg.push_back(kN2kEndOfText);
+  msg.append(static_cast<char>(byte_sum == 0 ? 0 : 256 - byte_sum));
+  msg.append(kN2kEscape);
+  msg.append(kN2kEndOfText);
   return msg;
 }

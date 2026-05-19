@@ -27,52 +27,52 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
-#include <string>
+#include <memory>
 #include <utility>
+
+#include <QByteArray>
 
 #include "model/comm_n0183_decoder.h"
 
 /** Return true iff the checksum in a 0183 sentence is correct. */
-static bool Is0183ChecksumOk(const std::string& sentence) {
-  const size_t cs_start = sentence.find('*');
-  if (cs_start == std::string::npos || cs_start > sentence.size() - 3)
+static bool Is0183ChecksumOk(const QByteArray& sentence) {
+  const int cs_start = sentence.indexOf('*');
+  if (cs_start < 0 || cs_start > sentence.size() - 3)
     return false;  // Not found, or fewer than two characters following it.
 
-  const std::string cs_str = sentence.substr(cs_start + 1, 2);
-  const unsigned long checksum = strtol(cs_str.c_str(), nullptr, 16);
-  if (checksum == 0L && cs_str != "00") return false;
+  bool ok = false;
+  const uint checksum = sentence.mid(cs_start + 1, 2).toUInt(&ok, 16);
+  if (!ok) return false;
 
   unsigned char calculated_checksum = 0;
-  for (const char c : sentence.substr(1, cs_start - 1))
-    calculated_checksum ^= static_cast<unsigned char>(c);
+  for (int i = 1; i < cs_start; i++)
+    calculated_checksum ^= static_cast<unsigned char>(sentence[i]);
   return calculated_checksum == checksum;
 }
 
 /**
  * Return the part of the frame starting with '$' or '!', stripping any v4
- * tag prefix. Returns "" if no sentence at least six chars long is found.
+ * tag prefix. Returns empty if no sentence at least six chars long is found.
  */
-static std::string GetPayloadSentence(const std::string& sentence) {
-  size_t start_pos = sentence.find('$');
-  if (start_pos == std::string::npos) start_pos = sentence.find('!');
-  if (start_pos == std::string::npos) return "";
-  if (sentence.size() < start_pos + 6) return "";
-  return sentence.substr(start_pos);
+static QByteArray GetPayloadSentence(const QByteArray& frame) {
+  int start = frame.indexOf('$');
+  if (start < 0) start = frame.indexOf('!');
+  if (start < 0) return {};
+  if (frame.size() < start + 6) return {};
+  return frame.mid(start);
 }
 
 Nmea0183Decoder::Nmea0183Decoder(dsPortType io_select,
                                  SentenceFilter input_filter)
     : m_io_select(io_select), m_input_filter(std::move(input_filter)) {}
 
-std::vector<std::shared_ptr<const NavMsg>> Nmea0183Decoder::Decode(
+QList<std::shared_ptr<const NavMsg>> Nmea0183Decoder::Decode(
     const CommFrame& frame, const std::shared_ptr<const NavAddr>& src) {
   // An output-only connection ignores anything that arrives.
   if (m_io_select == DS_TYPE_OUTPUT) return {};
 
-  const std::string payload(frame.begin(), frame.end());
-  const std::string sentence = GetPayloadSentence(payload);
-  if (sentence.empty()) return {};
+  const QByteArray sentence = GetPayloadSentence(frame);
+  if (sentence.isEmpty()) return {};
 
   const bool is_garbage =
       sentence.size() > 128 ||
@@ -81,7 +81,7 @@ std::vector<std::shared_ptr<const NavMsg>> Nmea0183Decoder::Decode(
                c != '\r';
       });
   const bool has_checksum =
-      sentence.find('*', sentence.size() - 6) != std::string::npos;
+      sentence.indexOf('*', sentence.size() - 6) >= 0;
 
   NavMsg::State state;
   if (is_garbage)
@@ -95,16 +95,18 @@ std::vector<std::shared_ptr<const NavMsg>> Nmea0183Decoder::Decode(
 
   std::shared_ptr<const Nmea0183Msg> msg;
   if (is_garbage) {
-    msg = std::make_shared<const Nmea0183Msg>("TRASH", payload, src, state);
+    msg = std::make_shared<const Nmea0183Msg>("TRASH", frame.toStdString(),
+                                              src, state);
   } else {
     // Notify based on the full message id, including the talker.
-    const std::string id = sentence.substr(1, 5);
-    msg = std::make_shared<const Nmea0183Msg>(id, sentence, src, state);
+    msg = std::make_shared<const Nmea0183Msg>(sentence.mid(1, 5).toStdString(),
+                                              sentence.toStdString(), src,
+                                              state);
   }
   return {std::move(msg)};
 }
 
-std::vector<CommFrame> Nmea0183Decoder::Encode(
+QList<CommFrame> Nmea0183Decoder::Encode(
     const std::shared_ptr<const NavMsg>& msg,
     const std::shared_ptr<const NavAddr>& /* dest */) {
   // An input-only connection cannot transmit.
@@ -113,9 +115,7 @@ std::vector<CommFrame> Nmea0183Decoder::Encode(
   auto msg_0183 = std::dynamic_pointer_cast<const Nmea0183Msg>(msg);
   if (!msg_0183) return {};
 
-  std::string payload = msg_0183->payload;
-  if (payload.size() < 2 ||
-      payload.compare(payload.size() - 2, 2, "\r\n") != 0)
-    payload += "\r\n";
-  return {CommFrame(payload.begin(), payload.end())};
+  QByteArray payload = QByteArray::fromStdString(msg_0183->payload);
+  if (!payload.endsWith("\r\n")) payload += "\r\n";
+  return {payload};
 }
