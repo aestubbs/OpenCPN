@@ -88,6 +88,7 @@
 #include "model/plugin_comm.h"
 #include "model/plugin_loader.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 #include "model/select.h"
 #include "model/std_icon.h"
 #include "model/sys_events.h"
@@ -1403,7 +1404,8 @@ bool MyFrame::DropMarker(bool atOwnShip) {
   }
 
   RoutePoint *pWP =
-      new RoutePoint(lat, lon, g_default_wp_icon, wxEmptyString, wxEmptyString);
+      new RoutePoint(lat, lon, wxString_to_QString(g_default_wp_icon),
+                     QString(), QString());
   pWP->m_bIsolatedMark = true;  // This is an isolated mark
   pSelect->AddSelectableRoutePoint(lat, lon, pWP);
   // pConfig->AddNewWayPoint(pWP, -1);  // use auto next num
@@ -1616,11 +1618,11 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
   if (g_bAutoAnchorMark) {
     bool watching_anchor = false;  // pjotrc 2010.02.15
     if (pAnchorWatchPoint1)        // pjotrc 2010.02.15
-      watching_anchor = (pAnchorWatchPoint1->GetIconName().StartsWith(
-          "anchor"));        // pjotrc 2010.02.15
+      watching_anchor =
+          (pAnchorWatchPoint1->GetIconName().startsWith("anchor"));        // pjotrc 2010.02.15
     if (pAnchorWatchPoint2)  // pjotrc 2010.02.15
-      watching_anchor |= (pAnchorWatchPoint2->GetIconName().StartsWith(
-          "anchor"));  // pjotrc 2010.02.15
+      watching_anchor |=
+          (pAnchorWatchPoint2->GetIconName().startsWith("anchor"));  // pjotrc 2010.02.15
 
     wxDateTime now = wxDateTime::Now();
     wxTimeSpan uptime = now.Subtract(g_start_time);
@@ -1633,7 +1635,7 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
       //    This will prevent screen clutter and database congestion.
       if (g_declutter_anchorage) {
         for (RoutePoint *pr : *pWayPointMan->GetWaypointList()) {
-          if (pr->GetName().StartsWith("Anchorage")) {
+          if (pr->GetName().startsWith("Anchorage")) {
             double a = gLat - pr->m_lat;
             double b = gLon - pr->m_lon;
             double l = sqrt((a * a) + (b * b));
@@ -1653,7 +1655,8 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
       wxString name = now.Format();
       name.Prepend(_("Anchorage created "));
       RoutePoint *pWP =
-          new RoutePoint(gLat, gLon, "anchorage", name, wxEmptyString);
+          new RoutePoint(gLat, gLon, "anchorage",
+                         wxString_to_QString(name), QString());
       pWP->m_bShowName = false;
       pWP->m_bIsolatedMark = true;
 
@@ -3037,7 +3040,8 @@ void MyFrame::ActivateMOB() {
   mob_label += ocpn::toUsrDateTimeFormat(mob_time);
 
   RoutePoint *pWP_MOB =
-      new RoutePoint(gLat, gLon, "mob", mob_label, wxEmptyString);
+      new RoutePoint(gLat, gLon, "mob", wxString_to_QString(mob_label),
+                     QString());
   pWP_MOB->SetShared(true);
   pWP_MOB->m_bIsolatedMark = true;
   pWP_MOB->SetWaypointArrivalRadius(
@@ -3052,8 +3056,9 @@ void MyFrame::ActivateMOB() {
     ll_gc_ll(gLat, gLon, gCog, 1.0, &zlat, &zlon);
 
     RoutePoint *pWP_src =
-        new RoutePoint(zlat, zlon, g_default_wp_icon,
-                       wxString(_("1.0 NM along COG")), wxEmptyString);
+        new RoutePoint(zlat, zlon, wxString_to_QString(g_default_wp_icon),
+                       wxString_to_QString(_("1.0 NM along COG")),
+                       QString());
     pSelect->AddSelectableRoutePoint(zlat, zlon, pWP_src);
 
     Route *temp_route = new Route();
@@ -3078,7 +3083,7 @@ void MyFrame::ActivateMOB() {
     g_pRouteMan->ActivateRoute(temp_route, pWP_MOB);
 
     wxJSONValue v;
-    v["GUID"] = temp_route->m_GUID;
+    v["GUID"] = QString_to_wxString(temp_route->m_GUID);
     wxString msg_id("OCPN_MAN_OVERBOARD");
     SendJSONMessageToAllPlugins(msg_id, v);
   }
@@ -5456,7 +5461,11 @@ void MyFrame::ProcessAnchorWatch() {
     DistanceBearingMercator(pAnchorWatchPoint1->m_lat,
                             pAnchorWatchPoint1->m_lon, gLat, gLon, &brg, &dist);
     double d = g_nAWMax;
-    (pAnchorWatchPoint1->GetName()).ToDouble(&d);
+    {
+      bool ok;
+      double pd = pAnchorWatchPoint1->GetName().toDouble(&ok);
+      if (ok) d = pd;
+    }
     d = ocpn::AnchorDistFix(d, AnchorPointMinDist, g_nAWMax);
     bool toofar = false;
     bool tooclose = false;
@@ -5477,7 +5486,11 @@ void MyFrame::ProcessAnchorWatch() {
                             pAnchorWatchPoint2->m_lon, gLat, gLon, &brg, &dist);
 
     double d = g_nAWMax;
-    (pAnchorWatchPoint2->GetName()).ToDouble(&d);
+    {
+      bool ok;
+      double pd = pAnchorWatchPoint2->GetName().toDouble(&ok);
+      if (ok) d = pd;
+    }
     d = ocpn::AnchorDistFix(d, AnchorPointMinDist, g_nAWMax);
     bool toofar = false;
     bool tooclose = false;
@@ -6286,8 +6299,8 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
     for (auto it = pRouteList->begin(); it != pRouteList->end(); ++it) {
       wxString name = wxEmptyString;
 
-      if ((*it)->m_GUID == guid) {
-        name = (*it)->m_RouteNameString;
+      if (QString_to_wxString((*it)->m_GUID) == guid) {
+        name = QString_to_wxString((*it)->m_RouteNameString);
         if (name.IsEmpty()) name = _("(Unnamed Route)");
 
         v["Name"] = name;
@@ -6298,9 +6311,10 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
              itp != (*it)->pRoutePointList->end(); itp++) {
           w[i]["lat"] = (*itp)->m_lat;
           w[i]["lon"] = (*itp)->m_lon;
-          w[i]["Name"] = (*itp)->GetName();
-          w[i]["Description"] = (*itp)->GetDescription();
-          w[i]["GUID"] = (*itp)->m_GUID;
+          w[i]["Name"] = QString_to_wxString((*itp)->GetName());
+          w[i]["Description"] =
+              QString_to_wxString((*itp)->GetDescription());
+          w[i]["GUID"] = QString_to_wxString((*itp)->m_GUID);
           w[i]["ArrivalRadius"] = (*itp)->GetWaypointArrivalRadius();
 
           auto node = (*itp)->m_HyperlinkList->begin();
@@ -6344,12 +6358,12 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
       if (route) {
         for (RouteList::iterator it = pRouteList->begin();
              it != pRouteList->end(); it++) {
-          wxString name = (*it)->m_RouteNameString;
+          wxString name = QString_to_wxString((*it)->m_RouteNameString);
           if (name.IsEmpty()) name = _("(Unnamed Route)");
 
           v[i]["error"] = false;
           v[i]["name"] = name;
-          v[i]["GUID"] = (*it)->m_GUID;
+          v[i]["GUID"] = QString_to_wxString((*it)->m_GUID);
           v[i]["active"] = (*it)->IsActive();
           i++;
         }
@@ -6388,7 +6402,8 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
         v[0]["range"] = g_pRouteMan->GetCurrentRngToActivePoint();
         v[0]["bearing"] = g_pRouteMan->GetCurrentBrgToActivePoint();
         v[0]["XTE"] = g_pRouteMan->GetCurrentXTEToActivePoint();
-        v[0]["active_route_GUID"] = g_pRouteMan->GetpActiveRoute()->GetGUID();
+        v[0]["active_route_GUID"] =
+            QString_to_wxString(g_pRouteMan->GetpActiveRoute()->GetGUID());
         v[0]["active_waypoint_lat"] =
             g_pRouteMan->GetpActiveRoute()->m_pRouteActivePoint->GetLatitude();
         v[0]["active_waypoint_lon"] =
@@ -6511,8 +6526,9 @@ void MyFrame::ActivateAISMOBRoute(const AisTargetData *ptarget) {
   mob_label += _(" on ");
   mob_label += ocpn::toUsrDateTimeFormat(mob_time);
 
-  RoutePoint *pWP_MOB = new RoutePoint(ptarget->Lat, ptarget->Lon, "mob",
-                                       mob_label, wxEmptyString);
+  RoutePoint *pWP_MOB =
+      new RoutePoint(ptarget->Lat, ptarget->Lon, "mob",
+                     wxString_to_QString(mob_label), QString());
   pWP_MOB->SetShared(true);
   pWP_MOB->m_bIsolatedMark = true;
   pSelect->AddSelectableRoutePoint(ptarget->Lat, ptarget->Lon, pWP_MOB);
@@ -6526,8 +6542,9 @@ void MyFrame::ActivateAISMOBRoute(const AisTargetData *ptarget) {
   event even in case our GPS is momentarily unavailable and b) work even when
   the boat is stationary, in which case some GPS units do not provide COG) if(
   bGPSValid && !std::isnan(gCog) && !std::isnan(gSog) ) { */
-  RoutePoint *pWP_src = new RoutePoint(gLat, gLon, g_default_wp_icon,
-                                       wxString(_("Own ship")), wxEmptyString);
+  RoutePoint *pWP_src =
+      new RoutePoint(gLat, gLon, wxString_to_QString(g_default_wp_icon),
+                     wxString_to_QString(_("Own ship")), QString());
   pSelect->AddSelectableRoutePoint(gLat, gLon, pWP_src);
   pWP_MOB->SetUseSca(false);  // Do not use scaled hiding for MOB
   pAISMOBRoute = new Route();
@@ -6551,7 +6568,7 @@ void MyFrame::ActivateAISMOBRoute(const AisTargetData *ptarget) {
   //       g_pRouteMan->ActivateRoute( pAISMOBRoute, pWP_MOB );
 
   wxJSONValue v;
-  v["GUID"] = pAISMOBRoute->m_GUID;
+  v["GUID"] = QString_to_wxString(pAISMOBRoute->m_GUID);
   wxString msg_id("OCPN_MAN_OVERBOARD");
   SendJSONMessageToAllPlugins(msg_id, v);
   //}

@@ -597,7 +597,8 @@ void RestServer::HandleServerMessage(ObservedEvt& event) {
       ss << "[";
       for (auto& r : *pRouteList) {
         if (ss.str() != "[") ss << ", ";
-        ss << "[ \"" << r->GetGUID() << "\", \"" << r->GetName() << "\"]";
+        ss << "[ \"" << r->GetGUID().toStdString() << "\", \""
+           << r->GetName().toStdString() << "\"]";
       }
       ss << "]";
       std::string reply(kListRoutesReply);
@@ -638,7 +639,8 @@ void RestServer::HandleRoute(pugi::xml_node object,
   // Check for duplicate GUID
   bool add = true;
   bool overwrite_one = false;
-  Route* duplicate = m_route_ctx.find_route_by_guid(route->GetGUID());
+  Route* duplicate = m_route_ctx.find_route_by_guid(
+      wxString::FromUTF8(route->GetGUID().toStdString()));
   if (duplicate) {
     if (!m_overwrite && !evt_data.force) {
       auto result = m_dlg_ctx.run_accept_object_dlg(
@@ -665,7 +667,7 @@ void RestServer::HandleRoute(pugi::xml_node object,
       NavObj_dB::GetInstance().InsertRoute(route);
       UpdateReturnStatus(RestServerResult::NoError);
       if (evt_data.activate)
-        activate_route.Notify(route->GetGUID().ToStdString());
+        activate_route.Notify(route->GetGUID().toStdString());
       GuiEvents::GetInstance().on_routes_update.Notify();
     } else {
       UpdateReturnStatus(RestServerResult::RouteInsertError);
@@ -722,7 +724,8 @@ void RestServer::HandleWaypoint(pugi::xml_node object,
   bool add = true;
   bool overwrite_one = false;
 
-  RoutePoint* duplicate = m_route_ctx.find_wpt_by_guid(rp->m_GUID);
+  RoutePoint* duplicate = m_route_ctx.find_wpt_by_guid(
+      wxString::FromUTF8(rp->m_GUID.toStdString()));
   if (duplicate) {
     if (!m_overwrite && !evt_data.force) {
       auto result = m_dlg_ctx.run_accept_object_dlg(

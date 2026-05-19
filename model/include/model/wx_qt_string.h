@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2022 by David S. Register                               *
+ *   Copyright (C) 2025 by the OpenCPN Development Team                     *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -18,33 +18,25 @@
 /**
  * \file
  *
- * Implement route_validator.h -- route dialog validation checks.
+ * Helpers for converting between wxString and QString during the ongoing
+ * wxWidgets -> Qt migration. Always uses an explicit UTF-8 round-trip so
+ * non-ASCII text is preserved regardless of the current locale.
  */
 
-#include "route_validator.h"
+#ifndef OCPN_WX_QT_STRING_H_
+#define OCPN_WX_QT_STRING_H_
 
-#include "model/routeman.h"
-#include "model/route.h"
-#include "model/wx_qt_string.h"
+#include <QString>
+#include <wx/string.h>
 
-/*!
- * Route point name validator validates the field value.
- */
-RoutePointNameValidator::RoutePointNameValidator(RoutePoint* wp_ptr)
-    : TextValidator() {
-  m_wp_ptr = wp_ptr;
+/** Convert a wxString to a QString using an explicit UTF-8 round-trip. */
+inline QString wxString_to_QString(const wxString &ws) {
+  return QString::fromStdString(ws.utf8_string());
 }
 
-wxValidator* RoutePointNameValidator::Clone() const {
-  return new RoutePointNameValidator(m_wp_ptr);
+/** Convert a QString to a wxString using an explicit UTF-8 round-trip. */
+inline wxString QString_to_wxString(const QString &qs) {
+  return wxString::FromUTF8(qs.toStdString());
 }
 
-/**
- * Validate route point name.
- */
-wxString RoutePointNameValidator::IsValid(const wxString& val) const {
-  Route* route = FindRouteContainingWaypoint(m_wp_ptr);
-  return route ? QString_to_wxString(route->IsPointNameValid(
-                     m_wp_ptr, wxString_to_QString(val)))
-               : "";
-}
+#endif  // OCPN_WX_QT_STRING_H_

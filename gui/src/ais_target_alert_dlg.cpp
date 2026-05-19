@@ -369,8 +369,10 @@ void AISTargetAlertDialog::OnIdCreateWPClick(wxCommandEvent &event) {
   if (m_pdecoder) {
     auto td = m_pdecoder->Get_Target_Data_From_MMSI(Get_Dialog_MMSI());
     if (td) {
-      RoutePoint *pWP = new RoutePoint(td->Lat, td->Lon, g_default_wp_icon,
-                                       wxEmptyString, wxEmptyString);
+      RoutePoint *pWP = new RoutePoint(
+          td->Lat, td->Lon,
+          QString::fromStdString(g_default_wp_icon.utf8_string()), QString(),
+          QString());
       pWP->m_bIsolatedMark = true;  // This is an isolated mark
       pSelect->AddSelectableRoutePoint(td->Lat, td->Lon, pWP);
       NavObj_dB::GetInstance().InsertRoutePoint(pWP);

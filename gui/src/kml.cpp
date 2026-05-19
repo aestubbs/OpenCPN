@@ -46,6 +46,7 @@
 #include "model/ocpn_types.h"
 #include "model/own_ship.h"
 #include "model/route.h"
+#include "model/wx_qt_string.h"
 #include "model/track.h"
 
 #include "kml.h"
@@ -195,8 +196,8 @@ KmlPastebufferType Kml::ParseOnePlacemarkPoint(TiXmlNode* node,
   parsedRoutePoint->m_lon = newLon;
   parsedRoutePoint->m_bIsolatedMark = true;
   parsedRoutePoint->m_bPtIsSelected = false;
-  parsedRoutePoint->m_MarkDescription = pointDescr;
-  parsedRoutePoint->SetName(pointName);
+  parsedRoutePoint->m_MarkDescription = wxString_to_QString(pointDescr);
+  parsedRoutePoint->SetName(wxString_to_QString(pointName));
 
   return KML_PASTE_WAYPOINT;
 }
@@ -357,14 +358,15 @@ std::string Kml::PointPlacemark(TiXmlElement* document,
   TiXmlElement* pmPointName = new TiXmlElement("name");
   pmPoint->LinkEndChild(pmPointName);
   TiXmlText* pmPointNameVal =
-      new TiXmlText(routepoint->GetName().mb_str(wxConvUTF8));
+      new TiXmlText(QString_to_wxString(routepoint->GetName()).mb_str(wxConvUTF8));
   pmPointName->LinkEndChild(pmPointNameVal);
 
   TiXmlElement* pointDescr = new TiXmlElement("description");
   pmPoint->LinkEndChild(pointDescr);
 
   bool descrIsPlainText = true;
-  wxCharBuffer descrString = routepoint->m_MarkDescription.mb_str(wxConvUTF8);
+  wxCharBuffer descrString =
+      QString_to_wxString(routepoint->m_MarkDescription).mb_str(wxConvUTF8);
 
   if (insertQtVlmExtendedData) {
     // Does the RoutePoint description parse as XML with an <ExtendedData> root
@@ -400,7 +402,7 @@ std::string Kml::PointPlacemark(TiXmlElement* document,
           wxString::Format("%04d", seqCounter).mb_str(wxConvUTF8));
       seq->LinkEndChild(snVal);
 
-      if (routepoint->m_MarkDescription.Length()) {
+      if (routepoint->m_MarkDescription.length()) {
         TiXmlElement* data = new TiXmlElement("Data");
         data->SetAttribute("name", "Description");
         extendedData->LinkEndChild(data);
@@ -470,7 +472,8 @@ wxString Kml::MakeKmlFromRoute(Route* route, bool insertSeq) {
   seqCounter = 0;
   TiXmlDocument xmlDoc;
   wxString name = _("OpenCPN Route");
-  if (route->m_RouteNameString.Length()) name = route->m_RouteNameString;
+  if (route->m_RouteNameString.length())
+    name = QString_to_wxString(route->m_RouteNameString);
   TiXmlElement* document = StandardHead(xmlDoc, name);
 
   std::stringstream lineStringCoords;
@@ -557,7 +560,8 @@ wxString Kml::MakeKmlFromTrack(Track* track) {
 wxString Kml::MakeKmlFromWaypoint(RoutePoint* routepoint) {
   TiXmlDocument xmlDoc;
   wxString name = _("OpenCPN Waypoint");
-  if (routepoint->GetName().Length()) name = routepoint->GetName();
+  if (routepoint->GetName().length())
+    name = QString_to_wxString(routepoint->GetName());
   TiXmlElement* document = StandardHead(xmlDoc, name);
 
   insertQtVlmExtendedData = false;

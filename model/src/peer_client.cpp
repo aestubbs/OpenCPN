@@ -403,7 +403,7 @@ static bool CheckObjects(const std::string& api_key, PeerData& peer_data) {
   url << "https://" << peer_data.dest_ip_address << "/api/writable"
       << "?source=" << g_hostname << "&apikey=" << api_key << "&guid=";
   for (const auto& r : peer_data.routes) {
-    std::string guid = r->GetGUID().ToStdString();
+    std::string guid = r->GetGUID().toStdString();
     std::string full_url = url.str() + guid;
     struct MemoryStruct chunk;
     if (ApiGet(full_url, &chunk) != 200) {
@@ -425,7 +425,7 @@ static bool CheckObjects(const std::string& api_key, PeerData& peer_data) {
     if (result != 0) return false;
   }
   for (const auto& rp : peer_data.routepoints) {
-    std::string guid = rp->m_GUID.ToStdString();
+    std::string guid = rp->m_GUID.toStdString();
     std::string full_url = url.str() + guid;
     struct MemoryStruct chunk;
     if (ApiGet(full_url, &chunk) != 200) {

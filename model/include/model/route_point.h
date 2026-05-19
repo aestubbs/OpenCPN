@@ -27,6 +27,8 @@
 #include <functional>
 #include <vector>
 
+#include <QString>
+
 #include <wx/bitmap.h>
 #include <wx/colour.h>
 #include <wx/datetime.h>
@@ -72,8 +74,8 @@ class RoutePoint {
   friend class RoutePointGui;
 
 public:
-  RoutePoint(double lat, double lon, const wxString &icon_ident,
-             const wxString &name, const wxString &pGUID = wxEmptyString,
+  RoutePoint(double lat, double lon, const QString &icon_ident,
+             const QString &name, const QString &pGUID = QString(),
              bool bAddToList = true);
   RoutePoint(RoutePoint *orig);
   RoutePoint();
@@ -110,16 +112,16 @@ public:
   void SetListed(bool viz = true) { m_bIsListed = viz; }
   void SetNameShown(bool viz = true) { m_bShowName = viz; }
   bool GetNameShown() { return m_bShowName; }
-  virtual wxString GetName(void) { return m_MarkName; }
-  wxString GetDescription(void) { return m_MarkDescription; }
+  virtual QString GetName(void) { return m_MarkName; }
+  QString GetDescription(void) { return m_MarkDescription; }
 
   /** Returns the Create Time of this RoutePoint in UTC. */
   wxDateTime GetCreateTime(void);
   /** Sets the create time of this RoutePoint in UTC. */
   void SetCreateTime(wxDateTime dt);
 
-  wxString GetIconName(void) { return m_IconName; }
-  void SetIconName(wxString name) { m_IconName = name; }
+  QString GetIconName(void) { return m_IconName; }
+  void SetIconName(QString name) { m_IconName = name; }
 
   void *GetSelectNode(void) { return m_SelectNode; }
   void SetSelectNode(void *node) { m_SelectNode = node; }
@@ -127,7 +129,7 @@ public:
   void *GetManagerListNode(void) { return m_ManagerNode; }
   void SetManagerListNode(void *node) { m_ManagerNode = node; }
 
-  void SetName(const wxString &name);
+  void SetName(const QString &name);
   void CalculateNameExtents(void);
 
   void SetCourse(double course) { m_routeprop_course = course; };
@@ -138,8 +140,8 @@ public:
   void SetWaypointArrivalRadius(double dArrivalDistance) {
     m_WaypointArrivalRadius = dArrivalDistance;
   };
-  void SetWaypointArrivalRadius(wxString wxArrivalDistance) {
-    wxArrivalDistance.ToDouble(&m_WaypointArrivalRadius);
+  void SetWaypointArrivalRadius(QString wxArrivalDistance) {
+    m_WaypointArrivalRadius = wxArrivalDistance.toDouble();
   };
   double GetWaypointArrivalRadius();
   bool GetShowWaypointRangeRings(void) { return m_bShowWaypointRangeRings; };
@@ -161,11 +163,11 @@ public:
   void SetWaypointRangeRingsColour(wxColour wxc_WaypointRangeRingsColour) {
     m_wxcWaypointRangeRingsColour = wxc_WaypointRangeRingsColour;
   };
-  void SetTideStation(wxString TideStation) { m_TideStation = TideStation; };
-  void SetScaMin(wxString str);
+  void SetTideStation(QString TideStation) { m_TideStation = TideStation; };
+  void SetScaMin(QString str);
   void SetScaMin(long val);
   long GetScaMin() { return m_ScaMin; };
-  void SetScaMax(wxString str);
+  void SetScaMax(QString str);
   void SetScaMax(long val);
   long GetScaMax() { return m_ScaMax; };
   bool GetUseSca() { return b_UseScamin; };
@@ -244,7 +246,7 @@ public:
    * conversion is performed.
    * @todo: add support to parse timezone information from the string.
    */
-  bool SetETD(const wxString &ts);
+  bool SetETD(const QString &ts);
   /**
    * Retrieves the Estimated Time of Arrival for this waypoint, in UTC.
    *
@@ -281,7 +283,7 @@ public:
    * @return Formatted string representation of the time en route, or an empty
    * string if no ETE value is available.
    */
-  wxString GetETE();
+  QString GetETE();
   void SetETE(wxLongLong secs);
 
   double m_lat, m_lon;
@@ -417,15 +419,15 @@ public:
    * Description text for the waypoint.
    * May contain encoded information like ETD or planned speed.
    */
-  wxString m_MarkDescription;
+  QString m_MarkDescription;
   /**
    * Globally Unique Identifier for the waypoint.
    */
-  wxString m_GUID;
+  QString m_GUID;
   /**
    * Associated tide station identifier.
    */
-  wxString m_TideStation;
+  QString m_TideStation;
   /**
    * Font used for rendering the waypoint name.
    */
@@ -547,7 +549,7 @@ public:
   /**
    * String representation of the waypoint creation time.
    */
-  wxString m_timestring;
+  QString m_timestring;
   /**
    * Creation timestamp for the waypoint, in UTC.
    */
@@ -557,9 +559,9 @@ private:
   /**
    * Name of the waypoint.
    */
-  wxString m_MarkName;
+  QString m_MarkName;
   wxBitmap *m_pbmIcon;
-  wxString m_IconName;
+  QString m_IconName;
 
   void *m_SelectNode;
   void *m_ManagerNode;

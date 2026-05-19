@@ -56,6 +56,10 @@
 
 bool g_bPluginHandleAutopilotRoute;
 
+static wxString qs2ws(const QString &qs) {
+  return wxString::FromUTF8(qs.toStdString());
+}
+
 Routeman *g_pRouteMan;
 Route *pAISMOBRoute;
 
@@ -126,7 +130,7 @@ Route *Routeman::FindRouteContainingWaypoint(RoutePoint *pWP) {
 Route *Routeman::FindRouteContainingWaypoint(const std::string &guid) {
   for (Route *proute : *pRouteList) {
     for (RoutePoint *prp : *proute->pRoutePointList) {
-      if (prp->m_GUID == guid) return proute;
+      if (prp->m_GUID.toStdString() == guid) return proute;
     }
   }
 
@@ -221,8 +225,8 @@ RoutePoint *Routeman::FindBestActivatePoint(Route *pR, double lat, double lon,
 bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
   g_bAllowShipToActive = false;
   wxJSONValue v;
-  v["Route_activated"] = pRouteToActivate->m_RouteNameString;
-  v["GUID"] = pRouteToActivate->m_GUID;
+  v["Route_activated"] = qs2ws(pRouteToActivate->m_RouteNameString);
+  v["GUID"] = qs2ws(pRouteToActivate->m_GUID);
   json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_ACTIVATED");
   if (g_bPluginHandleAutopilotRoute) return true;
 
@@ -260,7 +264,7 @@ bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
   }
 
   pActiveRoute = pRouteToActivate;
-  g_active_route = pActiveRoute->GetGUID();
+  g_active_route = qs2ws(pActiveRoute->GetGUID());
 
   if (pStartPoint) {
     pActivePoint = pStartPoint;
@@ -285,8 +289,8 @@ bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
 bool Routeman::ActivateRoutePoint(Route *pA, RoutePoint *pRP_target) {
   g_bAllowShipToActive = false;
   wxJSONValue v;
-  v["GUID"] = pRP_target->m_GUID;
-  v["WP_activated"] = pRP_target->GetName();
+  v["GUID"] = qs2ws(pRP_target->m_GUID);
+  v["WP_activated"] = qs2ws(pRP_target->GetName());
 
   json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_WPT_ACTIVATED");
 
@@ -311,7 +315,7 @@ bool Routeman::ActivateRoutePoint(Route *pA, RoutePoint *pRP_target) {
     if (pRouteActivatePoint) delete pRouteActivatePoint;
 
     pRouteActivatePoint =
-        new RoutePoint(gLat, gLon, wxString(""), wxString("Begin"), "",
+        new RoutePoint(gLat, gLon, QString(""), QString("Begin"), "",
                        false);  // Current location
     pRouteActivatePoint->m_bShowName = false;
 
@@ -362,9 +366,9 @@ bool Routeman::ActivateNextPoint(Route *pr, bool skipped) {
     pActivePoint->m_bIsActive = false;
 
     v["isSkipped"] = skipped;
-    v["GUID"] = pActivePoint->m_GUID;
-    v["GUID_WP_arrived"] = pActivePoint->m_GUID;
-    v["WP_arrived"] = pActivePoint->GetName();
+    v["GUID"] = qs2ws(pActivePoint->m_GUID);
+    v["GUID_WP_arrived"] = qs2ws(pActivePoint->m_GUID);
+    v["WP_arrived"] = qs2ws(pActivePoint->GetName());
   }
   int n_index_active = pActiveRoute->GetIndexOf(pActivePoint);
   if (n_index_active < 0) return false;
@@ -385,8 +389,8 @@ bool Routeman::ActivateNextPoint(Route *pr, bool skipped) {
     }
   }
   if (result) {
-    v["Next_WP"] = pActivePoint->GetName();
-    v["GUID_Next_WP"] = pActivePoint->m_GUID;
+    v["Next_WP"] = qs2ws(pActivePoint->GetName());
+    v["GUID_Next_WP"] = qs2ws(pActivePoint->m_GUID);
 
     pActivePoint->m_bBlink = true;
     pActivePoint->m_bIsActive = true;
@@ -421,12 +425,12 @@ bool Routeman::DeactivateRoute(bool b_arrival) {
 
     wxJSONValue v;
     if (!b_arrival) {
-      v["Route_deactivated"] = pActiveRoute->m_RouteNameString;
-      v["GUID"] = pActiveRoute->m_GUID;
+      v["Route_deactivated"] = qs2ws(pActiveRoute->m_RouteNameString);
+      v["GUID"] = qs2ws(pActiveRoute->m_GUID);
       json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_DEACTIVATED");
     } else {
-      v["GUID"] = pActiveRoute->m_GUID;
-      v["Route_ended"] = pActiveRoute->m_RouteNameString;
+      v["GUID"] = qs2ws(pActiveRoute->m_GUID);
+      v["Route_ended"] = qs2ws(pActiveRoute->m_RouteNameString);
       json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_ENDED");
     }
   }
@@ -470,7 +474,7 @@ bool Routeman::UpdateAutopilot() {
   if (XTEDir < 0) {
     leg_info.Xte = -leg_info.Xte;  // Left side of the track -> negative XTE
   }
-  leg_info.wp_name = pActivePoint->GetName().Truncate(maxName);
+  leg_info.wp_name = qs2ws(pActivePoint->GetName().left(maxName));
   leg_info.arrival = m_bArrival;
 
   json_leg_info.Notify(std::make_shared<ActiveLegDat>(leg_info), "");
@@ -500,7 +504,7 @@ bool Routeman::UpdateAutopilot() {
   if (XTEDir < 0) {
     leg_info.Xte = -leg_info.Xte;  // Left side of the track -> negative XTE
   }
-  leg_info.wp_name = pActivePoint->GetName().Truncate(maxName);
+  leg_info.wp_name = qs2ws(pActivePoint->GetName().left(maxName));
   leg_info.arrival = m_bArrival;
 
   json_leg_info.Notify(std::make_shared<ActiveLegDat>(leg_info), "");
@@ -940,7 +944,7 @@ Track *Routeman::FindTrackByGUID(const wxString &guid) {
 void Routeman::ZeroCurrentXTEToActivePoint() {
   // When zeroing XTE create a "virtual" waypoint at present position
   if (pRouteActivatePoint) delete pRouteActivatePoint;
-  pRouteActivatePoint = new RoutePoint(gLat, gLon, wxString(""), wxString(""),
+  pRouteActivatePoint = new RoutePoint(gLat, gLon, QString(""), QString(""),
                                        "", false);  // Current location
   pRouteActivatePoint->m_bShowName = false;
 

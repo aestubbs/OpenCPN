@@ -991,9 +991,10 @@ void AISTargetListDialog::OnTargetCreateWpt(wxCommandEvent &event) {
         m_pdecoder->Get_Target_Data_From_MMSI(m_pMMSI_array->Item(selItemID));
 
   if (pAISTarget) {
-    RoutePoint *pWP =
-        new RoutePoint(pAISTarget->Lat, pAISTarget->Lon, g_default_wp_icon,
-                       wxEmptyString, wxEmptyString);
+    RoutePoint *pWP = new RoutePoint(
+        pAISTarget->Lat, pAISTarget->Lon,
+        QString::fromStdString(g_default_wp_icon.utf8_string()), QString(),
+        QString());
     pWP->m_bIsolatedMark = true;  // This is an isolated mark
     pSelect->AddSelectableRoutePoint(pAISTarget->Lat, pAISTarget->Lon, pWP);
     // pConfig->AddNewWayPoint(pWP, -1);  // use auto next num

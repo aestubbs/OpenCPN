@@ -26,6 +26,8 @@
 #include <wx/wx.h>
 #endif
 
+#include <QStringList>
+
 #include <wx/arrstr.h>
 #include <wx/datetime.h>
 #include <wx/gdicmn.h>
@@ -43,6 +45,7 @@
 #include "model/routeman.h"
 #include "model/select.h"
 #include "model/navobj_db.h"
+#include "model/wx_qt_string.h"
 
 WayPointman *pWayPointMan;
 
@@ -65,7 +68,7 @@ Route::Route() {
   m_hiliteWidth = 0;
 
   pRoutePointList = new RoutePointList;
-  m_GUID = pWayPointMan->CreateGUID(NULL);
+  m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(NULL));
   m_btemp = false;
 
   m_ArrivalRadius = g_n_arrival_circle_radius;  // Nautical Miles
@@ -98,7 +101,7 @@ Route::~Route() {
 // route
 //
 void Route::CloneRoute(Route *psourceroute, int start_nPoint, int end_nPoint,
-                       const wxString &suffix,
+                       const QString &suffix,
                        const bool duplicate_first_point) {
   m_RouteNameString = psourceroute->m_RouteNameString + suffix;
   m_RouteStartString = psourceroute->m_RouteStartString;
@@ -123,18 +126,18 @@ void Route::CloneRoute(Route *psourceroute, int start_nPoint, int end_nPoint,
   FinalizeForRendering();
 }
 
-wxString Route::IsPointNameValid(RoutePoint *pPoint,
-                                 const wxString &name) const {
-  wxString substr = name;
+QString Route::IsPointNameValid(RoutePoint *pPoint,
+                                const QString &name) const {
+  QString substr = name;
   auto it = pRoutePointList->begin();
   while (it != pRoutePointList->end()) {
     RoutePoint *point = *it;
-    wxString exist = point->GetName();
+    QString exist = point->GetName();
 
     if (pPoint->m_GUID == point->m_GUID) {
       ++it;
     } else if (substr == exist) {
-      return _("Name is not unique in route");
+      return wxString_to_QString(_("Name is not unique in route"));
     } else {
       ++it;
     }
@@ -157,10 +160,9 @@ void Route::AddPoint(RoutePoint *pNewPoint, bool b_rename_in_sequence,
 
   if (prev) UpdateSegmentDistance(prev, pNewPoint);
 
-  if (b_rename_in_sequence && pNewPoint->GetName().IsEmpty() &&
+  if (b_rename_in_sequence && pNewPoint->GetName().isEmpty() &&
       !pNewPoint->IsShared()) {
-    wxString name;
-    name.Printf("%03d", GetnPoints());
+    QString name = QString::asprintf("%03d", GetnPoints());
     pNewPoint->SetName(name);
   }
   return;
@@ -201,7 +203,7 @@ void Route::InsertPointAndSegment(RoutePoint *pNewPoint, int insert_after,
     pNewPoint->m_bIsInRoute = true;
 
     if (insert_after >= GetnPoints() - 1) {
-      wxLogMessage("Error insert after last point");
+      qInfo("Error insert after last point");
       return;
     }
 
@@ -225,7 +227,7 @@ RoutePoint *Route::GetPoint(int nWhichPoint) {
   return *pos;
 }
 
-RoutePoint *Route::GetPoint(const wxString &guid) {
+RoutePoint *Route::GetPoint(const QString &guid) {
   for (RoutePoint *prp : *pRoutePointList) {
     if (guid == prp->m_GUID) return prp;
   }
@@ -269,8 +271,8 @@ void Route::ClearHighlights() {
 
 RoutePoint *Route::InsertPointBefore(RoutePoint *pRP, double rlat, double rlon,
                                      bool bRenamePoints) {
-  RoutePoint *newpoint = new RoutePoint(rlat, rlon, g_default_routepoint_icon,
-                                        GetNewMarkSequenced(), "");
+  RoutePoint *newpoint = new RoutePoint(
+      rlat, rlon, wxString_to_QString(g_default_routepoint_icon), GetNewMarkSequenced(), "");
   newpoint->m_bIsInRoute = true;
   newpoint->SetNameShown(false);
 
@@ -292,8 +294,8 @@ RoutePoint *Route::InsertPointAfter(RoutePoint *pRP, double rlat, double rlon,
   if (pos == pRoutePointList->end()) return nullptr;
   ++pos;
 
-  RoutePoint *newpoint = new RoutePoint(rlat, rlon, g_default_routepoint_icon,
-                                        GetNewMarkSequenced(), "");
+  RoutePoint *newpoint = new RoutePoint(
+      rlat, rlon, wxString_to_QString(g_default_routepoint_icon), GetNewMarkSequenced(), "");
   newpoint->m_bIsInRoute = true;
   newpoint->SetNameShown(false);
 
@@ -307,9 +309,8 @@ RoutePoint *Route::InsertPointAfter(RoutePoint *pRP, double rlat, double rlon,
   return (newpoint);
 }
 
-wxString Route::GetNewMarkSequenced() {
-  wxString ret;
-  ret.Printf("NM%03d", m_nm_sequence);
+QString Route::GetNewMarkSequenced() {
+  QString ret = QString::asprintf("NM%03d", m_nm_sequence);
   m_nm_sequence++;
 
   return ret;
@@ -541,18 +542,18 @@ void Route::UpdateSegmentDistances(double planspeed) {
 
 void Route::Reverse(bool bRenamePoints) {
   //    Reverse the GUID list
-  wxArrayString RoutePointGUIDList;
+  QStringList RoutePointGUIDList;
 
   int ncount = pRoutePointList->size();
   for (int i = 0; i < ncount; i++)
-    RoutePointGUIDList.Add(GetPoint(ncount - i)->m_GUID);
+    RoutePointGUIDList.append(GetPoint(ncount - i)->m_GUID);
 
   pRoutePointList->clear();
   m_route_length = 0.0;
 
   //  Iterate over the RoutePointGUIDs
-  for (unsigned int ip = 0; ip < RoutePointGUIDList.GetCount(); ip++) {
-    wxString GUID = RoutePointGUIDList[ip];
+  for (int ip = 0; ip < RoutePointGUIDList.size(); ip++) {
+    QString GUID = RoutePointGUIDList[ip];
     for (RoutePoint *prp : *pWayPointMan->GetWaypointList()) {
       if (prp->m_GUID == GUID) {
         AddPoint(prp);
@@ -564,7 +565,7 @@ void Route::Reverse(bool bRenamePoints) {
   if (bRenamePoints) RenameRoutePoints();
 
   // Switch start/end strings. anders, 2010-01-29
-  wxString tmp = m_RouteStartString;
+  QString tmp = m_RouteStartString;
   m_RouteStartString = m_RouteEndString;
   m_RouteEndString = tmp;
 }
@@ -609,17 +610,17 @@ void Route::RenameRoutePoints() {
   int i = 1;
   for (RoutePoint *prp : *pRoutePointList) {
     if (prp->IsNameDynamic()) {
-      wxString name = prp->GetName();
-      if (name.Len() == 3) {
-        name.Printf("%03d", i);
-      } else if (name.Left(2) == "NM") {
-        name.Printf("%03d", i);
-        if (prp->GetName().Len() >= 5) {
-          name.Append(prp->GetName().Mid(5));
+      QString name = prp->GetName();
+      if (name.length() == 3) {
+        name = QString::asprintf("%03d", i);
+      } else if (name.left(2) == "NM") {
+        name = QString::asprintf("%03d", i);
+        if (prp->GetName().length() >= 5) {
+          name.append(prp->GetName().mid(5));
         }
       } else {
-        name.Printf("%03d", i);
-        name.Append(prp->GetName().Mid(3));
+        name = QString::asprintf("%03d", i);
+        name.append(prp->GetName().mid(3));
       }
       prp->SetName(name);
     }
@@ -649,7 +650,7 @@ bool Route::IsEqualTo(Route *ptargetroute) {
         (fabs(pthisrp->m_lon - pthatrp->m_lon) > 1.0e-6))
       return false;
 
-    if (!pthisrp->GetName().IsSameAs(pthatrp->GetName())) return false;
+    if (pthisrp->GetName() != pthatrp->GetName()) return false;
 
     ++pthisnode;
     ++pthatnode;

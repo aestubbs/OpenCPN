@@ -1810,8 +1810,9 @@ static void AISDrawTarget(AisTargetData *td, ocpnDC &dc, ViewPort &vp,
         dc.SetPen(wxPen(c, 2.0 * AIS_nominal_line_width_pix));
       } else {
         for (unsigned int i = 0;
-             i < sizeof(::GpxxColorNames) / sizeof(wxString); i++) {
-          if (ptrack->m_Colour == ::GpxxColorNames[i]) {
+             i < sizeof(::GpxxColorNames) / sizeof(QString); i++) {
+          if (ptrack->m_Colour ==
+              wxString::FromUTF8(::GpxxColorNames[i].toStdString())) {
             c = ::GpxxColors[i];
             dc.SetPen(wxPen(c, 2.0 * AIS_nominal_line_width_pix));
             break;

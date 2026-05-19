@@ -48,6 +48,7 @@
 #include "model/position_parser.h"
 #include "model/route.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 #include "model/select.h"
 #include "model/svg_utils.h"
 
@@ -866,11 +867,11 @@ void MarkInfoDlg::SetRoutePoint(RoutePoint* pRP) {
   if (m_pRoutePoint) {
     m_lat_save = m_pRoutePoint->m_lat;
     m_lon_save = m_pRoutePoint->m_lon;
-    m_IconName_save = m_pRoutePoint->GetIconName();
+    m_IconName_save = QString_to_wxString(m_pRoutePoint->GetIconName());
     m_bShowName_save = m_pRoutePoint->m_bShowName;
     m_bIsVisible_save = m_pRoutePoint->m_bIsVisible;
-    m_Name_save = m_pRoutePoint->GetName();
-    m_Description_save = m_pRoutePoint->m_MarkDescription;
+    m_Name_save = QString_to_wxString(m_pRoutePoint->GetName());
+    m_Description_save = QString_to_wxString(m_pRoutePoint->m_MarkDescription);
     m_bUseScaMin_save = m_pRoutePoint->GetUseSca();
     m_iScaminVal_save = m_pRoutePoint->GetScaMin();
     m_iScamaxVal_save = m_pRoutePoint->GetScaMax();
@@ -1338,10 +1339,11 @@ void MarkInfoDlg::OnMarkInfoCancelClick(wxCommandEvent& event) {
     m_pRoutePoint->SetVisible(m_bIsVisible_save);
     m_pRoutePoint->SetNameShown(m_bShowName_save);
     m_pRoutePoint->SetPosition(m_lat_save, m_lon_save);
-    m_pRoutePoint->SetIconName(m_IconName_save);
+    m_pRoutePoint->SetIconName(wxString_to_QString(m_IconName_save));
     m_pRoutePoint->ReLoadIcon();
-    m_pRoutePoint->SetName(m_Name_save);
-    m_pRoutePoint->m_MarkDescription = m_Description_save;
+    m_pRoutePoint->SetName(wxString_to_QString(m_Name_save));
+    m_pRoutePoint->m_MarkDescription =
+        wxString_to_QString(m_Description_save);
     m_pRoutePoint->SetUseSca(m_bUseScaMin_save);
     m_pRoutePoint->SetScaMin(m_iScaminVal_save);
     m_pRoutePoint->SetScaMax(m_iScamaxVal_save);
@@ -1414,9 +1416,11 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
     m_textLongitude->SetValue(::toSDMM(2, m_pRoutePoint->m_lon));
     m_lat_save = m_pRoutePoint->m_lat;
     m_lon_save = m_pRoutePoint->m_lon;
-    m_textName->SetValue(m_pRoutePoint->GetName());
-    m_textDescription->ChangeValue(m_pRoutePoint->m_MarkDescription);
-    m_textCtrlExtDescription->ChangeValue(m_pRoutePoint->m_MarkDescription);
+    m_textName->SetValue(QString_to_wxString(m_pRoutePoint->GetName()));
+    m_textDescription->ChangeValue(
+        QString_to_wxString(m_pRoutePoint->m_MarkDescription));
+    m_textCtrlExtDescription->ChangeValue(
+        QString_to_wxString(m_pRoutePoint->m_MarkDescription));
     m_checkBoxShowName->SetValue(m_pRoutePoint->m_bShowName);
     m_checkBoxShowNameExt->SetValue(m_pRoutePoint->m_bShowName);
     m_checkBoxVisible->SetValue(m_pRoutePoint->m_bIsVisible);
@@ -1425,7 +1429,7 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
         wxString::Format("%i", (int)m_pRoutePoint->GetScaMin()));
     m_textScaMax->SetValue(
         wxString::Format("%i", (int)m_pRoutePoint->GetScaMax()));
-    m_textCtrlGuid->SetValue(m_pRoutePoint->m_GUID);
+    m_textCtrlGuid->SetValue(QString_to_wxString(m_pRoutePoint->m_GUID));
     m_ChoiceWaypointRangeRingsNumber->SetSelection(
         m_pRoutePoint->GetWaypointRangeRingsNumber());
     wxString buf;
@@ -1460,8 +1464,9 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
         m_pRoutePoint->m_TideStation) {
       m_comboBoxTideStation->Clear();
       m_comboBoxTideStation->Append("");
-      if (!m_pRoutePoint->m_TideStation.IsEmpty()) {
-        m_comboBoxTideStation->Append(m_pRoutePoint->m_TideStation);
+      if (!m_pRoutePoint->m_TideStation.isEmpty()) {
+        m_comboBoxTideStation->Append(
+            QString_to_wxString(m_pRoutePoint->m_TideStation));
         m_comboBoxTideStation->SetSelection(1);
       }
     }
@@ -1646,7 +1651,8 @@ void MarkInfoDlg::OnFocusEvent(wxFocusEvent& event) {
 void MarkInfoDlg::OnBitmapCombClick(wxCommandEvent& event) {
   wxString* icon_name =
       pWayPointMan->GetIconKey(m_bcomboBoxIcon->GetSelection());
-  if (icon_name && icon_name->Length()) m_pRoutePoint->SetIconName(*icon_name);
+  if (icon_name && icon_name->Length())
+    m_pRoutePoint->SetIconName(wxString_to_QString(*icon_name));
   m_pRoutePoint->ReLoadIcon();
   SaveChanges();
   // pConfig->UpdateWayPoint( m_pRoutePoint );
@@ -1671,12 +1677,14 @@ bool MarkInfoDlg::SaveChanges() {
     if (!this->Validate()) return false;  // prevent invalid save
 
     // Get User input Text Fields
-    m_pRoutePoint->SetName(m_textName->GetValue());
-    m_pRoutePoint->SetWaypointArrivalRadius(m_textArrivalRadius->GetValue());
-    m_pRoutePoint->SetScaMin(m_textScaMin->GetValue());
-    m_pRoutePoint->SetScaMax(m_textScaMax->GetValue());
+    m_pRoutePoint->SetName(wxString_to_QString(m_textName->GetValue()));
+    m_pRoutePoint->SetWaypointArrivalRadius(
+        wxString_to_QString(m_textArrivalRadius->GetValue()));
+    m_pRoutePoint->SetScaMin(wxString_to_QString(m_textScaMin->GetValue()));
+    m_pRoutePoint->SetScaMax(wxString_to_QString(m_textScaMax->GetValue()));
     m_pRoutePoint->SetUseSca(m_checkBoxScaMin->GetValue());
-    m_pRoutePoint->m_MarkDescription = m_textDescription->GetValue();
+    m_pRoutePoint->m_MarkDescription =
+        wxString_to_QString(m_textDescription->GetValue());
     m_pRoutePoint->SetVisible(m_checkBoxVisible->GetValue());
     m_pRoutePoint->m_bShowName = m_checkBoxShowName->GetValue();
     m_pRoutePoint->SetPosition(fromDMM(m_textLatitude->GetValue()),
@@ -1684,7 +1692,7 @@ bool MarkInfoDlg::SaveChanges() {
     wxString* icon_name =
         pWayPointMan->GetIconKey(m_bcomboBoxIcon->GetSelection());
     if (icon_name && icon_name->Length())
-      m_pRoutePoint->SetIconName(*icon_name);
+      m_pRoutePoint->SetIconName(wxString_to_QString(*icon_name));
     m_pRoutePoint->ReLoadIcon();
     m_pRoutePoint->SetShowWaypointRangeRings(
         (bool)(m_ChoiceWaypointRangeRingsNumber->GetSelection() != 0));
@@ -1799,7 +1807,7 @@ SaveDefaultsDialog::SaveDefaultsDialog(MarkInfoDlg* parent)
   stName->Wrap(-1);
   fgSizer1->Add(stName, 0, wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL, 5);
 
-  s = g_pMarkInfoDialog->m_pRoutePoint->GetIconName();
+  s = QString_to_wxString(g_pMarkInfoDialog->m_pRoutePoint->GetIconName());
   IconCB = new wxCheckBox(this, wxID_ANY, _("Icon"));
   fgSizer1->Add(IconCB, 0, wxALL, 5);
   stIcon = new wxStaticText(this, wxID_ANY, "[" + s + "]", wxDefaultPosition,

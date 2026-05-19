@@ -40,6 +40,7 @@
 #include "model/notification_manager.h"
 #include "model/own_ship.h"
 #include "model/route.h"
+#include "model/wx_qt_string.h"
 #include "model/track.h"
 
 #include "chcanv.h"
@@ -51,13 +52,14 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
                                      /* const*/ RoutePoint* src) {
   dst->m_lat = src->m_lat;
   dst->m_lon = src->m_lon;
-  dst->IconName = src->GetIconName();
-  dst->m_MarkName = src->GetName();
-  dst->m_MarkDescription = src->GetDescription();
-  dst->IconDescription = pWayPointMan->GetIconDescription(src->GetIconName());
+  dst->IconName = QString_to_wxString(src->GetIconName());
+  dst->m_MarkName = QString_to_wxString(src->GetName());
+  dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
+  dst->IconDescription = pWayPointMan->GetIconDescription(
+      QString_to_wxString(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
   dst->m_CreateTime = src->GetCreateTime();  // not const
-  dst->m_GUID = src->m_GUID;
+  dst->m_GUID = QString_to_wxString(src->m_GUID);
 
   //  Transcribe (clone) the html HyperLink List, if present
   if (src->m_HyperlinkList) {
@@ -82,7 +84,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
   dst->RangeRingSpace = src->m_fWaypointRangeRingsStep;
   dst->RangeRingSpaceUnits = src->m_iWaypointRangeRingsStepUnits;
   dst->RangeRingColor = src->m_wxcWaypointRangeRingsColour;
-  dst->m_TideStation = src->m_TideStation;
+  dst->m_TideStation = QString_to_wxString(src->m_TideStation);
 
   // Get other extended info
   dst->IsNameVisible = src->m_bShowName;
@@ -121,8 +123,9 @@ static void cloneHyperlinkListExV2(RoutePoint* dst,
 
 static RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src,
                                   bool b_permanent) {
-  RoutePoint* pWP = new RoutePoint(src->m_lat, src->m_lon, src->IconName,
-                                   src->m_MarkName, src->m_GUID);
+  RoutePoint* pWP = new RoutePoint(
+      src->m_lat, src->m_lon, wxString_to_QString(src->IconName),
+      wxString_to_QString(src->m_MarkName), wxString_to_QString(src->m_GUID));
 
   pWP->m_bIsolatedMark = true;  // This is an isolated mark
 
@@ -139,12 +142,12 @@ static RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src,
   pWP->m_btemp = (b_permanent == false);
 
   // Extended fields
-  pWP->SetIconName(src->IconName);
+  pWP->SetIconName(wxString_to_QString(src->IconName));
   pWP->SetWaypointRangeRingsNumber(src->nrange_rings);
   pWP->SetWaypointRangeRingsStep(src->RangeRingSpace);
   pWP->SetWaypointRangeRingsStepUnits(src->RangeRingSpaceUnits);
   pWP->SetWaypointRangeRingsColour(src->RangeRingColor);
-  pWP->SetTideStation(src->m_TideStation);
+  pWP->SetTideStation(wxString_to_QString(src->m_TideStation));
   pWP->SetScaMin(src->scamin);
   pWP->SetUseSca(src->b_useScamin);
   pWP->SetNameShown(src->IsNameVisible);
@@ -157,7 +160,7 @@ static RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src,
   if (src->m_ETD.IsValid())
     pWP->SetETD(src->m_ETD);
   else
-    pWP->SetETD(wxEmptyString);
+    pWP->SetETD(QString());
   return pWP;
 }
 
@@ -247,13 +250,14 @@ static void PlugInExFromRoutePoint(PlugIn_Waypoint_Ex* dst,
                                    /* const*/ RoutePoint* src) {
   dst->m_lat = src->m_lat;
   dst->m_lon = src->m_lon;
-  dst->IconName = src->GetIconName();
-  dst->m_MarkName = src->GetName();
-  dst->m_MarkDescription = src->GetDescription();
-  dst->IconDescription = pWayPointMan->GetIconDescription(src->GetIconName());
+  dst->IconName = QString_to_wxString(src->GetIconName());
+  dst->m_MarkName = QString_to_wxString(src->GetName());
+  dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
+  dst->IconDescription = pWayPointMan->GetIconDescription(
+      QString_to_wxString(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
   dst->m_CreateTime = src->GetCreateTime();  // not const
-  dst->m_GUID = src->m_GUID;
+  dst->m_GUID = QString_to_wxString(src->m_GUID);
 
   //  Transcribe (clone) the html HyperLink List, if present
   if (src->m_HyperlinkList) {
@@ -310,11 +314,12 @@ static wxString DropMarkPI(double lat, double lon) {
   if ((fabs(lat) > 80.0) || (fabs(lon) > 180.)) return "";
 
   RoutePoint* pWP =
-      new RoutePoint(lat, lon, g_default_wp_icon, wxEmptyString, wxEmptyString);
+      new RoutePoint(lat, lon, wxString_to_QString(g_default_wp_icon),
+                     QString(), QString());
   pWP->m_bIsolatedMark = true;  // This is an isolated mark
   pSelect->AddSelectableRoutePoint(lat, lon, pWP);
   NavObj_dB::GetInstance().InsertRoutePoint(pWP);
-  return pWP->m_GUID;
+  return QString_to_wxString(pWP->m_GUID);
 }
 
 static wxString RouteCreatePI(int canvas_index, bool start) {
@@ -355,11 +360,13 @@ static void EnableDefaultConsole(bool enable) {
 
 static wxString NavToHerePI(double lat, double lon) {
   RoutePoint* pWP_dest =
-      new RoutePoint(lat, lon, g_default_wp_icon, wxEmptyString, wxEmptyString);
+      new RoutePoint(lat, lon, wxString_to_QString(g_default_wp_icon),
+                     QString(), QString());
   pSelect->AddSelectableRoutePoint(lat, lon, pWP_dest);
 
-  RoutePoint* pWP_src = new RoutePoint(gLat, gLon, g_default_wp_icon,
-                                       wxEmptyString, wxEmptyString);
+  RoutePoint* pWP_src =
+      new RoutePoint(gLat, gLon, wxString_to_QString(g_default_wp_icon),
+                     QString(), QString());
   pSelect->AddSelectableRoutePoint(gLat, gLon, pWP_src);
 
   Route* temp_route = new Route();
@@ -379,7 +386,7 @@ static wxString NavToHerePI(double lat, double lon) {
   if (g_pRouteMan->GetpActiveRoute()) g_pRouteMan->DeactivateRoute();
 
   g_pRouteMan->ActivateRoute(temp_route, pWP_dest);
-  return temp_route->m_GUID;
+  return QString_to_wxString(temp_route->m_GUID);
 }
 
 static bool ActivateRoutePI(wxString route_guid, bool activate) {
@@ -438,7 +445,8 @@ static wxBitmap GetObjectIcon_PlugIn(const wxString& name) {
 
 static bool IsRouteActive(wxString route_guid) {
   if (g_pRouteMan->GetpActiveRoute())
-    return (route_guid.IsSameAs(g_pRouteMan->GetpActiveRoute()->m_GUID));
+    return (route_guid ==
+            QString_to_wxString(g_pRouteMan->GetpActiveRoute()->m_GUID));
   else
     return false;
 }
@@ -527,8 +535,9 @@ static void NavigateToWaypoint(wxString waypoint_guid) {
   RoutePoint* prp = pWayPointMan->FindRoutePointByGUID(waypoint_guid);
   if (!prp) return;
 
-  RoutePoint* pWP_src = new RoutePoint(gLat, gLon, g_default_wp_icon,
-                                       wxEmptyString, wxEmptyString);
+  RoutePoint* pWP_src =
+      new RoutePoint(gLat, gLon, wxString_to_QString(g_default_wp_icon),
+                     QString(), QString());
   pSelect->AddSelectableRoutePoint(gLat, gLon, pWP_src);
 
   Route* temp_route = new Route();
@@ -541,7 +550,7 @@ static void NavigateToWaypoint(wxString waypoint_guid) {
   pSelect->AddSelectableRouteSegment(gLat, gLon, prp->m_lat, prp->m_lon,
                                      pWP_src, prp, temp_route);
 
-  wxString name = prp->GetName();
+  wxString name = QString_to_wxString(prp->GetName());
   if (name.IsEmpty()) name = _("(Unnamed Waypoint)");
   wxString rteName = _("Go to ");
   rteName.Append(name);
@@ -764,8 +773,9 @@ static void AisTargetCreateWpt(wxString ais_mmsi) {
 
     if (pAISTarget) {
       RoutePoint* pWP =
-          new RoutePoint(pAISTarget->Lat, pAISTarget->Lon, g_default_wp_icon,
-                         wxEmptyString, wxEmptyString);
+          new RoutePoint(pAISTarget->Lat, pAISTarget->Lon,
+                         wxString_to_QString(g_default_wp_icon), QString(),
+                         QString());
       pWP->m_bIsolatedMark = true;  // This is an isolated mark
       pSelect->AddSelectableRoutePoint(pAISTarget->Lat, pAISTarget->Lon, pWP);
       NavObj_dB::GetInstance().InsertRoutePoint(pWP);
@@ -887,18 +897,18 @@ std::unique_ptr<HostApi121::Route> HostApi121::GetRoute(const wxString& guid) {
     PlugInExV2FromRoutePoint(dst_wp, src_wp);
     dst_route->pWaypointList->Append(dst_wp);
   }
-  dst_route->m_NameString = route->m_RouteNameString;
-  dst_route->m_StartString = route->m_RouteStartString;
-  dst_route->m_EndString = route->m_RouteEndString;
-  dst_route->m_GUID = route->m_GUID;
+  dst_route->m_NameString = QString_to_wxString(route->m_RouteNameString);
+  dst_route->m_StartString = QString_to_wxString(route->m_RouteStartString);
+  dst_route->m_EndString = QString_to_wxString(route->m_RouteEndString);
+  dst_route->m_GUID = QString_to_wxString(route->m_GUID);
   dst_route->m_isActive = g_pRouteMan->GetpActiveRoute() == route;
   dst_route->m_isVisible = route->IsVisible();
-  dst_route->m_Description = route->m_RouteDescription;
+  dst_route->m_Description = QString_to_wxString(route->m_RouteDescription);
   dst_route->m_PlannedSpeed = route->m_PlannedSpeed;
-  dst_route->m_Colour = route->m_Colour;
+  dst_route->m_Colour = QString_to_wxString(route->m_Colour);
   dst_route->m_style = route->m_style;
   dst_route->m_PlannedDeparture = route->m_PlannedDeparture;
-  dst_route->m_TimeDisplayFormat = route->m_TimeDisplayFormat;
+  dst_route->m_TimeDisplayFormat = QString_to_wxString(route->m_TimeDisplayFormat);
 
   return dst_route;
 }

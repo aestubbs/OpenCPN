@@ -49,6 +49,7 @@
 #include "model/plugin_comm.h"
 #include "model/route.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 #include "model/select.h"
 #include "model/track.h"
 
@@ -703,7 +704,7 @@ void CanvasMenuHandler::CanvasPopupMenu(int x, int y, int seltype) {
     if (seltype & SELTYPE_ROUTESEGMENT &&
         !(api_121->GetContextMenuMask() & api_121->kContextMenuDisableRoute)) {
       if (!g_bBasicMenus && m_pSelectedRoute) {
-        name = m_pSelectedRoute->m_RouteNameString;
+        name = QString_to_wxString(m_pSelectedRoute->m_RouteNameString);
         if (name.IsEmpty()) name = _("Unnamed Route");
         name.Prepend(" ( ").Append(" )");
       } else
@@ -821,7 +822,7 @@ void CanvasMenuHandler::CanvasPopupMenu(int x, int y, int seltype) {
         !(api_121->GetContextMenuMask() &
           api_121->kContextMenuDisableWaypoint)) {
       if (!g_bBasicMenus && m_pFoundRoutePoint) {
-        name = m_pFoundRoutePoint->GetName();
+        name = QString_to_wxString(m_pFoundRoutePoint->GetName());
         if (name.IsEmpty()) name = _("Unnamed Waypoint");
         name.Prepend(" ( ").Append(" )");
       } else
@@ -898,7 +899,7 @@ void CanvasMenuHandler::CanvasPopupMenu(int x, int y, int seltype) {
         !(api_121->GetContextMenuMask() &
           api_121->kContextMenuDisableWaypoint)) {
       if (!g_bBasicMenus && m_pFoundRoutePoint) {
-        name = m_pFoundRoutePoint->GetName();
+        name = QString_to_wxString(m_pFoundRoutePoint->GetName());
         if (name.IsEmpty()) name = _("Unnamed Mark");
         name.Prepend(" ( ").Append(" )");
       } else
@@ -1178,12 +1179,14 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
       break;
 
     case ID_DEF_MENU_GOTO_HERE: {
-      RoutePoint *pWP_dest = new RoutePoint(zlat, zlon, g_default_wp_icon,
-                                            wxEmptyString, wxEmptyString);
+      RoutePoint *pWP_dest = new RoutePoint(
+          zlat, zlon, wxString_to_QString(g_default_wp_icon), QString(),
+          QString());
       pSelect->AddSelectableRoutePoint(zlat, zlon, pWP_dest);
 
-      RoutePoint *pWP_src = new RoutePoint(gLat, gLon, g_default_wp_icon,
-                                           wxEmptyString, wxEmptyString);
+      RoutePoint *pWP_src = new RoutePoint(
+          gLat, gLon, wxString_to_QString(g_default_wp_icon), QString(),
+          QString());
       pSelect->AddSelectableRoutePoint(gLat, gLon, pWP_src);
 
       Route *temp_route = new Route();
@@ -1210,8 +1213,9 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
     }
 
     case ID_DEF_MENU_DROP_WP: {
-      RoutePoint *pWP = new RoutePoint(zlat, zlon, g_default_wp_icon,
-                                       wxEmptyString, wxEmptyString);
+      RoutePoint *pWP = new RoutePoint(
+          zlat, zlon, wxString_to_QString(g_default_wp_icon), QString(),
+          QString());
       pWP->m_bIsolatedMark = true;  // This is an isolated mark
       pSelect->AddSelectableRoutePoint(zlat, zlon, pWP);
       NavObj_dB::GetInstance().InsertRoutePoint(pWP);
@@ -1248,8 +1252,9 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
       break;
 
     case ID_WP_MENU_GOTO: {
-      RoutePoint *pWP_src = new RoutePoint(gLat, gLon, g_default_wp_icon,
-                                           wxEmptyString, wxEmptyString);
+      RoutePoint *pWP_src = new RoutePoint(
+          gLat, gLon, wxString_to_QString(g_default_wp_icon), QString(),
+          QString());
       pSelect->AddSelectableRoutePoint(gLat, gLon, pWP_src);
 
       Route *temp_route = new Route();
@@ -1263,7 +1268,7 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
                                          m_pFoundRoutePoint->m_lon, pWP_src,
                                          m_pFoundRoutePoint, temp_route);
 
-      wxString name = m_pFoundRoutePoint->GetName();
+      wxString name = QString_to_wxString(m_pFoundRoutePoint->GetName());
       if (name.IsEmpty()) name = _("(Unnamed Waypoint)");
       wxString rteName = _("Go to ");
       rteName.Append(name);
@@ -1379,23 +1384,23 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
       wxString guid = wxEmptyString;
       if (pAnchorWatchPoint1 == NULL) {
         pAnchorWatchPoint1 = m_pFoundRoutePoint;
-        g_AW1GUID = pAnchorWatchPoint1->m_GUID;
+        g_AW1GUID = QString_to_wxString(pAnchorWatchPoint1->m_GUID);
         guid = g_AW1GUID;
         wxString nn;
-        nn = m_pFoundRoutePoint->GetName();
+        nn = QString_to_wxString(m_pFoundRoutePoint->GetName());
         if (nn.IsNull()) {
           nn.Printf("%d m", g_nAWDefault);
-          m_pFoundRoutePoint->SetName(nn);
+          m_pFoundRoutePoint->SetName(wxString_to_QString(nn));
         }
       } else if (pAnchorWatchPoint2 == NULL) {
         pAnchorWatchPoint2 = m_pFoundRoutePoint;
-        g_AW2GUID = pAnchorWatchPoint2->m_GUID;
+        g_AW2GUID = QString_to_wxString(pAnchorWatchPoint2->m_GUID);
         guid = g_AW2GUID;
         wxString nn;
-        nn = m_pFoundRoutePoint->GetName();
+        nn = QString_to_wxString(m_pFoundRoutePoint->GetName());
         if (nn.IsNull()) {
           nn.Printf("%d m", g_nAWDefault);
-          m_pFoundRoutePoint->SetName(nn);
+          m_pFoundRoutePoint->SetName(wxString_to_QString(nn));
         }
       }
       if (!guid.IsEmpty()) {
@@ -1589,7 +1594,7 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
       // as the destination.
       RoutePoint *best_point;
       if (m_pSelectedRoute) {
-        if (wxNOT_FOUND == m_pSelectedRoute->m_RouteNameString.Find("MOB")) {
+        if (-1 == m_pSelectedRoute->m_RouteNameString.indexOf("MOB")) {
           best_point = g_pRouteMan->FindBestActivatePoint(
               m_pSelectedRoute, gLat, gLon, gCog, gSog);
         } else
@@ -1679,9 +1684,11 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
 
       m_pHead = new Route();
       m_pTail = new Route();
-      m_pHead->CloneRoute(m_pSelectedRoute, 1, m_SelectedIdx, _("_A"));
+      m_pHead->CloneRoute(m_pSelectedRoute, 1, m_SelectedIdx,
+                          wxString_to_QString(_("_A")));
       m_pTail->CloneRoute(m_pSelectedRoute, m_SelectedIdx + splitMode,
-                          m_pSelectedRoute->GetnPoints(), _("_B"), dupFirstWpt);
+                          m_pSelectedRoute->GetnPoints(),
+                          wxString_to_QString(_("_B")), dupFirstWpt);
       pRouteList->push_back(m_pHead);
       NavObj_dB::GetInstance().InsertRoute(m_pHead);
 
@@ -2005,11 +2012,11 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
 
             if ((pimis->m_in_menu.IsSameAs("Waypoint")) && m_pFoundRoutePoint) {
               object_type = "Waypoint";
-              object_ident = m_pFoundRoutePoint->m_GUID.ToStdString();
+              object_ident = m_pFoundRoutePoint->m_GUID.toStdString();
             } else if ((pimis->m_in_menu.IsSameAs("Route")) &&
                        m_pSelectedRoute) {
               object_type = "Route";
-              object_ident = m_pSelectedRoute->m_GUID.ToStdString();
+              object_ident = m_pSelectedRoute->m_GUID.toStdString();
             } else if ((pimis->m_in_menu.IsSameAs("Track")) &&
                        m_pSelectedTrack) {
               object_type = "Track";

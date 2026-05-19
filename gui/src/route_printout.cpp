@@ -60,6 +60,7 @@
 
 #include "model/navutil_base.h"
 #include "model/route.h"
+#include "model/wx_qt_string.h"
 #include "model/track.h"
 #include "navutil.h"
 #include "print_dialog.h"
@@ -153,7 +154,7 @@ RoutePrintout::RoutePrintout(Route* route, const std::set<int>& options,
     }
 
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointName)) {
-      m_table << point->GetName();
+      m_table << QString_to_wxString(point->GetName());
     }
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointPosition)) {
       std::wostringstream point_position;
@@ -209,14 +210,16 @@ RoutePrintout::RoutePrintout(Route* route, const std::set<int>& options,
     }
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointTideEvent)) {
       std::wostringstream point_tide;
-      if (point->m_TideStation.Len() > 0 && point->GetETA().IsValid()) {
+      if (point->m_TideStation.length() > 0 && point->GetETA().IsValid()) {
         int station_id = ptcmgr->GetStationIDXbyName(
-            point->m_TideStation, point->m_lat, point->m_lon);
+            QString_to_wxString(point->m_TideStation), point->m_lat,
+            point->m_lon);
         if (station_id > 0) {
           point_tide << ptcmgr->GetTidalEventStr(station_id, point->GetETA(),
                                                  point->m_lat, point->m_lon,
                                                  tz_selection);
-          point_tide << "\n@" << point->m_TideStation;
+          point_tide << "\n@"
+                     << QString_to_wxString(point->m_TideStation);
           m_table << point_tide.str();
         } else {
           m_table << "---";
@@ -226,7 +229,7 @@ RoutePrintout::RoutePrintout(Route* route, const std::set<int>& options,
       }
     }
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointDescription)) {
-      m_table << point->GetDescription();
+      m_table << QString_to_wxString(point->GetDescription());
     }
     m_table << "\n";
   }
@@ -287,23 +290,23 @@ void RoutePrintout::DrawPage(wxDC* dc, int page) {
            << toUsrDistance(m_route->m_route_length)
            << getUsrDistanceUnit().ToStdString();
 
-  if (m_route->m_RouteNameString.Trim().Len() > 0) {
-    title << m_route->m_RouteNameString.ToStdString();
+  if (m_route->m_RouteNameString.trimmed().length() > 0) {
+    title << m_route->m_RouteNameString.toStdString();
     title << " (" << distance.str() << ")";
   } else {
     title << _("Total distance ").ToStdString() << distance.str();
   }
 
-  if (m_route->m_RouteStartString.Trim().Len() > 0) {
+  if (m_route->m_RouteStartString.trimmed().length() > 0) {
     subtitle << _("From").ToStdString() << " "
-             << m_route->m_RouteStartString.ToStdString();
-    if (m_route->m_RouteEndString.Trim().Len() > 0) {
+             << m_route->m_RouteStartString.toStdString();
+    if (m_route->m_RouteEndString.trimmed().length() > 0) {
       subtitle << " " << _("To").ToStdString() << " "
-               << m_route->m_RouteEndString.ToStdString();
+               << m_route->m_RouteEndString.toStdString();
     }
-  } else if (m_route->m_RouteEndString.Trim().Len() > 0) {
+  } else if (m_route->m_RouteEndString.trimmed().length() > 0) {
     subtitle << _("Destination").ToStdString() << " "
-             << m_route->m_RouteEndString.ToStdString();
+             << m_route->m_RouteEndString.toStdString();
   }
 
   int title_width, title_height;
@@ -323,12 +326,13 @@ void RoutePrintout::DrawPage(wxDC* dc, int page) {
   dc->SetFont(normal_font);
 
   // Route description on page 1.
-  if (page == 1 && m_route->m_RouteDescription.Trim().Len() > 0) {
+  if (page == 1 && m_route->m_RouteDescription.trimmed().length() > 0) {
     int page_size_x, page_size_y;
     dc->GetSize(&page_size_x, &page_size_y);
 
     PrintCell cell_desc;
-    cell_desc.Init(m_route->m_RouteDescription, dc, page_size_x, m_margin_x);
+    cell_desc.Init(QString_to_wxString(m_route->m_RouteDescription), dc,
+                   page_size_x, m_margin_x);
     dc->DrawText(cell_desc.GetText(), current_x, current_y);
     current_y += cell_desc.GetHeight() + m_text_offset_y;
   }

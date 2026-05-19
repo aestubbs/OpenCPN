@@ -28,6 +28,7 @@
 #include "model/georef.h"
 #include "model/own_ship.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 #include "model/select.h"
 
 #include "model/navobj_db.h"
@@ -397,14 +398,14 @@ void RoutePropDlgImpl::UpdatePoints() {
       } else {
         eta = "";
       }
-      ete = (*pnode)->GetETE();
+      ete = QString_to_wxString((*pnode)->GetETE());
       totalDistance += distance;
     }
-    wxString name = (*pnode)->GetName();
+    wxString name = QString_to_wxString((*pnode)->GetName());
     double lat = (*pnode)->GetLatitude();
     double lon = (*pnode)->GetLongitude();
-    wxString tide_station = (*pnode)->m_TideStation;
-    wxString desc = (*pnode)->GetDescription();
+    wxString tide_station = QString_to_wxString((*pnode)->m_TideStation);
+    wxString desc = QString_to_wxString((*pnode)->GetDescription());
     wxString etd;
     if ((*pnode)->GetManualETD().IsValid()) {
       // GetManualETD() returns time in UTC, always. So use it as such.
@@ -486,7 +487,9 @@ void RoutePropDlgImpl::SetRouteAndUpdate(Route* pR, bool only_points) {
   m_OrigRoute.m_PlannedDeparture = pR->m_PlannedDeparture;
   m_OrigRoute.m_PlannedSpeed = pR->m_PlannedSpeed;
 
-  wxString title = pR->GetName() == "" ? _("Route Properties") : pR->GetName();
+  wxString title = pR->GetName() == ""
+                       ? _("Route Properties")
+                       : QString_to_wxString(pR->GetName());
   if (!pR->m_bIsInLayer)
     SetTitle(title);
   else {
@@ -564,10 +567,11 @@ void RoutePropDlgImpl::SetRouteAndUpdate(Route* pR, bool only_points) {
     m_choiceTimezone->SetSelection(m_tz_selection);
 
     // Reorganize dialog for route or track display
-    m_tcName->SetValue(m_pRoute->m_RouteNameString);
-    m_tcFrom->SetValue(m_pRoute->m_RouteStartString);
-    m_tcTo->SetValue(m_pRoute->m_RouteEndString);
-    m_tcDescription->SetValue(m_pRoute->m_RouteDescription);
+    m_tcName->SetValue(QString_to_wxString(m_pRoute->m_RouteNameString));
+    m_tcFrom->SetValue(QString_to_wxString(m_pRoute->m_RouteStartString));
+    m_tcTo->SetValue(QString_to_wxString(m_pRoute->m_RouteEndString));
+    m_tcDescription->SetValue(
+        QString_to_wxString(m_pRoute->m_RouteDescription));
 
     m_tcName->SetFocus();
     if (m_pRoute->m_PlannedDeparture.IsValid() &&
@@ -592,7 +596,7 @@ void RoutePropDlgImpl::SetRouteAndUpdate(Route* pR, bool only_points) {
   if (m_pRoute->m_Colour == "") {
     m_choiceColor->Select(0);
   } else {
-    for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(wxString);
+    for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
          i++) {
       if (m_pRoute->m_Colour == ::GpxxColorNames[i]) {
         m_choiceColor->Select(i + 1);
@@ -714,8 +718,9 @@ void RoutePropDlgImpl::WaypointsOnDataViewListCtrlItemValueChanged(
       if (!etd.ParseDateTime(ts, &end)) {
         p->SetETD(wxInvalidDateTime);
       } else {
-        p->SetETD(
-            fromUsrDateTime(etd, m_tz_selection, p->m_lon).FormatISOCombined());
+        p->SetETD(wxString_to_QString(
+            fromUsrDateTime(etd, m_tz_selection, p->m_lon)
+                .FormatISOCombined()));
       }
     } else {
       p->SetETD(wxInvalidDateTime);
@@ -765,9 +770,12 @@ void RoutePropDlgImpl::OnRoutepropCopyTxtClick(wxCommandEvent& event) {
   wxString csvString;
 
   csvString << this->GetTitle() << eol << _("Name") << tab
-            << m_pRoute->m_RouteNameString << eol << _("Depart From") << tab
-            << m_pRoute->m_RouteStartString << eol << _("Destination") << tab
-            << m_pRoute->m_RouteEndString << eol << _("Total distance") << tab
+            << QString_to_wxString(m_pRoute->m_RouteNameString) << eol
+            << _("Depart From") << tab
+            << QString_to_wxString(m_pRoute->m_RouteStartString) << eol
+            << _("Destination") << tab
+            << QString_to_wxString(m_pRoute->m_RouteEndString) << eol
+            << _("Total distance") << tab
             << m_tcDistance->GetValue() << eol << _("Speed (Kts)") << tab
             << m_tcPlanSpeed->GetValue() << eol
             << _("Departure Time") + " (" + ETA_FORMAT_STR + ")" << tab
@@ -1017,9 +1025,10 @@ void RoutePropDlgImpl::SplitOnButtonClick(wxCommandEvent& event) {
   if ((nSelected > 1) && (nSelected < m_pRoute->GetnPoints())) {
     m_pHead = new Route();
     m_pTail = new Route();
-    m_pHead->CloneRoute(m_pRoute, 1, nSelected, _("_A"));
-    m_pTail->CloneRoute(m_pRoute, nSelected, m_pRoute->GetnPoints(), _("_B"),
-                        true);
+    m_pHead->CloneRoute(m_pRoute, 1, nSelected,
+                        wxString_to_QString(_("_A")));
+    m_pTail->CloneRoute(m_pRoute, nSelected, m_pRoute->GetnPoints(),
+                        wxString_to_QString(_("_B")), true);
     pRouteList->push_back(m_pHead);
     // pConfig->AddNewRoute(m_pHead);
     NavObj_dB::GetInstance().InsertRoute(m_pHead);
@@ -1077,7 +1086,8 @@ void RoutePropDlgImpl::ExtendOnButtonClick(wxCommandEvent& event) {
     int to = m_pExtendRoute->GetnPoints();
     if (fm <= to) {
       pSelect->DeleteAllSelectableRouteSegments(m_pRoute);
-      m_pRoute->CloneRoute(m_pExtendRoute, fm, to, _("_plus"));
+      m_pRoute->CloneRoute(m_pExtendRoute, fm, to,
+                           wxString_to_QString(_("_plus")));
       pSelect->AddAllSelectableRouteSegments(m_pRoute);
       SetRouteAndUpdate(m_pRoute);
       UpdatePoints();
@@ -1113,7 +1123,8 @@ bool RoutePropDlgImpl::IsThisRouteExtendable() {
       double rlon = pLastPoint->m_lon;
 
       m_pExtendPoint = pWayPointMan->GetOtherNearbyWaypoint(
-          rlat, rlon, nearby_radius_meters, pLastPoint->m_GUID);
+          rlat, rlon, nearby_radius_meters,
+          QString_to_wxString(pLastPoint->m_GUID));
       if (m_pExtendPoint) {
         wxArrayPtrVoid* pCloseWPRouteArray =
             g_pRouteMan->GetRouteArrayContaining(m_pExtendPoint);

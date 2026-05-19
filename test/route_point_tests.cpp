@@ -25,7 +25,7 @@ protected:
 };
 
 TEST_F(RoutePointScaleTest, ScaMaxStoresAndClampsValue) {
-  RoutePoint point(0, 0, wxEmptyString, wxEmptyString, wxEmptyString, false);
+  RoutePoint point(0, 0, QString(), QString(), QString(), false);
   point.SetScaMin(2000);
   point.SetScaMax(500);
   EXPECT_EQ(point.GetScaMax(), 500);
@@ -52,7 +52,7 @@ TEST_F(RoutePointScaleTest, NewPointUsesConfiguredScaMax) {
 }
 
 TEST_F(RoutePointScaleTest, ScaMaxHidesWhenZoomedInPastLimit) {
-  RoutePoint point(0, 0, wxEmptyString, wxEmptyString, wxEmptyString, false);
+  RoutePoint point(0, 0, QString(), QString(), QString(), false);
   point.SetScaMin(2000);
   point.SetScaMax(500);
   point.SetUseSca(true);

@@ -38,6 +38,8 @@
 
 #include <wx/listimpl.cpp>
 
+#include "model/wx_qt_string.h"
+
 wxColour g_colourWaypointRangeRingsColour;
 
 int g_LayerIdx;
@@ -81,7 +83,7 @@ RoutePoint::RoutePoint() {
 
   m_HyperlinkList = new HyperlinkList;
 
-  m_GUID = pWayPointMan->CreateGUID(this);
+  m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(this));
 
   m_IconName = "";
 
@@ -148,7 +150,7 @@ RoutePoint::RoutePoint(RoutePoint *orig) {
   SetPlannedSpeed(orig->GetPlannedSpeed());
 
   m_bIsInLayer = orig->m_bIsInLayer;
-  m_GUID = pWayPointMan->CreateGUID(this);
+  m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(this));
 
   m_SelectNode = NULL;
   m_ManagerNode = NULL;
@@ -169,8 +171,8 @@ RoutePoint::RoutePoint(RoutePoint *orig) {
   m_draggingOffsetx = m_draggingOffsety = 0;
 }
 
-RoutePoint::RoutePoint(double lat, double lon, const wxString &icon_ident,
-                       const wxString &name, const wxString &pGUID,
+RoutePoint::RoutePoint(double lat, double lon, const QString &icon_ident,
+                       const QString &name, const QString &pGUID,
                        bool bAddToList) {
   //  Establish points
   m_lat = lat;
@@ -217,10 +219,10 @@ RoutePoint::RoutePoint(double lat, double lon, const wxString &icon_ident,
 
   m_iTextTexture = 0;
 
-  if (!pGUID.IsEmpty())
+  if (!pGUID.isEmpty())
     m_GUID = pGUID;
   else
-    m_GUID = pWayPointMan->CreateGUID(this);
+    m_GUID = wxString_to_QString(pWayPointMan->CreateGUID(this));
 
   //      Get Icon bitmap
   m_IconName = icon_ident;
@@ -269,14 +271,15 @@ RoutePoint::~RoutePoint() {
 
 wxDateTime RoutePoint::GetCreateTime() {
   if (!m_CreateTimeX.IsValid()) {
-    if (m_timestring.Len()) ParseGPXDateTime(m_CreateTimeX, m_timestring);
+    if (m_timestring.length())
+      ParseGPXDateTime(m_CreateTimeX, QString_to_wxString(m_timestring));
   }
   return m_CreateTimeX;
 }
 
 void RoutePoint::SetCreateTime(wxDateTime dt) { m_CreateTimeX = dt; }
 
-void RoutePoint::SetName(const wxString &name) {
+void RoutePoint::SetName(const QString &name) {
   if (m_iTextTexture) {
     RoutePoint::delete_gl_textures(1, &m_iTextTexture);
     m_iTextTexture = 0;
@@ -291,11 +294,11 @@ void RoutePoint::CalculateNameExtents() {
 
 #ifdef __WXQT__  // avoiding "painter not active" warning
     int w, h;
-    dc.GetTextExtent(m_MarkName, &w, &h, NULL, NULL, m_pMarkFont);
+    dc.GetTextExtent(QString_to_wxString(m_MarkName), &w, &h, NULL, NULL, m_pMarkFont);
     m_NameExtents = wxSize(w, h);
 #else
     dc.SetFont(*m_pMarkFont);
-    m_NameExtents = dc.GetMultiLineTextExtent(m_MarkName);
+    m_NameExtents = dc.GetMultiLineTextExtent(QString_to_wxString(m_MarkName));
 #endif
   } else
     m_NameExtents = wxSize(0, 0);
@@ -367,17 +370,18 @@ bool RoutePoint::IsSame(RoutePoint *pOtherRP) {
 bool RoutePoint::IsNameDynamic() {
   bool b_numeric = false;
   if (m_bIsInRoute) {
-    if (GetName().Len() >= 2) {
-      wxString substring = GetName().Left(2);
+    if (GetName().length() >= 2) {
+      QString substring = GetName().left(2);
       if (substring == "NM") {
-        substring = GetName().substr(2, 3);
+        substring = GetName().mid(2, 3);
       } else {
-        substring = GetName().Left(3);
+        substring = GetName().left(3);
       }
       b_numeric = true;  // assume it is numeric
-      for (unsigned int i = 0; i < substring.Len(); i++) {
+      for (int i = 0; i < substring.length(); i++) {
         if (b_numeric == true) {
-          b_numeric = wxIsdigit(substring[i]);
+          b_numeric = isdigit(
+              static_cast<unsigned char>(substring[i].toLatin1()));
         }  // don't change the value if it is already false
       }
     }
@@ -421,9 +425,10 @@ void RoutePoint::SetScaMin(long val) {
   if (m_ScaMax > 0 && val < (long)m_ScaMax) val = (long)m_ScaMax;
   m_ScaMin = val;
 }
-void RoutePoint::SetScaMin(wxString str) {
-  long val;
-  if (!str.ToLong(&val)) val = MAX_INT_VAL;
+void RoutePoint::SetScaMin(QString str) {
+  bool ok;
+  long val = str.toLong(&ok);
+  if (!ok) val = MAX_INT_VAL;
   SetScaMin(val);
 }
 
@@ -435,9 +440,10 @@ void RoutePoint::SetScaMax(long val) {
                              // nonlogic value
   }
 }
-void RoutePoint::SetScaMax(wxString str) {
-  long val;
-  if (!str.ToLong(&val)) val = 0;
+void RoutePoint::SetScaMax(QString str) {
+  bool ok;
+  long val = str.toLong(&ok);
+  if (!ok) val = 0;
   SetScaMax(val);
 }
 
@@ -446,15 +452,15 @@ void RoutePoint::SetPlannedSpeed(double spd) {
 }
 
 double RoutePoint::GetPlannedSpeed() {
-  if (m_PlannedSpeed < 0.0001 &&
-      m_MarkDescription.Find("VMG=") != wxNOT_FOUND) {
+  if (m_PlannedSpeed < 0.0001 && m_MarkDescription.indexOf("VMG=") != -1) {
     // In case there was speed encoded in the name of the waypoint, do the
     // conversion here.
-    wxString s_vmg = (m_MarkDescription.Mid(m_MarkDescription.Find("VMG=") + 4))
-                         .BeforeFirst(';');
-    double vmg;
-    if (!s_vmg.ToDouble(&vmg)) {
-      m_MarkDescription.Replace("VMG=" + s_vmg + ";", "");
+    QString s_vmg = m_MarkDescription.mid(m_MarkDescription.indexOf("VMG=") + 4)
+                        .section(';', 0, 0);
+    bool ok;
+    double vmg = s_vmg.toDouble(&ok);
+    if (!ok) {
+      m_MarkDescription.replace("VMG=" + s_vmg + ";", "");
       SetPlannedSpeed(vmg);
     }
   }
@@ -469,12 +475,11 @@ wxDateTime RoutePoint::GetETD() {
       return GetETA();
     }
   } else {
-    if (m_MarkDescription.Find("ETD=") != wxNOT_FOUND) {
+    if (m_MarkDescription.indexOf("ETD=") != -1) {
       wxDateTime etd = wxInvalidDateTime;
-      wxString s_etd =
-          (m_MarkDescription.Mid(m_MarkDescription.Find("ETD=") + 4))
-              .BeforeFirst(';');
-      const wxChar *parse_return = etd.ParseDateTime(s_etd);
+      QString s_etd = m_MarkDescription.mid(m_MarkDescription.indexOf("ETD=") + 4)
+                          .section(';', 0, 0);
+      const wxChar *parse_return = etd.ParseDateTime(QString_to_wxString(s_etd));
       if (parse_return) {
         wxString tz(parse_return);
 
@@ -494,7 +499,7 @@ wxDateTime RoutePoint::GetETD() {
           }
         }
         if (etd.IsValid() && (!GetETA().IsValid() || etd > GetETA())) {
-          m_MarkDescription.Replace(s_etd, "");
+          m_MarkDescription.replace(s_etd, "");
           m_seg_etd = etd;
           return m_seg_etd;
         } else {
@@ -520,9 +525,9 @@ wxDateTime RoutePoint::GetETA() {
   return wxInvalidDateTime;
 }
 
-wxString RoutePoint::GetETE() {
+QString RoutePoint::GetETE() {
   if (m_seg_ete != 0) {
-    return formatTimeDelta(m_seg_ete);
+    return wxString_to_QString(formatTimeDelta(m_seg_ete));
   }
   return "";
 }
@@ -534,21 +539,22 @@ void RoutePoint::SetETD(const wxDateTime &etd) {
   m_manual_etd = TRUE;
 }
 
-bool RoutePoint::SetETD(const wxString &ts) {
-  if (ts.IsEmpty()) {
+bool RoutePoint::SetETD(const QString &ts) {
+  if (ts.isEmpty()) {
     m_seg_etd = wxInvalidDateTime;
     m_manual_etd = false;
     return true;
   }
   wxDateTime tmp;
+  wxString ws_ts = QString_to_wxString(ts);
   wxString::const_iterator end;
   // No timezone conversion is done because the serialized string
   // does not include timezone information, e.g., "2025-03-26T18:57:01"
   // The input string is assumed to be in UTC format.
-  if (tmp.ParseISOCombined(ts)) {
+  if (tmp.ParseISOCombined(ws_ts)) {
     SetETD(tmp);
     return TRUE;
-  } else if (tmp.ParseDateTime(ts, &end)) {
+  } else if (tmp.ParseDateTime(ws_ts, &end)) {
     SetETD(tmp);
     return TRUE;
   }

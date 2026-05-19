@@ -47,6 +47,10 @@
 #include "androidUTIL.h"
 #endif
 
+static wxString qs2ws(const QString &qs) {
+  return wxString::FromUTF8(qs.toStdString());
+}
+
 static NmeaLog *GetNmeaLog() {
   auto w = wxWindow::FindWindowByName(kDataMonitorWindowName);
   auto log = dynamic_cast<NmeaLog *>(w);
@@ -143,9 +147,9 @@ static void SendRmb(NMEA0183 &nmea0183, Routeman &routeman) {
   // Restrict WP names further if necessary
   int wp_len = maxName;
   do {
-    nmea0183.Rmb.To = pActivePoint->GetName().Truncate(wp_len);
-    nmea0183.Rmb.From =
-        routeman.GetpActiveRouteSegmentBeginPoint()->GetName().Truncate(wp_len);
+    nmea0183.Rmb.To = qs2ws(pActivePoint->GetName().left(wp_len));
+    nmea0183.Rmb.From = qs2ws(
+        routeman.GetpActiveRouteSegmentBeginPoint()->GetName().left(wp_len));
     nmea0183.Rmb.Write(snt);
     wp_len -= 1;
   } while (snt.Sentence.size() > 82 && wp_len > 0);
@@ -204,7 +208,7 @@ bool UpdateAutopilotN0183(Routeman &routeman) {
     //  reaching this point
     nmea0183.Apb.IsPerpendicular = NFalse;
 
-    nmea0183.Apb.To = pActivePoint->GetName().Truncate(maxName);
+    nmea0183.Apb.To = qs2ws(pActivePoint->GetName().left(maxName));
 
     double brg1, dist1;
     DistanceBearingMercator(pActivePoint->m_lat, pActivePoint->m_lon,
@@ -330,7 +334,7 @@ bool SendPGN129285(Routeman &routeman, AbstractCommDriver *driver) {
 
   //  Append start point of current leg
   RoutePoint *pLegBeginPoint = routeman.GetpActiveRouteSegmentBeginPoint();
-  wxString start_point_name = pLegBeginPoint->GetName().Truncate(maxName);
+  wxString start_point_name = qs2ws(pLegBeginPoint->GetName().left(maxName));
   std::string sname = start_point_name.ToStdString();
   char *s = (char *)sname.c_str();
 
@@ -338,7 +342,7 @@ bool SendPGN129285(Routeman &routeman, AbstractCommDriver *driver) {
                                   pLegBeginPoint->m_lon);
   // Append destination point of current leg
   RoutePoint *pActivePoint = routeman.GetpActivePoint();
-  wxString destination_name = pActivePoint->GetName().Truncate(maxName);
+  wxString destination_name = qs2ws(pActivePoint->GetName().left(maxName));
   std::string dname = destination_name.ToStdString();
   char *d = (char *)dname.c_str();
   fail_any |= !AppendN2kPGN129285(msg129285, 1, d, pActivePoint->m_lat,

@@ -27,6 +27,8 @@
 #include <functional>
 #include <vector>
 
+#include <QString>
+
 #include <wx/colour.h>
 #include <wx/datetime.h>
 #include <wx/gdicmn.h>
@@ -53,14 +55,16 @@ class WayPointman;  // FIXME (leamas) why? routeman.h defines this.
 
 extern WayPointman *pWayPointMan;
 
-const wxString GpxxColorNames[] = {
-    _T("Black"),      _T("DarkRed"),   _T("DarkGreen"),
-    _T("DarkYellow"), _T("DarkBlue"),  _T("DarkMagenta"),
-    _T("DarkCyan"),   _T("LightGray"), _T("DarkGray"),
-    _T("Red"),        _T("Green"),     _T  ("Yellow"),
-    _T("Blue"),       _T("Magenta"),   _T("Cyan"),
-    _T("White")};  // The last color defined by Garmin is transparent - we
-                   // ignore it
+const QString GpxxColorNames[] = {
+    QStringLiteral("Black"),      QStringLiteral("DarkRed"),
+    QStringLiteral("DarkGreen"),  QStringLiteral("DarkYellow"),
+    QStringLiteral("DarkBlue"),   QStringLiteral("DarkMagenta"),
+    QStringLiteral("DarkCyan"),   QStringLiteral("LightGray"),
+    QStringLiteral("DarkGray"),   QStringLiteral("Red"),
+    QStringLiteral("Green"),      QStringLiteral("Yellow"),
+    QStringLiteral("Blue"),       QStringLiteral("Magenta"),
+    QStringLiteral("Cyan"),       QStringLiteral("White")};
+// The last color defined by Garmin is transparent - we ignore it
 const wxColour GpxxColors[] = {
     wxColour(0x00, 0x00, 0x00), wxColour(0x60, 0x00, 0x00),
     wxColour(0x00, 0x60, 0x00), wxColour(0x80, 0x80, 0x00),
@@ -104,7 +108,7 @@ public:
   ~Route();
 
   virtual int GetnPoints(void) { return pRoutePointList->size(); }
-  wxString IsPointNameValid(RoutePoint *pRP, const wxString &name) const;
+  QString IsPointNameValid(RoutePoint *pRP, const QString &name) const;
 
   void AddPoint(RoutePoint *pNewPoint, bool b_rename_in_sequence = true,
                 bool b_deferBoxCalc = false);
@@ -115,7 +119,7 @@ public:
                           bool b_rename_in_sequence = true,
                           bool b_deferBoxCalc = false);
   RoutePoint *GetPoint(int nPoint);
-  RoutePoint *GetPoint(const wxString &guid);
+  RoutePoint *GetPoint(const QString &guid);
   int GetIndexOf(RoutePoint *prp);
   RoutePoint *InsertPointBefore(RoutePoint *pRP, double rlat, double rlon,
                                 bool bRenamePoints = false);
@@ -155,11 +159,11 @@ public:
   void RebuildGUIDList(void);
   void RenameRoutePoints();
   void ReloadRoutePointIcons();
-  wxString GetNewMarkSequenced(void);
+  QString GetNewMarkSequenced(void);
   void AssembleRoute();
   bool IsEqualTo(Route *ptargetroute);
   void CloneRoute(Route *psourceroute, int start_nPoint, int end_nPoint,
-                  const wxString &suffix,
+                  const QString &suffix,
                   const bool duplicate_first_point = false);
   void ClearHighlights(void);
 
@@ -185,9 +189,9 @@ public:
     if (dt.IsValid()) m_PlannedDeparture = dt;
   }
 
-  wxString GetName() const { return m_RouteNameString; }
-  wxString GetTo() const { return m_RouteEndString; }
-  wxString GetGUID() const { return m_GUID; }
+  QString GetName() const { return m_RouteNameString; }
+  QString GetTo() const { return m_RouteEndString; }
+  QString GetGUID() const { return m_GUID; }
   void ShowWaypointNames(bool bshow);
   bool AreWaypointNamesVisible();
 
@@ -244,22 +248,22 @@ public:
    * User-assigned name for the route.
    * Used for display and identification purposes.
    */
-  wxString m_RouteNameString;
+  QString m_RouteNameString;
   /**
    * Name or description of the route's starting point.
    * Typically derived from the first RoutePoint name.
    */
-  wxString m_RouteStartString;
+  QString m_RouteStartString;
   /**
    * Name or description of the route's ending point.
    * Typically derived from the last RoutePoint name.
    */
-  wxString m_RouteEndString;
+  QString m_RouteEndString;
   /**
    * Additional descriptive information about the route.
    * User-provided details about the route's purpose or characteristics.
    */
-  wxString m_RouteDescription;
+  QString m_RouteDescription;
   /**
    * Flag indicating whether the route should be deleted once navigation reaches
    * the end. When true, the route will be automatically removed upon
@@ -270,7 +274,7 @@ public:
    * Globally unique identifier for this route.
    * Used for persistence and cross-referencing in the database.
    */
-  wxString m_GUID;
+  QString m_GUID;
   /**
    * Flag indicating whether this route belongs to a layer.
    * Layers are collections of chart objects that can be managed together.
@@ -328,7 +332,7 @@ public:
    * Format for displaying times in the UI.
    * Can be UTC, local time, PC time, or follow global settings.
    */
-  wxString m_TimeDisplayFormat;
+  QString m_TimeDisplayFormat;
   /**
    * Ordered list of waypoints (RoutePoints) that make up this route.
    * The sequence defines the path from start to finish.
@@ -343,7 +347,7 @@ public:
    * Color name for rendering the route on the chart.
    * References a named color in the application's color scheme.
    */
-  wxString m_Colour;
+  QString m_Colour;
   /**
    * Flag indicating if this is a temporary route.
    * Temporary routes might not be saved to persistent storage.

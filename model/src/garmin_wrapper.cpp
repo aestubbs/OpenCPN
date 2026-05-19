@@ -86,12 +86,16 @@ wxString Garmin_GPS_GetSaveString() {
   return wxString(gps_save_string, wxConvUTF8);
 }
 
+static wxString qs2ws(const QString &qs) {
+  return wxString::FromUTF8(qs.toStdString());
+}
+
 void Garmin_GPS_PrepareWptData(GPS_PWay pway, RoutePoint *prp) {
   pway->lat = prp->m_lat;
   pway->lon = prp->m_lon;
   pway->alt_is_unknown = 1;
   pway->alt = 0.0;
-  strncpy(pway->ident, (prp->GetName().Truncate(6)).mb_str(), 6);
+  strncpy(pway->ident, qs2ws(prp->GetName().left(6)).mb_str(), 6);
 }
 
 int Garmin_GPS_SendWaypoints(const wxString &port_name,
@@ -164,8 +168,9 @@ GPS_SWay **Garmin_GPS_Create_A200_Route(Route *pr, int route_number,
   GPS_PWay pway = ppway[0];
   pway->isrte = true;
   pway->rte_num = route_number;
-  strncpy(pway->rte_ident, (pr->m_RouteNameString.Truncate(255)).mb_str(), 255);
-  strncpy(pway->rte_cmnt, (pr->m_RouteNameString.Truncate(19)).mb_str(), 19);
+  strncpy(pway->rte_ident, qs2ws(pr->m_RouteNameString.left(255)).mb_str(),
+          255);
+  strncpy(pway->rte_cmnt, qs2ws(pr->m_RouteNameString.left(19)).mb_str(), 19);
 
   //    Elements 1..n are waypoints
   for (int i = 1; i < *size; i++) {
@@ -217,8 +222,9 @@ GPS_SWay **Garmin_GPS_Create_A201_Route(Route *pr, int route_number,
   GPS_PWay pway = ppway[0];
   pway->isrte = true;
   pway->rte_num = route_number;
-  strncpy(pway->rte_ident, (pr->m_RouteNameString.Truncate(255)).mb_str(), 255);
-  strncpy(pway->rte_cmnt, (pr->m_RouteNameString.Truncate(19)).mb_str(), 19);
+  strncpy(pway->rte_ident, qs2ws(pr->m_RouteNameString.left(255)).mb_str(),
+          255);
+  strncpy(pway->rte_cmnt, qs2ws(pr->m_RouteNameString.left(19)).mb_str(), 19);
 
   //    Odd elements 1,3,5... are waypoints
   //    Even elements 2,4,6... are links

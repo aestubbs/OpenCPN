@@ -1197,9 +1197,10 @@ bool TrackPropDlg::UpdateProperties() {
   if (m_pTrack->m_Colour == "")
     m_cColor->Select(0);
   else {
-    for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(wxString);
+    for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
          i++) {
-      if (m_pTrack->m_Colour == ::GpxxColorNames[i]) {
+      if (m_pTrack->m_Colour ==
+          wxString::FromUTF8(::GpxxColorNames[i].toStdString())) {
         m_cColor->Select(i + 1);
         break;
       }
@@ -1719,7 +1720,8 @@ bool TrackPropDlg::SaveChanges() {
     if (m_cColor->GetSelection() == 0)
       m_pTrack->m_Colour = "";
     else
-      m_pTrack->m_Colour = ::GpxxColorNames[m_cColor->GetSelection() - 1];
+      m_pTrack->m_Colour = wxString::FromUTF8(
+          ::GpxxColorNames[m_cColor->GetSelection() - 1].toStdString());
     m_pTrack->m_style = (wxPenStyle)::StyleValues[m_cStyle->GetSelection()];
     m_pTrack->m_width = ::WidthValues[m_cWidth->GetSelection()];
 

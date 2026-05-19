@@ -39,6 +39,7 @@
 #include "model/own_ship.h"
 #include "model/route.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 
 #include "chartbase.h"
 #include "color_handler.h"
@@ -100,7 +101,7 @@ void RouteGui::Draw(ocpnDC &dc, ChartCanvas *canvas, const LLBBox &box) {
     if (m_route.m_Colour == "") {
       col = g_pRouteMan->GetRoutePen()->GetColour();
     } else {
-      for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(wxString);
+      for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
            i++) {
         if (m_route.m_Colour == ::GpxxColorNames[i]) {
           col = ::GpxxColors[i];
@@ -411,7 +412,7 @@ void RouteGui::DrawGLRouteLines(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc) {
     if (m_route.m_Colour == "") {
       col = g_pRouteMan->GetRoutePen()->GetColour();
     } else {
-      for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(wxString);
+      for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
            i++) {
         if (m_route.m_Colour == ::GpxxColorNames[i]) {
           col = ::GpxxColors[i];

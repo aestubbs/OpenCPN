@@ -453,7 +453,7 @@ static void ActivateRoute(const std::string &guid) {
   //  (the MOB)
   // as the destination.
   RoutePoint *point;
-  if (wxNOT_FOUND == route->m_RouteNameString.Find("MOB")) {
+  if (-1 == route->m_RouteNameString.indexOf("MOB")) {
     point = g_pRouteMan->FindBestActivatePoint(route, gLat, gLon, gCog, gSog);
   } else {
     point = route->GetPoint(2);

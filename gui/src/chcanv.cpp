@@ -59,6 +59,7 @@
 #include "model/plugin_comm.h"
 #include "model/route.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 #include "model/select.h"
 #include "model/select_item.h"
 #include "model/track.h"
@@ -4049,16 +4050,17 @@ void ChartCanvas::OnRolloverPopupTimerEvent(wxTimerEvent &event) {
           else
             s.Append(_("Layer Route: "));
 
-          if (pr->m_RouteNameString.IsEmpty())
+          if (pr->m_RouteNameString.isEmpty())
             s.Append(_("(unnamed)"));
           else
-            s.Append(pr->m_RouteNameString);
+            s.Append(QString_to_wxString(pr->m_RouteNameString));
 
           s << "\n"
             << _("Total Length: ") << FormatDistanceAdaptive(pr->m_route_length)
             << "\n"
-            << _("Leg: from ") << segShow_point_a->GetName() << _(" to ")
-            << segShow_point_b->GetName() << "\n";
+            << _("Leg: from ")
+            << QString_to_wxString(segShow_point_a->GetName()) << _(" to ")
+            << QString_to_wxString(segShow_point_b->GetName()) << "\n";
 
           if (g_bShowTrue)
             s << wxString::Format(wxString("%03d%c(T) ", wxConvUTF8),
@@ -4106,7 +4108,8 @@ void ChartCanvas::OnRolloverPopupTimerEvent(wxTimerEvent &event) {
           // active
           if (validActive) {
             s << "\n"
-              << _("From Ship To") << " " << segShow_point_b->GetName() << "\n";
+              << _("From Ship To") << " "
+              << QString_to_wxString(segShow_point_b->GetName()) << "\n";
             shiptoEndLeg +=
                 g_pRouteMan
                     ->GetCurrentRngToActivePoint();  // add distance from ship
@@ -7704,13 +7707,13 @@ ChartCanvas::GetCanvasContextAtPoint(int x, int y) {
   } else if (seltype & SELTYPE_MARKPOINT) {
     if (FoundRoutePoint) {
       rstruct->object_type = HostApi121::PiContextObjectType::kObjectRoutepoint;
-      rstruct->object_ident = FoundRoutePoint->m_GUID.ToStdString();
+      rstruct->object_ident = FoundRoutePoint->m_GUID.toStdString();
     }
   } else if (seltype & SELTYPE_ROUTESEGMENT) {
     if (SelectedRoute) {
       rstruct->object_type =
           HostApi121::PiContextObjectType::kObjectRoutesegment;
-      rstruct->object_ident = SelectedRoute->m_GUID.ToStdString();
+      rstruct->object_ident = SelectedRoute->m_GUID.toStdString();
     }
   } else if (seltype & SELTYPE_TRACKSEGMENT) {
     if (m_pSelectedTrack) {
@@ -8667,10 +8670,11 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
                 if (m_pMouseRoute) {
                   int last_wp_num = m_pMouseRoute->GetnPoints();
                   // AP-ECRMB will truncate to 6 characters
-                  wxString guid_short = m_pMouseRoute->GetGUID().Left(2);
+                  wxString guid_short =
+                      QString_to_wxString(m_pMouseRoute->GetGUID().left(2));
                   wxString wp_name = wxString::Format(
                       "M%002i-%s", last_wp_num + 1, guid_short);
-                  pNearbyPoint->SetName(wp_name);
+                  pNearbyPoint->SetName(wxString_to_QString(wp_name));
                 } else
                   pNearbyPoint->SetName("WPXX");
               }
@@ -8750,8 +8754,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
         }
 
         if (NULL == pMousePoint) {  // need a new point
-          pMousePoint = new RoutePoint(rlat, rlon, g_default_routepoint_icon,
-                                       "", wxEmptyString);
+          pMousePoint = new RoutePoint(rlat, rlon,
+                                       wxString_to_QString(g_default_routepoint_icon),
+                                       "", QString());
           pMousePoint->SetNameShown(false);
 
           // pConfig->AddNewWayPoint(pMousePoint, -1);  // use auto next num
@@ -8810,7 +8815,7 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
 
                   if (i < segmentCount) {
                     gcPoint = new RoutePoint(gcCoord.y, gcCoord.x, "xmblue", "",
-                                             wxEmptyString);
+                                             QString());
                     gcPoint->SetNameShown(false);
                     // pConfig->AddNewWayPoint(gcPoint, -1);
                     NavObj_dB::GetInstance().InsertRoutePoint(gcPoint);
@@ -8909,8 +8914,8 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
         }
 
         RoutePoint *pMousePoint =
-            new RoutePoint(m_cursor_lat, m_cursor_lon, wxString("circle"),
-                           wxEmptyString, wxEmptyString);
+            new RoutePoint(m_cursor_lat, m_cursor_lon, "circle", QString(),
+                           QString());
         pMousePoint->m_bShowName = false;
         pMousePoint->SetShowWaypointRangeRings(false);
 
@@ -9332,8 +9337,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
         }
 
         if (NULL == pMousePoint) {  // need a new point
-          pMousePoint = new RoutePoint(rlat, rlon, g_default_routepoint_icon,
-                                       "", wxEmptyString);
+          pMousePoint = new RoutePoint(rlat, rlon,
+                                       wxString_to_QString(g_default_routepoint_icon),
+                                       "", QString());
           pMousePoint->SetNameShown(false);
 
           pSelect->AddSelectableRoutePoint(rlat, rlon, pMousePoint);
@@ -9390,7 +9396,7 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
 
                 if (i < segmentCount) {
                   gcPoint = new RoutePoint(gcCoord.y, gcCoord.x, "xmblue", "",
-                                           wxEmptyString);
+                                           QString());
                   gcPoint->SetNameShown(false);
                   pSelect->AddSelectableRoutePoint(gcCoord.y, gcCoord.x,
                                                    gcPoint);
@@ -9498,8 +9504,8 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
 
         if (m_pMeasureRoute) {
           RoutePoint *pMousePoint =
-              new RoutePoint(m_cursor_lat, m_cursor_lon, wxString("circle"),
-                             wxEmptyString, wxEmptyString);
+              new RoutePoint(m_cursor_lat, m_cursor_lon, "circle", QString(),
+                             QString());
           pMousePoint->m_bShowName = false;
 
           m_pMeasureRoute->AddPoint(pMousePoint);
@@ -9716,7 +9722,8 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
                 g_Platform->GetSelectRadiusPix() / m_true_scale_ppm;
             RoutePoint *pNearbyPoint = pWayPointMan->GetOtherNearbyWaypoint(
                 m_pRoutePointEditTarget->m_lat, m_pRoutePointEditTarget->m_lon,
-                nearby_radius_meters, m_pRoutePointEditTarget->m_GUID);
+                nearby_radius_meters,
+                QString_to_wxString(m_pRoutePointEditTarget->m_GUID));
             if (pNearbyPoint && !pNearbyPoint->m_bIsInLayer &&
                 pWayPointMan->IsReallyVisible(pNearbyPoint)) {
               bool duplicate =
@@ -9989,7 +9996,8 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
                 g_Platform->GetSelectRadiusPix() / m_true_scale_ppm;
             RoutePoint *pNearbyPoint = pWayPointMan->GetOtherNearbyWaypoint(
                 m_pRoutePointEditTarget->m_lat, m_pRoutePointEditTarget->m_lon,
-                nearby_radius_meters, m_pRoutePointEditTarget->m_GUID);
+                nearby_radius_meters,
+                QString_to_wxString(m_pRoutePointEditTarget->m_GUID));
             if (pNearbyPoint && !pNearbyPoint->m_bIsInLayer &&
                 pWayPointMan->IsReallyVisible(pNearbyPoint)) {
               bool duplicate = false;  // don't create duplicate point in routes
@@ -11234,7 +11242,7 @@ wxString ChartCanvas::FinishRoute() {
   m_prev_pMousePoint = NULL;
   m_bDrawingRoute = false;
   wxString rv = "";
-  if (m_pMouseRoute) rv = m_pMouseRoute->m_GUID;
+  if (m_pMouseRoute) rv = QString_to_wxString(m_pMouseRoute->m_GUID);
 
   // SetCanvasToolbarItemState(ID_ROUTE, false);
   top_frame::Get()->SetMasterToolbarItemState(ID_MENU_ROUTE_NEW, false);
@@ -13323,7 +13331,7 @@ double ChartCanvas::GetAnchorWatchRadiusPixels(RoutePoint *pAnchorWatchPoint) {
   double tlat1, tlon1;
 
   if (pAnchorWatchPoint) {
-    (pAnchorWatchPoint->GetName()).ToDouble(&d1);
+    d1 = pAnchorWatchPoint->GetName().toDouble();
     d1 = ocpn::AnchorDistFix(d1, AnchorPointMinDist, g_nAWMax);
     dabs = fabs(d1 / 1852.);
     ll_gc_ll(pAnchorWatchPoint->m_lat, pAnchorWatchPoint->m_lon, 0, dabs,

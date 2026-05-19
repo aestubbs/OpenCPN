@@ -110,8 +110,10 @@ void AISTargetQueryDialog::OnIdWptCreateClick(wxCommandEvent &event) {
       n.append(wxDateTime::Now().Format("%H:%M"));
       // wxString n =  wxString::Format("\"%s\"  %i ",td->ShipName,
       // td->MMSI).append(wxDateTime::Now().Format("%H:%M"));
-      RoutePoint *pWP =
-          new RoutePoint(td->Lat, td->Lon, g_default_wp_icon, n, wxEmptyString);
+      RoutePoint *pWP = new RoutePoint(
+          td->Lat, td->Lon,
+          QString::fromStdString(g_default_wp_icon.utf8_string()),
+          QString::fromStdString(n.utf8_string()), QString());
       pWP->m_bIsolatedMark = true;  // This is an isolated mark
       pSelect->AddSelectableRoutePoint(td->Lat, td->Lon, pWP);
       // pConfig->AddNewWayPoint(pWP, -1);  // use auto next num

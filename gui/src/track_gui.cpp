@@ -172,9 +172,10 @@ void TrackGui::Draw(ChartCanvas *cc, ocpnDC &dc, ViewPort &VP,
     // color
     if (m_track.GetName().StartsWith("AIS")) col = GetGlobalColor("TEAL1");
   } else {
-    for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(wxString);
+    for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
          i++) {
-      if (m_track.m_Colour == ::GpxxColorNames[i]) {
+      if (m_track.m_Colour ==
+          wxString::FromUTF8(::GpxxColorNames[i].toStdString())) {
         col = ::GpxxColors[i];
         break;
       }

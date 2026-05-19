@@ -36,6 +36,7 @@
 #include "model/multiplexer.h"
 #include "model/route.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 #include "model/svg_utils.h"
 
 #include "color_handler.h"
@@ -172,12 +173,13 @@ void RoutePointGui::Draw(ocpnDC &dc, ChartCanvas *canvas, wxPoint *rpn,
     dc.CalcBoundingBox(r.x + sx2, r.y + sy2);
   }
 
-  if (m_point.m_bShowName && m_point.m_MarkName.Length()) {
+  if (m_point.m_bShowName && m_point.m_MarkName.length()) {
     if (m_point.m_pMarkFont) {
       dc.SetFont(*m_point.m_pMarkFont);
       dc.SetTextForeground(m_point.m_FontColor);
 
-      dc.DrawText(m_point.m_MarkName, r.x + m_point.m_NameLocationOffsetX,
+      dc.DrawText(QString_to_wxString(m_point.m_MarkName),
+                  r.x + m_point.m_NameLocationOffsetX,
                   r.y + m_point.m_NameLocationOffsetY);
     }
   }
@@ -488,7 +490,7 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
       /* draw the text white */
       temp_dc.SetFont(*m_point.m_pMarkFont);
       temp_dc.SetTextForeground(wxColour(255, 255, 255));
-      temp_dc.DrawText(m_point.m_MarkName, 0, 0);
+      temp_dc.DrawText(QString_to_wxString(m_point.m_MarkName), 0, 0);
       temp_dc.SelectObject(wxNullBitmap);
 
       /* use the data in the bitmap for alpha channel,
@@ -858,17 +860,19 @@ void RoutePointGui::EnableDragHandle(bool bEnable) {
 
 void RoutePointGui::ReLoadIcon() {
   if (!pWayPointMan) return;
-  bool icon_exists = pWayPointMan->DoesIconExist(m_point.m_IconName);
+  bool icon_exists =
+      pWayPointMan->DoesIconExist(QString_to_wxString(m_point.m_IconName));
 
-  wxString iconUse = m_point.m_IconName;
+  wxString iconUse = QString_to_wxString(m_point.m_IconName);
   if (!icon_exists) {
     //  Try all lower case as a favor in the case where imported waypoints use
     //  mixed case names
-    wxString tentative_icon = m_point.m_IconName.Lower();
+    wxString tentative_icon =
+        QString_to_wxString(m_point.m_IconName).Lower();
     if (pWayPointMan->DoesIconExist(tentative_icon)) {
       // if found, convert point's icon name permanently.
-      m_point.m_IconName = tentative_icon;
-      iconUse = m_point.m_IconName;
+      m_point.m_IconName = wxString_to_QString(tentative_icon);
+      iconUse = QString_to_wxString(m_point.m_IconName);
     }
     //      Icon name is not in the standard or user lists, so add to the list a
     //      generic placeholder

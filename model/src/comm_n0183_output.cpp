@@ -97,6 +97,10 @@ void BroadcastNMEA0183Message(const wxString& msg, NmeaLog* nmea_log,
   on_msg_sent.Notify(msg.ToStdString());
 }
 
+static wxString qs2ws(const QString& qs) {
+  return wxString::FromUTF8(qs.toStdString());
+}
+
 bool CreateOutputConnection(const wxString& com_name,
                             ConnectionParams& params_save, bool& btempStream,
                             bool& b_restoreStream, N0183DlgCtx dlg_ctx,
@@ -387,7 +391,7 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
           else
             oNMEA0183.Wpl.Position.Longitude.Set(prp->m_lon, _T ( "E" ));
 
-          oNMEA0183.Wpl.To = prp->GetName().Truncate(g_maxWPNameLength);
+          oNMEA0183.Wpl.To = qs2ws(prp->GetName().left(g_maxWPNameLength));
 
           oNMEA0183.Wpl.Write(snt);
 
@@ -409,7 +413,7 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
           else
             oNMEA0183.GPwpl.Position.Longitude.Set(prp->m_lon, _T ( "E" ));
 
-          wxString name = prp->GetName();
+          wxString name = qs2ws(prp->GetName());
           name += "000000";
           name.Truncate(g_maxWPNameLength);
           oNMEA0183.GPwpl.To = name;
@@ -473,10 +477,10 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
     oNMEA0183.Rte.Empty();
     oNMEA0183.Rte.TypeOfRoute = CompleteRoute;
 
-    if (pr->m_RouteNameString.IsEmpty())
+    if (pr->m_RouteNameString.isEmpty())
       oNMEA0183.Rte.RouteName = _T ( "1" );
     else
-      oNMEA0183.Rte.RouteName = pr->m_RouteNameString;
+      oNMEA0183.Rte.RouteName = qs2ws(pr->m_RouteNameString);
 
     if (g_GPS_Ident == "FurunoGP3X") {
       oNMEA0183.Rte.RouteName = _T ( "01" );
@@ -490,9 +494,9 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
 
     // add the waypoints
     for (RoutePoint* prp : *pr->pRoutePointList) {
-      wxString name = prp->GetName().Truncate(g_maxWPNameLength);
+      wxString name = qs2ws(prp->GetName().left(g_maxWPNameLength));
       if (g_GPS_Ident == "FurunoGP3X") {
-        name = prp->GetName();
+        name = qs2ws(prp->GetName());
         name += "000000";
         name.Truncate(g_maxWPNameLength);
         name.Prepend(" ");  // What Furuno calls "Skip Code", space means
@@ -515,10 +519,10 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
       tNMEA0183.Rte.TypeOfRoute = CompleteRoute;
 
       if (g_GPS_Ident != "FurunoGP3X") {
-        if (pr->m_RouteNameString.IsEmpty())
+        if (pr->m_RouteNameString.isEmpty())
           tNMEA0183.Rte.RouteName = _T ( "1" );
         else
-          tNMEA0183.Rte.RouteName = pr->m_RouteNameString;
+          tNMEA0183.Rte.RouteName = qs2ws(pr->m_RouteNameString);
 
       } else {
         tNMEA0183.Rte.RouteName = _T ( "01" );
@@ -541,7 +545,7 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
       while (_node != pr->pRoutePointList->end()) {
         RoutePoint* prp = *_node;
         unsigned int name_len =
-            prp->GetName().Truncate(g_maxWPNameLength).Len();
+            qs2ws(prp->GetName().left(g_maxWPNameLength)).Len();
         if (g_GPS_Ident == "FurunoGP3X")
           name_len = 7;  // six chars, with leading space for "Skip Code"
 
@@ -576,9 +580,9 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
       auto it = pr->pRoutePointList->begin();
       while (it != pr->pRoutePointList->end()) {
         RoutePoint* prp = *it;
-        wxString name = prp->GetName().Truncate(g_maxWPNameLength);
+        wxString name = qs2ws(prp->GetName().left(g_maxWPNameLength));
         if (g_GPS_Ident == "FurunoGP3X") {
-          name = prp->GetName();
+          name = qs2ws(prp->GetName());
           name += "000000";
           name.Truncate(g_maxWPNameLength);
           name.Prepend(" ");  // What Furuno calls "Skip Code", space
@@ -596,10 +600,10 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
           oNMEA0183.Rte.TypeOfRoute = CompleteRoute;
 
           if (g_GPS_Ident != "FurunoGP3X") {
-            if (pr->m_RouteNameString.IsEmpty())
+            if (pr->m_RouteNameString.isEmpty())
               oNMEA0183.Rte.RouteName = "1";
             else
-              oNMEA0183.Rte.RouteName = pr->m_RouteNameString;
+              oNMEA0183.Rte.RouteName = qs2ws(pr->m_RouteNameString);
           } else {
             oNMEA0183.Rte.RouteName = "01";
           }
@@ -669,7 +673,7 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
     }
 
     if (g_GPS_Ident == "FurunoGP3X") {
-      wxString name = pr->GetName();
+      wxString name = qs2ws(pr->GetName());
       if (name.IsEmpty()) name = "RTECOMMENT";
       wxString rte;
       rte.Printf("$PFEC,GPrtc,01,");
@@ -857,7 +861,7 @@ int SendWaypointToGPS_N0183(RoutePoint* prp, const wxString& com_name,
       else
         oNMEA0183.Wpl.Position.Longitude.Set(prp->m_lon, "E");
 
-      oNMEA0183.Wpl.To = prp->GetName().Truncate(g_maxWPNameLength);
+      oNMEA0183.Wpl.To = qs2ws(prp->GetName().left(g_maxWPNameLength));
 
       oNMEA0183.Wpl.Write(snt);
     } else if (g_GPS_Ident == "FurunoGP3X") {
@@ -873,7 +877,7 @@ int SendWaypointToGPS_N0183(RoutePoint* prp, const wxString& com_name,
       else
         oNMEA0183.GPwpl.Position.Longitude.Set(prp->m_lon, "E");
 
-      wxString name = prp->GetName();
+      wxString name = qs2ws(prp->GetName());
       name += "000000";
       name.Truncate(g_maxWPNameLength);
       oNMEA0183.GPwpl.To = name;

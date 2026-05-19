@@ -785,7 +785,7 @@ Route *Track::RouteFromTrack(wxGenericProgressDialog *pprog) {
   TrackPoint *prp_OK =
       NULL;  // last routepoint known not to exceed xte limit, if not yet added
 
-  wxString icon = "xmblue";
+  QString icon = "xmblue";
   if (g_TrackDeltaDistance >= 0.1) icon = "diamond";
 
   int next_ic = 0;

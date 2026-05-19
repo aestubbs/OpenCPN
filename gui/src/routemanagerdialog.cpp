@@ -59,6 +59,7 @@
 #include "model/own_ship.h"
 #include "model/route.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 #include "model/select.h"
 #include "model/track.h"
 
@@ -112,8 +113,10 @@ static int wxCALLBACK SortRoutesOnName(wxIntPtr item1, wxIntPtr item2,
 int wxCALLBACK SortRoutesOnName(long item1, long item2, long list)
 #endif
 {
-  return SortRouteTrack(sort_route_name_dir, ((Route *)item1)->GetName(),
-                        ((Route *)item2)->GetName());
+  return SortRouteTrack(
+      sort_route_name_dir,
+      QString_to_wxString(((Route *)item1)->GetName()),
+      QString_to_wxString(((Route *)item2)->GetName()));
 }
 
 // sort callback. Sort by route Destination.
@@ -125,8 +128,9 @@ static int wxCALLBACK SortRoutesOnTo(wxIntPtr item1, wxIntPtr item2,
 int wxCALLBACK SortRoutesOnTo(long item1, long item2, long list)
 #endif
 {
-  return SortRouteTrack(sort_route_to_dir, ((Route *)item1)->GetTo(),
-                        ((Route *)item2)->GetTo());
+  return SortRouteTrack(
+      sort_route_to_dir, QString_to_wxString(((Route *)item1)->GetTo()),
+      QString_to_wxString(((Route *)item2)->GetTo()));
 }
 
 // sort callback. Sort by track name.
@@ -204,9 +208,9 @@ int wxCALLBACK SortWaypointsOnName(long item1, long item2, long list)
 
   if (pRP1 && pRP2) {
     if (sort_wp_name_dir & 1)
-      return pRP2->GetName().CmpNoCase(pRP1->GetName());
+      return pRP2->GetName().compare(pRP1->GetName(), Qt::CaseInsensitive);
     else
-      return pRP1->GetName().CmpNoCase(pRP2->GetName());
+      return pRP1->GetName().compare(pRP2->GetName(), Qt::CaseInsensitive);
   } else
     return 0;
 }
@@ -1263,7 +1267,8 @@ void RouteManagerDialog::UpdateRouteListCtrl() {
   for (it = (*pRouteList).begin(); it != (*pRouteList).end(); ++it, ++index) {
     if (!(*it)->IsListed()) continue;
 
-    if (!(*it)->GetName().Upper().Contains(m_tFilterRte->GetValue().Upper())) {
+    if (!(*it)->GetName().toUpper().contains(
+            wxString_to_QString(m_tFilterRte->GetValue()).toUpper())) {
       continue;
     }
 
@@ -1282,13 +1287,14 @@ void RouteManagerDialog::UpdateRouteListCtrl() {
 
     long idx = m_pRouteListCtrl->InsertItem(li);
 
-    wxString name = (*it)->m_RouteNameString;
+    wxString name = QString_to_wxString((*it)->m_RouteNameString);
     if (name.IsEmpty()) name = _("(Unnamed Route)");
     m_pRouteListCtrl->SetItem(idx, rmROUTENAME, name);
 
-    wxString startend = (*it)->m_RouteStartString;
-    if (!(*it)->m_RouteEndString.IsEmpty())
-      startend.append(_(" - ") + (*it)->m_RouteEndString);
+    wxString startend = QString_to_wxString((*it)->m_RouteStartString);
+    if (!(*it)->m_RouteEndString.isEmpty())
+      startend.append(_(" - ") +
+                      QString_to_wxString((*it)->m_RouteEndString));
     m_pRouteListCtrl->SetItem(idx, rmROUTEDESC, startend);
 
     wxListItem lic;
@@ -1545,9 +1551,10 @@ void RouteManagerDialog::OnRteReverseClick(wxCommandEvent &event) {
     pSelect->AddAllSelectableRouteSegments(route);
 
     // update column 2 - create a UpdateRouteItem(index) instead?
-    wxString startend = route->m_RouteStartString;
-    if (!route->m_RouteEndString.IsEmpty())
-      startend.append(_(" - ") + route->m_RouteEndString);
+    wxString startend = QString_to_wxString(route->m_RouteStartString);
+    if (!route->m_RouteEndString.isEmpty())
+      startend.append(_(" - ") +
+                      QString_to_wxString(route->m_RouteEndString));
     m_pRouteListCtrl->SetItem(item, 2, startend);
 
     NavObj_dB::GetInstance().UpdateRoute(route);
@@ -1574,7 +1581,8 @@ void RouteManagerDialog::OnRteExportClick(wxCommandEvent &event) {
     if (proute_to_export) {
       list.push_back(proute_to_export);
       if (proute_to_export->m_RouteNameString != "")
-        suggested_name = proute_to_export->m_RouteNameString;
+        suggested_name =
+            QString_to_wxString(proute_to_export->m_RouteNameString);
     }
   }
 
@@ -2398,7 +2406,8 @@ void RouteManagerDialog::UpdateWptListCtrl(RoutePoint *rp_select,
         continue;
       }
 
-      if (!rp->GetName().Upper().Contains(m_tFilterWpt->GetValue().Upper())) {
+      if (!rp->GetName().toUpper().contains(
+              wxString_to_QString(m_tFilterWpt->GetValue()).toUpper())) {
         ++node;
         continue;
       }
@@ -2415,7 +2424,7 @@ void RouteManagerDialog::UpdateWptListCtrl(RoutePoint *rp_select,
       if (g_bOverruleScaMin) scamin = _("Overruled");
       m_pWptListCtrl->SetItem(idx, colWPTSCALE, scamin);
 
-      wxString name = rp->GetName();
+      wxString name = QString_to_wxString(rp->GetName());
       if (name.IsEmpty()) name = _("(Unnamed Waypoint)");
       m_pWptListCtrl->SetItem(idx, colWPTNAME, name);
 
@@ -2620,7 +2629,8 @@ void RouteManagerDialog::OnWptToggleVisibility(wxMouseEvent &event) {
 }
 
 void RouteManagerDialog::OnWptNewClick(wxCommandEvent &event) {
-  RoutePoint *pWP = new RoutePoint(gLat, gLon, g_default_wp_icon, "", "");
+  RoutePoint *pWP = new RoutePoint(
+      gLat, gLon, wxString_to_QString(g_default_wp_icon), "", "");
   pWP->m_bIsolatedMark = true;  // This is an isolated mark
   pSelect->AddSelectableRoutePoint(gLat, gLon, pWP);
   NavObj_dB::GetInstance().InsertRoutePoint(pWP);
@@ -2764,7 +2774,8 @@ void RouteManagerDialog::OnWptGoToClick(wxCommandEvent &event) {
 
   if (!wp) return;
 
-  RoutePoint *pWP_src = new RoutePoint(gLat, gLon, g_default_wp_icon, "", "");
+  RoutePoint *pWP_src = new RoutePoint(
+      gLat, gLon, wxString_to_QString(g_default_wp_icon), "", "");
   pSelect->AddSelectableRoutePoint(gLat, gLon, pWP_src);
 
   Route *temp_route = new Route();
@@ -2776,7 +2787,7 @@ void RouteManagerDialog::OnWptGoToClick(wxCommandEvent &event) {
   pSelect->AddSelectableRouteSegment(gLat, gLon, wp->m_lat, wp->m_lon, pWP_src,
                                      wp, temp_route);
 
-  wxString name = wp->GetName();
+  wxString name = QString_to_wxString(wp->GetName());
   if (name.IsEmpty()) name = _("(Unnamed Waypoint)");
   wxString rteName = _("Go to ");
   rteName.Append(name);
@@ -2808,7 +2819,8 @@ void RouteManagerDialog::OnWptExportClick(wxCommandEvent &event) {
 
     if (wp && !wp->m_bIsInLayer) {
       list.push_back(wp);
-      if (wp->GetName() != "") suggested_name = wp->GetName();
+      if (wp->GetName() != "")
+        suggested_name = QString_to_wxString(wp->GetName());
     }
   }
 
