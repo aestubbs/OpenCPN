@@ -24,6 +24,8 @@
 #ifndef _NAVOBJ_DB_H__
 #define _NAVOBJ_DB_H__
 
+#include <QString>
+
 #include <wx/timer.h>
 #include "notification.h"
 #include "observable_evtvar.h"
@@ -71,7 +73,7 @@ public:
   bool ImportLegacyNavobj(wxFrame *frame);
 
   // Maintainance
-  bool Backup(wxString fileName);
+  bool Backup(QString fileName);
   bool FullSchemaMigrate(wxFrame *frame);
 
 private:

@@ -74,6 +74,7 @@
 #include "model/nav_object_database.h"
 #include "model/navutil_base.h"
 #include "model/navobj_db.h"
+#include "model/wx_qt_string.h"
 #include "model/own_ship.h"
 #include "model/plugin_comm.h"
 #include "model/route.h"
@@ -2486,10 +2487,12 @@ int BackupDatabase(wxWindow *parent) {
       wxString secureFileName = androidGetCacheDir() +
                                 wxFileName::GetPathSeparator() +
                                 fileName.GetFullName();
-      backupResult = NavObj_dB::GetInstance().Backup(secureFileName);
+      backupResult = NavObj_dB::GetInstance().Backup(
+          wxString_to_QString(secureFileName));
       AndroidSecureCopyFile(secureFileName, fileName.GetFullPath());
 #else
-      backupResult = NavObj_dB::GetInstance().Backup(fileName.GetFullPath());
+      backupResult = NavObj_dB::GetInstance().Backup(
+          wxString_to_QString(fileName.GetFullPath()));
 #endif
     }
     return backupResult ? wxID_YES : wxID_NO;
@@ -2504,7 +2507,7 @@ bool ExportGPXRoutes(wxWindow *parent, RouteList *pRoutes,
   if (fn.IsOk()) {
     NavObjectCollection1 *pgpx = new NavObjectCollection1;
     pgpx->AddGPXRoutesList(pRoutes);
-    pgpx->SaveFile(fn.GetFullPath());
+    pgpx->SaveFile(wxString_to_QString(fn.GetFullPath()));
     delete pgpx;
     return true;
   }
@@ -2514,7 +2517,7 @@ bool ExportGPXRoutes(wxWindow *parent, RouteList *pRoutes,
                  suggestedName + ".gpx";
   NavObjectCollection1 *pgpx = new NavObjectCollection1;
   pgpx->AddGPXRoutesList(pRoutes);
-  pgpx->SaveFile(fns);
+  pgpx->SaveFile(wxString_to_QString(fns));
   delete pgpx;
 
   // Kick off the Android file chooser activity
@@ -2541,7 +2544,7 @@ bool ExportGPXTracks(wxWindow *parent, std::vector<Track *> *pTracks,
   if (fn.IsOk()) {
     NavObjectCollection1 *pgpx = new NavObjectCollection1;
     pgpx->AddGPXTracksList(pTracks);
-    pgpx->SaveFile(fn.GetFullPath());
+    pgpx->SaveFile(wxString_to_QString(fn.GetFullPath()));
     delete pgpx;
     return true;
   }
@@ -2551,7 +2554,7 @@ bool ExportGPXTracks(wxWindow *parent, std::vector<Track *> *pTracks,
                  suggestedName + ".gpx";
   NavObjectCollection1 *pgpx = new NavObjectCollection1;
   pgpx->AddGPXTracksList(pTracks);
-  pgpx->SaveFile(fns);
+  pgpx->SaveFile(wxString_to_QString(fns));
   delete pgpx;
 
   // Kick off the Android file chooser activity
@@ -2577,7 +2580,7 @@ bool ExportGPXWaypoints(wxWindow *parent, RoutePointList *pRoutePoints,
   if (fn.IsOk()) {
     NavObjectCollection1 *pgpx = new NavObjectCollection1;
     pgpx->AddGPXPointsList(pRoutePoints);
-    pgpx->SaveFile(fn.GetFullPath());
+    pgpx->SaveFile(wxString_to_QString(fn.GetFullPath()));
     delete pgpx;
     return true;
   }
@@ -2587,7 +2590,7 @@ bool ExportGPXWaypoints(wxWindow *parent, RoutePointList *pRoutePoints,
                  suggestedName + ".gpx";
   NavObjectCollection1 *pgpx = new NavObjectCollection1;
   pgpx->AddGPXPointsList(pRoutePoints);
-  pgpx->SaveFile(fns);
+  pgpx->SaveFile(wxString_to_QString(fns));
   delete pgpx;
 
   // Kick off the Android file chooser activity
@@ -2673,7 +2676,7 @@ void ExportGPX(wxWindow *parent, bool bviz_only, bool blayer) {
     if (b_add) pgpx->AddGPXTrack(pTrack);
   }
 
-  pgpx->SaveFile(fns);
+  pgpx->SaveFile(wxString_to_QString(fns));
 
 #ifdef __ANDROID__
   // Kick off the Android file chooser activity

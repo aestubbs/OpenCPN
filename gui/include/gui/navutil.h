@@ -131,11 +131,11 @@ void DimeControl(wxWindow *ctrl, wxColour col, wxColour col1,
                  wxColour udkrd, wxColour gridline);
 
 bool WptIsInRouteList(RoutePoint *pr);
-RoutePoint *WaypointExists(const wxString &name, double lat, double lon);
-RoutePoint *WaypointExists(const wxString &guid);
-Route *RouteExists(const wxString &guid);
+RoutePoint *WaypointExists(const QString &name, double lat, double lon);
+RoutePoint *WaypointExists(const QString &guid);
+Route *RouteExists(const QString &guid);
 Route *RouteExists(Route *pTentRoute);
-Track *TrackExists(const wxString &guid);
+Track *TrackExists(const QString &guid);
 int BackupDatabase(wxWindow *parent);
 void ExportGPX(wxWindow *parent, bool bviz_only = false, bool blayer = false);
 void UI_ImportGPX(wxWindow *parent, bool islayer = false, wxString dirpath = "",

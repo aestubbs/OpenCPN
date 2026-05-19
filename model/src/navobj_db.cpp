@@ -38,6 +38,7 @@
 #include "model/notification.h"
 #include "model/notification_manager.h"
 #include "model/routeman.h"
+#include "model/wx_qt_string.h"
 
 static void ReportError(const std::string zmsg);  // forward
 
@@ -57,8 +58,8 @@ static bool executeSQL(sqlite3* db, const char* sql) {
   return true;
 }
 
-static bool executeSQL(sqlite3* db, wxString& sql) {
-  return executeSQL(db, sql.ToStdString().c_str());
+static bool executeSQL(sqlite3* db, const QString& sql) {
+  return executeSQL(db, sql.toStdString().c_str());
 }
 
 bool CreateTables(sqlite3* db) {
@@ -814,7 +815,7 @@ bool NavObj_dB::InsertTrack(Track* track) {
   }
 
   // Insert a new track
-  wxString sql = wxString::Format("INSERT INTO tracks (guid) VALUES ('%s')",
+  QString sql = QString::asprintf("INSERT INTO tracks (guid) VALUES ('%s')",
                                   track->m_GUID.toStdString().c_str());
   if (!executeSQL(m_db, sql)) {
     sqlite3_exec(m_db, "COMMIT", 0, 0, &errMsg);
@@ -1170,7 +1171,7 @@ bool NavObj_dB::InsertRoute(Route* route) {
 
   if (!RouteExistsDB(m_db, route->m_GUID.toStdString())) {
     // Insert a new route
-    wxString sql = wxString::Format("INSERT INTO routes (guid) VALUES ('%s')",
+    QString sql = QString::asprintf("INSERT INTO routes (guid) VALUES ('%s')",
                                     route->m_GUID.toStdString().c_str());
     if (!executeSQL(m_db, sql)) {
       return false;
@@ -2104,9 +2105,9 @@ bool NavObj_dB::InsertRoutePoint(RoutePoint* point) {
 
   if (!RoutePointExists(m_db, point->m_GUID.toStdString())) {
     // Insert a new route point
-    wxString sql =
-        wxString::Format("INSERT INTO routepoints (guid) VALUES ('%s')",
-                         point->m_GUID.toStdString().c_str());
+    QString sql =
+        QString::asprintf("INSERT INTO routepoints (guid) VALUES ('%s')",
+                          point->m_GUID.toStdString().c_str());
     if (!executeSQL(m_db, sql)) {
       return false;
     }
@@ -2165,11 +2166,12 @@ bool NavObj_dB::UpdateRoutePoint(RoutePoint* point) {
   return true;
 }
 
-bool NavObj_dB::Backup(wxString fileName) {
+bool NavObj_dB::Backup(QString fileName) {
   sqlite3_backup* pBackup;
   sqlite3* backupDatabase;
 
-  if (sqlite3_open(fileName.c_str(), &backupDatabase) == SQLITE_OK) {
+  if (sqlite3_open(fileName.toStdString().c_str(), &backupDatabase) ==
+      SQLITE_OK) {
     pBackup = sqlite3_backup_init(backupDatabase, "main", m_db, "main");
     if (pBackup) {
       int result = sqlite3_backup_step(pBackup, -1);
