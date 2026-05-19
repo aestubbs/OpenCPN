@@ -7,9 +7,9 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6b underway — the decode layer is being
-de-wx'd along the data flow: `comm_decoder` and `comm_bridge` done, leaving
-`ais_decoder` (the largest unit, ~117 `wxString` refs).
+SignalK/SocketCAN parked (P1.5m). P1.6b done — the decode layer
+(`comm_decoder`, `comm_bridge`, `ais_decoder`) is de-wx'd; the clean pipeline
+now runs *bytes-in → nav-data-out*. Next: P1.6c+ (downstream/adjacent layers).
 **Last updated:** 2026-05-19.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -192,7 +192,7 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         factory adapts `ConnectionParams` → wx-free pipeline inputs. Logging
         moved to Qt (`qWarning`/`qInfo`). `ConnectionParams` itself stays
         `wxString` — the boundary, shared with the wx GUI and plugin ABI.
-  - [~] **P1.6b** De-wx the **decode layer** — the stage downstream of the
+  - [x] **P1.6b** De-wx the **decode layer** — the stage downstream of the
         (wx-free) `NavMsgBus` that turns the `NavMsg` stream into nav data
         (positions, AIS, HUD). This extends the clean pipeline from *bytes-in*
         through to *nav-data-out* — the core functionality.
@@ -208,8 +208,19 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
           (`Load/SaveConfig`, P1.9). Other remaining wx: the `wxWindow` GUI
           lookup (`GetDataMonitor`) and a `wxString` hand-off to the still-wx
           AIS parser.
-    - [ ] `ais_decoder.cpp` (~117 `wxString` refs) — the largest unit; also
-          the AIS-parser boundary `comm_bridge` currently bridges to.
+    - [x] `ais_decoder.cpp` — the largest unit (~4.7k lines). All `wxString`
+          → `QString`; `wxStringTokenizer` → `QString::split` (with
+          `Qt::KeepEmptyParts` — NMEA fields are positional and may be empty);
+          `wxAtoi`/`wxRound`/`wxMin`/`wxMax`/`wxLogMessage` → Qt/std. The
+          `DecodeSingleVDO` signature is now `QString`, so the `wxString`
+          hand-off `comm_bridge` bridged to is gone (and `comm_ais` /
+          `ocpn_plugin_gui` callers adapted). `wxString` remains only at
+          boundary types — `MmsiProperties` (config-serialized, GUI-embedded),
+          the `GetShipNameFromFile`/`UpdateMMSItoNameFile`/`GetMMSItoNameEntry`
+          name-file API, and `wxString`-typed members of not-yet-migrated
+          headers (`ais_target_data.h`, `meteo_points.h`). `wxDateTime`,
+          `wxTimer`/`wxEvtHandler`, `wxTextFile`/`wxFileName` stay for
+          P1.7/P1.11/P1.10.
   - [ ] **P1.6c+** Continue downstream/adjacent layers (routes, nav object
         DB, …) the same way. `ConnectionParams` + config and the legacy
         gateway parsers (`n2k_net`) are swept only when their outer layer
@@ -473,3 +484,18 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   the `wxWindow` data-monitor GUI lookup and a `wxString` hand-off to the
   still-wx AIS parser. `ais_decoder` (~117 refs, and that AIS-parser
   boundary) is the remaining P1.6b file.
+- 2026-05-19 — P1.6b complete: `ais_decoder` de-wx'd, closing the decode
+  layer. The 4.7k-line AIS decoder had wxString woven through all the
+  NMEA/N2K/SignalK sentence parsing; all of it → `QString`, with
+  `wxStringTokenizer` → `QString::split`. One non-obvious call: NMEA fields
+  are positional and routinely empty, and a `wxStringTokenizer` on a
+  non-whitespace delimiter keeps empty tokens — so the splits use
+  `Qt::KeepEmptyParts`, not `SkipEmptyParts`, to preserve field offsets.
+  `DecodeSingleVDO` is now `QString`-based, so the `wxString` hand-off
+  `comm_bridge` bridged to (and the `comm_ais` free-function wrapper +
+  `ocpn_plugin_gui` plugin-ABI shim) is closed. `wxString` survives at the
+  GUI/config boundary types (`MmsiProperties`, the AIS name-file API) and in
+  `wxString`-typed members of headers not yet migrated (`ais_target_data.h`,
+  `meteo_points.h`); `wxDateTime`/`wxTimer`/`wxTextFile` stay for their
+  dedicated phases (P1.7/P1.11/P1.10). The decode layer now runs Qt-typed
+  end to end: bytes-in → nav-data-out.
