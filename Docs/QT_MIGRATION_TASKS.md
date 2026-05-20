@@ -7,24 +7,24 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6–P1.11 done — the model's
+SignalK/SocketCAN parked (P1.5m). P1.6–P1.12 done — the model's
 `wxString` / `wxDateTime` / wx-container / `wxConfig` / file-I/O /
-threading-and-timer sweeps are all complete. `QStringList` /
+threading-and-timer / JSON sweeps are all complete. `QStringList` /
 `QList<T*>` / `QHash` / `QSet` are the container vocabulary;
 `model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string conversions;
 `QDateTime` / `qint64`-seconds is the time/duration vocabulary;
 `OcpnConfig` (wraps `QSettings`) is the settings store; `QFile` /
 `QDir` / `QFileInfo` / `QStandardPaths` is the file-I/O vocabulary;
 `QThread` / `QMutex` / `QSemaphore` / `QTimer` / `QObject` with Qt
-signals/slots is the threading + event-loop vocabulary. Remaining wx
-references are deliberate boundaries — the frozen plugin ABI, the
-chart-reader `wxInputStream`/`wxOutputStream` streams, `wxStandardPaths`
-on macOS bundle paths, wx-widget plumbing (`wxTimer`/`wxEvtHandler` in
-`wxWindow`/`wxFrame`/`wxDialog` subclasses — Phase 3 territory),
-deferred-ownership container types, `libs/wxcurl` + `libs/wxservdisc`
-(P1.13 library replacement), and the post-P1.9 config call-site
-helpers. Next: P1.12 (delete `libs/wxJSON`; move JSON use to
-`QJsonDocument`).
+signals/slots is the threading + event-loop vocabulary; `QJsonDocument`
+/ `QJsonObject` / `QJsonArray` / `QJsonValue` is the JSON vocabulary.
+Remaining wx references are deliberate boundaries — the frozen plugin
+ABI (incl. the `GetSignalkPayload` `wxJSONValue` shim), the chart-
+reader `wxInputStream`/`wxOutputStream` streams, `wxStandardPaths` on
+macOS bundle paths, wx-widget plumbing (Phase 3), deferred-ownership
+container types, `libs/wxcurl` + `libs/wxservdisc` (P1.13 library
+replacement), and the post-P1.9 config call-site helpers. Next: P1.13
+(delete `libs/wxcurl`; move networking to `QNetworkAccessManager`).
 **Last updated:** 2026-05-20.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -468,7 +468,43 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         post replaced with `QMetaObject::invokeMethod(... Qt::Queued
         Connection, Q_ARG(QString, ...))`), `DataMonitorSrc`
         (`wxEvtHandler` base was vestigial — just dropped).
-- [ ] **P1.12** Delete `libs/wxJSON`; move JSON use to `QJsonDocument`.
+- [x] **P1.12** Move JSON use to `QJsonDocument`; `libs/wxJSON` minimised.
+      Done in 2 steps. All internal use of `wxJSONReader`/`wxJSONWriter`/
+      `wxJSONValue` is converted to `QJsonDocument`/`QJsonObject`/
+      `QJsonArray`/`QJsonValue`. `libs/wxJSON` **stays in the build**
+      (still added via `add_subdirectory`) — required for the single
+      plugin-ABI shim `GetSignalkPayload` in `model/src/plugin_api.cpp`,
+      which contracts via `include/ocpn_plugin.h:6320-6326` to return a
+      `std::shared_ptr<void>` pointing at a `wxJSONValue`. The body
+      builds a `QJsonObject` internally and double-encodes (Qt
+      `toJson(Compact)` → `wxJSONReader::Parse`) to produce the
+      `wxJSONValue` for the plugin. Deleting `libs/wxJSON` outright
+      would require a plugin ABI break and is deferred. Behaviour
+      delta visible to plugins: Qt's parser has no warnings (only
+      errors), so the payload's `WarningCount` is always 0 / `Warnings`
+      empty, and `ErrorCount` is 0 or 1.
+  - [x] **P1.12-1** Model + small GUI: `plugin_comm`/`routeman`/
+        `navmsg_filter`/`plugin_api`/`peer_client`/`comm_drv_loopback`/
+        `catalog_handler`/`track`/`ais_decoder`/`comm_n0183_output` +
+        `peer_client_dlg`/`gl_chart_canvas`/`canvas_menu`/`wiz_ui`/
+        `chcanv`/`ocpn_platform`. `SendJSONMessageToAllPlugins`
+        internal signature → `(QString, QJsonObject)`. `routeman::
+        json_msg` payload changed `shared_ptr<wxJSONValue>` →
+        `shared_ptr<QJsonObject>`. `NavmsgFilter::Parse` retries with
+        up to 4 appended `}` because legacy `wxJSONReader` tolerated
+        the shipped filter files' missing trailing brace.
+  - [x] **P1.12-2** GUI hold-outs + final audit: `ocpn_frame` (26
+        sites — POST_JSON, MOB/Track/AISMOB, WMM, GRIB_TIMELINE,
+        OCPN_TRACK/ROUTE/ROUTELIST/ACTIVE_ROUTELEG_REQUEST),
+        `pluginmanager` (11 sites), `track_prop_dlg`, `ocpn_app`
+        stray include. Transitional `wxJSONValue` overload of
+        `SendJSONMessageToAllPlugins` removed; added a
+        `(QString, QJsonArray)` overload because OCPN_ROUTELIST/
+        ACTIVE_ROUTELEG response payloads are array-rooted (and the
+        legacy wxJSON code relied on auto-promotion). On-wire
+        preservation: OCPN_ROUTELIST_RESPONSE's index-from-1 slot-0-
+        null quirk reproduced with `arr.append(QJsonValue())` before
+        the loop.
 - [ ] **P1.13** Delete `libs/wxcurl`; move networking to `QNetworkAccessManager`.
 - [ ] **P1.14** Abstract route/mark UI types (`wxColour`/`wxPen`/`wxBitmap`) → `QColor`/`QPen`/`QImage`.
 - [ ] **P1.15** Verify: core compiles wx-free; unit tests pass.
@@ -887,3 +923,23 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   (`pluginUtilHandler`/`CanvasMenuHandler`/etc.); these migrate with
   the QtQuick port in Phase 3. `libs/wxcurl` + `libs/wxservdisc` (21
   hits) are deferred to P1.13.
+- 2026-05-20 — P1.12 done: JSON usage is `QJsonDocument` / `QJsonObject`
+  / `QJsonArray` / `QJsonValue` throughout. `libs/wxJSON` stays in the
+  build for one shim: `GetSignalkPayload` (model/src/plugin_api.cpp)
+  contractually returns a `std::shared_ptr<void>` pointing at a
+  `wxJSONValue` per the frozen plugin ABI (`include/ocpn_plugin.h`).
+  The shim builds the payload as a `QJsonObject` internally and
+  double-encodes via `QJsonDocument::toJson(Compact)` →
+  `wxJSONReader::Parse` to produce the `wxJSONValue` plugins expect.
+  All other live wxJSON code is gone. Behaviour delta: Qt's parser
+  has no warnings (only errors), so the SignalK payload's
+  `WarningCount` is always 0 and `ErrorCount` is 0 or 1. The on-disk
+  filter files (`data/filters/all-nmea.filter.json` etc.) are missing
+  their closing `}` — legacy `wxJSONReader` tolerated this; `Navmsg
+  Filter::Parse` now retries with up to 4 appended `}` to keep the
+  shipped data loading. `OCPN_ROUTELIST_RESPONSE` and `OCPN_ACTIVE_
+  ROUTELEG_RESPONSE` are array-rooted plugin messages; a second
+  `SendJSONMessageToAllPlugins(QString, QJsonArray)` overload was
+  added to preserve their wire format. `OCPN_ROUTELIST_RESPONSE`'s
+  index-from-1 slot-0-null quirk preserved with
+  `arr.append(QJsonValue())` before the loop.
