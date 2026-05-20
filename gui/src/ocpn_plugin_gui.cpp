@@ -28,6 +28,7 @@
 #include <QString>
 
 #include "dychart.h"  // Must be ahead due to buggy GL includes handling
+#include "config_compat_helpers.h"
 
 #include <wx/wx.h>
 #include <wx/arrstr.h>
@@ -3158,7 +3159,7 @@ void ConfigFlushAndReload() {
   if (pConfig) {
     // Store current locale to detect changes
     wxString oldLocale = g_locale;
-    pConfig->Flush();
+    pConfig->sync();
 
     // Handle system general configuration options
     pConfig->LoadMyConfigRaw(false);

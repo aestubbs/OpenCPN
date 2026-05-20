@@ -44,6 +44,7 @@
 #include <wx/jsonval.h>
 #include <wx/jsonreader.h>
 #include "wiz_ui.h"
+#include "config_compat_helpers.h"
 #include "ocpn_platform.h"
 #include "model/comm_drv_n2k_net.h"
 #include "model/conn_params.h"
@@ -117,16 +118,18 @@ void FirstUseWizImpl::OnWizardFinished(wxWizardEvent& event) {
   if (!cfg) cfg = g_Platform->GetConfigObject();
 
   // Units
-  cfg->SetPath(_T("/Settings"));
-  cfg->Write("SDMMFormat", m_cPosition->GetSelection());
-  cfg->Write("DistanceFormat", m_cDistance->GetSelection());
-  cfg->Write("SpeedFormat", m_cSpeed->GetSelection());
-  cfg->Write("WindSpeedFormat", m_cWind->GetSelection());
+  cfg->endAllGroups();
+  cfg->beginGroup("Settings");
+  CfgWrite(*cfg, "SDMMFormat", m_cPosition->GetSelection());
+  CfgWrite(*cfg, "DistanceFormat", m_cDistance->GetSelection());
+  CfgWrite(*cfg, "SpeedFormat", m_cSpeed->GetSelection());
+  CfgWrite(*cfg, "WindSpeedFormat", m_cWind->GetSelection());
   //  True/magnetic
-  cfg->Write("ShowTrue", m_cbShowTrue->GetValue());
-  cfg->Write("ShowMag", m_cbShowMagnetic->GetValue());
-  cfg->SetPath(_T("/Settings/GlobalState"));
-  cfg->Write("S52_DEPTH_UNIT_SHOW", m_cDepth->GetSelection());
+  CfgWrite(*cfg, "ShowTrue", m_cbShowTrue->GetValue());
+  CfgWrite(*cfg, "ShowMag", m_cbShowMagnetic->GetValue());
+  cfg->endAllGroups();
+  cfg->beginGroup("Settings/GlobalState");
+  CfgWrite(*cfg, "S52_DEPTH_UNIT_SHOW", m_cDepth->GetSelection());
   // Connections
   bool anychecked = false;
   for (unsigned int i = 0; i < m_clSources->GetCount(); i++) {
@@ -136,8 +139,9 @@ void FirstUseWizImpl::OnWizardFinished(wxWizardEvent& event) {
     }
   }
   if (anychecked) {
-    cfg->DeleteGroup("/Settings/NMEADataSource");
-    cfg->SetPath("/Settings/NMEADataSource");
+    cfg->endAllGroups();
+    cfg->remove("Settings/NMEADataSource");
+    cfg->beginGroup("Settings/NMEADataSource");
     wxString connectionconfigs;
     bool firstconn = true;
     for (unsigned int i = 0; i < m_detected_connections.size(); i++) {
@@ -149,21 +153,22 @@ void FirstUseWizImpl::OnWizardFinished(wxWizardEvent& event) {
         firstconn = false;
       }
     }
-    cfg->Write("DataConnections", connectionconfigs);
+    CfgWrite(*cfg, "DataConnections", connectionconfigs);
   }
   // Charts
   if (!m_lbChartsDirs->IsEmpty()) {
-    cfg->DeleteGroup("/ChartDirectories");
-    cfg->SetPath("/ChartDirectories");
+    cfg->endAllGroups();
+    cfg->remove("ChartDirectories");
+    cfg->beginGroup("ChartDirectories");
     for (unsigned int iDir = 0; iDir < m_lbChartsDirs->GetCount(); iDir++) {
       wxString dirn = m_lbChartsDirs->GetString(iDir);
       dirn.Append("^");
       wxString str_buf;
       str_buf.Printf("ChartDir%d", iDir + 1);
-      cfg->Write(str_buf, dirn);
+      CfgWrite(*cfg, str_buf, dirn);
     }
   }
-  cfg->Flush();
+  cfg->sync();
   cfg->LoadMyConfig();
 }
 

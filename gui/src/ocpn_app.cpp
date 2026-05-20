@@ -425,7 +425,7 @@ bool DoNavMessage(wxString &new_version_string) {
   if (!n_NavMessageShown || (new_version_string != g_config_version_string)) {
     if (!ShowNavWarning()) return false;
     n_NavMessageShown = 1;
-    pConfig->Flush();
+    pConfig->sync();
   }
 #endif
   return true;
@@ -1576,8 +1576,12 @@ void MyApp::BuildMainFrame() {
   if (g_kiosk_startup) g_pi_manager->CallLateInit();
 
   wxString perspective;
-  pConfig->SetPath("/AUI");
-  pConfig->Read("AUIPerspective", &perspective);
+  pConfig->endAllGroups();
+  pConfig->beginGroup("AUI");
+  if (pConfig->contains("AUIPerspective"))
+    perspective = QString_to_wxString(
+        pConfig->value("AUIPerspective").toString());
+  pConfig->endGroup();
 
   // Make sure the perspective saved in the config file is "reasonable"
   // In particular, the perspective should have an entry for every

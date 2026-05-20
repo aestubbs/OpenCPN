@@ -37,6 +37,8 @@
 #include <wx/log.h>
 #include <wx/string.h>
 
+#include <QString>
+
 #include "observable_confvar.h"
 
 #include "model/ocpn_config.h"
@@ -63,9 +65,12 @@ ConfigVar<T>::ConfigVar(const std::string& section_, const std::string& key_,
 template <typename T>
 const T ConfigVar<T>::Get(const T& default_val) {
   std::istringstream iss;
-  config->SetPath(wxString(section.c_str()));
-  auto value = config->Read(wxString(key.c_str()), wxString()).ToStdString();
-  iss.str(value);
+  config->endAllGroups();
+  config->beginGroup(QString::fromStdString(section));
+  const QString value =
+      config->value(QString::fromStdString(key), QString()).toString();
+  config->endGroup();
+  iss.str(value.toStdString());
   T r;
   iss >> r;
   return iss.fail() ? default_val : r;
@@ -80,11 +85,11 @@ void ConfigVar<T>::Set(const T& arg) {
                  key.c_str());
     return;
   }
-  config->SetPath(wxString(section.c_str()));
-  if (!config->Write(wxString(key.c_str()), wxString(oss.str().c_str()))) {
-    wxLogWarning("Error writing buffer to key %s:%s", section.c_str(),
-                 key.c_str());
-  }
+  config->endAllGroups();
+  config->beginGroup(QString::fromStdString(section));
+  config->setValue(QString::fromStdString(key),
+                   QString::fromStdString(oss.str()));
+  config->endGroup();
   Observable::Notify();
 }
 

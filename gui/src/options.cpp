@@ -35,6 +35,7 @@
 #endif
 
 #include "gl_headers.h"  // Must be included before anything using GL stuff
+#include "config_compat_helpers.h"
 
 #ifdef __MINGW32__
 #undef IPV6STRICT  // mingw FTBS fix:  missing struct ip_mreq
@@ -7892,9 +7893,10 @@ void options::Finish() {
   lastWindowPos = GetPosition();
   lastWindowSize = GetSize();
 
-  pConfig->SetPath("/Settings");
-  pConfig->Write("OptionsSizeX", lastWindowSize.x);
-  pConfig->Write("OptionsSizeY", lastWindowSize.y);
+  pConfig->endAllGroups();
+  pConfig->beginGroup("Settings");
+  CfgWrite(*pConfig, "OptionsSizeX", lastWindowSize.x);
+  CfgWrite(*pConfig, "OptionsSizeY", lastWindowSize.y);
 }
 
 ArrayOfCDI options::GetSelectedChartDirs() {
@@ -8362,9 +8364,10 @@ void options::OnCancelClick(wxCommandEvent& event) {
   lastWindowPos = GetPosition();
   lastWindowSize = GetSize();
 
-  pConfig->SetPath("/Settings");
-  pConfig->Write("OptionsSizeX", lastWindowSize.x);
-  pConfig->Write("OptionsSizeY", lastWindowSize.y);
+  pConfig->endAllGroups();
+  pConfig->beginGroup("Settings");
+  CfgWrite(*pConfig, "OptionsSizeX", lastWindowSize.x);
+  CfgWrite(*pConfig, "OptionsSizeY", lastWindowSize.y);
 
 #ifdef __ANDROID__
   androidEnableBackButton(true);
@@ -8383,9 +8386,10 @@ void options::OnClose(wxCloseEvent& event) {
   lastWindowPos = GetPosition();
   lastWindowSize = GetSize();
 
-  pConfig->SetPath("/Settings");
-  pConfig->Write("OptionsSizeX", lastWindowSize.x);
-  pConfig->Write("OptionsSizeY", lastWindowSize.y);
+  pConfig->endAllGroups();
+  pConfig->beginGroup("Settings");
+  CfgWrite(*pConfig, "OptionsSizeX", lastWindowSize.x);
+  CfgWrite(*pConfig, "OptionsSizeY", lastWindowSize.y);
 
   m_callbacks.prepare_close(this, m_returnChanges);
   Hide();

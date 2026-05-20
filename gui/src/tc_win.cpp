@@ -33,6 +33,7 @@
 #include <wx/utils.h>
 
 #include "tc_win.h"
+#include "config_compat_helpers.h"
 
 #include "model/cutil.h"
 #include "model/config_vars.h"
@@ -155,8 +156,9 @@ TCWin::TCWin(ChartCanvas *parent, int x, int y, void *pvIDX) {
 
   // Read the config file to get the user specified time zone.
   if (pConfig) {
-    pConfig->SetPath("/Settings/Others");
-    pConfig->Read("TCWindowTimeZone", &m_tzoneDisplay, 0);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/Others");
+    CfgRead(*pConfig, "TCWindowTimeZone", &m_tzoneDisplay, 0);
   }
 
   wxFrame::Create(parent, wxID_ANY, wxString(""), m_position, m_tc_size,
@@ -1003,8 +1005,9 @@ void TCWin::OKEvent(wxCommandEvent &event) {
 
   // Update the config file to set the user specified time zone.
   if (pConfig) {
-    pConfig->SetPath("/Settings/Others");
-    pConfig->Write("TCWindowTimeZone", m_tzoneDisplay);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/Others");
+    CfgWrite(*pConfig, "TCWindowTimeZone", m_tzoneDisplay);
   }
 
   Destroy();  // that hurts
@@ -1027,8 +1030,9 @@ void TCWin::OnCloseWindow(wxCloseEvent &event) {
 
   // Update the config file to set the user specified time zone.
   if (pConfig) {
-    pConfig->SetPath("/Settings/Others");
-    pConfig->Write("TCWindowTimeZone", m_tzoneDisplay);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/Others");
+    CfgWrite(*pConfig, "TCWindowTimeZone", m_tzoneDisplay);
   }
 
   Destroy();  // that hurts

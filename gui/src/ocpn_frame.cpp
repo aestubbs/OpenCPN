@@ -21,6 +21,7 @@
  * OpenCPN top window
  */
 #include "config.h"
+#include "config_compat_helpers.h"
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
 #ifdef __MINGW32__
@@ -1560,8 +1561,9 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
   //             g_pauimgr->GetPane( cc ).MinSize(10,10);
   //     }
 
-  pConfig->SetPath("/AUI");
-  pConfig->Write("AUIPerspective", g_pauimgr->SavePerspective());
+  pConfig->endAllGroups();
+  pConfig->beginGroup("AUI");
+  CfgWrite(*pConfig, "AUIPerspective", g_pauimgr->SavePerspective());
 
   g_bquiting = true;
 
@@ -1683,9 +1685,9 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
 
   // Remove any leftover Routes and Waypoints from config file as they were
   // saved to navobj before
-  pConfig->DeleteGroup("/Routes");
-  pConfig->DeleteGroup("/Marks");
-  pConfig->Flush();
+  CfgDelete(*pConfig, "/Routes");
+  CfgDelete(*pConfig, "/Marks");
+  pConfig->sync();
 
   if (g_pAboutDlg) g_pAboutDlg->Destroy();
   if (g_pAboutDlgLegacy) g_pAboutDlgLegacy->Destroy();
@@ -4008,9 +4010,10 @@ void MyFrame::DoOptionsDialog() {
     AbstractPlatform::ShowBusySpinner();
 
     int sx, sy;
-    pConfig->SetPath("/Settings");
-    pConfig->Read("OptionsSizeX", &sx, -1);
-    pConfig->Read("OptionsSizeY", &sy, -1);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings");
+    CfgRead(*pConfig, "OptionsSizeX", &sx, -1);
+    CfgRead(*pConfig, "OptionsSizeY", &sy, -1);
 
     wxWindow *optionsParent = this;
 #ifdef __WXOSX__
@@ -4656,9 +4659,10 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
 
     case 4: {
       int sx, sy;
-      pConfig->SetPath("/Settings");
-      pConfig->Read("OptionsSizeX", &sx, -1);
-      pConfig->Read("OptionsSizeY", &sy, -1);
+      pConfig->endAllGroups();
+      pConfig->beginGroup("Settings");
+      CfgRead(*pConfig, "OptionsSizeX", &sx, -1);
+      CfgRead(*pConfig, "OptionsSizeY", &sy, -1);
 
       wxWindow *optionsParent = this;
 #ifdef __WXOSX__
@@ -4754,9 +4758,10 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
         AbstractPlatform::ShowBusySpinner();
 
         int sx, sy;
-        pConfig->SetPath("/Settings");
-        pConfig->Read("OptionsSizeX", &sx, -1);
-        pConfig->Read("OptionsSizeY", &sy, -1);
+        pConfig->endAllGroups();
+        pConfig->beginGroup("Settings");
+        CfgRead(*pConfig, "OptionsSizeX", &sx, -1);
+        CfgRead(*pConfig, "OptionsSizeY", &sy, -1);
 
         wxWindow *optionsParent = this;
 #ifdef __WXOSX__
@@ -7282,8 +7287,9 @@ void ApplyLocale() {
   // Capture a copy of the current perspective
   //  So that we may restore PlugIn window sizes, position, visibility, etc.
   wxString perspective;
-  pConfig->SetPath("/AUI");
-  pConfig->Read("AUIPerspective", &perspective);
+  pConfig->endAllGroups();
+  pConfig->beginGroup("AUI");
+  CfgRead(*pConfig, "AUIPerspective", &perspective);
 
   //  Compliant Plugins will reload their locale message catalog during the
   //  Init() method. So it is sufficient to simply deactivate, and then

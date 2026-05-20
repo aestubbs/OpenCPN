@@ -31,6 +31,7 @@
 #endif
 
 #include "gl_headers.h"  // Must be included before anything using GL stuff
+#include "config_compat_helpers.h"
 
 #ifdef __WXMSW__
 #undef IPV6STRICT  // mingw FTBS fix:  missing struct ip_mreq
@@ -1171,31 +1172,32 @@ void OCPNPlatform::SetDefaultOptions() {
 
   // Initial S52/S57 options
   if (pConfig) {
-    pConfig->SetPath("/Settings/GlobalState");
-    pConfig->Write("bShowS57Text", true);
-    pConfig->Write("bShowS57ImportantTextOnly", false);
-    pConfig->Write("nDisplayCategory", (int)(_DisCat)OTHER);
-    pConfig->Write("nSymbolStyle", (int)(_LUPname)PAPER_CHART);
-    pConfig->Write("nBoundaryStyle", (int)(_LUPname)PLAIN_BOUNDARIES);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/GlobalState");
+    CfgWrite(*pConfig, "bShowS57Text", true);
+    CfgWrite(*pConfig, "bShowS57ImportantTextOnly", false);
+    CfgWrite(*pConfig, "nDisplayCategory", (int)(_DisCat)OTHER);
+    CfgWrite(*pConfig, "nSymbolStyle", (int)(_LUPname)PAPER_CHART);
+    CfgWrite(*pConfig, "nBoundaryStyle", (int)(_LUPname)PLAIN_BOUNDARIES);
 
-    pConfig->Write("bShowSoundg", true);
-    pConfig->Write("bShowMeta", false);
-    pConfig->Write("bUseSCAMIN", true);
-    pConfig->Write("bShowAtonText", false);
-    pConfig->Write("bShowLightDescription", false);
-    pConfig->Write("bExtendLightSectors", true);
-    pConfig->Write("bDeClutterText", true);
-    pConfig->Write("bShowNationalText", true);
+    CfgWrite(*pConfig, "bShowSoundg", true);
+    CfgWrite(*pConfig, "bShowMeta", false);
+    CfgWrite(*pConfig, "bUseSCAMIN", true);
+    CfgWrite(*pConfig, "bShowAtonText", false);
+    CfgWrite(*pConfig, "bShowLightDescription", false);
+    CfgWrite(*pConfig, "bExtendLightSectors", true);
+    CfgWrite(*pConfig, "bDeClutterText", true);
+    CfgWrite(*pConfig, "bShowNationalText", true);
 
-    pConfig->Write("S52_MAR_SAFETY_CONTOUR", 3);
-    pConfig->Write("S52_MAR_SHALLOW_CONTOUR", 2);
-    pConfig->Write("S52_MAR_DEEP_CONTOUR", 6);
-    pConfig->Write("S52_MAR_TWO_SHADES", 0);
-    pConfig->Write("S52_DEPTH_UNIT_SHOW", 1);
+    CfgWrite(*pConfig, "S52_MAR_SAFETY_CONTOUR", 3);
+    CfgWrite(*pConfig, "S52_MAR_SHALLOW_CONTOUR", 2);
+    CfgWrite(*pConfig, "S52_MAR_DEEP_CONTOUR", 6);
+    CfgWrite(*pConfig, "S52_MAR_TWO_SHADES", 0);
+    CfgWrite(*pConfig, "S52_DEPTH_UNIT_SHOW", 1);
 
-    pConfig->Write("ZoomDetailFactorVector", 3);
+    CfgWrite(*pConfig, "ZoomDetailFactorVector", 3);
 
-    pConfig->Write("nColorScheme", 1);  // higher contrast on NOAA RNCs
+    CfgWrite(*pConfig, "nColorScheme", 1);  // higher contrast on NOAA RNCs
 
 // A few more often requested defaults, not applicable to Android
 #ifndef __ANDROID__
@@ -1209,45 +1211,54 @@ void OCPNPlatform::SetDefaultOptions() {
   g_bShowMenuBar = false;
   //  Enable some default PlugIns, and their default options
   if (pConfig) {
-    pConfig->SetPath("/PlugIns/chartdldr_pi.dll");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/chartdldr_pi.dll");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/PlugIns/wmm_pi.dll");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/wmm_pi.dll");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/Settings/WMM");
-    pConfig->Write("ShowIcon", true);
-    pConfig->Write("ShowLiveIcon", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/WMM");
+    CfgWrite(*pConfig, "ShowIcon", true);
+    CfgWrite(*pConfig, "ShowLiveIcon", true);
   }
 #endif
 
 #ifdef __WXOSX__
   //  Enable some default PlugIns, and their default options
   if (pConfig) {
-    pConfig->SetPath("/PlugIns/libchartdldr_pi.dylib");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/libchartdldr_pi.dylib");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/PlugIns/libwmm_pi.dylib");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/libwmm_pi.dylib");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/Settings/WMM");
-    pConfig->Write("ShowIcon", true);
-    pConfig->Write("ShowLiveIcon", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/WMM");
+    CfgWrite(*pConfig, "ShowIcon", true);
+    CfgWrite(*pConfig, "ShowLiveIcon", true);
   }
 #endif
 
 #ifdef __linux__
   //  Enable some default PlugIns, and their default options
   if (pConfig) {
-    pConfig->SetPath("/PlugIns/libchartdldr_pi.so");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/libchartdldr_pi.so");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/PlugIns/libwmm_pi.so");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/libwmm_pi.so");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/Settings/WMM");
-    pConfig->Write("ShowIcon", true);
-    pConfig->Write("ShowLiveIcon", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/WMM");
+    CfgWrite(*pConfig, "ShowIcon", true);
+    CfgWrite(*pConfig, "ShowLiveIcon", true);
   }
 #endif
 
@@ -1293,51 +1304,61 @@ void OCPNPlatform::SetDefaultOptions() {
   //  Enable some default PlugIns, and their default options
 
   if (pConfig) {
-    pConfig->SetPath("/PlugIns/libchartdldr_pi.so");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/libchartdldr_pi.so");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/PlugIns/libwmm_pi.so");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/libwmm_pi.so");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/Settings/WMM");
-    pConfig->Write("ShowIcon", true);
-    pConfig->Write("ShowLiveIcon", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/WMM");
+    CfgWrite(*pConfig, "ShowIcon", true);
+    CfgWrite(*pConfig, "ShowLiveIcon", true);
 
-    pConfig->SetPath("/PlugIns/libgrib_pi.so");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/libgrib_pi.so");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/PlugIns/libdashboard_pi.so");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/libdashboard_pi.so");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/PlugIns/GRIB");
-    pConfig->Write("GRIBCtrlBarPosX", 100);
-    pConfig->Write("GRIBCtrlBarPosY", 0);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/GRIB");
+    CfgWrite(*pConfig, "GRIBCtrlBarPosX", 100);
+    CfgWrite(*pConfig, "GRIBCtrlBarPosY", 0);
 
-    pConfig->SetPath("/Settings/GRIB");
-    pConfig->Write("CursorDataShown", 0);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/GRIB");
+    CfgWrite(*pConfig, "CursorDataShown", 0);
 
     // This is ugly hack
     // TODO
-    pConfig->SetPath("/PlugIns/liboesenc_pi.so");
-    pConfig->Write("bEnabled", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/liboesenc_pi.so");
+    CfgWrite(*pConfig, "bEnabled", true);
 
-    pConfig->SetPath("/Settings/QTFonts");
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/QTFonts");
 
     // Status Bar
     wxString str = "en_US-b25a3899";
     wxString pval = "StatusBar:Roboto,26,-1,5,75,0,0,0,0,0:rgb(0, 0, 0)";
-    pConfig->Write(str, pval);
+    CfgWrite(*pConfig, str, pval);
     FontMgr::Get().LoadFontNative(&str, &pval);
 
     // Dialog
     str = "en_US-9c3b3a0d";
     pval = "DialogStatusBar:Roboto,18,-1,5,50,0,0,0,0,0:rgb(0, 0, 0)";
-    pConfig->Write(str, pval);
+    CfgWrite(*pConfig, str, pval);
     FontMgr::Get().LoadFontNative(&str, &pval);
 
     // Set track default color to magenta
-    pConfig->SetPath("/Settings/Others");
-    pConfig->Write("TrackLineColour", "#C545C3");
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/Others");
+    CfgWrite(*pConfig, "TrackLineColour", "#C545C3");
     g_colourTrackLineColour.Set(197, 69, 195);
 
     qDebug() << "SetDefaultOptions.Config";
@@ -1364,8 +1385,9 @@ void OCPNPlatform::SetUpgradeOptions(wxString vNew, wxString vOld) {
 
     // Set some S52/S57 options
     if (pConfig) {
-      pConfig->SetPath("/Settings/GlobalState");
-      pConfig->Write("bShowS57Text", true);
+      pConfig->endAllGroups();
+      pConfig->beginGroup("Settings/GlobalState");
+      CfgWrite(*pConfig, "bShowS57Text", true);
     }
 
     g_ChartNotRenderScaleFactor = 2.0;
@@ -1373,7 +1395,7 @@ void OCPNPlatform::SetUpgradeOptions(wxString vNew, wxString vOld) {
     g_toolbarConfig = "X.....XX.......XX.XXXXXXXXXXX";
 
     //  Experience indicates a slightly larger default font size is better
-    pConfig->DeleteGroup("/Settings/QTFonts");
+    CfgDelete(*pConfig, "/Settings/QTFonts");
     g_default_font_size = 20;
     g_default_font_facename = "Roboto";
 
@@ -1388,12 +1410,14 @@ void OCPNPlatform::SetUpgradeOptions(wxString vNew, wxString vOld) {
 
     // A few popular requests,
     // which will take effect on next App startup.
-    pConfig->SetPath("/Settings/WMM");
-    pConfig->Write("ShowIcon", true);
-    pConfig->Write("ShowLiveIcon", true);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings/WMM");
+    CfgWrite(*pConfig, "ShowIcon", true);
+    CfgWrite(*pConfig, "ShowLiveIcon", true);
 
-    pConfig->SetPath("/Canvas/CanvasConfig1");
-    pConfig->Write("canvasENCShowVisibleSectorLights", 0);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Canvas/CanvasConfig1");
+    CfgWrite(*pConfig, "canvasENCShowVisibleSectorLights", 0);
 
     // Manage plugins
     // Clear the cache, allowing deprecation of obsolete plugins
@@ -1439,8 +1463,9 @@ void OCPNPlatform::SetUpgradeOptions(wxString vNew, wxString vOld) {
     // selection
     //  that may not be available on new build.
     g_CmdSoundString = wxString(OCPN_SOUND_CMD);
-    pConfig->SetPath("/Settings");
-    pConfig->Write("CmdSoundString", g_CmdSoundString);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings");
+    CfgWrite(*pConfig, "CmdSoundString", g_CmdSoundString);
 
     // Force AIS specific sound effects ON, leaving the master control
     // (g_bAIS_CPA_Alert_Audio) as configured
@@ -1469,9 +1494,10 @@ void OCPNPlatform::SetUpgradeOptions(wxString vNew, wxString vOld) {
     // are updated. (e.g. flatpak SDK 22.08->24.08->???)
     g_compatOS = "";
     g_compatOsVersion = "";
-    pConfig->SetPath("/Settings");
-    pConfig->Write("CompatOS", g_compatOS);
-    pConfig->Write("CompatOsVersion", g_compatOsVersion);
+    pConfig->endAllGroups();
+    pConfig->beginGroup("Settings");
+    CfgWrite(*pConfig, "CompatOS", g_compatOS);
+    CfgWrite(*pConfig, "CompatOsVersion", g_compatOsVersion);
   }
 }
 

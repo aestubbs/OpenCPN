@@ -37,6 +37,7 @@
 #include <QDateTime>
 
 #include "model/wx_qt_string.h"
+#include "config_compat_helpers.h"
 
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
@@ -623,8 +624,14 @@ static void run_update_dialog(PluginListPanel* parent, const PlugInData* pic,
     wxString config_section = (_T ( "/PlugIns/" ));
     wxFileName fn(pluginFile);
     config_section += fn.GetFullName();
-    pConfig->SetPath(config_section);
-    pConfig->Write(_T ( "bEnabled" ), true);
+    pConfig->endAllGroups();
+    {
+      QString section = wxString_to_QString(config_section);
+      if (section.startsWith('/')) section.remove(0, 1);
+      pConfig->beginGroup(section);
+    }
+    CfgWrite(*pConfig, _T ( "bEnabled" ), true);
+    pConfig->endGroup();
   }
 
   // This is installed from catalog, remove possible imported
@@ -1038,8 +1045,9 @@ void PlugInManager::HandlePluginLoaderEvents() {
   evt_load_directory_listener.Listen(loader->evt_load_directory, this,
                                      EVT_LOAD_DIRECTORY);
   Bind(EVT_LOAD_DIRECTORY, [&](wxCommandEvent&) {
-    pConfig->SetPath("/PlugIns/");
-    SetPluginOrder(pConfig->Read("PluginOrder", wxEmptyString));
+    pConfig->endAllGroups();
+    pConfig->beginGroup("PlugIns/");
+    SetPluginOrder(CfgReadStr(*pConfig, "PluginOrder"));
   });
 
   evt_load_plugin_listener.Listen(loader->evt_load_plugin, this,
@@ -1264,7 +1272,7 @@ wxString PlugInManager::GetPluginOrder() {
 
 bool PlugInManager::UpdateConfig() {
   //    pConfig->SetPath( "/PlugIns/" );
-  //    pConfig->Write( "PluginOrder", GetPluginOrder() );
+  //    CfgWrite(*pConfig, "PluginOrder", GetPluginOrder());
 
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->size(); i++) {
@@ -1273,8 +1281,14 @@ bool PlugInManager::UpdateConfig() {
     if (pic) {
       wxString config_section = (_T ( "/PlugIns/" ));
       config_section += pic->m_plugin_filename;
-      pConfig->SetPath(config_section);
-      pConfig->Write(_T ( "bEnabled" ), pic->m_enabled);
+      pConfig->endAllGroups();
+      {
+        QString section = wxString_to_QString(config_section);
+        if (section.startsWith('/')) section.remove(0, 1);
+        pConfig->beginGroup(section);
+      }
+      CfgWrite(*pConfig, _T ( "bEnabled" ), pic->m_enabled);
+      pConfig->endGroup();
     }
   }
 
@@ -2346,9 +2360,10 @@ void CatalogMgrPanel::OnUpdateButton(wxCommandEvent& event) {
   }
 
   // Record in the config file the name of the catalog downloaded
-  pConfig->SetPath("/PlugIns/");
-  pConfig->Write("LatestCatalogDownloaded", catalog.c_str());
-  pConfig->Flush();
+  pConfig->endAllGroups();
+  pConfig->beginGroup("PlugIns/");
+  CfgWrite(*pConfig, "LatestCatalogDownloaded", catalog.c_str());
+  pConfig->sync();
 
   // Reset the PluginHandler catalog file source.
   // This will case the Handler to find, load, and parse the just-downloaded
@@ -2443,8 +2458,13 @@ wxString CatalogMgrPanel::GetCatalogText(bool updated) {
   catalog += ": ";
 
   // Check the config file to learn what was the last catalog downloaded.
-  pConfig->SetPath("/PlugIns/");
-  wxString latestCatalog = pConfig->Read("LatestCatalogDownloaded", "default");
+  pConfig->endAllGroups();
+  pConfig->beginGroup("PlugIns/");
+  wxString latestCatalog =
+      pConfig->contains("LatestCatalogDownloaded")
+          ? QString_to_wxString(
+                pConfig->value("LatestCatalogDownloaded").toString())
+          : wxString("default");
   catalog += latestCatalog;
 
 #ifndef __ANDROID__
@@ -2470,10 +2490,14 @@ void CatalogMgrPanel::SetUpdateButtonLabel() {
 
 wxString CatalogMgrPanel::GetImportInitDir() {
   // Check the config file for the last Import path.
-  pConfig->SetPath("/PlugIns/");
+  pConfig->endAllGroups();
+  pConfig->beginGroup("PlugIns/");
   wxString lastImportDir;
   lastImportDir =
-      pConfig->Read("LatestImportDir", g_Platform->GetWritableDocumentsDir());
+      pConfig->contains("LatestImportDir")
+          ? QString_to_wxString(
+                pConfig->value("LatestImportDir").toString())
+          : g_Platform->GetWritableDocumentsDir();
   if (wxDirExists(lastImportDir)) {
     return lastImportDir;
   }
