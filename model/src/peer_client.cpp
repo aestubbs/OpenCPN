@@ -27,11 +27,20 @@
 #include <unordered_map>
 #include <utility>
 
-#include <curl/curl.h>
-
+#include <QByteArray>
+#include <QEventLoop>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QSslConfiguration>
+#include <QSslSocket>
+#include <QString>
+#include <QTimer>
+#include <QUrl>
+#include <QVariant>
 
 #include <wx/log.h>
 #include <wx/string.h>
@@ -64,103 +73,144 @@ PeerData::PeerData(EventVar& p)
       run_status_dlg([](PeerDlg, int) { return PeerDlgResult::Cancel; }),
       run_pincode_dlg([] { return PeerDlgPair(PeerDlgResult::Cancel, ""); }) {}
 
-static size_t WriteMemoryCallback(void* contents, size_t size, size_t nmemb,
-                                  void* userp) {
-  size_t realsize = size * nmemb;
-  struct MemoryStruct* mem = (struct MemoryStruct*)userp;
-
-  char* ptr = (char*)realloc(mem->memory, mem->size + realsize + 1);
+/** Copy a QByteArray response into the legacy MemoryStruct buffer used by
+ *  the JSON parsing helpers below. */
+static void StoreReplyBody(const QByteArray& body, MemoryStruct* dest) {
+  if (!dest) return;
+  const size_t n = static_cast<size_t>(body.size());
+  char* ptr = static_cast<char*>(realloc(dest->memory, n + 1));
   if (!ptr) {
-    /* out of memory! */
     std::cerr << "not enough memory (realloc returned NULL)\n";
-    return 0;
+    return;
   }
-
-  mem->memory = ptr;
-  memcpy(&(mem->memory[mem->size]), contents, realsize);
-  mem->size += realsize;
-  mem->memory[mem->size] = 0;
-
-  return realsize;
+  memcpy(ptr, body.constData(), n);
+  ptr[n] = '\0';
+  dest->memory = ptr;
+  dest->size = n;
 }
 
-static int xfer_callback(void* clientp, [[maybe_unused]] curl_off_t dltotal,
-                         [[maybe_unused]] curl_off_t dlnow, curl_off_t ultotal,
-                         curl_off_t ulnow) {
-  auto peer_data = static_cast<PeerData*>(clientp);
-  if (ultotal == 0) {
-    peer_data->progress.Notify(0, "");
-  } else {
-    peer_data->progress.Notify(100 * ulnow / ultotal, "");
+/** Build a QNetworkRequest with SSL peer/host verification disabled, matching
+ *  the old curl CURLOPT_SSL_VERIFYPEER=0 / CURLOPT_SSL_VERIFYHOST=0. */
+static QNetworkRequest MakeRequest(const std::string& url) {
+  QNetworkRequest req(QUrl(QString::fromStdString(url)));
+  QSslConfiguration ssl = QSslConfiguration::defaultConfiguration();
+  ssl.setPeerVerifyMode(QSslSocket::VerifyNone);
+  req.setSslConfiguration(ssl);
+  // Identity encoding (no gzip); QNAM does not advertise gzip unless asked,
+  // but be explicit to match the old curl "identity" encoding.
+  req.setRawHeader("Accept-Encoding", "identity");
+  return req;
+}
+
+/** Spin a local event loop until the reply finishes or the timeout fires.
+ *  Returns true if the reply finished naturally, false on timeout. */
+static bool WaitForReply(QNetworkReply* reply, int timeout_ms) {
+  QEventLoop loop;
+  QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+  bool timed_out = false;
+  if (timeout_ms > 0) {
+    QTimer::singleShot(timeout_ms, &loop, [&loop, &timed_out]() {
+      timed_out = true;
+      loop.quit();
+    });
   }
-// FIXME (leamas) dirty fix for outdated, bundled curl
-// returning 0 is undocumented, but worked for  5.8
-#ifdef CURL_PROGRESSFUNC_CONTINUE
-  return CURL_PROGRESSFUNC_CONTINUE;
-#else
-  return 0;
-#endif
+  loop.exec();
+  if (timed_out && !reply->isFinished()) {
+    reply->abort();
+    return false;
+  }
+  return true;
+}
+
+/** Translate a QNetworkReply outcome to the old curl-style return value:
+ *  positive HTTP status, or a negative sentinel on transport error. */
+static long ReplyToHttpStatus(QNetworkReply* reply) {
+  const QVariant status =
+      reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+  if (status.isValid()) {
+    bool ok = false;
+    long http = status.toInt(&ok);
+    if (ok && http > 0) return http;
+  }
+  const QNetworkReply::NetworkError err = reply->error();
+  // Map any non-OK transport error to a negative sentinel (the magnitude no
+  // longer matches CURLcode but no caller inspects it beyond "non-200").
+  long code = err == QNetworkReply::NoError ? 1 : static_cast<long>(err);
+  return -code;
 }
 
 /**
  *  Perform a POST operation on server, store possible reply in response.
- *  @return positive http status or negated CURLcode error
+ *  @return positive http status or negative sentinel on network error
  */
 static long ApiPost(const std::string& url, const std::string& body,
                     PeerData& peer_data, MemoryStruct* response) {
-  long response_code = -1;
   peer_data.progress.Notify(0, "");
 
-  CURL* c = curl_easy_init();
-  // No encoding, plain ASCII
-  curl_easy_setopt(c, CURLOPT_ENCODING, "identity");  // Plain ASCII
-  curl_easy_setopt(c, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 0L);
-  curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 0L);
+  QNetworkAccessManager nam;
+  QNetworkRequest req = MakeRequest(url);
+  // The peer server expects the legacy curl-style POST: no explicit
+  // Content-Type header (curl did not set one when only CURLOPT_COPYPOSTFIELDS
+  // was used) -- leave the header unset to match.
+  const QByteArray data(body.data(), static_cast<int>(body.size()));
+  QNetworkReply* reply = nam.post(req, data);
 
-  curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, body.size());
-  curl_easy_setopt(c, CURLOPT_COPYPOSTFIELDS, body.c_str());
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void*)response);
-  curl_easy_setopt(c, CURLOPT_NOPROGRESS, 0);
-  curl_easy_setopt(c, CURLOPT_XFERINFODATA, &peer_data);
-  curl_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, xfer_callback);
-  curl_easy_setopt(c, CURLOPT_TIMEOUT, 20);
-  // FIXME (leamas) always logs
-  curl_easy_setopt(c, CURLOPT_VERBOSE,
-                   wxLog::GetLogLevel() >= wxLOG_Debug ? 1 : 0);
+  // Wire upload progress to the existing PeerData progress callback.
+  QObject::connect(reply, &QNetworkReply::uploadProgress,
+                   [&peer_data](qint64 sent, qint64 total) {
+                     if (total <= 0) {
+                       peer_data.progress.Notify(0, "");
+                     } else {
+                       peer_data.progress.Notify(
+                           static_cast<int>(100 * sent / total), "");
+                     }
+                   });
 
-  CURLcode result = curl_easy_perform(c);
+  const bool finished = WaitForReply(reply, 20000);  // 20 s, matches old code.
   peer_data.progress.Notify(0, "");
-  if (result == CURLE_OK)
-    curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &response_code);
 
-  curl_easy_cleanup(c);
-  return response_code == -1 ? -static_cast<long>(result) : response_code;
+  long http_status;
+  if (!finished) {
+    http_status = -static_cast<long>(QNetworkReply::TimeoutError);
+  } else {
+    if (reply->error() == QNetworkReply::NoError ||
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).isValid()) {
+      StoreReplyBody(reply->readAll(), response);
+    }
+    http_status = ReplyToHttpStatus(reply);
+  }
+  reply->deleteLater();
+  return http_status;
 }
 
 /**
  * Perform a GET operation on server, store possible reply in chunk.
- * @return positive http status or negated CURLcode error
+ * @return positive http status or negative sentinel on network error
  */
 static int ApiGet(const std::string& url, const MemoryStruct* chunk,
                   int timeout = 0) {
-  long response_code = -1;
+  QNetworkAccessManager nam;
+  QNetworkRequest req = MakeRequest(url);
+  QNetworkReply* reply = nam.get(req);
 
-  CURL* c = curl_easy_init();
-  curl_easy_setopt(c, CURLOPT_ENCODING, "identity");  // Encoding: plain ASCII
-  curl_easy_setopt(c, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 0L);
-  curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 0L);
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void*)chunk);
-  curl_easy_setopt(c, CURLOPT_NOPROGRESS, 1);
-  if (timeout != 0) curl_easy_setopt(c, CURLOPT_TIMEOUT, timeout);
-  CURLcode result = curl_easy_perform(c);
-  if (result == CURLE_OK)
-    curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &response_code);
-  curl_easy_cleanup(c);
-  return response_code == -1 ? -static_cast<long>(result) : response_code;
+  // Timeout in seconds (matching old curl API); 0 means "no timeout".
+  const int timeout_ms = timeout > 0 ? timeout * 1000 : 0;
+  const bool finished = WaitForReply(reply, timeout_ms);
+
+  long http_status;
+  if (!finished) {
+    http_status = -static_cast<long>(QNetworkReply::TimeoutError);
+  } else {
+    // chunk is logically an output parameter but callers pass a const pointer
+    // (legacy curl idiom). Cast away const, as the old WriteMemoryCallback did.
+    if (reply->error() == QNetworkReply::NoError ||
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).isValid()) {
+      StoreReplyBody(reply->readAll(), const_cast<MemoryStruct*>(chunk));
+    }
+    http_status = ReplyToHttpStatus(reply);
+  }
+  reply->deleteLater();
+  return static_cast<int>(http_status);
 }
 
 static std::string GetClientKey(std::string& server_name) {

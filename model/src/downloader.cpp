@@ -23,13 +23,20 @@
 
 #include <fstream>
 
-#include <curl/curl.h>
-
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QEventLoop>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QSslConfiguration>
+#include <QSslSocket>
 #include <QStandardPaths>
 #include <QString>
+#include <QUrl>
+#include <QVariant>
 
 #include <wx/log.h>
 
@@ -37,25 +44,40 @@
 #include "model/downloader.h"
 #include "model/ocpn_utils.h"
 
-/** Dummy curl callback on received data from remote. */
-static size_t throw_cb(void* ptr, size_t size, size_t nmemb, void* data) {
-  (void)ptr;
-  (void)data;
-  return (size_t)(size * nmemb);
-}
-
 static std::string GetUserAgent() {
   std::string ua = "Mozilla/5.0 (@abi@; @abi_version@) OpenCPN/@o_version@";
-  ua += " curl/@curl_version@";
+  ua += " Qt/@qt_version@";
   ocpn::replace(ua, "@o_version@", VERSION_FULL);
   ocpn::replace(ua, "@abi@", PKG_TARGET);
   ocpn::replace(ua, "@abi_version@", PKG_TARGET_VERSION);
-  ocpn::replace(ua, "@curl_version@", LIBCURL_VERSION);
+  ocpn::replace(ua, "@qt_version@", QT_VERSION_STR);
   return ua;
 }
 
-static unsigned write_cb(char* in, unsigned size, unsigned nmemb, void* data);
-// Forward
+/** Build a QNetworkRequest with the User-Agent and SSL settings the old
+ *  curl-based code used (peer verification disabled, follow redirects). */
+static QNetworkRequest MakeRequest(const std::string& url) {
+  QNetworkRequest req(QUrl(QString::fromStdString(url)));
+  req.setHeader(QNetworkRequest::UserAgentHeader,
+                QString::fromStdString(GetUserAgent()));
+  // Mirror CURLOPT_SSL_VERIFYPEER=0 -- "FIXME: add correct certificates".
+  QSslConfiguration ssl = QSslConfiguration::defaultConfiguration();
+  ssl.setPeerVerifyMode(QSslSocket::VerifyNone);
+  req.setSslConfiguration(ssl);
+  // Mirror CURLOPT_FOLLOWLOCATION=1.
+  req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                   QNetworkRequest::NoLessSafeRedirectPolicy);
+  return req;
+}
+
+/** Run a synchronous QNetworkReply by spinning a local QEventLoop on
+ *  the reply's finished signal. The caller owns the returned reply and
+ *  must deleteLater() it. */
+static void WaitForReply(QNetworkReply* reply) {
+  QEventLoop loop;
+  QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+  loop.exec();
+}
 
 Downloader::Downloader(std::string url_)
     : url(url_), stream(), error_msg(""), errorcode(0) {};
@@ -68,31 +90,33 @@ void Downloader::on_chunk(const char* buff, unsigned bytes) {
   stream->write(buff, bytes);
 }
 
-bool Downloader::download(std::ostream* stream) {
-  CURL* curl;
-  char curl_errbuf[CURL_ERROR_SIZE];
+bool Downloader::download(std::ostream* out_stream) {
+  this->stream = out_stream;
 
-  this->stream = stream;
-  curl = curl_easy_init();
-  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_errbuf);
-  curl_easy_setopt(curl, CURLOPT_USERAGENT, GetUserAgent().c_str());
-  curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
-  // FIXME -- Add correct certificates on host.
-  curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, this);
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-  int code = curl_easy_perform(curl);
-  curl_easy_cleanup(curl);
-  if (code != CURLE_OK) {
-    wxLogWarning("Failed to get '%s' [%s]\n", url, curl_errbuf);
-    errorcode = code;
-    error_msg = std::string(curl_errbuf);
+  QNetworkAccessManager nam;
+  QNetworkRequest req = MakeRequest(url);
+  QNetworkReply* reply = nam.get(req);
+  WaitForReply(reply);
+
+  const QNetworkReply::NetworkError net_err = reply->error();
+  const int http_status =
+      reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+  // CURLOPT_FAILONERROR caused curl to fail on HTTP >= 400. Mirror that.
+  if (net_err != QNetworkReply::NoError || http_status >= 400) {
+    const std::string err_str = reply->errorString().toStdString();
+    wxLogWarning("Failed to get '%s' [%s]\n", url, err_str);
+    errorcode = static_cast<int>(net_err);
+    error_msg = err_str;
+    reply->deleteLater();
     return false;
   }
+
+  const QByteArray body = reply->readAll();
+  if (!body.isEmpty()) {
+    on_chunk(body.constData(), static_cast<unsigned>(body.size()));
+  }
+  reply->deleteLater();
   return true;
 }
 
@@ -105,54 +129,37 @@ bool Downloader::download(std::string& path) {
          QString::number(QDateTime::currentMSecsSinceEpoch()))
             .toStdString();
   }
-  std::ofstream stream;
-  stream.open(path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-  if (!stream.is_open()) {
-    errorcode = CURLE_WRITE_ERROR;
+  std::ofstream out_stream;
+  out_stream.open(path.c_str(),
+                  std::ios::out | std::ios::binary | std::ios::trunc);
+  if (!out_stream.is_open()) {
+    // Generic non-zero error code; callers only inspect last_error() text.
+    errorcode = -1;
     error_msg = std::string("Cannot open temporary file ") + path;
     return false;
   }
-  bool ok = download(&stream);
-  stream.close();
+  bool ok = download(&out_stream);
+  out_stream.close();
   return ok;
 }
 
 long Downloader::get_filesize() {
-  CURL* curl;
-  char curl_errbuf[CURL_ERROR_SIZE] = {0};
-  double filesize = 0.0;
+  QNetworkAccessManager nam;
+  QNetworkRequest req = MakeRequest(url);
+  QNetworkReply* reply = nam.head(req);
+  WaitForReply(reply);
 
-  curl = curl_easy_init();
-  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(curl, CURLOPT_USERAGENT, GetUserAgent().c_str());
-  curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-  curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
-  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, throw_cb);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-  curl_easy_setopt(curl, CURLOPT_HEADER, 0L);
-  // FIXME -- Add correct certificates on host.
-  curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-
-  int r = curl_easy_perform(curl);
-  if (r == CURLE_OK) {
-    r = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &filesize);
+  long filesize = 0;
+  const QNetworkReply::NetworkError net_err = reply->error();
+  if (net_err == QNetworkReply::NoError) {
+    const QVariant cl =
+        reply->header(QNetworkRequest::ContentLengthHeader);
+    if (cl.isValid()) filesize = cl.toLongLong();
+  } else {
+    errorcode = static_cast<int>(net_err);
+    error_msg = reply->errorString().toStdString();
   }
-  curl_easy_cleanup(curl);
+  reply->deleteLater();
   wxLogMessage("filesize %s: %d bytes\n", url.c_str(), (int)filesize);
-  if (r != CURLE_OK) {
-    errorcode = r;
-    error_msg = std::string(curl_errbuf);
-    return 0;
-  }
-  return (long)filesize;
-}
-
-/** Curl callback on received data from remote. */
-static unsigned write_cb(char* in, unsigned size, unsigned nmemb, void* data) {
-  auto downloader = static_cast<Downloader*>(data);
-  if (data == 0) {
-    return 0;
-  }
-  downloader->on_chunk(in, size * nmemb);
-  return in == NULL ? 0 : size * nmemb;
+  return filesize;
 }

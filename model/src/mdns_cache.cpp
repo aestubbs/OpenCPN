@@ -23,25 +23,62 @@
 
 #include <algorithm>
 
-#include <curl/curl.h>
+#include <QEventLoop>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QString>
+#include <QTimer>
+#include <QUrl>
 
 #include "model/logger.h"
 #include "model/mdns_cache.h"
 
 /**
  * Check if we can connect to given host/port, does not
- * care if we cannot recieve data.
+ * care if we cannot receive data.
+ *
+ * The pre-Qt code used curl with a 2 s timeout and treated both CURLE_OK and
+ * CURLE_RECV_ERROR as "host is alive". With QNetworkAccessManager the
+ * equivalent is: any reply (even an HTTP/protocol-level error) means we
+ * established a connection; only transport-level failures (host unreachable,
+ * timed out, connection refused) count as "down".
  */
-static bool Ping(const std::string& url, long port = 8443L) {
-  CURL* c = curl_easy_init();
-  curl_easy_setopt(c, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(c, CURLOPT_PORT, port);
-  curl_easy_setopt(c, CURLOPT_TIMEOUT_MS, 2000L);
-  CURLcode result = curl_easy_perform(c);
-  curl_easy_cleanup(c);
-  bool ok = result == CURLE_RECV_ERROR || result == CURLE_OK;
+static bool Ping(const std::string& url, int port = 8443) {
+  QUrl q_url(QString::fromStdString(url));
+  if (port > 0) q_url.setPort(port);
+
+  QNetworkAccessManager nam;
+  QNetworkRequest req(q_url);
+  QNetworkReply* reply = nam.get(req);
+
+  QEventLoop loop;
+  QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+  // 2 second timeout, matching the old CURLOPT_TIMEOUT_MS=2000.
+  QTimer::singleShot(2000, &loop, &QEventLoop::quit);
+  loop.exec();
+
+  bool ok;
+  if (!reply->isFinished()) {
+    // Timed out -- treat as unreachable.
+    reply->abort();
+    ok = false;
+  } else {
+    const QNetworkReply::NetworkError err = reply->error();
+    // Treat transport-level failures as down; any HTTP/content error from
+    // a server that did respond is still "reachable".
+    ok = !(err == QNetworkReply::ConnectionRefusedError ||
+           err == QNetworkReply::HostNotFoundError ||
+           err == QNetworkReply::TimeoutError ||
+           err == QNetworkReply::NetworkSessionFailedError ||
+           err == QNetworkReply::TemporaryNetworkFailureError ||
+           err == QNetworkReply::UnknownNetworkError);
+  }
+
+  const QString err_str = reply->errorString();
+  reply->deleteLater();
   DEBUG_LOG << "Checked mdns host: " << url << ": "
-            << (ok ? "ok" : curl_easy_strerror(result));
+            << (ok ? "ok" : err_str.toStdString());
   return ok;
 }
 
