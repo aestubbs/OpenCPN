@@ -7,17 +7,19 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6, P1.7 and P1.8 done — the model's
-`wxString`, `wxDateTime`/`wxTimeSpan` and wx-container sweeps are all
-complete. `QStringList`, `QList<T*>`, `QHash`/`QSet` are the container
-vocabulary; `model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string
-conversions; `QDateTime`/`qint64`-seconds is the time/duration vocabulary.
-Remaining wx-typed references are deliberate boundaries — the frozen
-plugin ABI, `wxDir`/`wxFileName` callers (P1.10), wx-widget plumbing,
-`wxList`-node container types owning raw resources (deferred ownership
-pass), and a handful of external library boundaries (S52PLIB color/ATON
-arrays, GLU tesselator). Next: P1.9 (`wxConfig`/`wxFileConfig` →
-`QSettings`).
+SignalK/SocketCAN parked (P1.5m). P1.6–P1.9 done — the model's
+`wxString`, `wxDateTime`/`wxTimeSpan`, wx-container, and
+`wxConfig`/`wxFileConfig` sweeps are all complete. `QStringList`,
+`QList<T*>`, `QHash`/`QSet` are the container vocabulary;
+`model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string conversions;
+`QDateTime`/`qint64`-seconds is the time/duration vocabulary; `OcpnConfig`
+(wraps `QSettings`, pure Qt API: `value`/`setValue`/`beginGroup`/…) is the
+settings store. Remaining wx-typed references are deliberate boundaries —
+the frozen plugin ABI, `wxDir`/`wxFileName` callers (P1.10), wx-widget
+plumbing, deferred-ownership container types, external library
+boundaries, and the `ocpn_cfg::Cfg*` config-call-site helpers (a
+post-P1.9 cleanup target). Next: P1.10 (file I/O — `wxFileName`/`wxDir`/
+`chartdata_input_stream` → `QFile`/`QDir`).
 **Last updated:** 2026-05-20.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -348,7 +350,44 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         `SortedArrayOfMarkIcon` are deferred — their contained types
         own raw resources in their destructors with no copy ctor, so
         the conversion needs a dedicated ownership pass.
-- [ ] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract `config_vars`.
+- [x] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract
+      `config_vars`. Done in 3 steps. End state: no `wxConfig`/`wxFileConfig`
+      types remain; `OcpnConfig` (wraps `QSettings(IniFormat)`, same file path
+      so existing user configs load unchanged) has a pure Qt-idiomatic
+      surface — `value`/`setValue`/`beginGroup`/`endGroup`/`endAllGroups`/
+      `group`/`contains`/`remove`/`childKeys`/`childGroups`/`sync`. The 870-ish
+      caller sites in `navutil`/`ocpn_platform`/`ocpn_frame`/`pluginmanager`/
+      `wiz_ui`/etc. went through `OcpnConfig` plus a `gui/config_compat_
+      helpers.h` (header-only `ocpn_cfg::Cfg{Read,ReadIf,ReadStr,Write,
+      HasEntry,HasGroup,Delete}` free functions) that keeps the conversion
+      one-liner-per-site and centralises the wxString⇄QString plumbing — to
+      be retired piecemeal in later cleanup. Plugin ABI:
+      `GetOCPNConfigObject()` (declared `wxFileConfig*` in `ocpn_plugin.h`)
+      keeps its frozen signature but returns `nullptr` for now, with a TODO
+      noting the two paths (build a `wxFileConfig` adapter delegating to
+      `OcpnConfig`, or sunset the accessor). The one internal caller is
+      rewired through `TheBaseConfig()`.
+  - [x] **P1.9-1** OcpnConfig + wiring — `MyConfig : public OcpnConfig`,
+        `TheBaseConfig() -> OcpnConfig*`, `wx-compat shim methods` provided
+        on OcpnConfig so the ~820 navutil call sites kept working unchanged
+        during the transition. `ConfigVar<T>` impl relocated
+        `libs/observable/src` → `model/src` so its OcpnConfig instantiation
+        stays in the right layer.
+  - [x] **P1.9-2** Small callers (`comm_bridge`, `rest_server`,
+        `plugin_api`, `canvas_config`, `config_mgr`, `mbtiles`,
+        `chartimg`) converted to the Qt-idiomatic OcpnConfig API; ~260
+        wx-shim calls eliminated.
+  - [x] **P1.9-3** Big sweep — navutil.cpp + observable_confvar.cpp + 7
+        other GUI consumers swept (~870 sites). OcpnConfig's wx-compat
+        shim methods deleted (`Read`/`Write`/`SetPath`/`GetPath`/`Flush`/
+        `HasGroup`/`HasEntry`/`DeleteEntry`/`DeleteGroup`/
+        `GetNumberOfEntries`/`GetNumberOfGroups`/`GetFirst*`/`GetNext*`);
+        `ocpn_config.cpp` shrank ~347 → 75 lines. Path-balance handled
+        via the new `endAllGroups()` helper (pops the QSettings group
+        stack to root), so wxConfig's `SetPath("/X")` absolute-jump
+        idiom translates to `endAllGroups(); beginGroup("X");` —
+        structurally robust against early-returns in long load/save
+        functions.
 - [ ] **P1.10** Replace file I/O (`wxFileName`/`wxDir`/`chartdata_input_stream`) with `QFile`/`QDir`.
 - [ ] **P1.11** Replace threading primitives (`wxThread`/`wxMutex`/`wxSemaphore`).
 - [ ] **P1.12** Delete `libs/wxJSON`; move JSON use to `QJsonDocument`.
@@ -699,3 +738,23 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   `SortedArrayOfMarkIcon`) are deferred to a dedicated ownership pass --
   their contained types own raw resources without copy ctors, so naïve
   wxObjArray → QList migration would double-free.
+- 2026-05-20 — P1.9 done: wxConfig/wxFileConfig is replaced with
+  `OcpnConfig` (wraps `QSettings(IniFormat)` at the same on-disk path so
+  user configs keep loading). The class exposes a pure Qt-idiomatic API
+  (`value`/`setValue`/`beginGroup`/`endGroup`/`endAllGroups`/`group`/
+  `contains`/`remove`/`childKeys`/`childGroups`/`sync`); the wx-style
+  `Read`/`Write`/`SetPath` etc. shim methods used during the transition
+  were deleted in step 3 once every caller had been swept. `MyConfig` in
+  the GUI now inherits from `OcpnConfig`; `TheBaseConfig()` /
+  `InitBaseConfig()` traffic in `OcpnConfig*`. The big GUI consumers
+  (navutil, ocpn_platform, ocpn_frame, pluginmanager, wiz_ui, ...) call
+  through `gui/config_compat_helpers.h` (`ocpn_cfg::Cfg{Read,Write,...}`
+  free functions over the Qt API), which keeps the diff one-liner-per-
+  site and centralises wxString⇄QString conversions — a future cleanup
+  can drop those helpers when each file is fully QString-typed. Plugin
+  ABI: `GetOCPNConfigObject()` (declared `wxFileConfig*` in
+  ocpn_plugin.h) keeps its frozen signature but returns nullptr with a
+  TODO; the one internal caller is rewired through `TheBaseConfig()`.
+  `ConfigVar<T>` was moved out of `libs/observable/src` into
+  `model/src` so its `OcpnConfig` instantiation stays in the right
+  layer.
