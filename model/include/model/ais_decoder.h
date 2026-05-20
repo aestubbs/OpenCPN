@@ -30,6 +30,7 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QList>
 #include <QString>
 
 #include <wx/event.h>     // wxEvtHandler / wxTimer -- P1.11
@@ -51,7 +52,8 @@ using SignalKMsgPtr = std::shared_ptr<const SignalkMsg>;
 using NavMsgPtr = std::shared_ptr<const NavMsg>;
 
 class AisDecoder;             // forward
-class ArrayOfMmsiProperties;  // forward
+class MmsiProperties;         // forward (defined below)
+using ArrayOfMmsiProperties = QList<MmsiProperties *>;
 
 // AISTargetAlertDialog in gui layer
 extern wxEvtHandler *g_pais_alert_dialog_active;
@@ -97,8 +99,6 @@ public:
   bool m_bPersistentTrack;
   wxString m_ShipName;
 };
-
-WX_DEFINE_ARRAY_PTR(MmsiProperties *, ArrayOfMmsiProperties);
 
 struct AisDecoderCallbacks {
   std::function<bool()> confirm_stop_track;

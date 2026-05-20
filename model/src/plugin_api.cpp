@@ -26,6 +26,9 @@
 #include <sstream>
 #include <vector>
 
+#include <QString>
+#include <QStringList>
+
 #include <wx/event.h>
 #include <wx/fileconf.h>
 #include <wx/jsonval.h>
@@ -33,6 +36,7 @@
 #include <wx/tokenzr.h>
 
 #include "model/base_platform.h"
+#include "model/wx_qt_string.h"
 #include "model/comm_appmsg.h"
 #include "model/comm_drv_loopback.h"
 #include "model/comm_drv_n0183_net.h"
@@ -288,9 +292,10 @@ void ReloadConfigConnections() {
     wxString connectionconfigs;
     pConf->Read("DataConnections", &connectionconfigs);
     if (!connectionconfigs.IsEmpty()) {
-      wxArrayString confs = wxStringTokenize(connectionconfigs, "|");
-      for (size_t i = 0; i < confs.Count(); i++) {
-        ConnectionParams* prm = new ConnectionParams(confs[i]);
+      const QStringList confs = wxString_to_QString(connectionconfigs)
+                                    .split('|', Qt::SkipEmptyParts);
+      for (const QString& conf : confs) {
+        ConnectionParams* prm = new ConnectionParams(QString_to_wxString(conf));
         if (!prm->Valid) continue;
         TheConnectionParams().push_back(prm);
       }

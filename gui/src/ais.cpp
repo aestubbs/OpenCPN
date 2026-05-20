@@ -1765,7 +1765,7 @@ static void AISDrawTarget(AisTargetData *td, ocpnDC &dc, ViewPort &vp,
   //  Check the Special MMSI Properties array
   bool b_noshow = false;
   bool b_forceshow = false;
-  for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+  for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
     if (td->MMSI == g_MMSI_Props_Array[i]->MMSI) {
       MmsiProperties *props = g_MMSI_Props_Array[i];
       if (TRACKTYPE_NEVER == props->TrackType) {

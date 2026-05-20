@@ -1483,13 +1483,13 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
     bool isLastWaypoint = false;
     if (m_pRoutePoint && m_pRoutePoint->m_bIsInRoute) {
       // Get routes containing this waypoint
-      wxArrayPtrVoid* pRouteArray =
+      QList<Route *>* pRouteArray =
           g_pRouteMan->GetRouteArrayContaining(m_pRoutePoint);
       if (pRouteArray) {
         isLastWaypoint = true;
         // Check if this waypoint is the last across all routes.
-        for (unsigned int i = 0; i < pRouteArray->GetCount(); i++) {
-          Route* route = (Route*)pRouteArray->Item(i);
+        for (unsigned int i = 0; i < pRouteArray->size(); i++) {
+          Route* route = pRouteArray->at(i);
           if (route->GetLastPoint()->m_GUID != m_pRoutePoint->m_GUID) {
             isLastWaypoint = false;
             break;
@@ -1776,12 +1776,12 @@ bool MarkInfoDlg::SaveChanges() {
       pSelect->UpdateSelectableRouteSegments(m_pRoutePoint);
 
       // Get an array of all routes using this point
-      wxArrayPtrVoid* pEditRouteArray =
+      QList<Route *>* pEditRouteArray =
           g_pRouteMan->GetRouteArrayContaining(m_pRoutePoint);
 
       if (pEditRouteArray) {
-        for (unsigned int ir = 0; ir < pEditRouteArray->GetCount(); ir++) {
-          Route* pr = (Route*)pEditRouteArray->Item(ir);
+        for (unsigned int ir = 0; ir < pEditRouteArray->size(); ir++) {
+          Route* pr = pEditRouteArray->at(ir);
           pr->FinalizeForRendering();
           pr->UpdateSegmentDistances();
 

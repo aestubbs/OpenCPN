@@ -29,6 +29,9 @@
 
 #include "config.h"
 
+#include <QString>
+#include <QStringList>
+
 #include <wx/jsonreader.h>
 #include <wx/jsonval.h>
 #include <wx/jsonwriter.h>
@@ -45,6 +48,7 @@
 #include "model/nmea_ctx_factory.h"
 #include "model/nmea_log.h"
 #include "model/route.h"
+#include "model/wx_qt_string.h"
 #include "nmea0183.h"
 
 #ifdef USE_GARMINHOST
@@ -533,7 +537,7 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
       unsigned int tare_length = tsnt.Sentence.Len();
       tare_length -= 3;  // Drop the checksum, for length calculations
 
-      wxArrayString sentence_array;
+      QStringList sentence_array;
 
       // Trial balloon: add the waypoints, with length checking
       int n_total = 1;
@@ -622,7 +626,7 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
 
             oNMEA0183.Rte.Write(snt);
 
-            sentence_array.Add(snt.Sentence);
+            sentence_array.append(wxString_to_QString(snt.Sentence));
           } else {
             sent_len += name_len + 1;  // comma
             oNMEA0183.Rte.AddWaypoint(name);
@@ -633,10 +637,11 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
       }
 
       oNMEA0183.Rte.Write(snt);  // last one...
-      if (snt.Sentence.Len() > tare_length) sentence_array.Add(snt.Sentence);
+      if (snt.Sentence.Len() > tare_length)
+        sentence_array.append(wxString_to_QString(snt.Sentence));
 
-      for (unsigned int ii = 0; ii < sentence_array.GetCount(); ii++) {
-        wxString sentence = sentence_array[ii];
+      for (const QString& q_sentence : sentence_array) {
+        wxString sentence = QString_to_wxString(q_sentence);
 
         auto msg_out = std::make_shared<Nmea0183Msg>(
             "ECRTE", sentence.ToStdString(), std::make_shared<NavAddr>());

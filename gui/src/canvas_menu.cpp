@@ -1325,7 +1325,7 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
         // If the WP belongs to an invisible route, we come here instead of to
         // ID_RT_MENU_DELPOINT
         //  Check it, and if so then remove the point from its routes
-        wxArrayPtrVoid *proute_array =
+        QList<Route *> *proute_array =
             g_pRouteMan->GetRouteArrayContaining(m_pFoundRoutePoint);
         if (proute_array) {
           pWayPointMan->DestroyWaypoint(m_pFoundRoutePoint);

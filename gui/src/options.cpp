@@ -167,6 +167,9 @@ static inline wxString ttCoordFormat() {
 #include <QtWidgets/QScroller>
 #endif
 
+#include <QString>
+#include <QStringList>
+
 #ifdef __WXOSX__
 #if wxCHECK_VERSION(3, 2, 0)
 #define SLIDER_STYLE wxSL_HORIZONTAL | wxSL_AUTOTICKS | wxSL_LABELS
@@ -1086,7 +1089,7 @@ wxString MMSIListCtrl::OnGetItemText(long item, long column) const {
 void MMSIListCtrl::OnListItemClick(wxListEvent& event) {}
 
 void MMSIListCtrl::OnListItemActivated(wxListEvent& event) {
-  MmsiProperties* props = g_MMSI_Props_Array.Item(event.GetIndex());
+  MmsiProperties* props = g_MMSI_Props_Array.at(event.GetIndex());
   MmsiProperties* props_new = new MmsiProperties(*props);
 
   MMSIEditDialog* pd =
@@ -1094,9 +1097,9 @@ void MMSIListCtrl::OnListItemActivated(wxListEvent& event) {
                          wxDefaultPosition, wxSize(200, 200));
 
   if (pd->ShowModal() == wxID_OK) {
-    g_MMSI_Props_Array.RemoveAt(event.GetIndex());
+    g_MMSI_Props_Array.removeAt(event.GetIndex());
     delete props;
-    g_MMSI_Props_Array.Insert(props_new, event.GetIndex());
+    g_MMSI_Props_Array.insert(event.GetIndex(), props_new);
   } else
     delete props_new;
 
@@ -1123,7 +1126,7 @@ void MMSIListCtrl::OnListItemRightClick(wxListEvent& event) {
   wxPoint p = ScreenToClient(wxGetMousePosition());
   PopupMenu(menu, p.x, p.y);
 
-  SetItemCount(g_MMSI_Props_Array.GetCount());
+  SetItemCount(g_MMSI_Props_Array.size());
   Refresh(TRUE);
 }
 
@@ -1141,10 +1144,10 @@ void MMSIListCtrl::PopupMenuHandler(wxCommandEvent& event) {
                              wxDefaultPosition, wxSize(200, 200));
 
       if (pd->ShowModal() == wxID_OK) {
-        g_MMSI_Props_Array.RemoveAt(context_item);
+        g_MMSI_Props_Array.removeAt(context_item);
         delete props;
         props_new->m_ShipName = GetShipNameFromFile(props_new->MMSI);
-        g_MMSI_Props_Array.Insert(props_new, context_item);
+        g_MMSI_Props_Array.insert(context_item, props_new);
       } else {
         delete props_new;
       }
@@ -1152,7 +1155,7 @@ void MMSIListCtrl::PopupMenuHandler(wxCommandEvent& event) {
       break;
     }
     case ID_DEF_MENU_MMSI_DELETE:
-      g_MMSI_Props_Array.RemoveAt(context_item);
+      g_MMSI_Props_Array.removeAt(context_item);
       delete props;
       break;
   }
@@ -1280,7 +1283,7 @@ void MMSI_Props_Panel::OnNewButton(wxCommandEvent& event) {
   DimeControl(pd);
   pd->ShowWindowModalThenDo([this, pd, props](int retcode) {
     if (retcode == wxID_OK) {
-      g_MMSI_Props_Array.Add(props);
+      g_MMSI_Props_Array.append(props);
     } else {
       delete props;
     }
@@ -1297,12 +1300,12 @@ void MMSI_Props_Panel::UpdateMMSIList() {
   int selMMSI = wxNOT_FOUND;
   if (selItemID != wxNOT_FOUND) selMMSI = g_MMSI_Props_Array[selItemID]->MMSI;
 
-  m_pListCtrlMMSI->SetItemCount(g_MMSI_Props_Array.GetCount());
+  m_pListCtrlMMSI->SetItemCount(g_MMSI_Props_Array.size());
 
   // Restore selected item
   long item_sel = wxNOT_FOUND;
   if (selItemID != wxNOT_FOUND && selMMSI != wxNOT_FOUND) {
-    for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+    for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
       if (g_MMSI_Props_Array[i]->MMSI == selMMSI) {
         item_sel = i;
         break;
@@ -1310,7 +1313,7 @@ void MMSI_Props_Panel::UpdateMMSIList() {
     }
   }
 
-  if (g_MMSI_Props_Array.GetCount() > 0)
+  if (g_MMSI_Props_Array.size() > 0)
     m_pListCtrlMMSI->SetItemState(item_sel,
                                   wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED,
                                   wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
@@ -6618,7 +6621,12 @@ void options::SetInitialSettings() {
 
   delete m_pSerialArray;
   m_pSerialArray = NULL;
-  m_pSerialArray = EnumerateSerialPorts();
+  // EnumerateSerialPorts() returns QStringList*; bridge to wxArrayString
+  // for the wx-typed member.
+  std::unique_ptr<QStringList> qs_ports(EnumerateSerialPorts());
+  m_pSerialArray = new wxArrayString;
+  for (const QString& p : *qs_ports)
+    m_pSerialArray->Add(QString_to_wxString(p));
   m_bForceNewToolbaronCancel = false;
 }
 
@@ -7508,7 +7516,7 @@ void options::ApplyChanges(wxCommandEvent& event) {
       if (NULL != pAISTarget) {
         pAISTarget->b_show_track = g_bAISShowTracks;
         // Check for exceptions in MMSI properties
-        for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+        for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
           if (pAISTarget->MMSI == g_MMSI_Props_Array[i]->MMSI) {
             MmsiProperties* props = g_MMSI_Props_Array[i];
             if (TRACKTYPE_NEVER == props->TrackType) {

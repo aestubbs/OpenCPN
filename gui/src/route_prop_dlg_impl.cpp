@@ -1157,20 +1157,20 @@ bool RoutePropDlgImpl::IsThisRouteExtendable() {
     return false;
 
   RoutePoint* pLastPoint = m_pRoute->GetLastPoint();
-  wxArrayPtrVoid* pEditRouteArray;
+  QList<Route *>* pEditRouteArray;
 
   pEditRouteArray = g_pRouteMan->GetRouteArrayContaining(pLastPoint);
   // remove invisible & own routes from choices
   int i;
-  for (i = pEditRouteArray->GetCount(); i > 0; i--) {
-    Route* p = (Route*)pEditRouteArray->Item(i - 1);
+  for (i = pEditRouteArray->size(); i > 0; i--) {
+    Route* p = pEditRouteArray->at(i - 1);
     if (!p->IsVisible() || (p->m_GUID == m_pRoute->m_GUID))
-      pEditRouteArray->RemoveAt(i - 1);
+      pEditRouteArray->removeAt(i - 1);
   }
-  if (pEditRouteArray->GetCount() == 1) {
+  if (pEditRouteArray->size() == 1) {
     m_pExtendPoint = pLastPoint;
   } else {
-    if (pEditRouteArray->GetCount() == 0) {
+    if (pEditRouteArray->size() == 0) {
       int nearby_radius_meters =
           (int)(8. / top_frame::Get()->GetCanvasTrueScale());
       double rlat = pLastPoint->m_lat;
@@ -1179,23 +1179,23 @@ bool RoutePropDlgImpl::IsThisRouteExtendable() {
       m_pExtendPoint = pWayPointMan->GetOtherNearbyWaypoint(
           rlat, rlon, nearby_radius_meters, pLastPoint->m_GUID);
       if (m_pExtendPoint) {
-        wxArrayPtrVoid* pCloseWPRouteArray =
+        QList<Route *>* pCloseWPRouteArray =
             g_pRouteMan->GetRouteArrayContaining(m_pExtendPoint);
         if (pCloseWPRouteArray) {
           pEditRouteArray = pCloseWPRouteArray;
 
           // remove invisible & own routes from choices
-          for (i = pEditRouteArray->GetCount(); i > 0; i--) {
-            Route* p = (Route*)pEditRouteArray->Item(i - 1);
+          for (i = pEditRouteArray->size(); i > 0; i--) {
+            Route* p = pEditRouteArray->at(i - 1);
             if (!p->IsVisible() || (p->m_GUID == m_pRoute->m_GUID))
-              pEditRouteArray->RemoveAt(i - 1);
+              pEditRouteArray->removeAt(i - 1);
           }
         }
       }
     }
   }
-  if (pEditRouteArray->GetCount() == 1) {
-    Route* p = (Route*)pEditRouteArray->Item(0);
+  if (pEditRouteArray->size() == 1) {
+    Route* p = pEditRouteArray->at(0);
     int extend_idx = p->GetIndexOf(m_pExtendPoint);
     if (extend_idx < 0) {
       delete pEditRouteArray;

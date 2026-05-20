@@ -139,8 +139,8 @@ static std::vector<std::string> glob_dir(const std::string& dir_path,
 static ssize_t PlugInIxByName(const std::string& name,
                               const ArrayOfPlugIns* plugins) {
   const auto lc_name = ocpn::tolower(name);
-  for (unsigned i = 0; i < plugins->GetCount(); i += 1) {
-    if (lc_name == plugins->Item(i)->m_common_name.Lower().ToStdString()) {
+  for (unsigned i = 0; i < plugins->size(); i += 1) {
+    if (lc_name == plugins->at(i)->m_common_name.Lower().ToStdString()) {
       return i;
     }
   }
@@ -1174,8 +1174,8 @@ const std::vector<PluginMetadata> PluginHandler::GetInstalled() {
   vector<PluginMetadata> plugins;
 
   auto loader = PluginLoader::GetInstance();
-  for (unsigned int i = 0; i < loader->GetPlugInArray()->GetCount(); i += 1) {
-    const PlugInContainer* p = loader->GetPlugInArray()->Item(i);
+  for (unsigned int i = 0; i < loader->GetPlugInArray()->size(); i += 1) {
+    const PlugInContainer* p = loader->GetPlugInArray()->at(i);
     PluginMetadata plugin;
     auto name = string(p->m_common_name);
     // std::transform(name.begin(), name.end(), name.begin(), ::tolower);
@@ -1327,7 +1327,7 @@ bool PluginHandler::Uninstall(const std::string plugin) {
     MESSAGE_LOG << "trying to Uninstall non-existing plugin " << plugin;
     return false;
   }
-  auto pic = loader->GetPlugInArray()->Item(ix);
+  auto pic = loader->GetPlugInArray()->at(ix);
 
   // Capture library file name before pic dies.
   string libfile = pic->m_plugin_file.ToStdString();

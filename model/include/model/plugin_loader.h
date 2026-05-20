@@ -28,6 +28,7 @@
 #include <functional>
 
 #include <QDateTime>
+#include <QList>
 
 #include <wx/wx.h>
 #include <wx/bitmap.h>
@@ -128,7 +129,7 @@ public:
       : type(t), lib_path(std::move(l)), plugin_version(SemanticVersion()) {}
 };
 
-WX_DEFINE_ARRAY_PTR(PlugInContainer*, ArrayOfPlugIns);
+using ArrayOfPlugIns = QList<PlugInContainer*>;
 
 /**
  * PluginLoader is a backend module without any direct GUI functionality.

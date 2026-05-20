@@ -1180,7 +1180,7 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
   SetPath("/MmsiProperties");
   int iPMax = GetNumberOfEntries();
   if (iPMax) {
-    g_MMSI_Props_Array.Empty();
+    g_MMSI_Props_Array.clear();
     wxString str, val;
     long dummy;
     bool bCont = pConfig->GetFirstEntry(str, dummy);
@@ -1188,7 +1188,7 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
       pConfig->Read(str, &val);  // Get an entry
 
       MmsiProperties *pProps = new MmsiProperties(val);
-      g_MMSI_Props_Array.Add(pProps);
+      g_MMSI_Props_Array.append(pProps);
 
       bCont = pConfig->GetNextEntry(str, dummy);
     }
@@ -2405,7 +2405,7 @@ void MyConfig::UpdateSettings() {
 
   DeleteGroup("/MmsiProperties");
   SetPath("/MmsiProperties");
-  for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+  for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
     wxString p;
     p.Printf("Props%d", i);
     Write(p, g_MMSI_Props_Array[i]->Serialize());

@@ -150,20 +150,20 @@ Route *Routeman::FindVisibleRouteContainingWaypoint(RoutePoint *pWP) {
   return NULL;  // not found
 }
 
-wxArrayPtrVoid *Routeman::GetRouteArrayContaining(RoutePoint *pWP) {
-  wxArrayPtrVoid *pArray = new wxArrayPtrVoid;
+QList<Route *> *Routeman::GetRouteArrayContaining(RoutePoint *pWP) {
+  auto *pArray = new QList<Route *>;
 
   for (Route *proute : *pRouteList) {
     for (RoutePoint *prp : *proute->pRoutePointList) {
       if (prp == pWP) {  // success
-        pArray->Add((void *)proute);
+        pArray->append(proute);
         break;  // only add a route to the array once, even if there are
                 // duplicate points in the route...See FS#1743
       }
     }
   }
 
-  if (pArray->GetCount())
+  if (!pArray->isEmpty())
     return pArray;
 
   else {
@@ -709,14 +709,15 @@ bool Routeman::DoesRouteContainSharedPoints(Route *pRoute) {
     // route or is isolated
     for (RoutePoint *prp : *pRoute->pRoutePointList) {
       // check all other routes to see if this point appears in any other route
-      wxArrayPtrVoid *pRA = GetRouteArrayContaining(prp);
+      QList<Route *> *pRA = GetRouteArrayContaining(prp);
       if (pRA) {
-        for (unsigned int ir = 0; ir < pRA->GetCount(); ir++) {
-          Route *pr = (Route *)pRA->Item(ir);
+        for (Route *pr : *pRA) {
           if (pr == pRoute)
             continue;  // self
-          else
+          else {
+            delete pRA;
             return true;
+          }
         }
         delete pRA;
       }
@@ -993,13 +994,12 @@ WayPointman::~WayPointman() {
   m_pWayPointList->clear();
   delete m_pWayPointList;
 
-  for (unsigned int i = 0; i < m_pIconArray->GetCount(); i++) {
-    MarkIcon *pmi = (MarkIcon *)m_pIconArray->Item(i);
+  for (MarkIcon *pmi : *m_pIconArray) {
     delete pmi->piconBitmap;
     delete pmi;
   }
 
-  m_pIconArray->Clear();
+  m_pIconArray->clear();
   delete m_pIconArray;
 
   if (pmarkicon_image_list) pmarkicon_image_list->RemoveAll();
@@ -1106,8 +1106,8 @@ bool WayPointman::DoesIconExist(const QString &icon_key) const {
   MarkIcon *pmi;
   unsigned int i;
 
-  for (i = 0; i < m_pIconArray->GetCount(); i++) {
-    pmi = (MarkIcon *)m_pIconArray->Item(i);
+  for (i = 0; i < m_pIconArray->size(); i++) {
+    pmi = m_pIconArray->at(i);
     if (pmi->icon_name == icon_key) return true;
   }
 
@@ -1119,23 +1119,23 @@ wxBitmap *WayPointman::GetIconBitmap(const QString &icon_key) const {
   MarkIcon *pmi = NULL;
   unsigned int i;
 
-  for (i = 0; i < m_pIconArray->GetCount(); i++) {
-    pmi = (MarkIcon *)m_pIconArray->Item(i);
+  for (i = 0; i < m_pIconArray->size(); i++) {
+    pmi = m_pIconArray->at(i);
     if (pmi->icon_name == icon_key) break;
   }
 
-  if (i == m_pIconArray->GetCount())  // key not found
+  if (i == m_pIconArray->size())  // key not found
   {
     // find and return bitmap for "circle"
-    for (i = 0; i < m_pIconArray->GetCount(); i++) {
-      pmi = (MarkIcon *)m_pIconArray->Item(i);
+    for (i = 0; i < m_pIconArray->size(); i++) {
+      pmi = m_pIconArray->at(i);
       //            if( pmi->icon_name.IsSameAs( "circle" ) )
       //                break;
     }
   }
 
-  if (i == m_pIconArray->GetCount())          // "circle" not found
-    pmi = (MarkIcon *)m_pIconArray->Item(0);  // use item 0
+  if (i == m_pIconArray->size())          // "circle" not found
+    pmi = m_pIconArray->at(0);  // use item 0
 
   if (pmi) {
     if (pmi->piconBitmap)
@@ -1154,23 +1154,23 @@ bool WayPointman::GetIconPrescaled(const QString &icon_key) const {
   MarkIcon *pmi = NULL;
   unsigned int i;
 
-  for (i = 0; i < m_pIconArray->GetCount(); i++) {
-    pmi = (MarkIcon *)m_pIconArray->Item(i);
+  for (i = 0; i < m_pIconArray->size(); i++) {
+    pmi = m_pIconArray->at(i);
     if (pmi->icon_name == icon_key) break;
   }
 
-  if (i == m_pIconArray->GetCount())  // key not found
+  if (i == m_pIconArray->size())  // key not found
   {
     // find and return bitmap for "circle"
-    for (i = 0; i < m_pIconArray->GetCount(); i++) {
-      pmi = (MarkIcon *)m_pIconArray->Item(i);
+    for (i = 0; i < m_pIconArray->size(); i++) {
+      pmi = m_pIconArray->at(i);
       //            if( pmi->icon_name.IsSameAs( "circle" ) )
       //                break;
     }
   }
 
-  if (i == m_pIconArray->GetCount())          // "circle" not found
-    pmi = (MarkIcon *)m_pIconArray->Item(0);  // use item 0
+  if (i == m_pIconArray->size())          // "circle" not found
+    pmi = m_pIconArray->at(0);  // use item 0
 
   if (pmi)
     return pmi->preScaled;
@@ -1183,7 +1183,7 @@ wxBitmap WayPointman::GetIconBitmapForList(int index, int height) const {
   MarkIcon *pmi;
 
   if (index >= 0) {
-    pmi = (MarkIcon *)m_pIconArray->Item(index);
+    pmi = m_pIconArray->at(index);
     // Scale the icon to "list size" if necessary
     if (pmi->iconImage.GetHeight() != height) {
       int w = height;
@@ -1224,7 +1224,7 @@ QString *WayPointman::GetIconDescription(int index) const {
   QString *pret = NULL;
 
   if (index >= 0) {
-    MarkIcon *pmi = (MarkIcon *)m_pIconArray->Item(index);
+    MarkIcon *pmi = m_pIconArray->at(index);
     pret = &pmi->icon_description;
   }
   return pret;
@@ -1234,8 +1234,8 @@ QString WayPointman::GetIconDescription(QString icon_key) const {
   MarkIcon *pmi;
   unsigned int i;
 
-  for (i = 0; i < m_pIconArray->GetCount(); i++) {
-    pmi = (MarkIcon *)m_pIconArray->Item(i);
+  for (i = 0; i < m_pIconArray->size(); i++) {
+    pmi = m_pIconArray->at(i);
     if (pmi->icon_name == icon_key) return pmi->icon_description;
   }
 
@@ -1245,8 +1245,8 @@ QString WayPointman::GetIconDescription(QString icon_key) const {
 QString *WayPointman::GetIconKey(int index) const {
   QString *pret = NULL;
 
-  if ((index >= 0) && ((unsigned int)index < m_pIconArray->GetCount())) {
-    MarkIcon *pmi = (MarkIcon *)m_pIconArray->Item(index);
+  if ((index >= 0) && ((unsigned int)index < m_pIconArray->size())) {
+    MarkIcon *pmi = m_pIconArray->at(index);
     pret = &pmi->icon_name;
   }
   return pret;
@@ -1256,9 +1256,9 @@ int WayPointman::GetIconIndex(const wxBitmap *pbm) const {
   unsigned int ret = 0;
   MarkIcon *pmi;
 
-  wxASSERT(m_pIconArray->GetCount() >= 1);
-  for (unsigned int i = 0; i < m_pIconArray->GetCount(); i++) {
-    pmi = (MarkIcon *)m_pIconArray->Item(i);
+  wxASSERT(m_pIconArray->size() >= 1);
+  for (unsigned int i = 0; i < m_pIconArray->size(); i++) {
+    pmi = m_pIconArray->at(i);
     if (pmi->piconBitmap == pbm) {
       ret = i;
       break;
@@ -1269,7 +1269,7 @@ int WayPointman::GetIconIndex(const wxBitmap *pbm) const {
 }
 
 int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
-  MarkIcon *pmi = (MarkIcon *)m_pIconArray->Item(GetIconIndex(pbm));
+  MarkIcon *pmi = m_pIconArray->at(GetIconIndex(pbm));
 
   // Build a "list - sized" image
   if (pmarkicon_image_list && !pmi->m_blistImageOK) {
@@ -1476,11 +1476,9 @@ void WayPointman::DestroyWaypoint(RoutePoint *pRp, bool b_update_changeset) {
   if (pRp) {
     // Get a list of all routes containing this point
     // and remove the point from them all
-    wxArrayPtrVoid *proute_array = g_pRouteMan->GetRouteArrayContaining(pRp);
+    QList<Route *> *proute_array = g_pRouteMan->GetRouteArrayContaining(pRp);
     if (proute_array) {
-      for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-        Route *pr = (Route *)proute_array->Item(ir);
-
+      for (Route *pr : *proute_array) {
         /*  FS#348
          if ( g_pRouteMan->GetpActiveRoute() == pr )            // Deactivate
          any route containing this point g_pRouteMan->DeactivateRoute();
@@ -1489,8 +1487,7 @@ void WayPointman::DestroyWaypoint(RoutePoint *pRp, bool b_update_changeset) {
       }
 
       //    Scrub the routes, looking for one-point routes
-      for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-        Route *pr = (Route *)proute_array->Item(ir);
+      for (Route *pr : *proute_array) {
         if (pr->GetnPoints() < 2) {
           g_pRouteMan->DeleteRoute(pr);
         }

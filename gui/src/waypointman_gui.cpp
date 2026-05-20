@@ -133,8 +133,8 @@ MarkIcon *WayPointmanGui::ProcessIcon(wxImage image, const wxString &key,
   bool newIcon = true;
 
   // avoid adding duplicates
-  for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->GetCount(); i++) {
-    pmi = (MarkIcon *)m_waypoint_man.m_pIconArray->Item(i);
+  for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->size(); i++) {
+    pmi = m_waypoint_man.m_pIconArray->at(i);
     if (pmi->icon_name == wxString_to_QString(key)) {
       newIcon = false;
       delete pmi->piconBitmap;
@@ -146,9 +146,9 @@ MarkIcon *WayPointmanGui::ProcessIcon(wxImage image, const wxString &key,
     pmi = new MarkIcon;
     pmi->icon_name = wxString_to_QString(key);  // Used for sorting
     if (add_in_front)
-      m_waypoint_man.m_pIconArray->Insert(pmi, 0);
+      m_waypoint_man.m_pIconArray->prepend(pmi);
     else {
-      m_waypoint_man.m_pIconArray->Add(pmi);
+      m_waypoint_man.m_pIconArray->append(pmi);
     }
   }
 
@@ -166,12 +166,12 @@ MarkIcon *WayPointmanGui::ProcessIcon(wxImage image, const wxString &key,
 }
 
 void WayPointmanGui::ProcessIcons(ocpnStyle::Style *style, double displayDPmm) {
-  for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->GetCount(); i++) {
-    MarkIcon *pmi = (MarkIcon *)m_waypoint_man.m_pIconArray->Item(i);
+  for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->size(); i++) {
+    MarkIcon *pmi = m_waypoint_man.m_pIconArray->at(i);
     delete pmi->piconBitmap;
     delete pmi;
   }
-  m_waypoint_man.m_pIconArray->Clear();
+  m_waypoint_man.m_pIconArray->clear();
 
   ProcessDefaultIcons(displayDPmm);
 
@@ -192,8 +192,8 @@ void WayPointmanGui::ProcessIcons(ocpnStyle::Style *style, double displayDPmm) {
   int w = 0;
   int h = 0;
 
-  for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->GetCount(); i++) {
-    MarkIcon *pmi = (MarkIcon *)m_waypoint_man.m_pIconArray->Item(i);
+  for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->size(); i++) {
+    MarkIcon *pmi = m_waypoint_man.m_pIconArray->at(i);
     w = wxMax(w, pmi->iconImage.GetWidth());
     h = wxMax(h, pmi->iconImage.GetHeight());
   }
@@ -458,7 +458,7 @@ void WayPointmanGui::ProcessDefaultIcons(double displayDPmm) {
   auto size = m_waypoint_man.m_pLegacyIconArray->GetCount();
   for (unsigned int i = 0; i < size; i++) {
     pmi = (MarkIcon *)m_waypoint_man.m_pLegacyIconArray->Item(i);
-    m_waypoint_man.m_pIconArray->Add(pmi);
+    m_waypoint_man.m_pIconArray->append(pmi);
   }
 
   size = m_waypoint_man.m_pExtendedIconArray->GetCount();
@@ -477,15 +477,15 @@ void WayPointmanGui::ProcessDefaultIcons(double displayDPmm) {
         break;
       }
     }
-    if (!noAdd) m_waypoint_man.m_pIconArray->Add(pmi);
+    if (!noAdd) m_waypoint_man.m_pIconArray->append(pmi);
   }
 }
 
 void WayPointmanGui::ReloadAllIcons(double displayDPmm) {
   ProcessIcons(g_StyleManager->GetCurrentStyle(), displayDPmm);
 
-  for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->GetCount(); i++) {
-    MarkIcon *pmi = (MarkIcon *)m_waypoint_man.m_pIconArray->Item(i);
+  for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->size(); i++) {
+    MarkIcon *pmi = m_waypoint_man.m_pIconArray->at(i);
     wxImage dim_image;
     if (m_waypoint_man.m_cs == GLOBAL_COLOR_SCHEME_DUSK) {
       dim_image = m_waypoint_man.CreateDimImage(pmi->iconImage, .50);
@@ -685,7 +685,7 @@ unsigned int WayPointmanGui::GetIconTexture(const wxBitmap *pbm, int &glw,
                                             int &glh) {
 #ifdef ocpnUSE_GL
   int index = m_waypoint_man.GetIconIndex(pbm);
-  MarkIcon *pmi = (MarkIcon *)m_waypoint_man.m_pIconArray->Item(index);
+  MarkIcon *pmi = m_waypoint_man.m_pIconArray->at(index);
 
   if (!pmi->icon_texture) {
     /* make rgba texture */

@@ -1459,8 +1459,8 @@ bool ConfigMgr::CheckTemplate(wxString fileName) {
       conf.Read(str, &val);  // Get an entry
 
       bool bfound = false;
-      for (unsigned int j = 0; j < g_MMSI_Props_Array.GetCount(); j++) {
-        MmsiProperties *pProps = g_MMSI_Props_Array.Item(j);
+      for (unsigned int j = 0; j < g_MMSI_Props_Array.size(); j++) {
+        MmsiProperties *pProps = g_MMSI_Props_Array.at(j);
         if (pProps->Serialize().IsSameAs(val)) {
           bfound = true;
           break;

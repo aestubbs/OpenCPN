@@ -502,8 +502,8 @@ static void UninstallPlugin(const std::string& name) {
   const auto& installed = handler->GetInstalled();
   auto found = std::find_if(installed.begin(), installed.end(), finder);
   if (found != installed.end()) {
-    for (size_t i = 0; i < loader->GetPlugInArray()->GetCount(); i++) {
-      auto const& item = loader->GetPlugInArray()->Item(i);
+    for (size_t i = 0; i < loader->GetPlugInArray()->size(); i++) {
+      auto const& item = loader->GetPlugInArray()->at(i);
       if (item->m_common_name.ToStdString() == name) {
         DEBUG_LOG << "Unloading plugin: " << name;
         loader->UnLoadPlugIn(i);
@@ -735,9 +735,9 @@ void pluginUtilHandler::OnPluginUtilAction(wxCommandEvent& event) {
       std::string manifestPath = PluginHandler::FileListPath(pluginName);
       if (isRegularFile(manifestPath.c_str())) {
         // dynamically deactivate the legacy plugin, making way for the upgrade.
-        for (unsigned i = 0; i < loader->GetPlugInArray()->GetCount(); i += 1) {
+        for (unsigned i = 0; i < loader->GetPlugInArray()->size(); i += 1) {
           if (actionPIC->m_managed_metadata.name ==
-              loader->GetPlugInArray()->Item(i)->m_common_name.ToStdString()) {
+              loader->GetPlugInArray()->at(i)->m_common_name.ToStdString()) {
             loader->UnLoadPlugIn(i);
             break;
           }
@@ -1105,7 +1105,7 @@ bool PlugInManager::CallLateInit() {
   bool bret = true;
 
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
     PlugInContainer* pic = (*plugin_array)[i];
 
     switch (pic->m_api_version) {
@@ -1185,7 +1185,7 @@ bool PlugInManager::IsAnyPlugInChartEnabled() {
   //  Is there a PlugIn installed and active that implements PlugIn Chart
   //  type(s)?
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
     PlugInContainer* pic = (*plugin_array)[i];
     if (pic->m_enabled && pic->m_init_state) {
       if ((pic->m_cap_flag & INSTALLS_PLUGIN_CHART) ||
@@ -1209,8 +1209,8 @@ bool PlugInManager::UpDateChartDataTypes() {
   if (NULL == ChartData) return bret;
 
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
 
     if (pic->m_init_state) {
       if ((pic->m_cap_flag & INSTALLS_PLUGIN_CHART) ||
@@ -1258,9 +1258,9 @@ void PlugInManager::SetPluginOrder(wxString serialized_names) {
 wxString PlugInManager::GetPluginOrder() {
   wxString plugins = wxEmptyString;
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    plugins.Append(plugin_array->Item(i)->m_common_name);
-    if (i < plugin_array->GetCount() - 1) plugins.Append(';');
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    plugins.Append(plugin_array->at(i)->m_common_name);
+    if (i < plugin_array->size() - 1) plugins.Append(';');
   }
   return plugins;
 }
@@ -1270,8 +1270,8 @@ bool PlugInManager::UpdateConfig() {
   //    pConfig->Write( "PluginOrder", GetPluginOrder() );
 
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
 
     if (pic) {
       wxString config_section = (_T ( "/PlugIns/" ));
@@ -1325,8 +1325,8 @@ bool PlugInManager::RenderAllCanvasOverlayPlugIns(ocpnDC& dc,
                                                   int canvasIndex,
                                                   int priority) {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_OVERLAY_CALLBACK) {
         PlugIn_ViewPort pivp = CreatePlugInViewport(vp);
@@ -1504,8 +1504,8 @@ bool PlugInManager::RenderAllGLCanvasOverlayPlugIns(wxGLContext* pcontext,
                                                     int canvasIndex,
                                                     int priority) {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_OPENGL_OVERLAY_CALLBACK) {
         PlugIn_ViewPort pivp = CreatePlugInViewport(vp);
@@ -1579,8 +1579,8 @@ bool PlugInManager::RenderAllGLCanvasOverlayPlugIns(wxGLContext* pcontext,
 
 void PlugInManager::SendViewPortToRequestingPlugIns(ViewPort& vp) {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_ONPAINT_VIEWPORT) {
         PlugIn_ViewPort pivp = CreatePlugInViewport(vp);
@@ -1596,8 +1596,8 @@ void NotifySetupOptionsPlugin(const PlugInData* pd) {
 
 void PlugInManager::NotifySetupOptions() {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     NotifySetupOptionsPlugin(pic);
   }
 }
@@ -1616,8 +1616,8 @@ void PlugInManager::ClosePlugInPanel(const PlugInContainer* pic,
 
 void PlugInManager::CloseAllPlugInPanels(int ok_apply_cancel) {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic) {
       ClosePlugInPanel(pic, ok_apply_cancel);
     }
@@ -1686,8 +1686,8 @@ void PlugInManager::SetCanvasContextMenuItemGrey(int item, bool grey,
 
 void PlugInManager::SendResizeEventToAllPlugIns(int x, int y) {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state)
       pic->m_pplugin->ProcessParentResize(x, y);
   }
@@ -1695,8 +1695,8 @@ void PlugInManager::SendResizeEventToAllPlugIns(int x, int y) {
 
 void PlugInManager::SetColorSchemeForAllPlugIns(ColorScheme cs) {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state)
       pic->m_pplugin->SetColorScheme((PI_ColorScheme)cs);
   }
@@ -1707,8 +1707,8 @@ void PlugInManager::PrepareAllPluginContextMenus() {
   if (canvasIndex < 0) return;
 
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & INSTALLS_CONTEXTMENU_ITEMS) {
         switch (pic->m_api_version) {
@@ -1823,8 +1823,8 @@ void PlugInManager::SendS52ConfigToAllPlugIns(bool bReconfig) {
 
 void PlugInManager::NotifyAuiPlugIns() {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state &&
         (pic->m_cap_flag & USES_AUI_MANAGER))
       pic->m_pplugin->UpdateAuiStatus();
@@ -2038,8 +2038,8 @@ wxString PlugInManager::GetToolOwnerCommonName(const int id) {
   opencpn_plugin* ppi = FindToolOwner(id);
   if (ppi) {
     auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-    for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-      PlugInContainer* pic = plugin_array->Item(i);
+    for (unsigned int i = 0; i < plugin_array->size(); i++) {
+      PlugInContainer* pic = plugin_array->at(i);
       if (pic && (pic->m_pplugin == ppi)) return pic->m_common_name;
     }
   }
@@ -2096,8 +2096,8 @@ wxBitmap* PlugInManager::BuildDimmedToolBitmap(wxBitmap* pbmp_normal,
 wxArrayString PlugInManager::GetPlugInChartClassNameArray() {
   wxArrayString array;
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic && pic->m_enabled && pic->m_init_state &&
         ((pic->m_cap_flag & INSTALLS_PLUGIN_CHART) ||
          (pic->m_cap_flag & INSTALLS_PLUGIN_CHART_GL))) {
@@ -2134,8 +2134,8 @@ opencpn_plugin* PlugInManager::GetProvidingPlugin(
     const wxString& ChartClassName) {
   opencpn_plugin* plugin = nullptr;
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic && pic->m_enabled && pic->m_init_state &&
         ((pic->m_cap_flag & INSTALLS_PLUGIN_CHART) ||
          (pic->m_cap_flag & INSTALLS_PLUGIN_CHART_GL))) {
@@ -2515,8 +2515,8 @@ void PluginListPanel::SelectByName(wxString& name) {
 std::vector<const PlugInData*> GetInstalled() {
   std::vector<const PlugInData*> result;
   auto loader = PluginLoader::GetInstance();
-  for (size_t i = 0; i < loader->GetPlugInArray()->GetCount(); i++) {
-    auto const item = loader->GetPlugInArray()->Item(i);
+  for (size_t i = 0; i < loader->GetPlugInArray()->size(); i++) {
+    auto const item = loader->GetPlugInArray()->at(i);
     if (item->m_managed_metadata.name.empty()) {
       const auto name = item->m_common_name.ToStdString();
       item->m_managed_metadata = PluginLoader::MetadataByName(name);
@@ -2543,8 +2543,8 @@ static bool IsPluginLoaded(const std::string& name) {
     return found != installed.end();
   } else {
     auto loaded = PluginLoader::GetInstance()->GetPlugInArray();
-    for (size_t i = 0; i < loaded->GetCount(); i++) {
-      if (loaded->Item(i)->m_common_name.ToStdString() == name) return true;
+    for (size_t i = 0; i < loaded->size(); i++) {
+      if (loaded->at(i)->m_common_name.ToStdString() == name) return true;
     }
     return false;
   }
@@ -4319,8 +4319,8 @@ wxString GetWritableDocumentsDir() {
 wxString GetPlugInPath(opencpn_plugin* pplugin) {
   wxString ret_val;
   auto loader = PluginLoader::GetInstance();
-  for (unsigned int i = 0; i < loader->GetPlugInArray()->GetCount(); i++) {
-    PlugInContainer* pic = loader->GetPlugInArray()->Item(i);
+  for (unsigned int i = 0; i < loader->GetPlugInArray()->size(); i++) {
+    PlugInContainer* pic = loader->GetPlugInArray()->at(i);
     if (pic->m_pplugin == pplugin) {
       ret_val = pic->m_plugin_file;
       break;

@@ -26,6 +26,7 @@
 
 #include <functional>
 
+#include <QList>
 #include <QString>
 
 #include <wx/bitmap.h>
@@ -76,7 +77,7 @@ extern Routeman *g_pRouteMan; /**< Global instance */
 //    List definitions for Waypoint Manager Icons
 
 WX_DEFINE_SORTED_ARRAY(MarkIcon *, SortedArrayOfMarkIcon);
-WX_DEFINE_ARRAY(MarkIcon *, ArrayOfMarkIcon);
+using ArrayOfMarkIcon = QList<MarkIcon *>;
 
 /** Callbacks for RoutePropDlg */
 struct RoutePropDlgCtx {
@@ -137,11 +138,11 @@ public:
    * contains the specified waypoint.
    *
    * @param pWP Pointer to the waypoint to search for.
-   * @return Pointer to wxArrayPtrVoid containing routes, or nullptr if no
-   * routes contain the waypoint. The caller is responsible for deleting the
+   * @return Pointer to QList containing routes, or nullptr if no routes
+   * contain the waypoint. The caller is responsible for deleting the
    * returned array when done with it.
    */
-  wxArrayPtrVoid *GetRouteArrayContaining(RoutePoint *pWP);
+  QList<Route *> *GetRouteArrayContaining(RoutePoint *pWP);
   bool DoesRouteContainSharedPoints(Route *pRoute);
   void RemovePointFromRoute(RoutePoint *point, Route *route, int route_state);
 
@@ -328,7 +329,7 @@ public:
   /** index of "fixed viz" icon in the image list  */
   int GetFIconImageListIndex(const wxBitmap *pbm) const;
 
-  int GetNumIcons(void) { return m_pIconArray->Count(); }
+  int GetNumIcons(void) { return m_pIconArray->size(); }
   QString CreateGUID(RoutePoint *pRP);
   RoutePoint *FindWaypointByGuid(const std::string &guid);
   RoutePoint *GetNearbyWaypoint(double lat, double lon, double radius_meters);

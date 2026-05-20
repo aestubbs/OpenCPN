@@ -5713,8 +5713,8 @@ void MyFrame::OnFrameTimer1(wxTimerEvent &event) {
   bool brq_dynamic = false;
   if (g_pi_manager) {
     auto *pplugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-    for (unsigned int i = 0; i < pplugin_array->GetCount(); i++) {
-      PlugInContainer *pic = pplugin_array->Item(i);
+    for (unsigned int i = 0; i < pplugin_array->size(); i++) {
+      PlugInContainer *pic = pplugin_array->at(i);
       if (pic->m_enabled && pic->m_init_state) {
         if (pic->m_cap_flag & WANTS_DYNAMIC_OPENGL_OVERLAY_CALLBACK) {
           brq_dynamic = true;

@@ -161,8 +161,8 @@ void SendAISSentenceToAllPlugIns(const wxString& sentence) {
   // decouple 'const wxString &' to keep interface.
   wxString decouple_sentence(sentence);
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_AIS_SENTENCES)
         pic->m_pplugin->SetAISSentence(decouple_sentence);
@@ -185,8 +185,8 @@ void SendPositionFixToAllPlugIns(GenericPosDatEx* ppos) {
   pfix.nSats = ppos->nSats;
 
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_NMEA_EVENTS)
         if (pic->m_pplugin) pic->m_pplugin->SetPositionFix(pfix);
@@ -208,8 +208,8 @@ void SendPositionFixToAllPlugIns(GenericPosDatEx* ppos) {
   auto msg = std::make_shared<PluginMsg>("position-fix", MsgToString(pfix));
   LogMessage(msg, "application ALL gnss-fix ");
 
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_NMEA_EVENTS) {
         switch (pic->m_api_version) {
@@ -247,8 +247,8 @@ void SendActiveLegInfoToAllPlugIns(const ActiveLegDat* leg_info) {
   leg.Xte = leg_info->Xte;
   leg.arrival = leg_info->arrival;
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_NMEA_EVENTS) {
         switch (pic->m_api_version) {
@@ -282,8 +282,8 @@ void SendActiveLegInfoToAllPlugIns(const ActiveLegDat* leg_info) {
 bool SendMouseEventToPlugins(wxMouseEvent& event) {
   bool bret = false;
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_MOUSE_EVENTS) {
         switch (pic->m_api_version) {
@@ -313,8 +313,8 @@ bool SendMouseEventToPlugins(wxMouseEvent& event) {
 bool SendKeyEventToPlugins(wxKeyEvent& event) {
   bool bret = false;
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_KEYBOARD_EVENTS) {
         {
@@ -345,8 +345,8 @@ bool SendKeyEventToPlugins(wxKeyEvent& event) {
 
 void SendPreShutdownHookToPlugins() {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_PRESHUTDOWN_HOOK) {
         switch (pic->m_api_version) {
@@ -367,8 +367,8 @@ void SendPreShutdownHookToPlugins() {
 
 void SendCursorLatLonToAllPlugIns(double lat, double lon) {
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_CURSOR_LATLON)
         if (pic->m_pplugin) pic->m_pplugin->SetCursorLatLon(lat, lon);
@@ -400,8 +400,8 @@ void SendNMEASentenceToAllPlugIns(const wxString& sentence) {
   auto msg = std::make_shared<PluginMsg>("NMEA-msg", sentence.ToStdString());
   LogMessage(msg, "internal ALL nmea-msg ");
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_NMEA_SENTENCES) {
 #ifndef __WXMSW__
@@ -431,8 +431,8 @@ void SendNMEASentenceToAllPlugIns(const wxString& sentence) {
 int GetJSONMessageTargetCount() {
   int rv = 0;
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-    PlugInContainer* pic = plugin_array->Item(i);
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
+    PlugInContainer* pic = plugin_array->at(i);
     if (pic->m_enabled && pic->m_init_state &&
         (pic->m_cap_flag & WANTS_PLUGIN_MESSAGING))
       rv++;
@@ -447,7 +447,7 @@ void SendVectorChartObjectInfo(const wxString& chart, const wxString& feature,
   wxString decouple_feature(feature);
   wxString decouple_objname(objname);
   auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-  for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
+  for (unsigned int i = 0; i < plugin_array->size(); i++) {
     PlugInContainer* pic = (*plugin_array)[i];
     if (pic->m_enabled && pic->m_init_state) {
       if (pic->m_cap_flag & WANTS_VECTOR_CHART_OBJECT_INFO) {

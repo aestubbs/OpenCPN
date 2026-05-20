@@ -251,7 +251,7 @@ static QString DecodeDSEExpansionCharacters(const QString &dseData) {
 }
 
 static void getMmsiProperties(std::shared_ptr<AisTargetData> &pTargetData) {
-  for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+  for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
     if (pTargetData->MMSI == g_MMSI_Props_Array[i]->MMSI) {
       MmsiProperties *props = g_MMSI_Props_Array[i];
       pTargetData->b_isFollower = props->m_bFollower;
@@ -1307,15 +1307,15 @@ AisDecoder::~AisDecoder() {
     AIS_Target_Name_Hash::iterator it;
     for (it = AISTargetNamesC->begin(); it != AISTargetNamesC->end(); ++it) {
       content.append("\r\n");
-      content.append(wxString::Format("%i", it->first));
-      content.append(",").append(it->second);
+      content.append(wxString::Format("%i", it.key()));
+      content.append(",").append(it.value());
     }
     content.append("\r\n");
     content.append("+++==Non Confirmed Entry's==+++");
     for (it = AISTargetNamesNC->begin(); it != AISTargetNamesNC->end(); ++it) {
       content.append("\r\n");
-      content.append(wxString::Format("%i", it->first));
-      content.append(",").append(it->second);
+      content.append(wxString::Format("%i", it.key()));
+      content.append(",").append(it.value());
     }
     outfile.Write(content);
     outfile.Commit();
@@ -1342,7 +1342,7 @@ AisDecoder::~AisDecoder() {
 
 bool IsTargetOnTheIgnoreList(const int &mmsi) {
   // Check the MMSI-Prop list if the target shall be ignored
-  for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+  for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
     if (mmsi == g_MMSI_Props_Array[i]->MMSI) {
       MmsiProperties *props = g_MMSI_Props_Array[i];
       if (props->m_bignore) {
@@ -3178,7 +3178,7 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
         pTargetData->met_data.original_mmsi = origin_mmsi;
       }
     }
-    for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+    for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
       MmsiProperties *props = g_MMSI_Props_Array[i];
       if (mmsi == static_cast<unsigned>(props->MMSI)) {
         // Check if this target has a dedicated tracktype
@@ -3394,7 +3394,7 @@ void AisDecoder::CommitAISTarget(
       // Normal target
       pTargetData->b_PersistTrack = false;
       // Or first decode for this target
-      for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+      for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
         if (pTargetData->MMSI == g_MMSI_Props_Array[i]->MMSI) {
           MmsiProperties *props = g_MMSI_Props_Array[i];
           pTargetData->b_mPropPersistTrack = props->m_bPersistentTrack;
@@ -3924,7 +3924,7 @@ void AisDecoder::DeletePersistentTrack(const Track *track) {
       m_persistent_tracks.erase(it);
       // Last tracks for this target?
       if (0 == m_persistent_tracks.count(mmsi)) {
-        for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+        for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
           if (mmsi == static_cast<unsigned>(g_MMSI_Props_Array[i]->MMSI)) {
             MmsiProperties *props = g_MMSI_Props_Array[i];
             if (props->m_bPersistentTrack) {
@@ -4329,7 +4329,7 @@ void AisDecoder::OnTimerAIS(wxTimerEvent &event) {
 
     // Remove any targets specified as to be "ignored", so that they won't
     // trigger phantom alerts (e.g. SARTs)
-    for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+    for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
       MmsiProperties *props = g_MMSI_Props_Array[i];
       if (xtd->MMSI == props->MMSI) {
         if (props->m_bignore) {

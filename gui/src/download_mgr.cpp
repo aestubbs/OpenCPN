@@ -103,8 +103,8 @@ static bool checksum_ok(const std::string& path,
  */
 static ssize_t PlugInIxByName(const std::string name,
                               const ArrayOfPlugIns* plugins) {
-  for (unsigned i = 0; i < plugins->GetCount(); i += 1) {
-    if (name == plugins->Item(i)->m_common_name.Lower().ToStdString()) {
+  for (unsigned i = 0; i < plugins->size(); i += 1) {
+    if (name == plugins->at(i)->m_common_name.Lower().ToStdString()) {
       return i;
     }
   }

@@ -32,6 +32,7 @@
 #include <wx/treectrl.h>
 
 #include <QDateTime>
+#include <QList>
 
 #ifdef ocpnUSE_GL
 #include <wx/glcanvas.h>
@@ -974,7 +975,7 @@ private:
       m_touchdownPos;  // LeftDown position for touch drag displacement check
   Route *m_pSelectedRoute;
   Track *m_pSelectedTrack;
-  wxArrayPtrVoid *m_pEditRouteArray;
+  QList<Route *> *m_pEditRouteArray;
   RoutePoint *m_pFoundRoutePoint;
 
   int m_FoundAIS_MMSI;

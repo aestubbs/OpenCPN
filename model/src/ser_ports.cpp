@@ -31,8 +31,7 @@
 
 #include <QSerialPortInfo>
 #include <QString>
-
-#include <wx/arrstr.h>
+#include <QStringList>
 
 #include "model/ser_ports.h"
 
@@ -40,8 +39,8 @@
 #include "model/garmin_protocol_mgr.h"
 #endif
 
-wxArrayString* EnumerateSerialPorts() {
-  auto* ports = new wxArrayString;
+QStringList* EnumerateSerialPorts() {
+  auto* ports = new QStringList;
 
   for (const QSerialPortInfo& info : QSerialPortInfo::availablePorts()) {
     // The connection settings parse the device name as the text up to the
@@ -55,13 +54,14 @@ wxArrayString* EnumerateSerialPorts() {
     if (desc.isEmpty()) desc = info.manufacturer();
     if (!desc.isEmpty() && desc != QStringLiteral("n/a"))
       entry += QStringLiteral(" - ") + desc;
-    ports->Add(wxString::FromUTF8(entry.toUtf8().constData()));
+    ports->append(entry);
   }
 
 #ifdef __WXMSW__
   // A Garmin USB unit is not a serial port; surface it as a selectable
   // device so the Garmin host-mode driver can be chosen for it.
-  if (GarminProtocolHandler::IsGarminPlugged()) ports->Add("Garmin-USB");
+  if (GarminProtocolHandler::IsGarminPlugged())
+    ports->append(QStringLiteral("Garmin-USB"));
 #endif
 
   return ports;

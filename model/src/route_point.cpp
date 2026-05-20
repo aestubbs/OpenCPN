@@ -333,13 +333,13 @@ bool RoutePoint::IsVisibleSelectable(double scale_val, bool boverrideViz) {
 bool RoutePoint::IsSharedInVisibleRoute() {
   if (IsShared()) {
     //    Get an array of all routes using this point
-    wxArrayPtrVoid *proute_array = g_pRouteMan->GetRouteArrayContaining(this);
+    QList<Route *> *proute_array =
+        g_pRouteMan->GetRouteArrayContaining(this);
 
     // Use route array (if any) to determine actual visibility for this point
     bool brp_viz = false;
     if (proute_array) {
-      for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-        Route *pr = (Route *)proute_array->Item(ir);
+      for (Route *pr : *proute_array) {
         if (pr->IsVisible()) {
           brp_viz = true;
           break;

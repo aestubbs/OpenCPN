@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+#include <QStringList>
+
 #include "gl_headers.h"  // Must come before anything using GL stuff
 
 #include <wx/wxprec.h>
@@ -157,9 +159,8 @@ static void LoadSerialPorts(wxComboBox* box) {
   } port_sorter;
 
   std::set<std::string, PortSorter> sorted_ports(port_sorter);
-  std::unique_ptr<wxArrayString> ports(EnumerateSerialPorts());
-  for (size_t i = 0; i < ports->GetCount(); i++)
-    sorted_ports.insert((*ports)[i].ToStdString());
+  std::unique_ptr<QStringList> ports(EnumerateSerialPorts());
+  for (const QString& p : *ports) sorted_ports.insert(p.toStdString());
 
   auto value = box->GetValue();
   box->Clear();

@@ -7487,8 +7487,8 @@ void ChartCanvas::FindRoutePointsAtCursor(float selectRadius,
     // Use route array to determine actual visibility for the point
     bool brp_viz = false;
     if (m_pEditRouteArray) {
-      for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount(); ir++) {
-        Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+      for (unsigned int ir = 0; ir < m_pEditRouteArray->size(); ir++) {
+        Route *pr = m_pEditRouteArray->at(ir);
         if (pr->IsVisible()) {
           brp_viz = true;
           break;
@@ -7501,8 +7501,8 @@ void ChartCanvas::FindRoutePointsAtCursor(float selectRadius,
       //    Use route array to rubberband all affected routes
       if (m_pEditRouteArray)  // Editing Waypoint as part of route
       {
-        for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount(); ir++) {
-          Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+        for (unsigned int ir = 0; ir < m_pEditRouteArray->size(); ir++) {
+          Route *pr = m_pEditRouteArray->at(ir);
           pr->m_bIsBeingEdited = setBeingEdited;
         }
         m_bRouteEditing = setBeingEdited;
@@ -7578,13 +7578,13 @@ ChartCanvas::GetCanvasContextAtPoint(int x, int y) {
       RoutePoint *prp = (RoutePoint *)pFindSel->m_pData1;  // candidate
 
       //    Get an array of all routes using this point
-      wxArrayPtrVoid *proute_array = g_pRouteMan->GetRouteArrayContaining(prp);
+      QList<Route *> *proute_array = g_pRouteMan->GetRouteArrayContaining(prp);
 
       // Use route array (if any) to determine actual visibility for this point
       bool brp_viz = false;
       if (proute_array) {
-        for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-          Route *pr = (Route *)proute_array->Item(ir);
+        for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+          Route *pr = proute_array->at(ir);
           if (pr->IsVisible()) {
             brp_viz = true;
             break;
@@ -7603,8 +7603,8 @@ ChartCanvas::GetCanvasContextAtPoint(int x, int y) {
       // Give preference to any active route, otherwise select the first visible
       // route in the array for this point
       if (proute_array) {
-        for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-          Route *pr = (Route *)proute_array->Item(ir);
+        for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+          Route *pr = proute_array->at(ir);
           if (pr->m_bRtIsActive) {
             pSelectedActiveRoute = pr;
             pFoundActiveRoutePoint = prp;
@@ -7613,8 +7613,8 @@ ChartCanvas::GetCanvasContextAtPoint(int x, int y) {
         }
 
         if (NULL == pSelectedVizRoute) {
-          for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-            Route *pr = (Route *)proute_array->Item(ir);
+          for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+            Route *pr = proute_array->at(ir);
             if (pr->IsVisible()) {
               pSelectedVizRoute = pr;
               pFoundVizRoutePoint = prp;
@@ -8136,13 +8136,13 @@ int ChartCanvas::PrepareContextSelections(double lat, double lon) {
       RoutePoint *prp = (RoutePoint *)pFindSel->m_pData1;  // candidate
 
       //    Get an array of all routes using this point
-      wxArrayPtrVoid *proute_array = g_pRouteMan->GetRouteArrayContaining(prp);
+      QList<Route *> *proute_array = g_pRouteMan->GetRouteArrayContaining(prp);
 
       // Use route array (if any) to determine actual visibility for this point
       bool brp_viz = false;
       if (proute_array) {
-        for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-          Route *pr = (Route *)proute_array->Item(ir);
+        for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+          Route *pr = proute_array->at(ir);
           if (pr->IsVisible()) {
             brp_viz = true;
             break;
@@ -8162,8 +8162,8 @@ int ChartCanvas::PrepareContextSelections(double lat, double lon) {
       // route in the array for this point
       m_pSelectedRoute = NULL;
       if (proute_array) {
-        for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-          Route *pr = (Route *)proute_array->Item(ir);
+        for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+          Route *pr = proute_array->at(ir);
           if (pr->m_bRtIsActive) {
             pSelectedActiveRoute = pr;
             pFoundActiveRoutePoint = prp;
@@ -8172,8 +8172,8 @@ int ChartCanvas::PrepareContextSelections(double lat, double lon) {
         }
 
         if (NULL == pSelectedVizRoute) {
-          for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-            Route *pr = (Route *)proute_array->Item(ir);
+          for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+            Route *pr = proute_array->at(ir);
             if (pr->IsVisible()) {
               pSelectedVizRoute = pr;
               pFoundVizRoutePoint = prp;
@@ -8451,15 +8451,14 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
         SelectItem *pFind = *node;
         RoutePoint *frp = (RoutePoint *)pFind->m_pData1;
         if (frp) {
-          wxArrayPtrVoid *proute_array =
-              g_pRouteMan->GetRouteArrayContaining(frp);
+          QList<Route *> *proute_array = g_pRouteMan->GetRouteArrayContaining(frp);
 
           // Use route array (if any) to determine actual visibility for this
           // point
           bool brp_viz = false;
           if (proute_array) {
-            for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-              Route *pr = (Route *)proute_array->Item(ir);
+            for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+              Route *pr = proute_array->at(ir);
               if (pr->IsVisible()) {
                 brp_viz = true;
                 break;
@@ -8520,8 +8519,8 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
         m_pIDXCandidate = FindBestCurrentObject(zlat, zlon);
         // Check for plugin graphic override
         auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-        for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-          PlugInContainer *pic = plugin_array->Item(i);
+        for (unsigned int i = 0; i < plugin_array->size(); i++) {
+          PlugInContainer *pic = plugin_array->at(i);
           if (pic->m_enabled && pic->m_init_state &&
               (pic->m_cap_flag & WANTS_TIDECURRENT_CLICK)) {
             if (ptcmgr) {
@@ -8556,8 +8555,8 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
         m_pIDXCandidate = (IDX_entry *)pFindTide->m_pData1;
         // Check for plugin graphic override
         auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
-        for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
-          PlugInContainer *pic = plugin_array->Item(i);
+        for (unsigned int i = 0; i < plugin_array->size(); i++) {
+          PlugInContainer *pic = plugin_array->at(i);
           if (pic->m_enabled && pic->m_init_state &&
               (pic->m_cap_flag & WANTS_TIDECURRENT_CLICK)) {
             if (ptcmgr) {
@@ -8637,15 +8636,14 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
             pWayPointMan->GetNearbyWaypoint(rlat, rlon, nearby_radius_meters);
         if (pNearbyPoint && (pNearbyPoint != m_prev_pMousePoint) &&
             !pNearbyPoint->m_bIsInLayer && pNearbyPoint->IsVisible()) {
-          wxArrayPtrVoid *proute_array =
-              g_pRouteMan->GetRouteArrayContaining(pNearbyPoint);
+          QList<Route *> *proute_array = g_pRouteMan->GetRouteArrayContaining(pNearbyPoint);
 
           // Use route array (if any) to determine actual visibility for this
           // point
           bool brp_viz = false;
           if (proute_array) {
-            for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-              Route *pr = (Route *)proute_array->Item(ir);
+            for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+              Route *pr = proute_array->at(ir);
               if (pr->IsVisible()) {
                 brp_viz = true;
                 break;
@@ -9020,8 +9018,8 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
         wxRect pre_rect;
 
         if (!g_bopengl && m_pEditRouteArray) {
-          for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount(); ir++) {
-            Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+          for (unsigned int ir = 0; ir < m_pEditRouteArray->size(); ir++) {
+            Route *pr = m_pEditRouteArray->at(ir);
             //      Need to validate route pointer
             //      Route may be gone due to drgging close to ownship with
             //      "Delete On Arrival" state set, as in the case of
@@ -9077,9 +9075,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
           wxRect post_rect;
 
           if (m_pEditRouteArray) {
-            for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount();
+            for (unsigned int ir = 0; ir < m_pEditRouteArray->size();
                  ir++) {
-              Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+              Route *pr = m_pEditRouteArray->at(ir);
               if (g_pRouteMan->IsRouteValid(pr)) {
                 wxRect route_rect;
                 RouteGui(*pr).CalculateDCRect(m_dc_route, this, &route_rect);
@@ -9583,9 +9581,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
               }
 
               wxRect pre_rect;
-              for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount();
+              for (unsigned int ir = 0; ir < m_pEditRouteArray->size();
                    ir++) {
-                Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+                Route *pr = m_pEditRouteArray->at(ir);
                 //      Need to validate route pointer
                 //      Route may be gone due to drgging close to ownship with
                 //      "Delete On Arrival" state set, as in the case of
@@ -9638,13 +9636,13 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
                                              SELTYPE_DRAGHANDLE);
 
               //  Clear any routes being edited, probably orphans
-              wxArrayPtrVoid *lastEditRouteArray =
+              QList<Route *> *lastEditRouteArray =
                   g_pRouteMan->GetRouteArrayContaining(
                       m_lastRoutePointEditTarget);
               if (lastEditRouteArray) {
-                for (unsigned int ir = 0; ir < lastEditRouteArray->GetCount();
+                for (unsigned int ir = 0; ir < lastEditRouteArray->size();
                      ir++) {
-                  Route *pr = (Route *)lastEditRouteArray->Item(ir);
+                  Route *pr = lastEditRouteArray->at(ir);
                   if (g_pRouteMan->IsRouteValid(pr)) {
                     pr->m_bIsBeingEdited = false;
                   }
@@ -9738,9 +9736,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
               bool duplicate =
                   false;  // ensure we won't create duplicate point in routes
               if (m_pEditRouteArray && !pNearbyPoint->m_bIsolatedMark) {
-                for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount();
+                for (unsigned int ir = 0; ir < m_pEditRouteArray->size();
                      ir++) {
-                  Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+                  Route *pr = m_pEditRouteArray->at(ir);
                   if (pr && pr->pRoutePointList) {
                     auto *list = pr->pRoutePointList;
                     auto pos =
@@ -9757,7 +9755,7 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
               // Allow "re-use" of a route's waypoints iff it is a simple
               // isolated route. This allows, for instance, creation of a closed
               // polygon route
-              if (m_pEditRouteArray->GetCount() == 1) duplicate = false;
+              if (m_pEditRouteArray->size() == 1) duplicate = false;
 
               if (!duplicate) {
                 int dlg_return;
@@ -9851,9 +9849,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
             pSelect->UpdateSelectableRouteSegments(m_pRoutePointEditTarget);
 
           if (m_pEditRouteArray) {
-            for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount();
+            for (unsigned int ir = 0; ir < m_pEditRouteArray->size();
                  ir++) {
-              Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+              Route *pr = m_pEditRouteArray->at(ir);
               if (g_pRouteMan->IsRouteValid(pr)) {
                 if (pMousePoint) {  // remove the dragged point and insert the
                                     // nearby
@@ -9885,9 +9883,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
           //    Update the RouteProperties Dialog, if currently shown
           if (pRoutePropDialog && pRoutePropDialog->IsShown()) {
             if (m_pEditRouteArray) {
-              for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount();
+              for (unsigned int ir = 0; ir < m_pEditRouteArray->size();
                    ir++) {
-                Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+                Route *pr = m_pEditRouteArray->at(ir);
                 if (g_pRouteMan->IsRouteValid(pr)) {
                   if (pRoutePropDialog->GetRoute() == pr) {
                     pRoutePropDialog->SetRouteAndUpdate(pr, true);
@@ -9974,8 +9972,8 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
       //    Update the RouteProperties Dialog, if currently shown
       if (pRoutePropDialog && pRoutePropDialog->IsShown()) {
         if (m_pEditRouteArray) {
-          for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount(); ir++) {
-            Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+          for (unsigned int ir = 0; ir < m_pEditRouteArray->size(); ir++) {
+            Route *pr = m_pEditRouteArray->at(ir);
             if (g_pRouteMan->IsRouteValid(pr)) {
               if (pRoutePropDialog->GetRoute() == pr) {
                 pRoutePropDialog->SetRouteAndUpdate(pr, true);
@@ -10010,9 +10008,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
                 pWayPointMan->IsReallyVisible(pNearbyPoint)) {
               bool duplicate = false;  // don't create duplicate point in routes
               if (m_pEditRouteArray && !pNearbyPoint->m_bIsolatedMark) {
-                for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount();
+                for (unsigned int ir = 0; ir < m_pEditRouteArray->size();
                      ir++) {
-                  Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+                  Route *pr = m_pEditRouteArray->at(ir);
                   if (pr && pr->pRoutePointList) {
                     auto *list = pr->pRoutePointList;
                     auto pos =
@@ -10029,7 +10027,7 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
               // Allow "re-use" of a route's waypoints iff it is a simple
               // isolated route. This allows, for instance, creation of a closed
               // polygon route
-              if (m_pEditRouteArray->GetCount() == 1) duplicate = false;
+              if (m_pEditRouteArray->size() == 1) duplicate = false;
 
               if (!duplicate) {
                 int dlg_return;
@@ -10122,9 +10120,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
             pSelect->UpdateSelectableRouteSegments(m_pRoutePointEditTarget);
 
           if (m_pEditRouteArray) {
-            for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount();
+            for (unsigned int ir = 0; ir < m_pEditRouteArray->size();
                  ir++) {
-              Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+              Route *pr = m_pEditRouteArray->at(ir);
               if (g_pRouteMan->IsRouteValid(pr)) {
                 if (pMousePoint) {  // replace dragged point by nearby one
                   auto *list = pr->pRoutePointList;
@@ -10197,9 +10195,9 @@ bool ChartCanvas::MouseEventProcessObjects(wxMouseEvent &event) {
           //    Update the RouteProperties Dialog, if currently shown
           if (pRoutePropDialog && pRoutePropDialog->IsShown()) {
             if (m_pEditRouteArray) {
-              for (unsigned int ir = 0; ir < m_pEditRouteArray->GetCount();
+              for (unsigned int ir = 0; ir < m_pEditRouteArray->size();
                    ir++) {
-                Route *pr = (Route *)m_pEditRouteArray->Item(ir);
+                Route *pr = m_pEditRouteArray->at(ir);
                 if (g_pRouteMan->IsRouteValid(pr)) {
                   if (pRoutePropDialog->GetRoute() == pr) {
                     pRoutePropDialog->SetRouteAndUpdate(pr, true);

@@ -361,7 +361,7 @@ void AisInfoGui::ShowAisInfo(
   //  If a SART Alert is active, check to see if the MMSI has special properties
   //  set indicating that this Alert is a MOB for THIS ship.
   if (palert_target && (palert_target->Class == AIS_SART)) {
-    for (unsigned int i = 0; i < g_MMSI_Props_Array.GetCount(); i++) {
+    for (unsigned int i = 0; i < g_MMSI_Props_Array.size(); i++) {
       if (palert_target->MMSI == g_MMSI_Props_Array[i]->MMSI) {
         if (pAISMOBRoute)
           top_frame::Get()->UpdateAISMOBRoute(palert_target.get());

@@ -30,6 +30,10 @@
 #include <sstream>
 #include <vector>
 
+#include <QHash>
+#include <QSet>
+#include <QString>
+
 #ifdef USE_LIBELF
 #include <elf.h>
 #include <libelf.h>
@@ -460,16 +464,15 @@ void PluginLoader::RemovePlugin(const PlugInData& pd) {
                  pd.m_common_name.ToStdString().c_str());
     return;
   }
-  plugin_array.Remove(pic);
-}
-
-static int ComparePlugins(PlugInContainer** p1, PlugInContainer** p2) {
-  return (*p1)->Key().compare((*p2)->Key());
+  plugin_array.removeOne(pic);
 }
 
 void PluginLoader::SortPlugins(int (*cmp_func)(PlugInContainer**,
                                                PlugInContainer**)) {
-  plugin_array.Sort(ComparePlugins);
+  std::sort(plugin_array.begin(), plugin_array.end(),
+            [cmp_func](PlugInContainer* a, PlugInContainer* b) {
+              return cmp_func(&a, &b) < 0;
+            });
 }
 
 bool PluginLoader::LoadAllPlugIns(bool load_enabled, bool keep_orphans) {
@@ -530,7 +533,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
   // plugin
   bool loaded = false;
   PlugInContainer* loaded_pic = nullptr;
-  for (unsigned int i = 0; i < plugin_array.GetCount(); i++) {
+  for (unsigned int i = 0; i < plugin_array.size(); i++) {
     PlugInContainer* pic_test = plugin_array[i];
     // Checking for dynamically updated plugins
     if (pic_test->m_plugin_filename == plugin_file) {
@@ -539,7 +542,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
       if (pic_test->m_plugin_file == file_name) {
         if (pic_test->m_plugin_modification != plugin_modification) {
           // modification times don't match, reload plugin
-          plugin_array.Remove(pic_test);
+          plugin_array.removeOne(pic_test);
           i--;
 
           DeactivatePlugIn(pic_test);
@@ -629,7 +632,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
 
   if (pic) {
     if (pic->m_pplugin) {
-      plugin_array.Add(pic);
+      plugin_array.append(pic);
 
       //    The common name is available without initialization and startup of
       //    the PlugIn
@@ -781,26 +784,26 @@ bool PluginLoader::LoadPlugInDirectory(const wxString& plugin_dir,
   // Here, looking for duplicates caused by new installation of a plugin
   // We want to remove the previous entry representing the uninstalled packaged
   // plugin metadata
-  for (unsigned int i = 0; i < plugin_array.GetCount(); i++) {
+  for (unsigned int i = 0; i < plugin_array.size(); i++) {
     PlugInContainer* pic = plugin_array[i];
-    for (unsigned int j = i + 1; j < plugin_array.GetCount(); j++) {
+    for (unsigned int j = i + 1; j < plugin_array.size(); j++) {
       PlugInContainer* pict = plugin_array[j];
 
       if (pic->m_common_name == pict->m_common_name) {
         if (pic->m_plugin_file.IsEmpty())
-          plugin_array.Item(i)->m_status = PluginStatus::PendingListRemoval;
+          plugin_array.at(i)->m_status = PluginStatus::PendingListRemoval;
         else
-          plugin_array.Item(j)->m_status = PluginStatus::PendingListRemoval;
+          plugin_array.at(j)->m_status = PluginStatus::PendingListRemoval;
       }
     }
   }
 
   //  Remove any list items marked
   size_t i = 0;
-  while ((i >= 0) && (i < plugin_array.GetCount())) {
-    PlugInContainer* pict = plugin_array.Item(i);
+  while ((i >= 0) && (i < plugin_array.size())) {
+    PlugInContainer* pict = plugin_array.at(i);
     if (pict->m_status == PluginStatus::PendingListRemoval) {
-      plugin_array.RemoveAt(i);
+      plugin_array.removeAt(i);
       i = 0;
     } else
       i++;
@@ -896,7 +899,7 @@ bool PluginLoader::DeactivatePlugIn(const PlugInData& pd) {
 }
 
 bool PluginLoader::UnLoadPlugIn(size_t ix) {
-  if (ix >= plugin_array.GetCount()) {
+  if (ix >= plugin_array.size()) {
     wxLogWarning("Attempt to remove non-existing plugin %d", ix);
     return false;
   }
@@ -909,7 +912,7 @@ bool PluginLoader::UnLoadPlugIn(size_t ix) {
   }
 
   delete pic;  // This will unload the PlugIn via DTOR of pic->m_library
-  plugin_array.RemoveAt(ix);
+  plugin_array.removeAt(ix);
   return true;
 }
 
@@ -1063,14 +1066,14 @@ void PluginLoader::UpdateManagedPlugins(bool keep_orphans) {
     }
   }
 
-  plugin_array.Clear();
-  for (const auto& p : loaded_plugins) plugin_array.Add(p);
+  plugin_array.clear();
+  for (const auto& p : loaded_plugins) plugin_array.append(p);
   evt_pluglist_change.Notify();
 }
 
 bool PluginLoader::UnLoadAllPlugIns() {
   bool rv = true;
-  while (plugin_array.GetCount()) {
+  while (plugin_array.size()) {
     if (!UnLoadPlugIn(0)) {
       rv = false;
     }
@@ -1108,9 +1111,8 @@ DWORD Rva2Offset(DWORD rva, PIMAGE_SECTION_HEADER psh, PIMAGE_NT_HEADERS pnt) {
 class ModuleInfo {
 public:
   ModuleInfo() : type_magic(0) {}
-  WX_DECLARE_HASH_SET(wxString, wxStringHash, wxStringEqual, DependencySet);
-  WX_DECLARE_HASH_MAP(wxString, wxString, wxStringHash, wxStringEqual,
-                      DependencyMap);
+  using DependencySet = QSet<QString>;
+  using DependencyMap = QHash<QString, QString>;
 
   uint64_t type_magic;
   DependencyMap dependencies;
@@ -1232,12 +1234,12 @@ bool ReadModuleInfoFromELF(const wxString& file,
                                       "string entry", file));
         goto FailureEpilogue;
       }
-      wxString name_full(elf_dynamic_entry_name);
-      wxString name_part(elf_dynamic_entry_name,
-                         strcspn(elf_dynamic_entry_name, "-."));
-      if (dependencies.find(name_part) != dependencies.end()) {
-        info.dependencies.insert(
-            ModuleInfo::DependencyMap::value_type(name_part, name_full));
+      QString name_full = QString::fromUtf8(elf_dynamic_entry_name);
+      QString name_part = QString::fromUtf8(
+          elf_dynamic_entry_name,
+          static_cast<int>(strcspn(elf_dynamic_entry_name, "-.")));
+      if (dependencies.contains(name_part)) {
+        info.dependencies.insert(name_part, name_full);
       }
     }
   }
@@ -1417,16 +1419,16 @@ bool PluginLoader::CheckPluginCompatibility(const wxString& plugin_file) {
         wxLogMessage("host magic: %.8x, plugin magic: %.8x",
                      own_info.type_magic, pi_info.type_magic);
       }
-      for (const auto& own_dependency : own_info.dependencies) {
-        ModuleInfo::DependencyMap::const_iterator pi_dependency =
-            pi_info.dependencies.find(own_dependency.first);
-        if ((pi_dependency != pi_info.dependencies.end()) &&
-            (pi_dependency->second != own_dependency.second)) {
+      for (auto own_it = own_info.dependencies.cbegin();
+           own_it != own_info.dependencies.cend(); ++own_it) {
+        auto pi_dependency = pi_info.dependencies.constFind(own_it.key());
+        if ((pi_dependency != pi_info.dependencies.cend()) &&
+            (pi_dependency.value() != own_it.value())) {
           b_compat = false;
           wxLogMessage(
               "    Plugin \"%s\" depends on library \"%s\", but the main "
               "module was built for \"%s\".",
-              plugin_file, pi_dependency->second, own_dependency.second);
+              plugin_file, pi_dependency.value(), own_it.value());
           break;
         }
       }

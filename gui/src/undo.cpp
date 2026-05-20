@@ -105,11 +105,11 @@ void doUndoMoveWaypoint(UndoAction* action, ChartCanvas* cc) {
       g_pMarkInfoDialog->UpdateProperties(true);
   }
 
-  wxArrayPtrVoid* routeArray =
+  QList<Route *>* routeArray =
       g_pRouteMan->GetRouteArrayContaining(currentPoint);
   if (routeArray) {
-    for (unsigned int ir = 0; ir < routeArray->GetCount(); ir++) {
-      Route* pr = (Route*)routeArray->Item(ir);
+    for (unsigned int ir = 0; ir < routeArray->size(); ir++) {
+      Route* pr = routeArray->at(ir);
       pr->FinalizeForRendering();
       pr->UpdateSegmentDistances();
       NavObj_dB::GetInstance().UpdateRoute(pr);

@@ -936,14 +936,13 @@ bool RoutePointGui::SendToGPS(const wxString &com_name, SendToGpsDlg *dialog) {
 int RoutePointGui::GetIconImageIndex() {
   if (m_point.IsShared()) {
     //    Get an array of all routes using this point
-    wxArrayPtrVoid *proute_array =
-        g_pRouteMan->GetRouteArrayContaining(&m_point);
+    QList<Route *> *proute_array = g_pRouteMan->GetRouteArrayContaining(&m_point);
 
     // Use route array (if any) to determine actual visibility for this point
     bool brp_viz = false;
     if (proute_array) {
-      for (unsigned int ir = 0; ir < proute_array->GetCount(); ir++) {
-        Route *pr = (Route *)proute_array->Item(ir);
+      for (unsigned int ir = 0; ir < proute_array->size(); ir++) {
+        Route *pr = proute_array->at(ir);
         if (pr->IsVisible()) {
           brp_viz = true;
           break;

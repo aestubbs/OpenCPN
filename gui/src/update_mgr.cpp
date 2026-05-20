@@ -88,8 +88,8 @@ private:
  */
 static ssize_t PlugInIxByName(const std::string name,
                               const ArrayOfPlugIns* plugins) {
-  for (unsigned i = 0; i < plugins->GetCount(); i += 1) {
-    if (name == plugins->Item(i)->m_common_name.Lower().ToStdString()) {
+  for (unsigned i = 0; i < plugins->size(); i += 1) {
+    if (name == plugins->at(i)->m_common_name.Lower().ToStdString()) {
       return i;
     }
   }
@@ -100,7 +100,7 @@ static ssize_t PlugInIxByName(const std::string name,
 static PlugInContainer* PlugInByName(const std::string name,
                                      const ArrayOfPlugIns* plugins) {
   auto ix = PlugInIxByName(name, plugins);
-  return ix == -1 ? 0 : plugins->Item(ix);
+  return ix == -1 ? 0 : plugins->at(ix);
 }
 
 /**

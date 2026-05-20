@@ -23,6 +23,9 @@
 
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
+#include <QString>
+#include <QStringList>
+
 #include <wx/arrstr.h>
 #include <wx/button.h>
 #include <wx/combobox.h>
@@ -41,6 +44,7 @@
 #include "model/route.h"
 #include "model/route_point.h"
 #include "model/ser_ports.h"
+#include "model/wx_qt_string.h"
 
 #include "ocpn_platform.h"
 #include "route_gui.h"
@@ -103,14 +107,13 @@ void SendToGpsDlg::CreateControls(const wxString& hint) {
   wxStaticBoxSizer* comm_box_sizer = new wxStaticBoxSizer(comm_box, wxVERTICAL);
   itemBoxSizer2->Add(comm_box_sizer, 0, wxEXPAND | wxALL, 5);
 
-  wxArrayString* pSerialArray = EnumerateSerialPorts();
+  QStringList* pSerialArray = EnumerateSerialPorts();
 
   m_itemCommListBox = new wxComboBox(this, ID_STG_CHOICE_COMM);
 
   //    Fill in the listbox with all detected serial ports
-  for (unsigned int iPortIndex = 0; iPortIndex < pSerialArray->GetCount();
-       iPortIndex++) {
-    wxString full_port = pSerialArray->Item(iPortIndex);
+  for (const QString& port : *pSerialArray) {
+    wxString full_port = QString_to_wxString(port);
     full_port.Prepend("Serial:");
     m_itemCommListBox->Append(full_port);
   }
