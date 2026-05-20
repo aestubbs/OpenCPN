@@ -42,10 +42,11 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 
+#include <QMutex>
+
 #include <wx/log.h>
 #include <wx/string.h>
 #include <wx/utils.h>
-#include <wx/thread.h>
 
 #include "model/comm_can_util.h"
 #include "model/comm_drv_n2k_socketcan.h"
@@ -158,7 +159,7 @@ private:
   int m_source_address;
   int m_last_TX_sequence;
   std::future<int> m_AddressClaimFuture;
-  wxMutex m_TX_mutex;
+  QMutex m_TX_mutex;
   int m_unique_number;
 
   ObservableListener listener_N2K_59904;
@@ -214,7 +215,7 @@ void CommDriverN2KSocketCanImpl::Close() {
 }
 
 bool CommDriverN2KSocketCanImpl::SendAddressClaim(int proposed_source_address) {
-  wxMutexLocker lock(m_TX_mutex);
+  QMutexLocker lock(&m_TX_mutex);
 
   int socket = GetWorker().GetSocket();
 
@@ -299,7 +300,7 @@ bool CommDriverN2KSocketCanImpl::SendProductInfo() {
 bool CommDriverN2KSocketCanImpl::SendMessage(
     std::shared_ptr<const NavMsg> msg, std::shared_ptr<const NavAddr> addr) {
   if (!msg) return false;
-  wxMutexLocker lock(m_TX_mutex);
+  QMutexLocker lock(&m_TX_mutex);
 
   // Verify claimed address is useable
   if (m_source_address < 0) return false;

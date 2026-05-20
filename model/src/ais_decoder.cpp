@@ -45,9 +45,8 @@
 #include <wx/wx.h>
 #endif
 
-#include <wx/event.h>   // wxEvtHandler / wxTimer -- P1.11
+#include <wx/event.h>   // wxEvtHandler -- g_pais_alert_dialog_active (GUI boundary)
 #include <wx/string.h>  // wxString -- MmsiProperties + name-file boundary
-#include <wx/timer.h>   // wxTimer -- P1.11
 
 // Be sure to include these before ais_decoder.h
 // to avoid a conflict with rapidjson/fwd.h
@@ -87,28 +86,9 @@ wxString AISTargetNameFileName;
 
 unsigned g_OwnShipmmsi;
 
-wxDEFINE_EVENT(EVT_N0183_VDO, ObservedEvt);
-wxDEFINE_EVENT(EVT_N0183_VDM, ObservedEvt);
-wxDEFINE_EVENT(EVT_N0183_FRPOS, ObservedEvt);
-wxDEFINE_EVENT(EVT_N0183_CDDSC, ObservedEvt);
-wxDEFINE_EVENT(EVT_N0183_CDDSE, ObservedEvt);
-wxDEFINE_EVENT(EVT_N0183_TLL, ObservedEvt);
-wxDEFINE_EVENT(EVT_N0183_TTM, ObservedEvt);
-wxDEFINE_EVENT(EVT_N0183_OSD, ObservedEvt);
-wxDEFINE_EVENT(EVT_N0183_WPL, ObservedEvt);
-wxDEFINE_EVENT(EVT_SIGNALK, ObservedEvt);
-wxDEFINE_EVENT(EVT_N2K_129038, ObservedEvt);
-wxDEFINE_EVENT(EVT_N2K_129039, ObservedEvt);
-wxDEFINE_EVENT(EVT_N2K_129041, ObservedEvt);
-wxDEFINE_EVENT(EVT_N2K_129794, ObservedEvt);
-wxDEFINE_EVENT(EVT_N2K_129809, ObservedEvt);
-wxDEFINE_EVENT(EVT_N2K_129810, ObservedEvt);
-wxDEFINE_EVENT(EVT_N2K_129793, ObservedEvt);
-
-BEGIN_EVENT_TABLE(AisDecoder, wxEvtHandler)
-EVT_TIMER(TIMER_AIS1, AisDecoder::OnTimerAIS)
-EVT_TIMER(TIMER_DSC, AisDecoder::OnTimerDSC)
-END_EVENT_TABLE()
+// EVT_N0183_*/EVT_N2K_*/EVT_SIGNALK wxEventType tags were retired in P1.11:
+// the wxEvtHandler base was dropped and each AIS listener uses ObsListener
+// (an internal wxEvtHandler proxy) wired directly to a lambda.
 
 static constexpr double ms_to_knot_factor = 1.9438444924406;
 
@@ -1276,11 +1256,14 @@ AisDecoder::AisDecoder(const AisDecoderCallbacks &callbacks)
 
   m_bAIS_AlertPlaying = false;
 
-  TimerAIS.SetOwner(this, TIMER_AIS1);
-  TimerAIS.Start(TIMER_AIS_MSEC, wxTIMER_CONTINUOUS);
+  connect(&TimerAIS, &QTimer::timeout, this, &AisDecoder::OnTimerAIS);
+  TimerAIS.start(TIMER_AIS_MSEC);
 
   m_ptentative_dsctarget = nullptr;
-  m_dsc_timer.SetOwner(this, TIMER_DSC);
+  m_dsc_timer.setSingleShot(true);
+  connect(&m_dsc_timer, &QTimer::timeout, this, &AisDecoder::OnTimerDSC);
+
+  m_AIS_Audio_Alert_Timer.setSingleShot(true);
 
   //  Create/connect a dynamic event handler slot for wxEVT_OCPN_DATASTREAM(s)
   // FIXME delete Connect(wxEVT_OCPN_DATASTREAM,
@@ -1326,9 +1309,9 @@ AisDecoder::~AisDecoder() {
 
   clear_hash_ERI();
 
-  m_dsc_timer.Stop();
-  m_AIS_Audio_Alert_Timer.Stop();
-  TimerAIS.Stop();
+  m_dsc_timer.stop();
+  m_AIS_Audio_Alert_Timer.stop();
+  TimerAIS.stop();
 
 #ifdef AIS_DEBUG
   printf(
@@ -1352,145 +1335,59 @@ bool IsTargetOnTheIgnoreList(const int &mmsi) {
 }
 
 void AisDecoder::InitCommListeners() {
-  // Initialize the comm listeners
+  // Initialize the comm listeners. After dropping the wxEvtHandler base
+  // (P1.11), each listener owns its own wxEvtHandler proxy via ObsListener
+  // and the lambda fires directly when the upstream KeyProvider notifies.
 
-  // NMEA0183
-  // VDM
-  Nmea0183Msg n0183_msg_VDM("VDM");
-  listener_N0183_VDM.Listen(n0183_msg_VDM, this, EVT_N0183_VDM);
-  Bind(EVT_N0183_VDM, [&](const ObservedEvt &ev) {
-    auto ptr = ev.GetSharedPtr();
-    auto n0183_msg = std::static_pointer_cast<const Nmea0183Msg>(ptr);
+  auto handle_n0183 = [this](const ObservedEvt &ev) {
+    auto n0183_msg = UnpackEvtPointer<Nmea0183Msg>(ev);
     HandleN0183_AIS(n0183_msg);
-  });
+  };
 
-  // FRPOS
-  Nmea0183Msg n0183_msg_FRPOS("FRPOS");
-  listener_N0183_FRPOS.Listen(n0183_msg_FRPOS, this, EVT_N0183_FRPOS);
-
-  Bind(EVT_N0183_FRPOS, [&](const ObservedEvt &ev) {
-    auto ptr = ev.GetSharedPtr();
-    auto n0183_msg = std::static_pointer_cast<const Nmea0183Msg>(ptr);
-    HandleN0183_AIS(n0183_msg);
-  });
-
-  // CDDSC
-  Nmea0183Msg n0183_msg_CDDSC("CDDSC");
-  listener_N0183_CDDSC.Listen(n0183_msg_CDDSC, this, EVT_N0183_CDDSC);
-  Bind(EVT_N0183_CDDSC, [&](const ObservedEvt &ev) {
-    auto ptr = ev.GetSharedPtr();
-    auto n0183_msg = std::static_pointer_cast<const Nmea0183Msg>(ptr);
-    HandleN0183_AIS(n0183_msg);
-  });
-
-  // CDDSE
-  Nmea0183Msg n0183_msg_CDDSE("CDDSE");
-  listener_N0183_CDDSE.Listen(n0183_msg_CDDSE, this, EVT_N0183_CDDSE);
-  Bind(EVT_N0183_CDDSE, [&](const ObservedEvt &ev) {
-    auto ptr = ev.GetSharedPtr();
-    auto n0183_msg = std::static_pointer_cast<const Nmea0183Msg>(ptr);
-    HandleN0183_AIS(n0183_msg);
-  });
-
-  // TLL
-  Nmea0183Msg n0183_msg_TLL("TLL");
-  listener_N0183_TLL.Listen(n0183_msg_TLL, this, EVT_N0183_TLL);
-
-  Bind(EVT_N0183_TLL, [&](const ObservedEvt &ev) {
-    auto ptr = ev.GetSharedPtr();
-    auto n0183_msg = std::static_pointer_cast<const Nmea0183Msg>(ptr);
-    HandleN0183_AIS(n0183_msg);
-  });
-
-  // TTM
-  Nmea0183Msg n0183_msg_ttm("TTM");
-  listener_N0183_TTM.Listen(n0183_msg_ttm, this, EVT_N0183_TTM);
-  Bind(EVT_N0183_TTM, [&](const ObservedEvt &ev) {
-    auto ptr = ev.GetSharedPtr();
-    auto n0183_msg = std::static_pointer_cast<const Nmea0183Msg>(ptr);
-    HandleN0183_AIS(n0183_msg);
-  });
-
-  // OSD
-  Nmea0183Msg n0183_msg_OSD("OSD");
-  listener_N0183_OSD.Listen(n0183_msg_OSD, this, EVT_N0183_OSD);
-  Bind(EVT_N0183_OSD, [&](const ObservedEvt &ev) {
-    auto ptr = ev.GetSharedPtr();
-    auto n0183_msg = std::static_pointer_cast<const Nmea0183Msg>(ptr);
-    HandleN0183_AIS(n0183_msg);
-  });
-
-  // WPL
-  Nmea0183Msg n0183_msg_WPL("WPL");
-  listener_N0183_WPL.Listen(n0183_msg_WPL, this, EVT_N0183_WPL);
-  Bind(EVT_N0183_WPL, [&](const ObservedEvt &ev) {
-    auto ptr = ev.GetSharedPtr();
-    auto n0183_msg = std::static_pointer_cast<const Nmea0183Msg>(ptr);
-    HandleN0183_AIS(n0183_msg);
-  });
+  // NMEA0183 message types: all routed to HandleN0183_AIS.
+  listener_N0183_VDM.Init(Nmea0183Msg("VDM"), handle_n0183);
+  listener_N0183_FRPOS.Init(Nmea0183Msg("FRPOS"), handle_n0183);
+  listener_N0183_CDDSC.Init(Nmea0183Msg("CDDSC"), handle_n0183);
+  listener_N0183_CDDSE.Init(Nmea0183Msg("CDDSE"), handle_n0183);
+  listener_N0183_TLL.Init(Nmea0183Msg("TLL"), handle_n0183);
+  listener_N0183_TTM.Init(Nmea0183Msg("TTM"), handle_n0183);
+  listener_N0183_OSD.Init(Nmea0183Msg("OSD"), handle_n0183);
+  listener_N0183_WPL.Init(Nmea0183Msg("WPL"), handle_n0183);
 
   // SignalK
-  SignalkMsg sk_msg;
-  listener_SignalK.Listen(sk_msg, this, EVT_SIGNALK);
-  Bind(EVT_SIGNALK, [&](const ObservedEvt &ev) {
+  listener_SignalK.Init(SignalkMsg(), [this](const ObservedEvt &ev) {
     HandleSignalK(UnpackEvtPointer<SignalkMsg>(ev));
   });
 
-  // AIS Class A   PGN 129038
-  //-----------------------------
-  Nmea2000Msg n2k_msg_129038(static_cast<uint64_t>(129038));
-  listener_N2K_129038.Listen(n2k_msg_129038, this, EVT_N2K_129038);
-  Bind(EVT_N2K_129038, [&](const ObservedEvt &ev) {
-    HandleN2K_129038(UnpackEvtPointer<Nmea2000Msg>(ev));
-  });
-
-  // AIS Class B   PGN 129039
-  //-----------------------------
-  Nmea2000Msg n2k_msg_129039(static_cast<uint64_t>(129039));
-  listener_N2K_129039.Listen(n2k_msg_129039, this, EVT_N2K_129039);
-  Bind(EVT_N2K_129039, [&](const ObservedEvt &ev) {
-    HandleN2K_129039(UnpackEvtPointer<Nmea2000Msg>(ev));
-  });
-
-  // AIS ATON   PGN 129041
-  //-----------------------------
-  Nmea2000Msg n2k_msg_129041(static_cast<uint64_t>(129041));
-  listener_N2K_129041.Listen(n2k_msg_129041, this, EVT_N2K_129041);
-  Bind(EVT_N2K_129041, [&](const ObservedEvt &ev) {
-    HandleN2K_129041(UnpackEvtPointer<Nmea2000Msg>(ev));
-  });
-
-  // AIS static data class A PGN 129794
-  //-----------------------------
-  Nmea2000Msg n2k_msg_129794(static_cast<uint64_t>(129794));
-  listener_N2K_129794.Listen(n2k_msg_129794, this, EVT_N2K_129794);
-  Bind(EVT_N2K_129794, [&](const ObservedEvt &ev) {
-    HandleN2K_129794(UnpackEvtPointer<Nmea2000Msg>(ev));
-  });
-
-  // AIS static data class B part A PGN 129809
-  //-----------------------------
-  Nmea2000Msg n2k_msg_129809(static_cast<uint64_t>(129809));
-  listener_N2K_129809.Listen(n2k_msg_129809, this, EVT_N2K_129809);
-  Bind(EVT_N2K_129809, [&](const ObservedEvt &ev) {
-    HandleN2K_129809(UnpackEvtPointer<Nmea2000Msg>(ev));
-  });
-
-  // AIS static data class B part B PGN 129810
-  //-----------------------------
-  Nmea2000Msg n2k_msg_129810(static_cast<uint64_t>(129810));
-  listener_N2K_129810.Listen(n2k_msg_129810, this, EVT_N2K_129810);
-  Bind(EVT_N2K_129810, [&](const ObservedEvt &ev) {
-    HandleN2K_129810(UnpackEvtPointer<Nmea2000Msg>(ev));
-  });
-
-  // AIS Base Station report PGN 129793
-  //-----------------------------
-  Nmea2000Msg n2k_msg_129793(static_cast<uint64_t>(129793));
-  listener_N2K_129793.Listen(n2k_msg_129793, this, EVT_N2K_129793);
-  Bind(EVT_N2K_129793, [&](const ObservedEvt &ev) {
-    HandleN2K_129793(UnpackEvtPointer<Nmea2000Msg>(ev));
-  });
+  // AIS NMEA2000 PGNs
+  listener_N2K_129038.Init(Nmea2000Msg(static_cast<uint64_t>(129038)),
+                           [this](const ObservedEvt &ev) {
+                             HandleN2K_129038(UnpackEvtPointer<Nmea2000Msg>(ev));
+                           });
+  listener_N2K_129039.Init(Nmea2000Msg(static_cast<uint64_t>(129039)),
+                           [this](const ObservedEvt &ev) {
+                             HandleN2K_129039(UnpackEvtPointer<Nmea2000Msg>(ev));
+                           });
+  listener_N2K_129041.Init(Nmea2000Msg(static_cast<uint64_t>(129041)),
+                           [this](const ObservedEvt &ev) {
+                             HandleN2K_129041(UnpackEvtPointer<Nmea2000Msg>(ev));
+                           });
+  listener_N2K_129794.Init(Nmea2000Msg(static_cast<uint64_t>(129794)),
+                           [this](const ObservedEvt &ev) {
+                             HandleN2K_129794(UnpackEvtPointer<Nmea2000Msg>(ev));
+                           });
+  listener_N2K_129809.Init(Nmea2000Msg(static_cast<uint64_t>(129809)),
+                           [this](const ObservedEvt &ev) {
+                             HandleN2K_129809(UnpackEvtPointer<Nmea2000Msg>(ev));
+                           });
+  listener_N2K_129810.Init(Nmea2000Msg(static_cast<uint64_t>(129810)),
+                           [this](const ObservedEvt &ev) {
+                             HandleN2K_129810(UnpackEvtPointer<Nmea2000Msg>(ev));
+                           });
+  listener_N2K_129793.Init(Nmea2000Msg(static_cast<uint64_t>(129793)),
+                           [this](const ObservedEvt &ev) {
+                             HandleN2K_129793(UnpackEvtPointer<Nmea2000Msg>(ev));
+                           });
 }
 
 bool AisDecoder::HandleN0183_AIS(const N0183MsgPtr &n0183_msg) {
@@ -3701,7 +3598,7 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const QString &str,
         m_ptentative_dsctarget->PositionReportTicks - last_report_ticks;
 
     //      Start a timer, looking for an expected DSE extension message
-    if (!b_take_dsc) m_dsc_timer.Start(1000, wxTIMER_ONE_SHOT);
+    if (!b_take_dsc) m_dsc_timer.start(1000);
   }
 
   //    Got an extension message, or the timer expired and no extension is
@@ -3709,7 +3606,7 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const QString &str,
   if (dse_mmsi || b_take_dsc) {
     if (m_ptentative_dsctarget) {
       //  stop the timer for sure
-      m_dsc_timer.Stop();
+      m_dsc_timer.stop();
 
       //  Update the extended information
       if (dse_mmsi) {
@@ -4209,7 +4106,7 @@ void AisDecoder::UpdateOneCPA(AisTargetData *ptarget) {
   }
 }
 
-void AisDecoder::OnTimerDSC(wxTimerEvent &event) {
+void AisDecoder::OnTimerDSC() {
   //  Timer expired, no CDDSE message was received, so accept the latest CDDSC
   //  message
   if (m_ptentative_dsctarget) {
@@ -4217,8 +4114,8 @@ void AisDecoder::OnTimerDSC(wxTimerEvent &event) {
   }
 }
 
-void AisDecoder::OnTimerAIS(wxTimerEvent &event) {
-  TimerAIS.Stop();
+void AisDecoder::OnTimerAIS() {
+  TimerAIS.stop();
   //    Scrub the target hash list
   //    removing any targets older than stipulated age
 
@@ -4442,7 +4339,7 @@ void AisDecoder::OnTimerAIS(wxTimerEvent &event) {
   // Show or update the alert
   if (palert_target) info_update.Notify(palert_target, "");
 
-  TimerAIS.Start(TIMER_AIS_MSEC, wxTIMER_CONTINUOUS);
+  TimerAIS.start(TIMER_AIS_MSEC);
 }
 
 std::shared_ptr<AisTargetData> AisDecoder::Get_Target_Data_From_MMSI(

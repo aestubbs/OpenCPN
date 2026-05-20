@@ -31,10 +31,12 @@
 
 #include <QDateTime>
 #include <QList>
+#include <QObject>
 #include <QString>
+#include <QTimer>
 
-#include <wx/event.h>     // wxEvtHandler / wxTimer -- P1.11
-#include <wx/string.h>    // wxString -- MmsiProperties + name-file boundary
+#include <wx/event.h>   // wxEvtHandler -- g_pais_alert_dialog_active (GUI boundary)
+#include <wx/string.h>  // wxString -- MmsiProperties + name-file boundary
 
 #include "rapidjson/fwd.h"
 #include "model/ais_bitstring.h"
@@ -108,7 +110,9 @@ struct AisDecoderCallbacks {
         get_target_mmsi([]() { return 0; }) {}
 };
 
-class AisDecoder : public wxEvtHandler {
+class AisDecoder : public QObject {
+  Q_OBJECT
+
 public:
   explicit AisDecoder(const AisDecoderCallbacks &callbacks);
 
@@ -155,10 +159,11 @@ public:
   /** A JSON message should be sent. Contains a AisTargetData* pointer. */
   EventVar plugin_msg;
 
-private:
-  void OnTimerAIS(wxTimerEvent &event);
-  void OnTimerDSC(wxTimerEvent &event);
+private Q_SLOTS:
+  void OnTimerAIS();
+  void OnTimerDSC();
 
+private:
   bool NMEACheckSumOK(const QString &str);
   void UpdateAllCPA();
   void UpdateOneCPA(AisTargetData *ptarget);
@@ -198,26 +203,26 @@ private:
   AIS_Target_Name_Hash *AISTargetNamesC;
   AIS_Target_Name_Hash *AISTargetNamesNC;
 
-  ObservableListener listener_N0183_VDM;
-  ObservableListener listener_N0183_FRPOS;
-  ObservableListener listener_N0183_CDDSC;
-  ObservableListener listener_N0183_CDDSE;
-  ObservableListener listener_N0183_TLL;
-  ObservableListener listener_N0183_TTM;
-  ObservableListener listener_N0183_OSD;
-  ObservableListener listener_N0183_WPL;
-  ObservableListener listener_SignalK;
+  ObsListener listener_N0183_VDM;
+  ObsListener listener_N0183_FRPOS;
+  ObsListener listener_N0183_CDDSC;
+  ObsListener listener_N0183_CDDSE;
+  ObsListener listener_N0183_TLL;
+  ObsListener listener_N0183_TTM;
+  ObsListener listener_N0183_OSD;
+  ObsListener listener_N0183_WPL;
+  ObsListener listener_SignalK;
 
-  ObservableListener listener_N2K_129038;
-  ObservableListener listener_N2K_129039;
-  ObservableListener listener_N2K_129041;
-  ObservableListener listener_N2K_129794;
-  ObservableListener listener_N2K_129809;
-  ObservableListener listener_N2K_129810;
-  ObservableListener listener_N2K_129793;
+  ObsListener listener_N2K_129038;
+  ObsListener listener_N2K_129039;
+  ObsListener listener_N2K_129041;
+  ObsListener listener_N2K_129794;
+  ObsListener listener_N2K_129809;
+  ObsListener listener_N2K_129810;
+  ObsListener listener_N2K_129793;
 
   bool m_busy;
-  wxTimer TimerAIS;
+  QTimer TimerAIS;
   wxFrame *m_parent_frame;
   AisDecoderCallbacks m_callbacks;
 
@@ -229,17 +234,16 @@ private:
   std::shared_ptr<AisTargetData> m_pLatestTargetData;
 
   bool m_bAIS_Audio_Alert_On;
-  wxTimer m_AIS_Audio_Alert_Timer;
+  QTimer m_AIS_Audio_Alert_Timer;
   int m_n_targets;
   bool m_bSuppressed;
   bool m_bGeneralAlert;
   std::shared_ptr<AisTargetData> m_ptentative_dsctarget;
-  wxTimer m_dsc_timer;
+  QTimer m_dsc_timer;
   QString m_dsc_last_string;
   std::vector<int> m_MMSI_MismatchVec;
 
   bool m_bAIS_AlertPlaying;
-  DECLARE_EVENT_TABLE()
 };
 
 #endif  //  AIS_DECODER_H_

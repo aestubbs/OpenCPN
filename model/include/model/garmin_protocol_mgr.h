@@ -37,6 +37,10 @@
 #include <initguid.h>
 #endif
 
+#include <QObject>
+#include <QThread>
+#include <QTimer>
+
 #include <wx/wxprec.h>
 
 #ifndef WX_PRECOMP
@@ -170,12 +174,12 @@ enum { rs_fromintr, rs_frombulk };
 
 using SendMsgFunc = std::function<void(const std::vector<unsigned char> &)>;
 
-#define TIMER_GARMIN1 7005
-
 class GARMIN_Serial_Thread;
 class GARMIN_USB_Thread;
 
-class GarminProtocolHandler : public wxEvtHandler {
+class GarminProtocolHandler : public QObject {
+  Q_OBJECT
+
 public:
   GarminProtocolHandler(wxString port, SendMsgFunc send_msg_func, bool sel_usb);
   ~GarminProtocolHandler();
@@ -187,8 +191,6 @@ public:
 
   void StopSerialThread(void);
 
-  void OnTimerGarmin1(wxTimerEvent &event);
-
   bool FindGarminDeviceInterface();
 
   SendMsgFunc m_send_msg_func;
@@ -199,7 +201,12 @@ public:
   cpo_sat_data m_sat_data[12];
   unit_info_type grmin_unit_info[2];
   int m_nSats;
-  wxTimer TimerGarmin1;
+  QTimer TimerGarmin1;
+
+private Q_SLOTS:
+  void OnTimerGarmin1();
+
+public:
 
   std::atomic_int m_Thread_run_flag;
   GARMIN_Serial_Thread *m_garmin_serial_thread;
@@ -227,8 +234,6 @@ public:
 
   WXLRESULT MSWWindowProc(WXUINT message, WXWPARAM wParam, WXLPARAM lParam);
 #endif
-
-  DECLARE_EVENT_TABLE()
 };
 
 //-------------------------------------------------------------------------------------------------------------
@@ -239,12 +244,12 @@ public:
 //    Garmin GRMN Mode serial device
 //
 //-------------------------------------------------------------------------------------------------------------
-class GARMIN_Serial_Thread : public wxThread {
+class GARMIN_Serial_Thread : public QThread {
 public:
   GARMIN_Serial_Thread(GarminProtocolHandler *parent, SendMsgFunc send_msg_func,
                        wxString port);
   ~GARMIN_Serial_Thread(void);
-  void *Entry();
+  void run() override;
   void string(wxCharBuffer mb_str);
 
 private:
@@ -264,12 +269,12 @@ private:
 //    Garmin USB device
 //
 //-------------------------------------------------------------------------------------------------------------
-class GARMIN_USB_Thread : public wxThread {
+class GARMIN_USB_Thread : public QThread {
 public:
   GARMIN_USB_Thread(GarminProtocolHandler *parent, SendMsgFunc send_msg_func,
                     unsigned int device_handle, size_t max_tx_size);
   ~GARMIN_USB_Thread(void);
-  void *Entry();
+  void run() override;
 
 private:
   int gusb_win_get(garmin_usb_packet *ibuf, size_t sz);

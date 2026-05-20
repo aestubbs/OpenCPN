@@ -30,13 +30,16 @@
 #include <condition_variable>
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <string>
 #include <thread>
 #include <unordered_map>
 
+#include <QObject>
+#include <QSemaphore>
+
 #include <wx/event.h>
 #include <wx/string.h>
-#include <wx/thread.h>  // for wxSemaphore, std::semaphore is c++20
 
 #include "observable_evtvar.h"
 #include "std_filesystem.h"
@@ -70,6 +73,8 @@ std::string RestResultText(RestServerResult result);
 
 /** Data from IO thread to main */
 struct RestIoEvtData;
+
+using RestIoEvtDataPtr = std::shared_ptr<RestIoEvtData>;
 
 /** Returned status from RunAcceptObjectDlg. */
 struct AcceptObjectDlgResult {
@@ -229,7 +234,8 @@ public:
 };
 
 /** AbstractRestServer implementation and interface to underlying IO thread. */
-class RestServer : public AbstractRestServer, public wxEvtHandler {
+class RestServer : public QObject, public AbstractRestServer {
+  Q_OBJECT
   friend class RestServerObjectApp;  ///< Unit test hook
   friend class RestCheckWriteApp;    ///< Unit test hook
   friend class RestServerPingApp;    ///< Unit test hook
@@ -272,11 +278,22 @@ public:
 
   /**
    * IoThread interface: Binary exit synchronization, released when
-   * io thread exits. std::semaphore is C++20, hence wxSemaphore.
+   * io thread exits.
    */
-  wxSemaphore m_exit_sem;
+  QSemaphore m_exit_sem;
 
   const std::string m_endpoint;
+
+  /**
+   * Emitted from the mongoose IO thread with a chunk-id and payload. The
+   * slot HandleServerMessage is connected via Qt::QueuedConnection so the
+   * dispatch runs on the GUI thread.
+   */
+Q_SIGNALS:
+  void IoEventReceived(int id, RestIoEvtDataPtr evt_data);
+
+private Q_SLOTS:
+  void HandleServerMessage(int id, RestIoEvtDataPtr evt_data);
 
 private:
   class IoThread {
@@ -326,8 +343,6 @@ private:
 
   bool LoadConfig();
   bool SaveConfig();
-
-  void HandleServerMessage(ObservedEvt& event);
 
   void HandleWaypoint(pugi::xml_node object, const RestIoEvtData& evt_data);
   void HandleTrack(pugi::xml_node object, const RestIoEvtData& evt_data);

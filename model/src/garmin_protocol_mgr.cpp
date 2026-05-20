@@ -114,10 +114,6 @@ BOOL IsUserAdmin(VOID)
 
 #endif
 
-BEGIN_EVENT_TABLE(GarminProtocolHandler, wxEvtHandler)
-EVT_TIMER(TIMER_GARMIN1, GarminProtocolHandler::OnTimerGarmin1)
-END_EVENT_TABLE()
-
 GarminProtocolHandler::GarminProtocolHandler(wxString port,
                                              SendMsgFunc send_msg_func,
                                              bool bsel_usb) {
@@ -163,17 +159,18 @@ GarminProtocolHandler::GarminProtocolHandler(wxString port,
         new GARMIN_Serial_Thread(this, m_send_msg_func, m_port);
 
     m_Thread_run_flag = 1;
-    m_garmin_serial_thread->Run();
+    m_garmin_serial_thread->start();
   }
 
-  TimerGarmin1.SetOwner(this, TIMER_GARMIN1);
-  TimerGarmin1.Start(100);
+  connect(&TimerGarmin1, &QTimer::timeout, this,
+          &GarminProtocolHandler::OnTimerGarmin1);
+  TimerGarmin1.start(100);
 }
 
 GarminProtocolHandler::~GarminProtocolHandler() {}
 
 void GarminProtocolHandler::Close() {
-  TimerGarmin1.Stop();
+  TimerGarmin1.stop();
 
   StopIOThread(true);
   StopSerialThread();
@@ -186,7 +183,7 @@ void GarminProtocolHandler::StopSerialThread() {
 
     int tsec = 5;
     while ((m_Thread_run_flag >= 0) && (tsec--)) {
-      wxSleep(1);
+      QThread::sleep(1);
     }
 
     wxString msg;
@@ -201,7 +198,7 @@ void GarminProtocolHandler::StopSerialThread() {
 }
 
 void GarminProtocolHandler::StopIOThread(bool b_pause) {
-  if (b_pause) TimerGarmin1.Stop();
+  if (b_pause) TimerGarmin1.stop();
 
   if (m_garmin_usb_thread) {
     wxLogMessage("Stopping Garmin USB thread");
@@ -209,7 +206,7 @@ void GarminProtocolHandler::StopIOThread(bool b_pause) {
 
     int tsec = 5;
     while ((m_Thread_run_flag >= 0) && (tsec--)) {
-      wxSleep(1);
+      QThread::sleep(1);
     }
 
     wxString msg;
@@ -233,13 +230,13 @@ void GarminProtocolHandler::StopIOThread(bool b_pause) {
 
 void GarminProtocolHandler::RestartIOThread() {
   wxLogMessage("Restarting Garmin I/O thread");
-  TimerGarmin1.Start(1000);
+  TimerGarmin1.start(1000);
 }
 
-void GarminProtocolHandler::OnTimerGarmin1(wxTimerEvent &event) {
+void GarminProtocolHandler::OnTimerGarmin1() {
   char pvt_on[14] = {20, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0, 49, 0};
 
-  TimerGarmin1.Stop();
+  TimerGarmin1.stop();
 
   if (m_busb) {
 #ifdef __WXMSW__
@@ -254,13 +251,13 @@ void GarminProtocolHandler::OnTimerGarmin1(wxTimerEvent &event) {
         m_garmin_usb_thread = new GARMIN_USB_Thread(
             this, m_send_msg_func, (wxIntPtr)m_usb_handle, m_max_tx_size);
         m_Thread_run_flag = 1;
-        m_garmin_usb_thread->Run();
+        m_garmin_usb_thread->start();
       }
     }
 #endif
   }
 
-  TimerGarmin1.Start(1000);
+  TimerGarmin1.start(1000);
 }
 
 #ifdef __WXMSW__
@@ -692,14 +689,12 @@ GARMIN_Serial_Thread::GARMIN_Serial_Thread(GarminProtocolHandler *parent,
   m_parent = parent;  // This thread's immediate "parent"
   m_send_msg_func = send_msg_func;
   m_port = port;
-
-  Create();
 }
 
 GARMIN_Serial_Thread::~GARMIN_Serial_Thread() {}
 
 //    Entry Point
-void *GARMIN_Serial_Thread::Entry() {
+void GARMIN_Serial_Thread::run() {
   //   m_parent->SetSecThreadActive();               // I am alive
   m_bdetected = false;
   m_bconnected = false;
@@ -711,7 +706,7 @@ void *GARMIN_Serial_Thread::Entry() {
   //    The main loop
 
   while ((not_done) && (m_parent->m_Thread_run_flag > 0)) {
-    if (TestDestroy()) {
+    if (isInterruptionRequested()) {
       not_done = false;  // smooth exit
       goto thread_exit_2;
     }
@@ -721,8 +716,8 @@ void *GARMIN_Serial_Thread::Entry() {
       int v_init = Garmin_GPS_Init(m_port);
       if (v_init < 0) {  //  Open failed, so sleep and try again
         for (int i = 0; i < 4; i++) {
-          wxSleep(1);
-          if (TestDestroy()) goto thread_exit;
+          QThread::sleep(1);
+          if (isInterruptionRequested()) goto thread_exit;
           if (!m_parent->m_Thread_run_flag) goto thread_exit;
         }
       } else
@@ -802,8 +797,8 @@ thread_exit_2:
   Garmin_GPS_ClosePortVerify();
 
   while ((not_done) && (m_parent->m_Thread_run_flag > 0)) {
-    wxSleep(1);
-    if (TestDestroy()) {
+    QThread::sleep(1);
+    if (isInterruptionRequested()) {
       not_done = false;  // smooth exit
       goto thread_exit;
     }
@@ -814,7 +809,6 @@ thread_exit:
 #endif  // #ifdef USE_GARMINHOST
 
   m_parent->m_Thread_run_flag = -1;  // in GarminProtocolHandler
-  return 0;
 }
 
 //-------------------------------------------------------------------------------------------------------------
@@ -832,20 +826,18 @@ GARMIN_USB_Thread::GARMIN_USB_Thread(GarminProtocolHandler *parent,
 #ifdef __WXMSW__
   m_usb_handle = (HANDLE)(device_handle & 0xffff);
 #endif
-
-  Create();
 }
 
 GARMIN_USB_Thread::~GARMIN_USB_Thread() {}
 
-void *GARMIN_USB_Thread::Entry() {
+void GARMIN_USB_Thread::run() {
   garmin_usb_packet iresp = {{0}};
   int n_short_read = 0;
   m_receive_state = rs_fromintr;
 
   //    Here comes the big while loop
   while (m_parent->m_Thread_run_flag > 0) {
-    if (TestDestroy()) goto thread_prexit;  // smooth exit
+    if (isInterruptionRequested()) goto thread_prexit;  // smooth exit
 
     //    Get one  packet
 
@@ -924,7 +916,6 @@ void *GARMIN_USB_Thread::Entry() {
   }
 thread_prexit:
   m_parent->m_Thread_run_flag = -1;
-  return 0;
 }
 
 int GARMIN_USB_Thread::gusb_cmd_get(garmin_usb_packet *ibuf, size_t sz) {

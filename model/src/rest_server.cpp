@@ -52,11 +52,7 @@
 #include "model/wx_qt_string.h"
 
 #include "mongoose.h"
-#include "observable_evt.h"
 #include "model/navobj_db.h"
-
-/** Event from IO thread to main */
-wxDEFINE_EVENT(REST_IO_EVT, ObservedEvt);
 
 using namespace std::chrono_literals;
 
@@ -157,9 +153,15 @@ static inline std::string HttpVarToString(const struct mg_str& query,
 
 static void PostEvent(RestServer* parent,
                       const std::shared_ptr<RestIoEvtData>& evt_data, int id) {
-  auto evt = new ObservedEvt(REST_IO_EVT, id);
-  evt->SetSharedPtr(evt_data);
-  parent->QueueEvent(evt);
+  // The connection is DirectConnection so HandleServerMessage runs
+  // synchronously on this (mongoose IO) thread -- matching the pre-P1.11
+  // wxEvtHandler-based behaviour where wxTheApp->ProcessPendingEvents()
+  // dispatched the queued ObservedEvt to its handler in-line.
+  Q_EMIT parent->IoEventReceived(id, evt_data);
+  // Downstream code paths in HandleServerMessage still post wx events
+  // (NavMsgBus::Notify, ObsListener::Init wiring etc.). Drain any pending
+  // wx events from this thread so the test harness's listeners see them
+  // promptly, again matching the pre-P1.11 behaviour.
   if (!dynamic_cast<wxApp*>(wxAppConsole::GetInstance())) {
     wxTheApp->ProcessPendingEvents();
   }
@@ -409,17 +411,17 @@ void RestServer::IoThread::Run() {
   while (run_flag > 0) mg_mgr_poll(&mgr, 200);  // Infinite event loop
   mg_mgr_free(&mgr);
   run_flag = -1;
-  m_parent.m_exit_sem.Post();
+  m_parent.m_exit_sem.release();
 }
 
 void RestServer::IoThread::Stop() { run_flag = 0; }
 
 bool RestServer::IoThread::WaitUntilStopped() {
-  auto r = m_parent.m_exit_sem.WaitTimeout(10000);
-  if (r != wxSEMA_NO_ERROR) {
-    WARNING_LOG << "Semaphore error: " << r;
+  bool ok = m_parent.m_exit_sem.tryAcquire(1, 10000);
+  if (!ok) {
+    WARNING_LOG << "REST server exit semaphore timed out";
   }
-  return r == wxSEMA_NO_ERROR;
+  return ok;
 }
 
 RestServer::Apikeys RestServer::Apikeys::Parse(const std::string& s) {
@@ -450,7 +452,7 @@ void RestServer::UpdateReturnStatus(RestServerResult result) {
 }
 
 RestServer::RestServer(RestServerDlgCtx ctx, RouteCtx route_ctx, bool& portable)
-    : m_exit_sem(0, 1),
+    : m_exit_sem(0),
       m_endpoint(portable ? kHttpsPortableAddr : kHttpsAddr),
       m_dlg_ctx(std::move(ctx)),
       m_route_ctx(std::move(route_ctx)),
@@ -459,8 +461,20 @@ RestServer::RestServer(RestServerDlgCtx ctx, RouteCtx route_ctx, bool& portable)
       m_overwrite(false),
       m_io_thread(*this, m_endpoint),
       m_pincode(Pincode::Create()) {
-  // Prepare the wxEventHandler to accept events from the io thread
-  Bind(REST_IO_EVT, &RestServer::HandleServerMessage, this);
+  // RestIoEvtDataPtr is a shared_ptr<RestIoEvtData>. Register it with the
+  // meta-type system so a QueuedConnection (or BlockingQueued) can marshal
+  // it across threads. Not strictly required for DirectConnection but kept
+  // for symmetry with the other model-layer signals.
+  qRegisterMetaType<RestIoEvtDataPtr>("RestIoEvtDataPtr");
+  // The IO thread emits IoEventReceived and immediately waits on
+  // ret_mutex/return_status_cv for the slot to update return_status. A
+  // Qt::DirectConnection therefore matches the previous wxEvtHandler
+  // behaviour where wxTheApp->ProcessPendingEvents() in PostEvent ran the
+  // handler synchronously on the IO thread. With QueuedConnection the slot
+  // would have to wait for the main thread's Qt event loop, which the
+  // mongoose IO thread does not block-pump.
+  connect(this, &RestServer::IoEventReceived, this,
+          &RestServer::HandleServerMessage, Qt::DirectConnection);
 }
 
 RestServer::~RestServer() { StopServer(); }
@@ -533,10 +547,9 @@ bool RestServer::CheckApiKey(const RestIoEvtData& evt_data) {
   return false;
 }
 
-void RestServer::HandleServerMessage(ObservedEvt& event) {
-  auto evt_data = UnpackEvtPointer<RestIoEvtData>(event);
+void RestServer::HandleServerMessage(int id, RestIoEvtDataPtr evt_data) {
   m_reply_body = "";
-  switch (event.GetId()) {
+  switch (id) {
     case ORS_START_OF_SESSION:
       // Prepare a temp file to catch chuncks that might follow
       m_upload_path =

@@ -82,6 +82,15 @@ static std::vector<std::string> GetLocalAddresses() {
 #endif  // _WIN32
 
 static bool g_portable = false;
+// The RestServer is now a QObject. After P1.11 its IO-thread to GUI-thread
+// handoff uses a Qt signal/slot wired with Qt::DirectConnection, so the slot
+// runs synchronously on the emitting (mongoose IO) thread -- no Qt event
+// loop is required to deliver it. We still pump the wx event loop for any
+// downstream ObsListener events posted via wxQueueEvent.
+static void PumpEventLoops(wxAppConsole& app) {
+  app.ProcessPendingEvents();
+}
+
 class RestServerApp : public wxAppConsole {
 public:
   RestServerApp(RestServerDlgCtx ctx, RouteCtx route_ctx, bool& portable)
@@ -105,7 +114,7 @@ public:
     make_certificate(local_address, dirpath.string() + "/");
     m_rest_server.StartServer(dirpath.string());
     Work();
-    ProcessPendingEvents();
+    PumpEventLoops(*this);
     m_rest_server.StopServer();
   }
 
@@ -139,7 +148,7 @@ protected:
          << " \"https://localhost:8443/api/ping?source=1.2.3.4&apikey=bad\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(path.string());
       std::string result;
       std::getline(f, result);
@@ -156,7 +165,7 @@ protected:
          << "\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(path.string());
       std::string result;
       std::getline(f, result);
@@ -184,7 +193,7 @@ protected:
          << " \"https://localhost:8443/api/ping?source=1.2.3.4&apikey=bad\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(path.string());
       std::string result;
       std::getline(f, result);
@@ -210,7 +219,7 @@ protected:
          << key << "&id=msg1" << "\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       EXPECT_EQ(s_result, "msg1");
       EXPECT_EQ(s_result2, "foobar");
     }
@@ -233,7 +242,7 @@ protected:
       auto foo = ss.str();
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       EXPECT_EQ(s_result, "foobar");
     }
   }
@@ -255,7 +264,7 @@ protected:
     system(CmdString(ss.str()).c_str());
     std::this_thread::sleep_for(50ms);
 
-    ProcessPendingEvents();
+    PumpEventLoops(*this);
     std::ifstream f(path.string());
     std::string result;
     std::getline(f, result);
@@ -281,7 +290,7 @@ protected:
       system(CmdString(ss.str()).c_str());
     }
     std::this_thread::sleep_for(50ms);
-    ProcessPendingEvents();
+    PumpEventLoops(*this);
     std::ifstream f(path.string());
     std::stringstream ss;
     ss << f.rdbuf();
@@ -319,7 +328,7 @@ protected:
          << " \"https://localhost:8443/api/rx_object?source=1.2.3.4\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(outpath.string());
       std::string result;
       std::getline(f, result);
@@ -336,7 +345,7 @@ protected:
          << "&apikey=" << key << "\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(outpath.string());
       std::string result;
       std::getline(f, result);
@@ -365,7 +374,7 @@ protected:
          << "&apikey=" << key << "\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(outpath.string());
       std::string result;
       std::getline(f, result);
@@ -381,7 +390,7 @@ protected:
          << " \"https://localhost:8443/api/rx_object?source=1.2.3.4"
          << "&force=1&apikey=" << key << "\"";
       system(CmdString(ss.str()).c_str());
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(outpath.string());
       std::string result;
       std::getline(f, result);
@@ -417,7 +426,7 @@ protected:
       // Try check our standard object, bad api key
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(outpath.string());
       std::string result;
       std::getline(f, result);
@@ -433,7 +442,7 @@ protected:
          << "&apikey=" << key << "&guid=6a76a7e6-dc39-4a7d-964e-1eff3462c06c\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(outpath.string());
       std::string result;
       std::getline(f, result);
@@ -455,7 +464,7 @@ protected:
          << "&guid=apikey6a76a7e6-dc39-4a7d-964e-1eff3462c06c\"";
       system(CmdString(ss.str()).c_str());
       std::this_thread::sleep_for(50ms);
-      ProcessPendingEvents();
+      PumpEventLoops(*this);
       std::ifstream f(outpath.string());
       std::string result;
       std::getline(f, result);

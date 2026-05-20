@@ -34,6 +34,9 @@
 #include <netinet/in.h>
 #endif
 
+#include <QObject>
+#include <QTimer>
+
 #include <wx/wxprec.h>
 
 #ifndef WX_PRECOMP
@@ -41,7 +44,6 @@
 #endif
 
 #include <wx/string.h>
-#include <wx/timer.h>
 
 #ifdef __WXGTK__
 // newer versions of glib define its own GSocket, but we unfortunately use this
@@ -63,9 +65,11 @@
 
 class MrqContainer;  // forward in .cpp file
 
-class CommDriverN0183Net : public CommDriverN0183,
-                           public wxEvtHandler,
+class CommDriverN0183Net : public QObject,
+                           public CommDriverN0183,
                            public DriverStatsProvider {
+  Q_OBJECT
+
 public:
   CommDriverN0183Net(const ConnectionParams* params, DriverListener& listener);
 
@@ -81,20 +85,25 @@ public:
   DriverStats GetDriverStats() const override { return m_driver_stats; }
 
 private:
-  class SocketTimer : public wxTimer {
+  class SocketTimer : public QTimer {
   public:
-    SocketTimer(CommDriverN0183Net& owner) : wxTimer(), m_owner(owner) {}
-    void Notify() override { m_owner.OnTimerSocket(); }
+    SocketTimer(CommDriverN0183Net& owner) : QTimer(), m_owner(owner) {
+      setSingleShot(true);
+      QObject::connect(this, &QTimer::timeout,
+                       [this]() { m_owner.OnTimerSocket(); });
+    }
 
   private:
     CommDriverN0183Net& m_owner;
   };
 
-  class SocketReadWatchdogTimer : public wxTimer {
+  class SocketReadWatchdogTimer : public QTimer {
   public:
     SocketReadWatchdogTimer(CommDriverN0183Net& owner)
-        : wxTimer(), m_owner(owner) {}
-    void Notify() override { m_owner.OnSocketReadWatchdogTimer(); }
+        : QTimer(), m_owner(owner) {
+      QObject::connect(this, &QTimer::timeout,
+                       [this]() { m_owner.OnSocketReadWatchdogTimer(); });
+    }
 
   private:
     CommDriverN0183Net& m_owner;
