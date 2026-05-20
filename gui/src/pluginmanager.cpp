@@ -40,6 +40,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QMutexLocker>
 #include <QStandardPaths>
 #include <QTextStream>
 
@@ -4295,7 +4296,7 @@ double ChartPlugInWrapper::GetRasterScaleFactor(const ViewPort& vp) {
 
 bool ChartPlugInWrapper::GetChartBits(wxRect& source, unsigned char* pPix,
                                       int sub_samp) {
-  wxCriticalSectionLocker locker(m_critSect);
+  QMutexLocker locker(&m_critSect);
 
   if (m_ppicb)
 

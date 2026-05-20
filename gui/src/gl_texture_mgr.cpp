@@ -26,17 +26,20 @@
 #include <list>
 #include <vector>
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QList>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QThread>
 
 #include "model/wx_qt_string.h"
 
 #include <wx/wxprec.h>
 #include <wx/progdlg.h>
 #include <wx/wx.h>
-#include <wx/thread.h>
 
 #if defined(__ANDROID__)
 #include <GLES2/gl2.h>
@@ -53,7 +56,6 @@
 #include <wx/progdlg.h>
 #include <wx/stopwatch.h>
 #include <wx/string.h>
-#include <wx/thread.h>
 #include <wx/utils.h>
 
 #include <wx/listimpl.cpp>
@@ -441,16 +443,16 @@ class OCPNStopWatch : public wxStopWatch {};
 #endif
 
 static void throttle_func(void *data) {
-  if (!wxThread::IsMain()) {
+  if (QThread::currentThread() != QCoreApplication::instance()->thread()) {
     OCPNStopWatch *sww = (OCPNStopWatch *)data;
     if (sww->Time() > 1) {
       sww->Start();
-      wxThread::Sleep(2);
+      QThread::msleep(2);
     }
   }
 }
 
-static wxMutex s_mutexProtectingChartBitRead;
+static QMutex s_mutexProtectingChartBitRead;
 
 bool JobTicket::DoJob(const wxRect &rect) {
   unsigned char *bit_array[10];
@@ -469,7 +471,7 @@ bool JobTicket::DoJob(const wxRect &rect) {
     int index;
 
     if (ChartData) {
-      wxMutexLocker lock(s_mutexProtectingChartBitRead);
+      QMutexLocker lock(&s_mutexProtectingChartBitRead);
 
       index = ChartData->FinddbIndex(m_ChartPath);
       pchart = ChartData->OpenChartFromDBAndLock(index, FULL_INIT);
@@ -552,7 +554,7 @@ bool JobTicket::DoJob(const wxRect &rect) {
     bit_array[i] = 0;
   }
 
-  if (b_throttle) wxThread::Sleep(1);
+  if (b_throttle) QThread::msleep(1);
 
   if (b_abort) return false;
 
@@ -710,7 +712,7 @@ void *CompressionPoolThread::Entry() {
 glTextureManager::glTextureManager() {
   // ideally we would use the cpu count -1, and only launch jobs
   // when the idle load average is sufficient (greater than 1)
-  int nCPU = wxMax(1, wxThread::GetCPUCount());
+  int nCPU = std::max(1, QThread::idealThreadCount());
   if (g_nCPUCount > 0) nCPU = g_nCPUCount;
 
   if (nCPU < 1)
@@ -1533,7 +1535,7 @@ void glTextureManager::BuildCompressedCache() {
       ::wxYield();
       int cnt = GetJobCount() - GetRunningJobCount();
       if (!cnt) break;
-      wxThread::Sleep(1);
+      QThread::msleep(1);
     }
 
     if (m_skipout) {
@@ -1545,7 +1547,7 @@ void glTextureManager::BuildCompressedCache() {
   }
 
   while (GetRunningJobCount()) {
-    wxThread::Sleep(1);
+    QThread::msleep(1);
     ::wxYield();
   }
 

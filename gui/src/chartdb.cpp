@@ -35,6 +35,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QMutexLocker>
 
 #include <wx/progdlg.h>
 #include <wx/regex.h>
@@ -283,14 +284,15 @@ void ChartDB::PurgeCache() {
   //    Empty the cache
   // wxLogMessage("Chart cache purge");
 
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
       DeleteCacheEntry(0, true);
     }
     pChartCache->clear();
 
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 }
 
@@ -298,7 +300,8 @@ void ChartDB::PurgeCachePlugins() {
   //    Empty the cache
   wxLogMessage("Chart cache PlugIn purge");
 
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     unsigned int i = 0;
     while (i < nCache) {
@@ -315,18 +318,19 @@ void ChartDB::PurgeCachePlugins() {
         i++;
     }
 
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 }
 
 void ChartDB::ClearCacheInUseFlags() {
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
       CacheEntry *pce = pChartCache->at(i);
       pce->b_in_use = false;
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 }
 
@@ -336,7 +340,7 @@ void ChartDB::ClearCacheInUseFlags() {
 void ChartDB::PurgeCacheUnusedCharts(double factor) {
   //    Use memory limited cache policy, if defined....
   if (g_memCacheLimit) {
-    if (wxMUTEX_NO_ERROR == m_cache_mutex.TryLock()) {
+    if (m_cache_mutex.tryLock()) {
       //    Check memory status to see if above limit
       int mem_used;
       platform::GetMemoryStatus(0, &mem_used);
@@ -366,12 +370,12 @@ void ChartDB::PurgeCacheUnusedCharts(double factor) {
         nl--;
       }
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 
   //    Else use chart count cache policy, if defined....
   else if (g_nCacheLimit) {
-    if (wxMUTEX_NO_ERROR == m_cache_mutex.TryLock()) {
+    if (m_cache_mutex.tryLock()) {
       //    Check chart count to see if above limit
       double fac10 = factor * 10;
       int chart_limit = g_nCacheLimit * fac10 / 10;
@@ -396,7 +400,7 @@ void ChartDB::PurgeCacheUnusedCharts(double factor) {
         nl = pChartCache->size();
       }
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 }
 
@@ -896,7 +900,8 @@ bool ChartDB::IsChartInCache(int dbindex) {
   bool bInCache = false;
 
   //    Search the cache
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
       CacheEntry *pce = pChartCache->at(i);
@@ -906,7 +911,7 @@ bool ChartDB::IsChartInCache(int dbindex) {
         break;
       }
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 
   return bInCache;
@@ -914,7 +919,8 @@ bool ChartDB::IsChartInCache(int dbindex) {
 
 bool ChartDB::IsChartInCache(wxString path) {
   bool bInCache = false;
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     //    Search the cache
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
@@ -926,23 +932,24 @@ bool ChartDB::IsChartInCache(wxString path) {
       }
     }
 
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
   return bInCache;
 }
 
 bool ChartDB::IsChartLocked(int index) {
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
       CacheEntry *pce = pChartCache->at(i);
       if (pce->dbIndex == index) {
         bool ret = pce->n_lock > 0;
-        m_cache_mutex.Unlock();
+        m_cache_mutex.unlock();
         return ret;
       }
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 
   return false;
@@ -951,7 +958,8 @@ bool ChartDB::IsChartLocked(int index) {
 bool ChartDB::LockCacheChart(int index) {
   //    Search the cache
   bool ret = false;
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
       CacheEntry *pce = pChartCache->at(i);
@@ -961,14 +969,15 @@ bool ChartDB::LockCacheChart(int index) {
         break;
       }
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
   return ret;
 }
 
 void ChartDB::UnLockCacheChart(int index) {
   //    Search the cache
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
       CacheEntry *pce = pChartCache->at(i);
@@ -977,19 +986,20 @@ void ChartDB::UnLockCacheChart(int index) {
         break;
       }
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 }
 
 void ChartDB::UnLockAllCacheCharts() {
   //    Walk the cache
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
       CacheEntry *pce = pChartCache->at(i);
       if (pce->n_lock > 0) pce->n_lock--;
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 }
 
@@ -1013,7 +1023,7 @@ ChartBase *ChartDB::OpenChartFromStack(ChartStack *pStack, int StackEntry,
 
 ChartBase *ChartDB::OpenChartFromDBAndLock(int index, ChartInitFlag init_flag,
                                            bool lock) {
-  wxCriticalSectionLocker locker(m_critSect);
+  QMutexLocker locker(&m_critSect);
   ChartBase *pret = OpenChartUsingCache(index, init_flag);
   if (lock && pret) LockCacheChart(index);
   return pret;
@@ -1091,7 +1101,7 @@ ChartBase *ChartDB::OpenChartUsingCache(int dbindex, ChartInitFlag init_flag) {
 
   //    Search the cache
   {
-    wxMutexLocker lock(m_cache_mutex);
+    QMutexLocker lock(&m_cache_mutex);
 
     unsigned int nCache = pChartCache->size();
     m_ticks++;
@@ -1335,11 +1345,10 @@ ChartBase *ChartDB::OpenChartUsingCache(int dbindex, ChartInitFlag init_flag) {
           pce->RecentTime = m_ticks;
           pce->n_lock = old_lock;
 
-          if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+          {
+            m_cache_mutex.lock();
             pChartCache->append(pce);
-            m_cache_mutex.Unlock();
-          } else {
-            delete pce;
+            m_cache_mutex.unlock();
           }
         }
 
@@ -1465,7 +1474,8 @@ ChartBase *ChartDB::OpenChartUsingCache(int dbindex, ChartInitFlag init_flag) {
 bool ChartDB::DeleteCacheChart(ChartBase *pDeleteCandidate) {
   bool retval = false;
 
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     if (!IsSingleChart(pDeleteCandidate)) {
       // Find the chart in the cache
       CacheEntry *pce = NULL;
@@ -1485,7 +1495,7 @@ bool ChartDB::DeleteCacheChart(ChartBase *pDeleteCandidate) {
         }
       }
     }
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 
   return retval;
@@ -1502,7 +1512,8 @@ void ChartDB::ApplyColorSchemeToCachedCharts(ColorScheme cs) {
 #endif
   //    Search the cache
 
-  if (wxMUTEX_NO_ERROR == m_cache_mutex.Lock()) {
+  {
+    m_cache_mutex.lock();
     unsigned int nCache = pChartCache->size();
     for (unsigned int i = 0; i < nCache; i++) {
       pce = pChartCache->at(i);
@@ -1510,7 +1521,7 @@ void ChartDB::ApplyColorSchemeToCachedCharts(ColorScheme cs) {
       if (Ch) Ch->SetColorScheme(cs, true);
     }
 
-    m_cache_mutex.Unlock();
+    m_cache_mutex.unlock();
   }
 }
 

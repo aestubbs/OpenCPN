@@ -31,6 +31,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLocale>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QStandardPaths>
 
 #ifdef __ANDROID__
@@ -110,7 +112,7 @@ WX_DEFINE_LIST(ListOfPI_S57Obj);
 
 WX_DEFINE_LIST(ListOfObjRazRules);  // Implement a list ofObjRazRules
 
-static wxCriticalSection GDALcriticalSection;
+static QMutex GDALcriticalSection;
 
 static int s_bInS57;  // Exclusion flag to prvent recursion in this class init
                       // call. Init() is not reentrant due to static
@@ -3186,7 +3188,7 @@ bool s57chart::CreateHeaderDataFromENC() {
   MyFloatPtrArray *pNoCovrPtrArray = new MyFloatPtrArray;
 
   {
-    wxCriticalSectionLocker enter(GDALcriticalSection);
+    QMutexLocker enter(&GDALcriticalSection);
     if (isProcessing) int yyp = 4;
     isProcessing = true;
 

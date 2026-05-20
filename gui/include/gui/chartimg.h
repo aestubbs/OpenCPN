@@ -26,6 +26,8 @@
 
 #include "model/georef.h"  // for GeoRef type
 
+#include <QMutex>
+
 #include "chartbase.h"
 #include "chartdb.h"
 #include "ocpn_region.h"
@@ -343,7 +345,7 @@ protected:
 
   ViewPort m_vp_render_last;
 
-  wxCriticalSection m_critSect;
+  QMutex m_critSect;
   wxULongLong m_filesize;
 };
 
@@ -471,7 +473,7 @@ public:
 private:
   PlugInChartBase *m_ppicb;
   wxObject *m_ppo;
-  wxCriticalSection m_critSect;
+  QMutex m_critSect;
   bool m_overlayENC;
   wxMask *m_pMask;
 };

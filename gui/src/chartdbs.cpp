@@ -1139,7 +1139,7 @@ void ChartDatabase::ProcessThreadQueueEmpty() {
       if (m_pool_deferred.GetWorkerCount() < workerCount) {
         int threads_needed = workerCount - m_pool_deferred.GetWorkerCount();
         for (int i = 0; i < threads_needed; ++i) {
-          (new PoolWorkerThread(m_pool_deferred, this))->Run();
+          (new PoolWorkerThread(m_pool_deferred, this))->start();
           m_pool_deferred.AddWorker();
         }
       }
@@ -1912,7 +1912,7 @@ bool ChartDatabase::Update(ArrayOfCDI &dir_array, bool bForce,
     if (m_pool.GetWorkerCount() < workerCount) {
       int threads_needed = workerCount - m_pool.GetWorkerCount();
       for (int i = 0; i < threads_needed; ++i) {
-        (new PoolWorkerThread(m_pool, this))->Run();
+        (new PoolWorkerThread(m_pool, this))->start();
         m_pool.AddWorker();
       }
     }

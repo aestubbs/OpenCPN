@@ -27,6 +27,7 @@
 #include <wx/xml/xml.h>
 
 #include <QList>
+#include <QMutex>
 
 #include "chartbase.h"
 #include "chartbase.h"
@@ -194,8 +195,8 @@ private:
   bool m_b_locked;
   bool m_b_busy;
 
-  wxCriticalSection m_critSect;
-  wxMutex m_cache_mutex;
+  QMutex m_critSect;
+  QMutex m_cache_mutex;
   int m_checkGroupIndex[2];
   bool m_checkedTileOnly[2];
 };

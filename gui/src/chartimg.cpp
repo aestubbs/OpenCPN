@@ -34,6 +34,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QMutexLocker>
 
 #include <wx/stream.h>
 #include <wx/wfstream.h>
@@ -3687,7 +3688,7 @@ bool ChartBaseBSB::GetAndScaleData(unsigned char *ppn, size_t data_size,
 
 bool ChartBaseBSB::GetChartBits(wxRect &source, unsigned char *pPix,
                                 int sub_samp) {
-  wxCriticalSectionLocker locker(m_critSect);
+  QMutexLocker locker(&m_critSect);
 
   int iy;
 #define FILL_BYTE 0

@@ -29,6 +29,8 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <QThread>
+
 // #include <wx/xml/xml.h>
 
 // #include "chartbase.h"
@@ -68,10 +70,10 @@ public:
 #endif
 
 #if 0
-class ChartTableEntryPoolThread : public wxThread {
+class ChartTableEntryPoolThread : public QThread {
 public:
   ChartTableEntryPoolThread(ChartTableEntryJobTicket *ticket, wxEvtHandler *message_target);
-  void *Entry();
+  void run() override;
 
   wxEvtHandler *m_pMessageTarget;
   ChartTableEntryJobTicket *m_ticket;
@@ -79,11 +81,11 @@ public:
 #endif
 
 #if 1
-class ChartTableEntryPoolThread : public wxThread {
+class ChartTableEntryPoolThread : public QThread {
 public:
   ChartTableEntryPoolThread(std::shared_ptr<ChartTableEntryJobTicket> ticket,
                             wxEvtHandler* message_target);
-  void* Entry();
+  void run() override;
 
 private:
   wxEvtHandler* m_pMessageTarget = nullptr;
@@ -188,22 +190,24 @@ private:
 #define kMAX_EVENT_THROTTLE 2
 #endif
 
-class PoolWorkerThread : public wxThread {
+class PoolWorkerThread : public QThread {
 public:
   PoolWorkerThread(JobQueueCTE& queue, wxEvtHandler* target)
-      : wxThread(wxTHREAD_DETACHED), m_queue(queue), m_target(target) {
+      : m_queue(queue), m_target(target) {
+    // Detached lifetime: free the QThread once run() returns.
+    connect(this, &QThread::finished, this, &QObject::deleteLater);
     printf("New thread\n");
   }
 
 protected:
-  ExitCode Entry() override {
+  void run() override {
     std::shared_ptr<ChartTableEntryJobTicket> job;
 
     while (m_queue.Pop(job)) {
       // Throttle event generation
       while (m_queue.pending_events.load(std::memory_order_relaxed) >
              kMAX_EVENT_THROTTLE) {
-        wxMilliSleep(1);
+        QThread::msleep(1);
       }
 
       if (!job->DoJob()) {
@@ -218,8 +222,6 @@ protected:
       wxQueueEvent(m_target, evt);
       m_queue.pending_events++;
     }
-
-    return 0;
   }
 
 private:
