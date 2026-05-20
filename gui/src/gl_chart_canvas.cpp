@@ -35,6 +35,8 @@
 #include <stdint.h>
 #include <vector>
 
+#include <QDateTime>
+
 #include <wx/brush.h>
 #include <wx/colour.h>
 #include <wx/dcmemory.h>
@@ -3775,7 +3777,6 @@ void glChartCanvas::RenderGLAlertMessage() {
 
 unsigned long quiltHash;
 int refChartIndex;
-extern wxLongLong s_t0;
 
 int n_render;
 void glChartCanvas::Render() {
@@ -3844,7 +3845,7 @@ void glChartCanvas::Render() {
 #endif
   m_pParentCanvas->VPoint.SetPixelScale(m_displayScale);
 
-  m_last_render_time = wxDateTime::Now().GetTicks();
+  m_last_render_time = QDateTime::currentDateTime().toSecsSinceEpoch();
 
   // we don't care about jobs that are now off screen
   // clear out and it will be repopulated during render

@@ -41,6 +41,7 @@
 
 #include <model/base_platform.h>
 #include <model/ocpn_utils.h>
+#include <model/wx_qt_string.h>
 
 #include "canvas_config.h"
 #include "chartimg.h"
@@ -1601,12 +1602,10 @@ wxXmlDocument ChartDB::GetXMLDescription(int dbIndex, bool b_getGeom) {
     tnode = new wxXmlNode(wxXML_TEXT_NODE, "", scale);
     node->AddChild(tnode);
 
-    wxDateTime file_date(cte.GetFileTime());
-    file_date.MakeUTC();
-    wxString sfile_date = file_date.FormatISODate();
-    sfile_date += "T";
-    sfile_date += file_date.FormatISOTime();
-    sfile_date += "Z";
+    QDateTime file_date =
+        QDateTime::fromSecsSinceEpoch(cte.GetFileTime()).toUTC();
+    wxString sfile_date =
+        QString_to_wxString(file_date.toString("yyyy-MM-ddTHH:mm:ss'Z'"));
     node = new wxXmlNode(wxXML_ELEMENT_NODE, "local_file_datetime_iso8601");
     pcell_node->AddChild(node);
     tnode = new wxXmlNode(wxXML_TEXT_NODE, "", sfile_date);
@@ -1618,9 +1617,10 @@ wxXmlDocument ChartDB::GetXMLDescription(int dbIndex, bool b_getGeom) {
       tnode = new wxXmlNode(wxXML_TEXT_NODE, "", pc->GetSE());
       node->AddChild(tnode);
 
-      wxDateTime sdt = pc->GetEditionDate();
+      QDateTime sdt = pc->GetEditionDate();
       wxString ssdt = "Unknown";
-      if (sdt.IsValid()) ssdt = sdt.Format("%Y%m%d");
+      if (sdt.isValid())
+        ssdt = QString_to_wxString(sdt.toString("yyyyMMdd"));
 
       node = new wxXmlNode(wxXML_ELEMENT_NODE, "source_date");
       pcell_node->AddChild(node);
@@ -1663,12 +1663,10 @@ wxXmlDocument ChartDB::GetXMLDescription(int dbIndex, bool b_getGeom) {
     tnode = new wxXmlNode(wxXML_TEXT_NODE, "", scale);
     node->AddChild(tnode);
 
-    wxDateTime file_date(cte.GetFileTime());
-    file_date.MakeUTC();
-    wxString sfile_date = file_date.FormatISODate();
-    sfile_date += "T";
-    sfile_date += file_date.FormatISOTime();
-    sfile_date += "Z";
+    QDateTime file_date =
+        QDateTime::fromSecsSinceEpoch(cte.GetFileTime()).toUTC();
+    wxString sfile_date =
+        QString_to_wxString(file_date.toString("yyyy-MM-ddTHH:mm:ss'Z'"));
     node = new wxXmlNode(wxXML_ELEMENT_NODE, "local_file_datetime_iso8601");
     pcell_node->AddChild(node);
     tnode = new wxXmlNode(wxXML_TEXT_NODE, "", sfile_date);

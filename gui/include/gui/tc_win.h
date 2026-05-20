@@ -26,6 +26,8 @@
 
 #include <list>
 
+#include <QDateTime>
+
 #include <wx/frame.h>
 #include <wx/button.h>
 #include <wx/choice.h>
@@ -127,7 +129,7 @@ private:
   int m_diff_mins;
   wxString m_stz;
   int m_t_graphday_GMT;
-  wxDateTime m_graphday;
+  QDateTime m_graphday;
   int m_plot_y_offset;
 
   std::list<wxPoint *> m_sList;

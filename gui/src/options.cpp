@@ -2124,17 +2124,26 @@ void options::CreatePanel_Ownship(size_t parent, int border_size,
 
 #if wxUSE_TIMEPICKCTRL
   pTrackDaily->SetLabel(_("Automatic Daily Tracks at"));
+  {
+    // Bridge QDateTime to the still-wx pickers (deferred to P1.10).
+    QDateTime rot_q =
+        QDateTime::fromSecsSinceEpoch(g_track_rotate_time).toUTC();
+    wxDateTime rot_wx(
+        static_cast<wxDateTime::wxDateTime_t>(rot_q.date().day()),
+        static_cast<wxDateTime::Month>(rot_q.date().month() - 1),
+        rot_q.date().year(),
+        static_cast<wxDateTime::wxDateTime_t>(rot_q.time().hour()),
+        static_cast<wxDateTime::wxDateTime_t>(rot_q.time().minute()),
+        static_cast<wxDateTime::wxDateTime_t>(rot_q.time().second()));
 #ifdef __WXGTK__
-  pTrackRotateTime =
-      new TimeCtrl(itemPanelShip, ID_TRACKROTATETIME,
-                   wxDateTime((time_t)g_track_rotate_time).ToUTC(),
-                   wxDefaultPosition, wxDefaultSize, 0);
+    pTrackRotateTime = new TimeCtrl(itemPanelShip, ID_TRACKROTATETIME, rot_wx,
+                                    wxDefaultPosition, wxDefaultSize, 0);
 #else
-  pTrackRotateTime =
-      new wxTimePickerCtrl(itemPanelShip, ID_TRACKROTATETIME,
-                           wxDateTime((time_t)g_track_rotate_time).ToUTC(),
-                           wxDefaultPosition, wxDefaultSize, 0);
+    pTrackRotateTime =
+        new wxTimePickerCtrl(itemPanelShip, ID_TRACKROTATETIME, rot_wx,
+                             wxDefaultPosition, wxDefaultSize, 0);
 #endif  // __WXGTK__
+  }
   trackSizer1->Add(pTrackRotateTime, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT,
                    border_size);
 #endif  // wxUSE_TIMEPICKCTRL

@@ -26,6 +26,8 @@
 
 #include "gl_headers.h"
 
+#include <QDateTime>
+
 #include <wx/bitmap.h>
 #include <wx/datetime.h>
 #include <wx/dcmemory.h>
@@ -146,7 +148,7 @@ public:
   virtual bool GetChartExtent(Extent *pext) = 0;
 
   virtual OcpnProjType GetChartProjectionType() { return m_projection; }
-  virtual wxDateTime GetEditionDate(void) { return m_EdDate; }
+  virtual QDateTime GetEditionDate(void) { return m_EdDate; }
 
   virtual wxString GetPubDate() { return m_PubYear; }
   virtual int GetNativeScale() { return m_Chart_Scale; }
@@ -225,7 +227,7 @@ protected:
   OcpnProjType m_projection;
   ChartDepthUnitType m_depth_unit_id;
 
-  wxDateTime m_EdDate;
+  QDateTime m_EdDate;
 
   ThumbData *pThumbData;
 

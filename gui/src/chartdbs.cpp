@@ -39,6 +39,7 @@
 #include <wx/evtloop.h>
 
 #include "model/gui_events.h"
+#include "model/wx_qt_string.h"
 
 #include "chartbase.h"
 #include "chartdbs.h"
@@ -178,9 +179,9 @@ ChartTableEntry::ChartTableEntry(ChartBase &theChart, wxString &utf8Path) {
   Skew = theChart.GetChartSkew();
   ProjectionType = theChart.GetChartProjectionType();
 
-  wxDateTime ed = theChart.GetEditionDate();
-  if (theChart.GetEditionDate().IsValid())
-    edition_date = theChart.GetEditionDate().GetTicks();
+  QDateTime ed = theChart.GetEditionDate();
+  if (theChart.GetEditionDate().isValid())
+    edition_date = theChart.GetEditionDate().toSecsSinceEpoch();
 
   wxFileName fn(theChart.GetFullPath());
   if (fn.GetModificationTime().IsValid())
@@ -403,23 +404,23 @@ ChartTableEntry::~ChartTableEntry() {
 ///////////////////////////////////////////////////////////////////////
 
 bool ChartTableEntry::IsEarlierThan(const ChartTableEntry &cte) const {
-  wxDateTime mine(edition_date);
-  wxDateTime theirs(cte.edition_date);
+  QDateTime mine = QDateTime::fromSecsSinceEpoch(edition_date);
+  QDateTime theirs = QDateTime::fromSecsSinceEpoch(cte.edition_date);
 
-  if (!mine.IsValid() || !theirs.IsValid())
+  if (!mine.isValid() || !theirs.isValid())
     return false;  // will have the effect of keeping all questionable charts
 
-  return (mine.IsEarlierThan(theirs));
+  return (mine < theirs);
 }
 
 bool ChartTableEntry::IsEqualTo(const ChartTableEntry &cte) const {
-  wxDateTime mine(edition_date);
-  wxDateTime theirs(cte.edition_date);
+  QDateTime mine = QDateTime::fromSecsSinceEpoch(edition_date);
+  QDateTime theirs = QDateTime::fromSecsSinceEpoch(cte.edition_date);
 
-  if (!mine.IsValid() || !theirs.IsValid())
+  if (!mine.isValid() || !theirs.isValid())
     return true;  // will have the effect of keeping all questionable charts
 
-  return (mine.IsEqualTo(theirs));
+  return (mine == theirs);
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -1621,9 +1622,10 @@ wxString ChartDatabase::GetFullChartInfo(ChartBase *pc, int dbIndex,
   r += line;
   lc++;
   if (pc) {
-    wxDateTime ed = pc->GetEditionDate();
-    if (ed.IsValid()) {
-      line = _(" Updated:  ") + ed.FormatISODate() + "\n";
+    QDateTime ed = pc->GetEditionDate();
+    if (ed.isValid()) {
+      line = _(" Updated:  ") +
+             QString_to_wxString(ed.date().toString(Qt::ISODate)) + "\n";
       max_width = wxMax(max_width, line.Len());
       r += line;
     }
@@ -2083,8 +2085,11 @@ bool ChartDatabase::DetectDirChange(const wxString &dir_path,
     hash.Update(&fileSize, (sizeof fileSize));
 
     //    Mod time, in ticks
-    wxDateTime t = file.GetModificationTime();
-    wxULongLong fileTime = t.GetTicks();
+    // wxFileName::GetModificationTime() still returns wxDateTime; convert at
+    // the boundary (wxFileName itself is deferred to P1.10).
+    QDateTime t = QDateTime::fromSecsSinceEpoch(
+        file.GetModificationTime().GetTicks());
+    wxULongLong fileTime = t.toSecsSinceEpoch();
     hash.Update(&fileTime, (sizeof fileTime));
   }
 

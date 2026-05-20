@@ -30,6 +30,8 @@
 #include <mutex>
 #include <unordered_map>
 
+#include <QDateTime>
+
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
@@ -519,7 +521,7 @@ private:
 
   S57Reader *poReader;
 
-  wxDateTime m_date000;
+  QDateTime m_date000;
   wxString m_sdate000;
 
   wxString m_edtn000;

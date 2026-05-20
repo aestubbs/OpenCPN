@@ -821,29 +821,29 @@ bool TCMgr::GetTideOrCurrent15(time_t t_d, int idx, float &tcvalue, float &dir,
     return false;
   }
 
-  //    Figure out this computer timezone minute offset
-  // gTimeSource is QDateTime; bridge to wxDateTime via Unix epoch since the
-  // routine below depends on wxDateTime IsDST()/ToGMT() semantics.
-  wxDateTime this_now;
-  if (!gTimeSource.isValid())
-    this_now = wxDateTime::Now();
-  else
-    this_now = wxDateTime((time_t)gTimeSource.toSecsSinceEpoch());
-  wxDateTime this_gmt = this_now.ToGMT();
-  wxTimeSpan diff = this_gmt.Subtract(this_now);
-  int diff_mins = diff.GetMinutes();
+  //    Figure out this computer timezone minute offset.
+  // QDateTime::offsetFromUtc() already incorporates DST; this replaces the
+  // wx 3.0.2 ToGMT()/IsDST() dance the wx version needed.
+  QDateTime this_now = gTimeSource.isValid()
+                           ? QDateTime::fromSecsSinceEpoch(
+                                 gTimeSource.toSecsSinceEpoch())
+                           : QDateTime::currentDateTime();
+  this_now.setTimeSpec(Qt::LocalTime);
+  QDateTime this_gmt = this_now.toUTC();
+  // diff = GMT - local (in wx idiom). offsetFromUtc() is (local - UTC), so
+  // negate to preserve the same sign convention used downstream.
+  int diff_mins = -this_now.offsetFromUtc() / 60;
 
   int station_offset = pIDX->IDX_time_zone;
-  if (this_now.IsDST()) station_offset += 60;
+  if (this_now.isDaylightTime()) station_offset += 60;
   int corr_mins = station_offset - diff_mins;
 
-  wxDateTime today_00 = this_now;
-  today_00.ResetTime();
-  int t_today_00 = today_00.GetTicks();
+  QDateTime today_00(this_now.date(), QTime(0, 0, 0), Qt::LocalTime);
+  int t_today_00 = today_00.toSecsSinceEpoch();
   int t_today_00_at_station = t_today_00 - (corr_mins * 60);
 
   int t_at_station =
-      this_gmt.GetTicks() - (station_offset * 60) + (corr_mins * 60);
+      this_gmt.toSecsSinceEpoch() - (station_offset * 60) + (corr_mins * 60);
 
   int t_mins = (t_at_station - t_today_00_at_station) / 60;
   int t_15s = t_mins / 15;
@@ -1023,12 +1023,15 @@ int TCMgr::GetNextBigEvent(time_t *tm, int idx) {
   }
 }
 
-std::wstring TCMgr::GetTidalEventStr(int station_id, wxDateTime ref_dt,
+std::wstring TCMgr::GetTidalEventStr(int station_id, QDateTime ref_dt,
                                      double lat, double lon, int dt_type) {
   IDX_entry *idx = (IDX_entry *)GetIDX_entry(station_id);
-  time_t dtmtt = ref_dt.FromUTC().GetTicks();
+  // wx FromUTC() converted a UTC instant to the local-clock wall time;
+  // mirror with toLocalTime()+epoch.
+  time_t dtmtt = ref_dt.toLocalTime().toSecsSinceEpoch();
   int event = GetNextBigEvent(&dtmtt, station_id);
-  wxDateTime event_dt = wxDateTime(dtmtt).MakeUTC();
+  QDateTime event_dt =
+      QDateTime::fromSecsSinceEpoch(dtmtt, Qt::LocalTime).toUTC();
 
   std::wstring event_str;
   if (event == 1) {
@@ -1041,8 +1044,9 @@ std::wstring TCMgr::GetTidalEventStr(int station_id, wxDateTime ref_dt,
 
   if (event > 0) {
     event_str.append(L": ");
-    event_str.append(
-        toUsrDateTime(event_dt, dt_type, lon).FormatISOCombined(' '));
+    event_str.append(toUsrDateTime(event_dt, dt_type, lon)
+                         .toString("yyyy-MM-dd HH:mm:ss")
+                         .toStdWString());
   }
 
   return event_str;

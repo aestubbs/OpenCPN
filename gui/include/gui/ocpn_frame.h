@@ -563,8 +563,8 @@ private:
    * The last time basic navigational data was received, or 0 if no data
    * has been received.
    *
-   * @todo Change time_t to wxLongLong, as time_t is susceptible to the
-   * year 2038 problem on 32-bit builds.
+   * @todo Change time_t to qint64 (or QDateTime), as time_t is susceptible to
+   * the year 2038 problem on 32-bit builds.
    */
   time_t m_fixtime;
   bool b_autofind;

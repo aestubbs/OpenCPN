@@ -28,7 +28,8 @@
 #include <sstream>
 #include <string>
 
-#include <wx/datetime.h>
+#include <QDateTime>
+
 #include <wx/filename.h>
 
 #include "model/logger.h"
@@ -56,11 +57,11 @@ static void init_level_by_name() {
 }
 
 static std::string timeStamp() {
-  wxDateTime now = wxDateTime::UNow();
+  QDateTime now = QDateTime::currentDateTime();
   std::stringstream stamp;
-  stamp << std::setfill('0') << std::setw(2) << now.GetHour() << ":"
-        << std::setw(2) << now.GetMinute() << ":" << std::setw(2)
-        << now.GetSecond() << "." << std::setw(3) << now.GetMillisecond();
+  stamp << std::setfill('0') << std::setw(2) << now.time().hour() << ":"
+        << std::setw(2) << now.time().minute() << ":" << std::setw(2)
+        << now.time().second() << "." << std::setw(3) << now.time().msec();
   return stamp.str();
 }
 

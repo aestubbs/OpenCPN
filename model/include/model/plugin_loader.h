@@ -27,6 +27,8 @@
 
 #include <functional>
 
+#include <QDateTime>
+
 #include <wx/wx.h>
 #include <wx/bitmap.h>
 #include <wx/dynarray.h>
@@ -72,7 +74,7 @@ public:
   int m_cap_flag;                    //!< PlugIn Capabilities descriptor
   wxString m_plugin_file;            //!< The full file path
   wxString m_plugin_filename;        //!< The short file path
-  wxDateTime m_plugin_modification;  //!< used to detect upgraded plugins
+  QDateTime m_plugin_modification;  //!< used to detect upgraded plugins
   wxString m_common_name;            //!< A common name string for the plugin
   wxString m_short_description;
   wxString m_long_description;

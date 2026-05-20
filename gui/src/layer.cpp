@@ -31,7 +31,7 @@ Layer::Layer() {
   m_LayerName = "";
   m_LayerFileName = "";
   m_LayerDescription = "";
-  m_CreateTime = wxDateTime::Now();
+  m_CreateTime = QDateTime::currentDateTime();
 }
 
 Layer::~Layer() {

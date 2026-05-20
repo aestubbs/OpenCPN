@@ -40,6 +40,7 @@
 #include <wx/fileconf.h>
 
 #include "model/chartdata_input_stream.h"
+#include "model/wx_qt_string.h"
 
 #include "config.h"
 #include "chartimg.h"
@@ -141,7 +142,7 @@ ChartBase::ChartBase() {
   m_pNoCOVRTable = NULL;
   m_pNoCOVRTablePoints = NULL;
 
-  m_EdDate = wxInvalidDateTime;
+  m_EdDate = QDateTime();
 
   m_lon_datum_adjust = 0.;
   m_lat_datum_adjust = 0.;
@@ -388,11 +389,13 @@ InitReturn ChartGEO::Init(const wxString &name, ChartInitFlag init_flags) {
       char date_string[40];
       char date_buf[10];
       sscanf(buffer, "Date Published=%s\r\n", &date_string[0]);
-      wxString date_wxstr(date_string, wxConvUTF8);
-      wxDateTime dt;
-      if (dt.ParseDate(date_wxstr))  // successful parse?
+      QString date_qstr =
+          wxString_to_QString(wxString(date_string, wxConvUTF8));
+      QDate dt = QDate::fromString(date_qstr, Qt::ISODate);
+      if (!dt.isValid()) dt = QDate::fromString(date_qstr, Qt::TextDate);
+      if (dt.isValid())  // successful parse?
       {
-        sprintf(date_buf, "%d", dt.GetYear());
+        sprintf(date_buf, "%d", dt.year());
       } else {
         sscanf(date_string, "%s", date_buf);
       }
@@ -1136,33 +1139,34 @@ InitReturn ChartKAP::Init(const wxString &name, ChartInitFlag init_flags) {
           date_string[0] = 0;
           date_buf[0] = 0;
           sscanf(&buffer[i], "%s\r\n", date_string);
-          wxString date_wxstr(date_string, wxConvUTF8);
+          QString date_qstr =
+              wxString_to_QString(wxString(date_string, wxConvUTF8));
 
-          wxDateTime dt;
-          if (dt.ParseDate(date_wxstr))  // successful parse?
+          QDate dt = QDate::fromString(date_qstr, Qt::ISODate);
+          if (!dt.isValid()) dt = QDate::fromString(date_qstr, Qt::TextDate);
+          if (dt.isValid())  // successful parse?
           {
-            int iyear =
-                dt.GetYear();  // GetYear() fails on W98, DMC compiler, wx2.8.3
+            int iyear = dt.year();
             //    BSB charts typically list publish date as xx/yy/zz
             //  This our own little version of the Y2K problem.
             //  Just apply some sensible logic
 
             if (iyear < 50) {
               iyear += 2000;
-              dt.SetYear(iyear);
+              dt = QDate(iyear, dt.month(), dt.day());
             } else if ((iyear >= 50) && (iyear < 100)) {
               iyear += 1900;
-              dt.SetYear(iyear);
+              dt = QDate(iyear, dt.month(), dt.day());
             }
             assert(iyear <= 9999);
             sprintf(date_buf, "%d", iyear);
 
-            //    Initialize the wxDateTime menber for Edition Date
-            m_EdDate = dt;
+            //    Initialize the QDateTime member for Edition Date
+            m_EdDate = QDateTime(dt, QTime(0, 0, 0));
           } else {
             sscanf(date_string, "%s", date_buf);
-            m_EdDate.Set(1, wxDateTime::Jan,
-                         2000);  // Todo this could be smarter
+            m_EdDate = QDateTime(QDate(2000, 1, 1),
+                                 QTime(0, 0, 0));  // Todo this could be smarter
           }
 
           m_PubYear = wxString(date_buf, wxConvUTF8);

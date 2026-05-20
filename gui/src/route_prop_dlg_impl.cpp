@@ -586,20 +586,33 @@ void RoutePropDlgImpl::SetRouteAndUpdate(Route* pR, bool only_points) {
     m_tcName->SetFocus();
     if (m_pRoute->m_PlannedDeparture.isValid() &&
         m_pRoute->m_PlannedDeparture.toSecsSinceEpoch() > 0) {
-      // Bridge to wx for the still-wx-typed toUsrDateTime() and the picker
-      // controls.
-      wxDateTime dep_wx = wxDateTime(static_cast<time_t>(
-          m_pRoute->m_PlannedDeparture.toUTC().toSecsSinceEpoch()));
-      wxDateTime t = toUsrDateTime(dep_wx, m_tz_selection,
-                                   (*m_pRoute->pRoutePointList->begin())->m_lon);
-      m_dpDepartureDate->SetValue(t.GetDateOnly());
-      m_tpDepartureTime->SetValue(t);
+      QDateTime t = toUsrDateTime(
+          m_pRoute->m_PlannedDeparture.toUTC(), m_tz_selection,
+          (*m_pRoute->pRoutePointList->begin())->m_lon);
+      // The pickers still consume wxDateTime; bridge the broken-down fields
+      // back to wx (the picker is deferred to P1.10).
+      wxDateTime wx_t(
+          static_cast<wxDateTime::wxDateTime_t>(t.date().day()),
+          static_cast<wxDateTime::Month>(t.date().month() - 1),
+          t.date().year(),
+          static_cast<wxDateTime::wxDateTime_t>(t.time().hour()),
+          static_cast<wxDateTime::wxDateTime_t>(t.time().minute()),
+          static_cast<wxDateTime::wxDateTime_t>(t.time().second()));
+      m_dpDepartureDate->SetValue(wx_t.GetDateOnly());
+      m_tpDepartureTime->SetValue(wx_t);
     } else {
-      wxDateTime t =
-          toUsrDateTime(wxDateTime::Now().ToUTC(), m_tz_selection,
-                        (*m_pRoute->pRoutePointList->begin())->m_lon);
-      m_dpDepartureDate->SetValue(t.GetDateOnly());
-      m_tpDepartureTime->SetValue(t);
+      QDateTime t = toUsrDateTime(
+          QDateTime::currentDateTimeUtc(), m_tz_selection,
+          (*m_pRoute->pRoutePointList->begin())->m_lon);
+      wxDateTime wx_t(
+          static_cast<wxDateTime::wxDateTime_t>(t.date().day()),
+          static_cast<wxDateTime::Month>(t.date().month() - 1),
+          t.date().year(),
+          static_cast<wxDateTime::wxDateTime_t>(t.time().hour()),
+          static_cast<wxDateTime::wxDateTime_t>(t.time().minute()),
+          static_cast<wxDateTime::wxDateTime_t>(t.time().second()));
+      m_dpDepartureDate->SetValue(wx_t.GetDateOnly());
+      m_tpDepartureTime->SetValue(wx_t);
     }
   }
 
@@ -654,15 +667,25 @@ void RoutePropDlgImpl::DepartureTimeOnTimeChanged(wxDateEvent& event) {
 void RoutePropDlgImpl::TimezoneOnChoice(wxCommandEvent& event) {
   if (!m_pRoute) return;
   m_tz_selection = m_choiceTimezone->GetSelection();
-  wxDateTime dep_wx =
-      m_pRoute->m_PlannedDeparture.isValid()
-          ? wxDateTime(static_cast<time_t>(
-                m_pRoute->m_PlannedDeparture.toUTC().toSecsSinceEpoch()))
-          : wxInvalidDateTime;
-  wxDateTime t = toUsrDateTime(dep_wx, m_tz_selection,
-                               (*m_pRoute->pRoutePointList->begin())->m_lon);
-  m_dpDepartureDate->SetValue(t.GetDateOnly());
-  m_tpDepartureTime->SetValue(t);
+  QDateTime dep_q = m_pRoute->m_PlannedDeparture.isValid()
+                        ? m_pRoute->m_PlannedDeparture.toUTC()
+                        : QDateTime();
+  QDateTime t = toUsrDateTime(
+      dep_q, m_tz_selection, (*m_pRoute->pRoutePointList->begin())->m_lon);
+  // Bridge to the still-wx picker controls (deferred to P1.10).
+  wxDateTime wx_t;
+  if (t.isValid()) {
+    wx_t = wxDateTime(
+        static_cast<wxDateTime::wxDateTime_t>(t.date().day()),
+        static_cast<wxDateTime::Month>(t.date().month() - 1),
+        t.date().year(),
+        static_cast<wxDateTime::wxDateTime_t>(t.time().hour()),
+        static_cast<wxDateTime::wxDateTime_t>(t.time().minute()),
+        static_cast<wxDateTime::wxDateTime_t>(t.time().second()));
+  }
+  m_dpDepartureDate->SetValue(wx_t.IsValid() ? wx_t.GetDateOnly()
+                                              : wxInvalidDateTime);
+  m_tpDepartureTime->SetValue(wx_t);
   UpdatePoints();
   event.Skip();
 }
@@ -722,9 +745,6 @@ void RoutePropDlgImpl::WaypointsOnDataViewListCtrlItemValueChanged(
     }
     p->SetPlannedSpeed(fromUsrSpeed(spd));
   } else if (ev_col == COLUMN_ETD) {
-    wxString::const_iterator end;
-    wxDateTime etd;
-
     wxString ts = value.GetString();
     if (ts.StartsWith("!")) {
       ts.Replace("!", "", true);
@@ -733,12 +753,19 @@ void RoutePropDlgImpl::WaypointsOnDataViewListCtrlItemValueChanged(
     ts.Trim(false);
 
     if (!ts.IsEmpty()) {
-      if (!etd.ParseDateTime(ts, &end)) {
+      QString qts = wxString_to_QString(ts);
+      // Accept a few common forms in the user's locale.
+      QDateTime etd_q = QDateTime::fromString(qts, Qt::ISODate);
+      if (!etd_q.isValid())
+        etd_q = QDateTime::fromString(qts, "yyyy-MM-dd HH:mm:ss");
+      if (!etd_q.isValid())
+        etd_q = QLocale::system().toDateTime(qts, QLocale::ShortFormat);
+      if (!etd_q.isValid()) {
         p->SetETD(QDateTime());
       } else {
-        p->SetETD(wxString_to_QString(
-            fromUsrDateTime(etd, m_tz_selection, p->m_lon)
-                .FormatISOCombined()));
+        QDateTime utc =
+            fromUsrDateTime(etd_q, m_tz_selection, p->m_lon);
+        p->SetETD(utc);
       }
     } else {
       p->SetETD(QDateTime());
@@ -774,14 +801,18 @@ void RoutePropDlgImpl::WaypointsOnDataViewListCtrlSelectionChanged(
 
 QDateTime RoutePropDlgImpl::GetDepartureTS() {
   wxDateTime dt = m_dpDepartureDate->GetValue();
-  dt.SetHour(m_tpDepartureTime->GetValue().GetHour());
-  dt.SetMinute(m_tpDepartureTime->GetValue().GetMinute());
-  dt.SetSecond(m_tpDepartureTime->GetValue().GetSecond());
-  wxDateTime utc_wx = fromUsrDateTime(
-      dt, m_tz_selection, (*m_pRoute->pRoutePointList->begin())->m_lon);
-  if (!utc_wx.IsValid()) return QDateTime();
-  return QDateTime::fromSecsSinceEpoch(
-      static_cast<qint64>(utc_wx.GetTicks()), Qt::UTC);
+  wxDateTime tval = m_tpDepartureTime->GetValue();
+  // Bridge from the still-wx pickers (deferred to P1.10) into a QDateTime
+  // carrying the same broken-down user-tz fields, then run fromUsrDateTime()
+  // to get UTC.
+  QDateTime user_dt(
+      QDate(dt.GetYear(), dt.GetMonth() + 1, dt.GetDay()),
+      QTime(tval.GetHour(), tval.GetMinute(), tval.GetSecond()));
+  QDateTime utc = fromUsrDateTime(
+      user_dt, m_tz_selection, (*m_pRoute->pRoutePointList->begin())->m_lon);
+  if (!utc.isValid()) return QDateTime();
+  utc.setTimeSpec(Qt::UTC);
+  return utc;
 }
 
 void RoutePropDlgImpl::OnRoutepropCopyTxtClick(wxCommandEvent& event) {

@@ -240,8 +240,8 @@ bool FastMessageMap::AppendEntry(const CanHeader header,
     }
     // FIXME (dave)
     //     if ((dropped_frames > CONST_DROPPEDFRAME_THRESHOLD) &&
-    //     (wxDateTime::Now() < (dropped_frame_time +
-    //     wxTimeSpan::Seconds(CONST_DROPPEDFRAME_PERIOD) ) ) ) {
+    //     (QDateTime::currentDateTime() <
+    //      dropped_frame_time.addSecs(CONST_DROPPEDFRAME_PERIOD))) {
     //       wxLogError("TwoCan Device, Dropped Frames rate exceeded");
     //       wxLogError(wxString::Format(_T("Frame: Source: %d Destination: %d
     //       Priority: %d PGN: %d"),header.source, header.destination,

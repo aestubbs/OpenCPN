@@ -26,6 +26,8 @@
 
 #include <list>
 
+#include <QDateTime>
+
 #include <wx/checkbox.h>
 #include <wx/datetime.h>
 #include <wx/string.h>
@@ -65,7 +67,7 @@ public:
   wxString m_LayerFileName;
   wxString m_LayerDescription;
   wxString m_LayerType;
-  wxDateTime m_CreateTime;
+  QDateTime m_CreateTime;
 };
 
 #endif

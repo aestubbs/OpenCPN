@@ -26,6 +26,8 @@
 #include <list>
 #include <vector>
 
+#include <QDateTime>
+
 #include <wx/wxprec.h>
 #include <wx/progdlg.h>
 #include <wx/wx.h>
@@ -1343,15 +1345,15 @@ void glTextureManager::BuildCompressedCache() {
   PurgeJobList();
   if (GetRunningJobCount()) {
     wxLogMessage("Starting compressor pool drain");
-    wxDateTime now = wxDateTime::Now();
-    time_t stall = now.GetTicks();
+    QDateTime now = QDateTime::currentDateTime();
+    time_t stall = now.toSecsSinceEpoch();
 #define THREAD_WAIT_SECONDS 5
     time_t end = stall + THREAD_WAIT_SECONDS;
 
     int n_comploop = 0;
     while (stall < end) {
-      wxDateTime later = wxDateTime::Now();
-      stall = later.GetTicks();
+      QDateTime later = QDateTime::currentDateTime();
+      stall = later.toSecsSinceEpoch();
 
       wxString msg;
       msg.Printf("Time: %d  Job Count: %d", n_comploop, GetRunningJobCount());

@@ -210,7 +210,7 @@ static void SendAisJsonMessage(std::shared_ptr<const AisTargetData> pTarget) {
   jMsg[wxS("Source")] = wxS("AisDecoder");
   jMsg["Type"] = "Information";
   jMsg["Msg"] = wxS("AIS Target");
-  jMsg["MsgId"] = static_cast<wxLongLong_t>(t);
+  jMsg["MsgId"] = static_cast<long long>(t);
   jMsg[wxS("lat")] = pTarget->Lat;
   jMsg[wxS("lon")] = pTarget->Lon;
   jMsg[wxS("sog")] = pTarget->SOG;
@@ -3686,14 +3686,25 @@ InitReturn ChartPlugInWrapper::Init(const wxString& name,
       m_ChartType = (ChartTypeEnum)m_ppicb->GetChartType();
       m_ChartFamily = (ChartFamilyEnum)m_ppicb->GetChartFamily();
       m_projection = (OcpnProjType)m_ppicb->GetChartProjection();
-      m_EdDate = m_ppicb->GetEditionDate();
+      // Plugin ABI still returns wxDateTime; bridge at the boundary.
+      {
+        wxDateTime wx_ed = m_ppicb->GetEditionDate();
+        m_EdDate = wx_ed.IsValid()
+                       ? QDateTime::fromSecsSinceEpoch(wx_ed.GetTicks())
+                       : QDateTime();
+      }
       m_Name = m_ppicb->GetName();
       m_ID = m_ppicb->GetID();
       m_DepthUnits = m_ppicb->GetDepthUnits();
       m_SoundingsDatum = m_ppicb->GetSoundingsDatum();
       m_datum_str = m_ppicb->GetDatumString();
       m_SE = m_ppicb->GetSE();
-      m_EdDate = m_ppicb->GetEditionDate();
+      {
+        wxDateTime wx_ed = m_ppicb->GetEditionDate();
+        m_EdDate = wx_ed.IsValid()
+                       ? QDateTime::fromSecsSinceEpoch(wx_ed.GetTicks())
+                       : QDateTime();
+      }
       m_ExtraInfo = m_ppicb->GetExtraInfo();
       Chart_Error_Factor = m_ppicb->GetChartErrorFactor();
       m_depth_unit_id = (ChartDepthUnitType)m_ppicb->GetDepthUnitId();

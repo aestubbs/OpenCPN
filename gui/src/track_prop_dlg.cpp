@@ -1185,14 +1185,15 @@ bool TrackPropDlg::UpdateProperties() {
 
   //  Time
   wxString time_form;
-  wxTimeSpan time(0, 0, (int)total_seconds, 0);
   // TODO  Construct a readable time string, e.g. "xx Days, 15:34"
-  if (total_seconds > 3600. * 24.)
-    time_form = time.Format("%H:%M");
-  else if (total_seconds > 0.)
-    time_form = time.Format("%H:%M");
-  else
+  if (total_seconds > 0.) {
+    qint64 secs = static_cast<qint64>(total_seconds);
+    time_form = wxString::Format("%02lld:%02lld",
+                                 static_cast<long long>(secs / 3600),
+                                 static_cast<long long>((secs / 60) % 60));
+  } else {
     time_form = "--";
+  }
   m_tTimeEnroute->SetValue(time_form);
 
   m_cbShow->SetValue(m_pTrack->IsVisible());

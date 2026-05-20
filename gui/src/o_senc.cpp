@@ -45,6 +45,7 @@
 
 #include "model/config_vars.h"
 #include "model/gui_vars.h"
+#include "model/wx_qt_string.h"
 
 #include "gui_lib.h"
 #include "LOD_reduce.h"
@@ -1043,7 +1044,8 @@ int Osenc::ingestCell(OGRS57DataSource *poS57DS, const wxString &FullPath000,
   //      source directory. We need to keep track of the last sequential update
   //      applied, to look out for new updates
 
-  wxString LastUpdateDate = m_date000.Format("%Y%m%d");
+  wxString LastUpdateDate =
+      QString_to_wxString(m_date000.toString("yyyyMMdd"));
 
   int available_updates =
       ValidateAndCountUpdates(FullPath000, working_dir, LastUpdateDate, true);
@@ -1133,8 +1135,8 @@ int Osenc::ingestCell(OGRS57DataSource *poS57DS, const wxString &FullPath000,
       bool bSuccess;
       DDFModule oUpdateModule;
       wxString LastGoodUpdateDate;
-      wxDateTime now = wxDateTime::Now();
-      LastGoodUpdateDate = now.Format("%Y%m%d");
+      QDateTime now = QDateTime::currentDateTime();
+      LastGoodUpdateDate = QString_to_wxString(now.toString("yyyyMMdd"));
 
       bSuccess = !(
           oUpdateModule.Open(last_successful_update_file.mb_str(), TRUE) == 0);
@@ -1368,8 +1370,8 @@ int Osenc::ValidateAndCountUpdates(const wxFileName file000,
           LastUpdateDate = wxString(u, wxConvUTF8);
         }
       } else {
-        wxDateTime now = wxDateTime::Now();
-        LastUpdateDate = now.Format("%Y%m%d");
+        QDateTime now = QDateTime::currentDateTime();
+        LastUpdateDate = QString_to_wxString(now.toString("yyyyMMdd"));
       }
     }
   }
@@ -1412,10 +1414,12 @@ bool Osenc::GetBaseFileAttr(const wxString &FullPath000) {
     date000 =
         "20000101";  // backstop, very early, so any new files will update?
   }
-  m_date000.ParseFormat(date000, "%Y%m%d");
-  if (!m_date000.IsValid()) m_date000.ParseFormat("20000101", "%Y%m%d");
+  m_date000 =
+      QDateTime::fromString(wxString_to_QString(date000), "yyyyMMdd");
+  if (!m_date000.isValid())
+    m_date000 = QDateTime::fromString("20000101", "yyyyMMdd");
 
-  m_date000.ResetTime();
+  m_date000 = QDateTime(m_date000.date(), QTime(0, 0, 0));
 
   //    Fetch the EDTN(Edition) field
   u = (char *)(pr->GetStringSubfield("DSID", 0, "EDTN", 0));
@@ -1589,7 +1593,8 @@ int Osenc::createSenc200(const wxString &FullPath000,
     return ERROR_SENCFILE_ABORT;
   }
 
-  wxString date000 = m_date000.Format("%Y%m%d");
+  wxString date000 =
+      QString_to_wxString(m_date000.toString("yyyyMMdd"));
   string sdata = date000.ToStdString();
   if (!WriteHeaderRecord200(stream, HEADER_CELL_PUBLISHDATE, sdata)) {
     stream->Close();
@@ -1631,9 +1636,8 @@ int Osenc::createSenc200(const wxString &FullPath000,
     return ERROR_SENCFILE_ABORT;
   }
 
-  wxDateTime now = wxDateTime::Now();
-  wxString dateNow = now.Format("%Y%m%d");
-  sdata = dateNow.ToStdString();
+  QDateTime now = QDateTime::currentDateTime();
+  sdata = now.toString("yyyyMMdd").toStdString();
   if (!WriteHeaderRecord200(stream, HEADER_CELL_SENCCREATEDATE, sdata)) {
     stream->Close();
     delete m_pOutstream;

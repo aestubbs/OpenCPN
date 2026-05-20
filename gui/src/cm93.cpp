@@ -42,6 +42,7 @@
 
 #include "model/plugin_comm.h"
 #include "model/chartdata_input_stream.h"
+#include "model/wx_qt_string.h"
 
 #include "chcanv.h"
 #include "cm93.h"
@@ -3340,9 +3341,10 @@ S57Obj *cm93chart::CreateS57Obj(int cell_index, int iobject, int subcell,
       if (sclass_sub.IsSameAs("M_COVR") && (vtype == 'S')) {
         wxString pub_date((char *)pattValTmp->value, wxConvUTF8);
 
-        wxDateTime upd;
-        upd.ParseFormat(pub_date, "%Y%m%d");
-        if (!upd.IsValid()) upd.ParseFormat("20000101", "%Y%m%d");
+        QDateTime upd = QDateTime::fromString(
+            wxString_to_QString(pub_date), "yyyyMMdd");
+        if (!upd.isValid())
+          upd = QDateTime::fromString("20000101", "yyyyMMdd");
         m_EdDate = upd;
 
         pub_date.Truncate(4);
@@ -4709,9 +4711,9 @@ void cm93compchart::SetVPParms(const ViewPort &vpt) {
   //    Continuoesly update the composite chart edition date to the latest cell
   //    decoded
   if (m_pcm93chart_array[cmscale]) {
-    if (!m_EdDate.IsValid() ||
-        !m_pcm93chart_array[cmscale]->GetEditionDate().IsValid() ||
-        m_pcm93chart_array[cmscale]->GetEditionDate().IsLaterThan(m_EdDate))
+    if (!m_EdDate.isValid() ||
+        !m_pcm93chart_array[cmscale]->GetEditionDate().isValid() ||
+        m_pcm93chart_array[cmscale]->GetEditionDate() > m_EdDate)
       m_EdDate = m_pcm93chart_array[cmscale]->GetEditionDate();
   }
 }

@@ -513,7 +513,10 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
     }
     CreateLoadStamp(plugin_loadstamp.ToStdString());
   }
-  wxDateTime plugin_modification = wxFileName(file_name).GetModificationTime();
+  // wxFileName::GetModificationTime() returns wxDateTime; bridge to QDateTime
+  // via Unix epoch since wxFileName itself is deferred to P1.10.
+  QDateTime plugin_modification = QDateTime::fromSecsSinceEpoch(
+      wxFileName(file_name).GetModificationTime().GetTicks());
   wxLog::FlushActive();
 
 #ifdef __ANDROID__

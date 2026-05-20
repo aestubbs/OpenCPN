@@ -27,6 +27,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include <QDateTime>
+
 #include <wx/wx.h>
 #include <wx/dir.h>
 #include <wx/dynarray.h>
@@ -236,7 +238,7 @@ public:
   int ValidateAndCountUpdates(const wxFileName file000, const wxString CopyDir,
                               wxString &LastUpdateDate, bool b_copyfiles);
   static int GetUpdateFileArray(const wxFileName file000,
-                                wxArrayString *UpFiles, wxDateTime date000,
+                                wxArrayString *UpFiles, QDateTime date000,
                                 wxString edtn000);
   wxString GetISDT();
   InitReturn PostInit(ChartInitFlag flags, ColorScheme cs);
@@ -329,7 +331,7 @@ private:
   bool m_bneed_new_thumbnail;
 
   bool m_bbase_file_attr_known;
-  wxDateTime m_date000;  // extracted from DSID:ISDT
+  QDateTime m_date000;  // extracted from DSID:ISDT
   wxString m_edtn000;    // extracted from DSID:EDTN
   int m_nGeoRecords;     // extracted from DSSI:NOGR
   int m_native_scale;    // extracted from DSPM:CSCL

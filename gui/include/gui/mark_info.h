@@ -26,6 +26,8 @@
 
 #include <memory>
 
+#include <QDateTime>
+
 /*!
  * Includes
  */
@@ -245,7 +247,7 @@ private:
   wxColour m_wxcWaypointRangeRingsColour_save;
   double m_WaypointArrivalRadius_save;
   float m_PlannedSpeed_save;
-  wxDateTime m_ArrETA_save;
+  QDateTime m_ArrETA_save;
   std::map<double, const IDX_entry*> m_tss;
   wxString m_lasttspos;
 

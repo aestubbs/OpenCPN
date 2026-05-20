@@ -28,6 +28,8 @@
 #include <map>
 #include <vector>
 
+#include <QDateTime>
+
 #include <wx/datetime.h>
 
 #include "station_data.h"
@@ -108,7 +110,7 @@ public:
 
   int GetStationTimeOffset(IDX_entry *pIDX);
   int GetNextBigEvent(time_t *tm, int idx);
-  std::wstring GetTidalEventStr(int station_id, wxDateTime ref_dt, double lat,
+  std::wstring GetTidalEventStr(int station_id, QDateTime ref_dt, double lat,
                                 double lon, int dt_type);
   double GetStationLat(IDX_entry *pIDX);
   double GetStationLon(IDX_entry *pIDX);

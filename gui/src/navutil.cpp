@@ -2940,9 +2940,9 @@ bool LogMessageOnce(const wxString &msg) {
 /*          Some assorted utilities                                       */
 /**************************************************************************/
 
-wxDateTime toUsrDateTime(const wxDateTime ts, const int format,
-                         const double lon) {
-  if (!ts.IsValid()) {
+QDateTime toUsrDateTime(const QDateTime ts, const int format,
+                        const double lon) {
+  if (!ts.isValid()) {
     return ts;
   }
   int effective_format = format;
@@ -2958,19 +2958,18 @@ wxDateTime toUsrDateTime(const wxDateTime ts, const int format,
       effective_format = UTCINPUT;
     }
   }
-  wxDateTime dt;
+  QDateTime dt;
   switch (effective_format) {
     case LMTINPUT:  // LMT@Location
       if (std::isnan(lon)) {
-        dt = wxInvalidDateTime;
+        dt = QDateTime();
       } else {
-        dt =
-            ts.Add(wxTimeSpan(wxTimeSpan(0, 0, wxLongLong(lon * 3600. / 15.))));
+        dt = ts.addSecs(static_cast<qint64>(lon * 3600. / 15.));
       }
       break;
     case LTINPUT:  // Local@PC
       // Convert date/time from UTC to local time.
-      dt = ts.FromUTC();
+      dt = ts.toLocalTime();
       break;
     case UTCINPUT:  // UTC
       // The date/time is already in UTC.
@@ -2980,9 +2979,9 @@ wxDateTime toUsrDateTime(const wxDateTime ts, const int format,
   return dt;
 }
 
-wxDateTime fromUsrDateTime(const wxDateTime ts, const int format,
-                           const double lon) {
-  if (!ts.IsValid()) {
+QDateTime fromUsrDateTime(const QDateTime ts, const int format,
+                          const double lon) {
+  if (!ts.isValid()) {
     return ts;
   }
   int effective_format = format;
@@ -2998,18 +2997,18 @@ wxDateTime fromUsrDateTime(const wxDateTime ts, const int format,
       effective_format = UTCINPUT;
     }
   }
-  wxDateTime dt;
+  QDateTime dt;
   switch (effective_format) {
     case LMTINPUT:  // LMT@Location
       if (std::isnan(lon)) {
-        dt = wxInvalidDateTime;
+        dt = QDateTime();
       } else {
-        dt = ts.Subtract(wxTimeSpan(0, 0, wxLongLong(lon * 3600. / 15.)));
+        dt = ts.addSecs(-static_cast<qint64>(lon * 3600. / 15.));
       }
       break;
     case LTINPUT:  // Local@PC
       // The input date/time is in local time, so convert it to UTC.
-      dt = ts.ToUTC();
+      dt = ts.toUTC();
       break;
     case UTCINPUT:  // UTC
       dt = ts;

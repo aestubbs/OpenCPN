@@ -14,7 +14,7 @@
  *   You should have received a copy of the GNU General Public License     *
  *   along with this program; if not, see <https://www.gnu.org/licenses/>. *
  **************************************************************************/
-#include <wx/datetime.h>
+#include <QDateTime>
 
 #include "model/gpx_document.h"
 #include "model/notification.h"
@@ -29,7 +29,7 @@ Notification::Notification(NotificationSeverity _severity,
                            const std::string &_message, int _timeout_secs)
     : severity(_severity),
       message(_message),
-      activate_time(wxDateTime::Now().GetTicks()),
+      activate_time(QDateTime::currentDateTime().toSecsSinceEpoch()),
       guid(GpxDocument::GetUUID()),
       message_hash(std::hash<std::string>{}(_message)),
       auto_timeout_start(_timeout_secs),

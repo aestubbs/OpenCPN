@@ -19,6 +19,13 @@
  * \file
  *
  * Time textbox to replace broken wxTimePickerCtrl on wxGTK
+ *
+ * This class is a drop-in for wxTimePickerCtrl on platforms where the latter
+ * is unreliable, so its public surface intentionally mirrors wxTimePickerCtrl
+ * (takes/returns wxDateTime). Internally the parsing/formatting is done with
+ * QTime, with the wxDateTime kept only as the public payload for the
+ * wxEVT_TIME_CHANGED event. The wxDateTime surface here will go away alongside
+ * wxDatePickerCtrl in P1.10.
  */
 
 #ifndef time_textbox_h
@@ -26,13 +33,16 @@
 
 #pragma once
 
+#include <QDateTime>
+
 #include <wx/dateevt.h>
 #include <wx/datetime.h>
 #include <wx/msgdlg.h>
 #include <wx/textctrl.h>
 
+#include "model/wx_qt_string.h"
+
 #define NO_TIME "00:00"
-#define TIME_FORMAT "%H:%M"
 
 class TimeCtrl : public wxTextCtrl {
 public:
@@ -42,52 +52,69 @@ public:
            const wxSize &size = wxDefaultSize, long style = 0,
            const wxValidator &validator = wxDefaultValidator,
            const wxString &name = wxTextCtrlNameStr)
-      : wxTextCtrl(parent, id,
-                   value.IsValid() ? value.Format(TIME_FORMAT) : NO_TIME, pos,
-                   size, style, validator, name) {
+      : wxTextCtrl(parent, id, FormatInitial(value), pos, size, style,
+                   validator, name) {
     Bind(wxEVT_KEY_UP, &TimeCtrl::OnChar, this);
     Bind(wxEVT_KILL_FOCUS, &TimeCtrl::OnKillFocus, this);
   };
 
-  void SetValue(const wxDateTime val) {
+  void SetValue(const wxDateTime &val) {
     if (val.IsValid()) {
-      wxTextCtrl::SetValue(val.Format(TIME_FORMAT));
+      QTime t(val.GetHour(), val.GetMinute(), val.GetSecond());
+      wxTextCtrl::SetValue(QString_to_wxString(t.toString("HH:mm")));
     } else {
       wxTextCtrl::SetValue(NO_TIME);
     }
   };
 
   wxDateTime GetValue() {
-    wxDateTime dt;
-    wxString str = wxTextCtrl::GetValue();
-    wxString::const_iterator end;
-    if (!dt.ParseTime(str, &end)) {
-      return wxInvalidDateTime;
-    } else if (end == str.end()) {
-      return dt;
-    } else {
-      return dt;
-    }
+    QString str = wxString_to_QString(wxTextCtrl::GetValue());
+    QTime t = QTime::fromString(str, "HH:mm");
+    if (!t.isValid()) t = QTime::fromString(str, "H:mm");
+    if (!t.isValid()) return wxInvalidDateTime;
+    // wxTimePickerCtrl returns today's date with the parsed time of day.
+    QDate today = QDate::currentDate();
+    return wxDateTime(static_cast<wxDateTime::wxDateTime_t>(today.day()),
+                      static_cast<wxDateTime::Month>(today.month() - 1),
+                      today.year(),
+                      static_cast<wxDateTime::wxDateTime_t>(t.hour()),
+                      static_cast<wxDateTime::wxDateTime_t>(t.minute()),
+                      static_cast<wxDateTime::wxDateTime_t>(t.second()));
   };
 
   void OnChar(wxKeyEvent &event) {
-    if (GetValue().IsValid()) {
-      wxDateEvent evt(this, GetValue(), wxEVT_TIME_CHANGED);
+    wxDateTime v = GetValue();
+    if (v.IsValid()) {
+      wxDateEvent evt(this, v, wxEVT_TIME_CHANGED);
       HandleWindowEvent(evt);
     }
   };
 
   void OnKillFocus(wxFocusEvent &event) {
-    wxTextCtrl::SetValue(GetValue().Format(TIME_FORMAT));
+    wxDateTime v = GetValue();
+    if (v.IsValid()) {
+      QTime t(v.GetHour(), v.GetMinute(), v.GetSecond());
+      wxTextCtrl::SetValue(QString_to_wxString(t.toString("HH:mm")));
+    }
   };
 
   bool GetTime(int *hour, int *min, int *sec) {
-    const wxDateTime::Tm tm = GetValue().GetTm();
-    *hour = tm.hour;
-    *min = tm.min;
-    *sec = tm.sec;
-
+    wxDateTime v = GetValue();
+    if (!v.IsValid()) {
+      *hour = *min = *sec = 0;
+      return false;
+    }
+    *hour = v.GetHour();
+    *min = v.GetMinute();
+    *sec = v.GetSecond();
     return true;
+  }
+
+private:
+  static wxString FormatInitial(const wxDateTime &value) {
+    if (!value.IsValid()) return NO_TIME;
+    QTime t(value.GetHour(), value.GetMinute(), value.GetSecond());
+    return QString_to_wxString(t.toString("HH:mm"));
   }
 };
 

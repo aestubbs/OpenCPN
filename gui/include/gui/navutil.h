@@ -27,6 +27,8 @@
 #include <cmath>
 #include <vector>
 
+#include <QDateTime>
+
 #include <wx/colour.h>
 #include <wx/config.h>
 #include <wx/confbase.h>
@@ -98,11 +100,11 @@ void DeinitGlobals();
  *        0 = UTC, 1 = Local@PC, 2 = LMT@Location, 3 = Global settings.
  * @param lon The longitude in degrees for LMT calculation (positive for east,
  * negative for west). Default is NaN.
- * @return wxDateTime The converted timestamp in the specified format, or
- * wxInvalidDateTime if conversion fails.
+ * @return QDateTime The converted timestamp in the specified format, or
+ * an invalid QDateTime if conversion fails.
  */
-wxDateTime toUsrDateTime(const wxDateTime ts, const int format,
-                         const double lon = INFINITY - INFINITY);
+QDateTime toUsrDateTime(const QDateTime ts, const int format,
+                        const double lon = INFINITY - INFINITY);
 /**
  * Converts a timestamp from a user's preferred time format to UTC.
  *
@@ -115,10 +117,10 @@ wxDateTime toUsrDateTime(const wxDateTime ts, const int format,
  * @param format The input timestamp format:
  *        0 = UTC, 1 = Local@PC, 2 = LMT@Location, 3 = Global settings.
  * @param lon The longitude for LMT calculation. Default is NaN.
- * @return wxDateTime The converted timestamp in UTC.
+ * @return QDateTime The converted timestamp in UTC.
  */
-wxDateTime fromUsrDateTime(const wxDateTime ts, const int format,
-                           const double lon = INFINITY - INFINITY);
+QDateTime fromUsrDateTime(const QDateTime ts, const int format,
+                          const double lon = INFINITY - INFINITY);
 
 extern void AlphaBlending(ocpnDC &dc, int x, int y, int size_x, int size_y,
                           float radius, wxColour color,

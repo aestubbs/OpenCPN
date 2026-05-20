@@ -26,6 +26,8 @@
 #include <map>
 #include <vector>
 
+#include <QLocale>
+
 #ifdef __ANDROID__
 #include "crashlytics.h"
 #endif
@@ -55,6 +57,7 @@
 #include "s57chart.h"
 
 #include "model/chartdata_input_stream.h"
+#include "model/wx_qt_string.h"
 #include "model/cutil.h"
 #include "model/georef.h"
 #include "model/logger.h"
@@ -2702,11 +2705,11 @@ int s57chart::FindOrCreateSenc(const wxString &name, bool b_progress) {
         int last_update = senc.getSENCReadLastUpdate();
 
         wxString str = senc.getSENCFileCreateDate();
-        wxDateTime SENCCreateDate;
-        SENCCreateDate.ParseFormat(str, "%Y%m%d");
-
-        if (SENCCreateDate.IsValid())
-          SENCCreateDate.ResetTime();  // to midnight
+        QDateTime SENCCreateDate = QDateTime::fromString(
+            wxString_to_QString(str), "yyyyMMdd");
+        // ResetTime() in wx zeroes the time-of-day; mirror that.
+        if (SENCCreateDate.isValid())
+          SENCCreateDate = QDateTime(SENCCreateDate.date(), QTime(0, 0, 0));
 
         //                wxULongLong size000 = senc.getFileSize000();
         //                wxString ssize000 = senc.getsFileSize000();
@@ -2760,11 +2763,16 @@ int s57chart::FindOrCreateSenc(const wxString &name, bool b_progress) {
           //          Make simple tests to see if the .000 file is "newer" than
           //          the SENC file representation These tests may be redundant,
           //          since the DSID:EDTN test above should catch new base files
-          wxDateTime OModTime000;
-          FileName000.GetTimes(NULL, &OModTime000, NULL);
-          OModTime000.ResetTime();  // to midnight
-          if (SENCCreateDate.IsValid()) {
-            if (OModTime000.IsLaterThan(SENCCreateDate)) {
+          // wxFileName::GetTimes() returns wx; convert at the boundary
+          // (wxFileName itself is deferred to P1.10).
+          wxDateTime wx_omod;
+          FileName000.GetTimes(NULL, &wx_omod, NULL);
+          QDateTime OModTime000 =
+              QDateTime::fromSecsSinceEpoch(wx_omod.GetTicks());
+          OModTime000 =
+              QDateTime(OModTime000.date(), QTime(0, 0, 0));  // to midnight
+          if (SENCCreateDate.isValid()) {
+            if (OModTime000 > SENCCreateDate) {
               wxLogMessage(
                   "    Rebuilding SENC due to Senc vs cell file time "
                   "check.");
@@ -3435,10 +3443,10 @@ bool s57chart::CreateHeaderDataFromoSENC() {
     int last_update = senc.getSENCReadLastUpdate();
 
     wxString str = senc.getSENCFileCreateDate();
-    wxDateTime SENCCreateDate;
-    SENCCreateDate.ParseFormat(str, "%Y%m%d");
-
-    if (SENCCreateDate.IsValid()) SENCCreateDate.ResetTime();  // to midnight
+    QDateTime SENCCreateDate =
+        QDateTime::fromString(wxString_to_QString(str), "yyyyMMdd");
+    if (SENCCreateDate.isValid())
+      SENCCreateDate = QDateTime(SENCCreateDate.date(), QTime(0, 0, 0));
 
     wxString senc_base_edtn = senc.getSENCReadBaseEdition();
   }
@@ -3636,7 +3644,7 @@ static int ExtensionCompare(const wxString &first, const wxString &second) {
 }
 
 int s57chart::GetUpdateFileArray(const wxFileName file000,
-                                 wxArrayString *UpFiles, wxDateTime date000,
+                                 wxArrayString *UpFiles, QDateTime date000,
                                  wxString edtn000) {
   wxString DirName000 =
       file000.GetPath((int)(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME));
@@ -3705,7 +3713,7 @@ int s57chart::GetUpdateFileArray(const wxFileName file000,
         //          2.  Is update file DSID.ISDT greater than or equal to base
         //          .000 file DSID:ISDT
 
-        wxDateTime umdate;
+        QDateTime umdate;
         wxString sumdate;
         wxString umedtn;
         DDFModule *poModule = new DDFModule();
@@ -3742,11 +3750,13 @@ int s57chart::GetUpdateFileArray(const wxFileName file000,
             sumdate = "20000101";  // backstop, very early, so wont be used
           }
 
-          umdate.ParseFormat(sumdate, "%Y%m%d");
-          if (!umdate.IsValid()) umdate.ParseFormat("20000101", "%Y%m%d");
+          umdate =
+              QDateTime::fromString(wxString_to_QString(sumdate), "yyyyMMdd");
+          if (!umdate.isValid())
+            umdate = QDateTime::fromString("20000101", "yyyyMMdd");
 
-          umdate.ResetTime();
-          if (!umdate.IsValid()) int yyp = 4;
+          if (umdate.isValid())
+            umdate = QDateTime(umdate.date(), QTime(0, 0, 0));
 
           //    Fetch the EDTN(Edition) field
           if (pr) {
@@ -3768,7 +3778,7 @@ int s57chart::GetUpdateFileArray(const wxFileName file000,
 
         delete poModule;
 
-        if ((!umdate.IsEarlierThan(date000)) &&
+        if ((umdate >= date000) &&
             (umedtn.IsSameAs(edtn000)))  // Note polarity on Date compare....
           dummy_array->Add(FileToAdd);   // Looking for umdate >= m_date000
       }
@@ -3935,8 +3945,8 @@ int s57chart::ValidateAndCountUpdates(const wxFileName file000,
           LastUpdateDate = wxString(u, wxConvUTF8);
         }
       } else {
-        wxDateTime now = wxDateTime::Now();
-        LastUpdateDate = now.Format("%Y%m%d");
+        QDateTime now = QDateTime::currentDateTime();
+        LastUpdateDate = QString_to_wxString(now.toString("yyyyMMdd"));
       }
     }
   }
@@ -3946,8 +3956,8 @@ int s57chart::ValidateAndCountUpdates(const wxFileName file000,
 }
 
 wxString s57chart::GetISDT() {
-  if (m_date000.IsValid())
-    return m_date000.Format("%Y%m%d");
+  if (m_date000.isValid())
+    return QString_to_wxString(m_date000.toString("yyyyMMdd"));
   else
     return "Unknown";
 }
@@ -4000,10 +4010,12 @@ bool s57chart::GetBaseFileAttr(const wxString &file000) {
     date000 =
         "20000101";  // backstop, very early, so any new files will update?
   }
-  m_date000.ParseFormat(date000, "%Y%m%d");
-  if (!m_date000.IsValid()) m_date000.ParseFormat("20000101", "%Y%m%d");
+  m_date000 =
+      QDateTime::fromString(wxString_to_QString(date000), "yyyyMMdd");
+  if (!m_date000.isValid())
+    m_date000 = QDateTime::fromString("20000101", "yyyyMMdd");
 
-  m_date000.ResetTime();
+  m_date000 = QDateTime(m_date000.date(), QTime(0, 0, 0));
 
   //    Fetch the EDTN(Edition) field
   u = (char *)(pr->GetStringSubfield("DSID", 0, "EDTN", 0));
@@ -4281,24 +4293,27 @@ int s57chart::BuildRAZFromSENCFile(const wxString &FullPath) {
 
   //   Decide on pub date to show
 
-  wxDateTime d000;
-  d000.ParseFormat(sencfile.getBaseDate(), "%Y%m%d");
-  if (!d000.IsValid()) d000.ParseFormat("20000101", "%Y%m%d");
+  QDateTime d000 = QDateTime::fromString(
+      wxString_to_QString(sencfile.getBaseDate()), "yyyyMMdd");
+  if (!d000.isValid())
+    d000 = QDateTime::fromString("20000101", "yyyyMMdd");
 
-  wxDateTime updt;
-  updt.ParseFormat(sencfile.getUpdateDate(), "%Y%m%d");
-  if (!updt.IsValid()) updt.ParseFormat("20000101", "%Y%m%d");
+  QDateTime updt = QDateTime::fromString(
+      wxString_to_QString(sencfile.getUpdateDate()), "yyyyMMdd");
+  if (!updt.isValid())
+    updt = QDateTime::fromString("20000101", "yyyyMMdd");
 
-  if (updt.IsLaterThan(d000))
-    m_PubYear.Printf("%4d", updt.GetYear());
+  if (updt > d000)
+    m_PubYear.Printf("%4d", updt.date().year());
   else
-    m_PubYear.Printf("%4d", d000.GetYear());
+    m_PubYear.Printf("%4d", d000.date().year());
 
   //    Set some base class values
-  wxDateTime upd = updt;
-  if (!upd.IsValid()) upd.ParseFormat("20000101", "%Y%m%d");
+  QDateTime upd = updt;
+  if (!upd.isValid())
+    upd = QDateTime::fromString("20000101", "yyyyMMdd");
 
-  upd.ResetTime();
+  upd = QDateTime(upd.date(), QTime(0, 0, 0));
   m_EdDate = upd;
 
   m_SE = sencfile.getSENCReadBaseEdition();
@@ -5813,14 +5828,18 @@ wxString s57chart::CreateObjDescriptions(ListOfObjRazRules *rule_list) {
             d = false;
             ts.Append("01");  // so we add a fictive day to get a valid date
           }
-          wxString::const_iterator end;
-          wxDateTime dt;
-          if (dt.ParseFormat(ts, "%Y%m%d", &end)) {
+          QDateTime dt =
+              QDateTime::fromString(wxString_to_QString(ts), "yyyyMMdd");
+          if (dt.isValid()) {
             ts.Empty();
-            if (m) ts = wxDateTime::GetMonthName(dt.GetMonth());
-            if (d) ts.Append(wxString::Format(" %d", dt.GetDay()));
-            if (dt.GetYear() > 0)
-              ts.Append(wxString::Format(",  %i", dt.GetYear()));
+            // QDate::month() is 1-based; QLocale::standaloneMonthName provides
+            // the full month name (mirrors wxDateTime::GetMonthName default).
+            if (m)
+              ts = QString_to_wxString(
+                  QLocale::system().standaloneMonthName(dt.date().month()));
+            if (d) ts.Append(wxString::Format(" %d", dt.date().day()));
+            if (dt.date().year() > 0)
+              ts.Append(wxString::Format(",  %i", dt.date().year()));
             if (curAttrName == "PEREND")
               ts = _("Period ends: ") + ts + "  (" + value + ")";
             if (curAttrName == "PERSTA")

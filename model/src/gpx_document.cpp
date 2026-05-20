@@ -21,7 +21,8 @@
  * Implement gpx_document.h -- GPX files UUID support
  */
 
-#include <wx/datetime.h>
+#include <QDateTime>
+
 #include <wx/utils.h>
 
 #include "model/gpx_document.h"
@@ -68,9 +69,9 @@ void GpxDocument::SeedRandom() {
   /* Fill with random. Miliseconds hopefully good enough for our usage, reading
    * /dev/random would be much better on linux and system guid function on
    * Windows as well */
-  wxDateTime x = wxDateTime::UNow();
-  long seed = x.GetMillisecond();
-  seed *= x.GetTicks();
+  QDateTime x = QDateTime::currentDateTime();
+  long seed = x.time().msec();
+  seed *= x.toSecsSinceEpoch();
   srand(seed);
 }
 

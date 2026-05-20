@@ -37,6 +37,9 @@
 #include "model/cutil.h"
 #include "model/config_vars.h"
 #include "model/gui_vars.h"
+#include "model/wx_qt_string.h"
+
+#include <QLocale>
 
 #include "abstract_chart_canv.h"
 #include "chcanv.h"
@@ -603,13 +606,17 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
                                     pIDX->IDX_rec_num, tcvalue, tctime);
           if (tctime > tt_localtz) {  // Only show events visible in graphic
                                       // presently shown
-            wxDateTime tcd;           // write date
+            QDateTime tcd;            // write date
             wxString s, s1;
-            tcd.Set(tctime - (m_diff_mins * 60));
+            // Bias the epoch so the wall-clock hour/minute (formatted in
+            // local tz) reads as the desired tz; mirrors the wx 3.0.2 trick
+            // of Set(epoch)+Format("%H:%M").
+            tcd = QDateTime::fromSecsSinceEpoch(tctime - (m_diff_mins * 60));
             if (m_tzoneDisplay == 0)  // LMT @ Station
-              tcd.Set(tctime + (m_stationOffset_mins - m_diff_mins) * 60);
+              tcd = QDateTime::fromSecsSinceEpoch(
+                  tctime + (m_stationOffset_mins - m_diff_mins) * 60);
 
-            s.Printf(tcd.Format("%H:%M  "));
+            s.Printf(QString_to_wxString(tcd.toString("HH:mm  ")));
 
             // Convert tcvalue to preferred height units (it comes from
             // GetHightOrLowTide in station units)
@@ -649,13 +656,14 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
         val = tcv[i];
       }
       if (CURRENT_PLOT == m_plot_type) {
-        wxDateTime thx;  // write date
+        QDateTime thx;  // write date
         wxString s, s1;
-        thx.Set((time_t)tt - (m_diff_mins * 60));
+        thx = QDateTime::fromSecsSinceEpoch((time_t)tt - (m_diff_mins * 60));
         if (m_tzoneDisplay == 0)  // LMT @ Station
-          thx.Set((time_t)tt + (m_stationOffset_mins - m_diff_mins) * 60);
+          thx = QDateTime::fromSecsSinceEpoch(
+              (time_t)tt + (m_stationOffset_mins - m_diff_mins) * 60);
 
-        s.Printf(thx.Format("%H:%M  "));
+        s.Printf(QString_to_wxString(thx.toString("HH:mm  ")));
         s1.Printf("%05.2f ",
                   fabs(tcv[i]));  // tcv[i] is already converted to height units
         s.Append(s1);
@@ -758,7 +766,7 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
     int station_offset = ptcmgr->GetStationTimeOffset(pIDX);
     int h = station_offset / 60;
     int m = station_offset - (h * 60);
-    if (m_graphday.IsDST()) h += 1;
+    if (m_graphday.isDaylightTime()) h += 1;
     m_stz.Printf("UTC %+03d:%02d", h, m);
 
     //    Make the "nice" (for the US) station time-zone string, brutally by
@@ -778,7 +786,7 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
           break;
       }
       if (mtz.Len()) {
-        if (m_graphday.IsDST()) mtz[1] = 'D';
+        if (m_graphday.isDaylightTime()) mtz[1] = 'D';
         m_stz = mtz;
       }
     }
@@ -795,9 +803,9 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
 
   wxString sdate;
   if (g_locale == "en_US")
-    sdate = m_graphday.Format("%A %b %d, %Y");
+    sdate = QString_to_wxString(m_graphday.toString("dddd MMM dd, yyyy"));
   else
-    sdate = m_graphday.Format("%A %d %b %Y");
+    sdate = QString_to_wxString(m_graphday.toString("dddd dd MMM yyyy"));
 
   dc.SetFont(*pMFont);
   dc.GetTextExtent(sdate, &w, &h);
@@ -839,15 +847,16 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
   //    Today or tomorrow
   if ((m_button_height * 15) < x && cur_time) {  // large enough horizontally?
     wxString sday;
-    int day = m_graphday.GetDayOfYear();
-    if (m_graphday.GetYear() == this_now.date().year()) {
+    int day = m_graphday.date().dayOfYear();
+    if (m_graphday.date().year() == this_now.date().year()) {
       if (day == this_now.date().dayOfYear())
         sday.Append(_("Today"));
       else if (day == this_now.date().dayOfYear() + 1)
         sday.Append(_("Tomorrow"));
       else
-        sday.Append(m_graphday.GetWeekDayName(m_graphday.GetWeekDay()));
-    } else if (m_graphday.GetYear() == this_now.date().year() + 1 &&
+        sday.Append(QString_to_wxString(
+            QLocale::system().standaloneDayName(m_graphday.date().dayOfWeek())));
+    } else if (m_graphday.date().year() == this_now.date().year() + 1 &&
                day == this_now.addDays(1).date().dayOfYear())
       sday.Append(_("Tomorrow"));
 
@@ -879,76 +888,46 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
 }
 
 void TCWin::SetTimeFactors() {
-  //    Figure out this computer timezone minute offset
-  // Keep this routine on wxDateTime locally: it relies on wxDateTime's
-  // IsDST() and the wx 3.0.2 toGMT() bug-workaround. Bridge via Unix epoch.
-  wxDateTime this_now;
-  bool cur_time = !gTimeSource.isValid();
+  //    Figure out this computer timezone minute offset.
+  // QDateTime::offsetFromUtc() (and isDaylightTime()) replace the
+  // wx 3.0.2 ToGMT()/IsDST() dance the wx version needed.
+  QDateTime this_now = gTimeSource.isValid()
+                           ? QDateTime::fromSecsSinceEpoch(
+                                 gTimeSource.toSecsSinceEpoch())
+                           : QDateTime::currentDateTime();
+  this_now.setTimeSpec(Qt::LocalTime);
+  QDateTime this_gmt = this_now.toUTC();
 
-  if (cur_time) {
-    this_now = wxDateTime::Now();
-  } else {
-    this_now = wxDateTime((time_t)gTimeSource.toSecsSinceEpoch());
-  }
-  wxDateTime this_gmt = this_now.ToGMT();
-
-#if wxCHECK_VERSION(2, 6, 2)
-  wxTimeSpan diff = this_now.Subtract(this_gmt);
-#else
-  wxTimeSpan diff = this_gmt.Subtract(this_now);
-#endif
-
-  m_diff_mins = diff.GetMinutes();
-
-  //  Correct a bug in wx3.0.2
-  //  If the system TZ happens to be GMT, with DST active (e.g.summer in
-  //  London), then wxDateTime returns incorrect results for toGMT() method
-#if wxCHECK_VERSION(3, 0, 2)
-  if (m_diff_mins == 0 && this_now.IsDST()) m_diff_mins += 60;
-#endif
+  // diff = local - GMT, matching wxCHECK_VERSION(2, 6, 2) branch.
+  m_diff_mins = this_now.offsetFromUtc() / 60;
 
   int station_offset = ptcmgr->GetStationTimeOffset(pIDX);
 
   m_stationOffset_mins = station_offset;
-  if (this_now.IsDST()) {
+  if (this_now.isDaylightTime()) {
     m_stationOffset_mins += 60;
   }
-
-  //  Correct a bug in wx3.0.2
-  //  If the system TZ happens to be GMT, with DST active (e.g.summer in
-  //  London), then wxDateTime returns incorrect results for toGMT() method
-#if wxCHECK_VERSION(3, 0, 2)
-//    if(  this_now.IsDST() )
-//        m_corr_mins +=60;
-#endif
 
   //    Establish the inital drawing day as today, in the timezone of the
   //    station
   m_graphday = this_gmt;
 
-  int day_gmt = this_gmt.GetDayOfYear();
+  int day_gmt = this_gmt.date().dayOfYear();
 
-  time_t ttNow = this_now.GetTicks();
+  time_t ttNow = this_now.toSecsSinceEpoch();
   time_t tt_at_station =
       ttNow - (m_diff_mins * 60) + (m_stationOffset_mins * 60);
-  wxDateTime atStation(tt_at_station);
-  int day_at_station = atStation.GetDayOfYear();
+  QDateTime atStation = QDateTime::fromSecsSinceEpoch(tt_at_station);
+  int day_at_station = atStation.date().dayOfYear();
 
   if (day_gmt > day_at_station) {
-    wxTimeSpan dt(24, 0, 0, 0);
-    m_graphday.Subtract(dt);
+    m_graphday = m_graphday.addDays(-1);
   } else if (day_gmt < day_at_station) {
-    wxTimeSpan dt(24, 0, 0, 0);
-    m_graphday.Add(dt);
+    m_graphday = m_graphday.addDays(1);
   }
 
-  wxDateTime graphday_00 = m_graphday;  // this_gmt;
-  graphday_00.ResetTime();
-  time_t t_graphday_00 = graphday_00.GetTicks();
-
-  //    Correct a Bug in wxWidgets time support
-  //    if( !graphday_00.IsDST() && m_graphday.IsDST() ) t_graphday_00 -= 3600;
-  //    if( graphday_00.IsDST() && !m_graphday.IsDST() ) t_graphday_00 += 3600;
+  QDateTime graphday_00(m_graphday.date(), QTime(0, 0, 0), Qt::UTC);
+  time_t t_graphday_00 = graphday_00.toSecsSinceEpoch();
 
   m_t_graphday_GMT = t_graphday_00;
 
@@ -1056,15 +1035,15 @@ void TCWin::OnCloseWindow(wxCloseEvent &event) {
 }
 
 void TCWin::NXEvent(wxCommandEvent &event) {
-  wxTimeSpan dt(24, 0, 0, 0);
-  m_graphday.Add(dt);
-  wxDateTime dm = m_graphday;
+  m_graphday = m_graphday.addDays(1);
+  QDateTime graphday_00(m_graphday.date(), QTime(0, 0, 0),
+                        m_graphday.timeSpec());
+  time_t t_graphday_00 = graphday_00.toSecsSinceEpoch();
 
-  wxDateTime graphday_00 = dm.ResetTime();
-  time_t t_graphday_00 = graphday_00.GetTicks();
-
-  if (!graphday_00.IsDST() && m_graphday.IsDST()) t_graphday_00 -= 3600;
-  if (graphday_00.IsDST() && !m_graphday.IsDST()) t_graphday_00 += 3600;
+  if (!graphday_00.isDaylightTime() && m_graphday.isDaylightTime())
+    t_graphday_00 -= 3600;
+  if (graphday_00.isDaylightTime() && !m_graphday.isDaylightTime())
+    t_graphday_00 += 3600;
 
   m_t_graphday_GMT = t_graphday_00;
 
@@ -1073,15 +1052,15 @@ void TCWin::NXEvent(wxCommandEvent &event) {
 }
 
 void TCWin::PREvent(wxCommandEvent &event) {
-  wxTimeSpan dt(-24, 0, 0, 0);
-  m_graphday.Add(dt);
-  wxDateTime dm = m_graphday;
+  m_graphday = m_graphday.addDays(-1);
+  QDateTime graphday_00(m_graphday.date(), QTime(0, 0, 0),
+                        m_graphday.timeSpec());
+  time_t t_graphday_00 = graphday_00.toSecsSinceEpoch();
 
-  wxDateTime graphday_00 = dm.ResetTime();
-  time_t t_graphday_00 = graphday_00.GetTicks();
-
-  if (!graphday_00.IsDST() && m_graphday.IsDST()) t_graphday_00 -= 3600;
-  if (graphday_00.IsDST() && !m_graphday.IsDST()) t_graphday_00 += 3600;
+  if (!graphday_00.isDaylightTime() && m_graphday.isDaylightTime())
+    t_graphday_00 -= 3600;
+  if (graphday_00.isDaylightTime() && !m_graphday.isDaylightTime())
+    t_graphday_00 += 3600;
 
   m_t_graphday_GMT = t_graphday_00;
 
@@ -1211,9 +1190,8 @@ void TCWin::OnTCWinPopupTimerEvent(wxTimerEvent &event) {
     int tt = m_t_graphday_GMT + (int)(t * 3600);
     time_t ths = tt;
 
-    wxDateTime thd;
-    thd.Set(ths);
-    p.Printf(thd.Format("%Hh %Mmn"));
+    QDateTime thd = QDateTime::fromSecsSinceEpoch(ths);
+    p.Printf(QString_to_wxString(thd.toString("HH'h' mm'mn'")));
     p.Append("\n");
 
     // The tide/current modules calculate values based on PC local time

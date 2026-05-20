@@ -196,22 +196,19 @@ RoutePrintout::RoutePrintout(Route* route, const std::set<int>& options,
       }
     }
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointETA)) {
-      // GetETA() now returns QDateTime; bridge to wxDateTime via Unix seconds
-      // to call the still-wx-typed toUsrDateTime helper.
-      wxDateTime eta_wx =
-          point->GetETA().isValid()
-              ? wxDateTime(static_cast<time_t>(
-                    point->GetETA().toUTC().toSecsSinceEpoch()))
-              : wxInvalidDateTime;
-      m_table << toUsrDateTime(eta_wx, tz_selection, point->m_lon)
-                     .FormatISOCombined(' ');
+      QDateTime eta_q = point->GetETA().isValid()
+                           ? toUsrDateTime(point->GetETA().toUTC(),
+                                           tz_selection, point->m_lon)
+                           : QDateTime();
+      m_table << QString_to_wxString(
+          eta_q.toString("yyyy-MM-dd HH:mm:ss"));
     }
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointETD)) {
       if (point->GetManualETD().isValid()) {
-        wxDateTime etd_wx = wxDateTime(static_cast<time_t>(
-            point->GetManualETD().toUTC().toSecsSinceEpoch()));
-        m_table << toUsrDateTime(etd_wx, tz_selection, point->m_lon)
-                       .FormatISOCombined(' ');
+        QDateTime etd_q = toUsrDateTime(point->GetManualETD().toUTC(),
+                                        tz_selection, point->m_lon);
+        m_table << QString_to_wxString(
+            etd_q.toString("yyyy-MM-dd HH:mm:ss"));
       } else {
         m_table << "---";
       }
@@ -223,9 +220,8 @@ RoutePrintout::RoutePrintout(Route* route, const std::set<int>& options,
             QString_to_wxString(point->m_TideStation), point->m_lat,
             point->m_lon);
         if (station_id > 0) {
-          wxDateTime eta_wx = wxDateTime(static_cast<time_t>(
-              point->GetETA().toUTC().toSecsSinceEpoch()));
-          point_tide << ptcmgr->GetTidalEventStr(station_id, eta_wx,
+          QDateTime eta_q = point->GetETA().toUTC();
+          point_tide << ptcmgr->GetTidalEventStr(station_id, eta_q,
                                                  point->m_lat, point->m_lon,
                                                  tz_selection);
           point_tide << "\n@"
