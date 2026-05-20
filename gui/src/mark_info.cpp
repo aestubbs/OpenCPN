@@ -49,6 +49,7 @@
 #include "model/route.h"
 #include "model/routeman.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 #include "model/select.h"
 #include "model/svg_utils.h"
 
@@ -1315,7 +1316,8 @@ void MarkInfoDlg::DefautlBtnClicked(wxCommandEvent& event) {
             m_ChoiceWaypointRangeRingsNumber->GetSelection();
         if (m_textWaypointRangeRingsStep->GetValue().ToDouble(&value))
           g_fWaypointRangeRingsStep = fromUsrDistance(value, -1);
-        g_colourWaypointRangeRingsColour = m_PickColor->GetColour();
+        g_colourWaypointRangeRingsColour =
+            WxColourToQColor(m_PickColor->GetColour());
       }
       if (m_SaveDefaultDlg->ArrivalRCB->GetValue())
         if (m_textArrivalRadius->GetValue().ToDouble(&value))
@@ -1382,7 +1384,8 @@ void MarkInfoDlg::OnMarkInfoCancelClick(wxCommandEvent& event) {
 
 void MarkInfoDlg::OnMarkInfoOKClick(wxCommandEvent& event) {
   if (m_pRoutePoint) {
-    m_pRoutePoint->m_wxcWaypointRangeRingsColour = m_PickColor->GetColour();
+    m_pRoutePoint->m_wxcWaypointRangeRingsColour =
+        WxColourToQColor(m_PickColor->GetColour());
 
     OnPositionCtlUpdated(event);
     SaveChanges();  // write changes to globals and update config
@@ -1443,7 +1446,8 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
     int nUnits = m_pRoutePoint->GetWaypointRangeRingsStepUnits();
     m_RangeRingUnits->SetSelection(nUnits);
 
-    wxColour col = m_pRoutePoint->m_wxcWaypointRangeRingsColour;
+    wxColour col =
+        QColorToWxColour(m_pRoutePoint->m_wxcWaypointRangeRingsColour);
     m_PickColor->SetColour(col);
 
     if (m_pRoutePoint->m_bIsInRoute) {
@@ -1620,8 +1624,8 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
     if (fillCombo) {
       for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
         QString* ps = pWayPointMan->GetIconDescription(i);
-        wxBitmap bmp =
-            pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight());
+        wxBitmap bmp = QImageToWxBitmap(
+            pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight()));
 
         m_bcomboBoxIcon->Append(QString_to_wxString(*ps), bmp);
       }

@@ -26,15 +26,15 @@
 
 #include <functional>
 
+#include <QBrush>
+#include <QColor>
+#include <QImage>
 #include <QList>
+#include <QPen>
 #include <QString>
 
-#include <wx/bitmap.h>
-#include <wx/brush.h>
 #include <wx/dynarray.h>
 #include <wx/imaglist.h>
-#include <wx/pen.h>
-#include <wx/string.h>
 
 #include "model/MarkIcon.h"
 
@@ -94,14 +94,14 @@ struct RoutePropDlgCtx {
 
 struct RoutemanDlgCtx {
   std::function<bool()> confirm_delete_ais_mob;
-  std::function<wxColour(QString)> get_global_colour;
+  std::function<QColor(QString)> get_global_colour;
   std::function<void()> show_with_fresh_fonts;
   std::function<void()> clear_console_background;
   std::function<void()> route_mgr_dlg_update_list_ctrl;
 
   RoutemanDlgCtx()
       : confirm_delete_ais_mob([]() { return true; }),
-        get_global_colour([](QString c) { return *wxBLACK; }),
+        get_global_colour([](QString c) { return QColor(0, 0, 0); }),
         show_with_fresh_fonts([]() {}),
         clear_console_background([]() {}),
         route_mgr_dlg_update_list_ctrl([]() {}) {}
@@ -232,17 +232,23 @@ public:
   int GetXTEDir() { return XTEDir; }
 
   void SetColorScheme(ColorScheme cs, double displayDPmm);
-  wxPen *GetRoutePen(void) { return m_pRoutePen; }
-  wxPen *GetTrackPen(void) { return m_pTrackPen; }
-  wxPen *GetSelectedRoutePen(void) { return m_pSelectedRoutePen; }
-  wxPen *GetActiveRoutePen(void) { return m_pActiveRoutePen; }
-  wxPen *GetActiveRoutePointPen(void) { return m_pActiveRoutePointPen; }
-  wxPen *GetRoutePointPen(void) { return m_pRoutePointPen; }
-  wxBrush *GetRouteBrush(void) { return m_pRouteBrush; }
-  wxBrush *GetSelectedRouteBrush(void) { return m_pSelectedRouteBrush; }
-  wxBrush *GetActiveRouteBrush(void) { return m_pActiveRouteBrush; }
-  wxBrush *GetActiveRoutePointBrush(void) { return m_pActiveRoutePointBrush; }
-  wxBrush *GetRoutePointBrush(void) { return m_pRoutePointBrush; }
+  const QPen &GetRoutePen(void) const { return m_RoutePen; }
+  const QPen &GetTrackPen(void) const { return m_TrackPen; }
+  const QPen &GetSelectedRoutePen(void) const { return m_SelectedRoutePen; }
+  const QPen &GetActiveRoutePen(void) const { return m_ActiveRoutePen; }
+  const QPen &GetActiveRoutePointPen(void) const {
+    return m_ActiveRoutePointPen;
+  }
+  const QPen &GetRoutePointPen(void) const { return m_RoutePointPen; }
+  const QBrush &GetRouteBrush(void) const { return m_RouteBrush; }
+  const QBrush &GetSelectedRouteBrush(void) const {
+    return m_SelectedRouteBrush;
+  }
+  const QBrush &GetActiveRouteBrush(void) const { return m_ActiveRouteBrush; }
+  const QBrush &GetActiveRoutePointBrush(void) const {
+    return m_ActiveRoutePointBrush;
+  }
+  const QBrush &GetRoutePointBrush(void) const { return m_RoutePointBrush; }
 
   QString GetRouteReverseMessage(void);
   QString GetRouteResequenceMessage(void);
@@ -280,17 +286,17 @@ private:
   double CurrentSegmentCourse;
   int XTEDir;
   bool m_bArrival;
-  wxPen *m_pRoutePen;
-  wxPen *m_pTrackPen;
-  wxPen *m_pSelectedRoutePen;
-  wxPen *m_pActiveRoutePen;
-  wxPen *m_pActiveRoutePointPen;
-  wxPen *m_pRoutePointPen;
-  wxBrush *m_pRouteBrush;
-  wxBrush *m_pSelectedRouteBrush;
-  wxBrush *m_pActiveRouteBrush;
-  wxBrush *m_pActiveRoutePointBrush;
-  wxBrush *m_pRoutePointBrush;
+  QPen m_RoutePen;
+  QPen m_TrackPen;
+  QPen m_SelectedRoutePen;
+  QPen m_ActiveRoutePen;
+  QPen m_ActiveRoutePointPen;
+  QPen m_RoutePointPen;
+  QBrush m_RouteBrush;
+  QBrush m_SelectedRouteBrush;
+  QBrush m_ActiveRouteBrush;
+  QBrush m_ActiveRoutePointBrush;
+  QBrush m_RoutePointBrush;
 
   NMEA0183 m_NMEA0183;  // For autopilot output
 
@@ -310,7 +316,7 @@ private:
 //   WayPointman
 //----------------------------------------------------------------------------
 
-typedef std::function<wxColour(QString)> GlobalColourFunc;
+typedef std::function<QColor(QString)> GlobalColourFunc;
 
 class WayPointman {
   friend class WayPointmanGui;
@@ -318,16 +324,16 @@ class WayPointman {
 public:
   WayPointman(GlobalColourFunc colour_func);
   ~WayPointman();
-  wxBitmap *GetIconBitmap(const QString &icon_key) const;
+  const QImage *GetIconBitmap(const QString &icon_key) const;
   bool GetIconPrescaled(const QString &icon_key) const;
-  int GetIconIndex(const wxBitmap *pbm) const;
-  int GetIconImageListIndex(const wxBitmap *pbm) const;
+  int GetIconIndex(const QImage *pbm) const;
+  int GetIconImageListIndex(const QImage *pbm) const;
 
   /** index of "X-ed out" icon in the image list */
-  int GetXIconImageListIndex(const wxBitmap *pbm) const;
+  int GetXIconImageListIndex(const QImage *pbm) const;
 
   /** index of "fixed viz" icon in the image list  */
-  int GetFIconImageListIndex(const wxBitmap *pbm) const;
+  int GetFIconImageListIndex(const QImage *pbm) const;
 
   int GetNumIcons(void) { return m_pIconArray->size(); }
   QString CreateGUID(RoutePoint *pRP);
@@ -344,7 +350,7 @@ public:
   void ClearRoutePointFonts(void);
 
   bool DoesIconExist(const QString &icon_key) const;
-  wxBitmap GetIconBitmapForList(int index, int height) const;
+  QImage GetIconBitmapForList(int index, int height) const;
   QString *GetIconDescription(int index) const;
   QString *GetIconKey(int index) const;
   QString GetIconDescription(QString icon_key) const;
@@ -368,10 +374,10 @@ public:
   const RoutePointList *GetWaypointList(void) { return m_pWayPointList; }
 
 private:
-  wxImage CreateDimImage(wxImage &image, double factor);
+  QImage CreateDimImage(const QImage &image, double factor);
 
   RoutePointList *m_pWayPointList;
-  wxBitmap *CreateDimBitmap(wxBitmap *pBitmap, double factor);
+  QImage CreateDimBitmap(const QImage &image, double factor);
 
   wxImageList *pmarkicon_image_list;  // Current wxImageList, updated on
                                       // colorscheme change

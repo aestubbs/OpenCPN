@@ -50,6 +50,7 @@
 #include "model/gui_vars.h"
 #include "model/own_ship.h"
 #include "model/select.h"
+#include "model/wx_qt_ui_types.h"
 
 #include "ais.h"
 #include "ais_target_alert_dlg.h"
@@ -1810,7 +1811,7 @@ static void AISDrawTarget(AisTargetData *td, ocpnDC &dc, ViewPort &vp,
         for (unsigned int i = 0;
              i < sizeof(::GpxxColorNames) / sizeof(QString); i++) {
           if (ptrack->m_Colour == ::GpxxColorNames[i]) {
-            c = ::GpxxColors[i];
+            c = QColorToWxColour(::GpxxColors[i]);
             dc.SetPen(wxPen(c, 2.0 * AIS_nominal_line_width_pix));
             break;
           }

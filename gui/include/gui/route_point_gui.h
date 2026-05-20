@@ -25,6 +25,8 @@
 #ifndef _ROUTE_POINT_GUI_H
 #define _ROUTE_POINT_GUI_H
 
+#include <QImage>
+
 #include <wx/gdicmn.h>
 #include <wx/string.h>
 #include <wx/dc.h>
@@ -54,7 +56,7 @@ public:
   void ReLoadIcon();
   void EnableDragHandle(bool bEnable);
   int GetIconImageIndex();
-  wxBitmap *GetIconBitmap() {
+  const QImage *GetIconBitmap() {
     if (m_point.m_IconIsDirty) ReLoadIcon();
     return m_point.m_pbmIcon;
   }

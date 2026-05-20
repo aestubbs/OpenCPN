@@ -103,6 +103,7 @@
 #include "model/plugin_loader.h"
 #include "model/routeman.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 #include "model/select.h"
 #include "model/std_icon.h"
 #include "model/sys_events.h"
@@ -4719,7 +4720,7 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
       // Load the waypoints. Both of these routines are very slow to execute
       // which is why they have been to defered until here
       auto colour_func = [](QString c) {
-        return GetGlobalColor(QString_to_wxString(c));
+        return WxColourToQColor(GetGlobalColor(QString_to_wxString(c)));
       };
       pWayPointMan = new WayPointman(colour_func);
       WayPointmanGui(*pWayPointMan)

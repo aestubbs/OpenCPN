@@ -311,7 +311,7 @@ public:
 
 protected:
   void Work() override {
-    auto colour_func = [](QString c) { return *wxBLACK; };
+    auto colour_func = [](QString c) { return QColor(0, 0, 0); };
     pWayPointMan = new WayPointman(colour_func);
     pRouteList = new RouteList;
     g_BasePlatform = new BasePlatform();
@@ -406,7 +406,7 @@ public:
 
 protected:
   void Work() override {
-    auto colour_func = [](QString c) { return *wxBLACK; };
+    auto colour_func = [](QString c) { return QColor(0, 0, 0); };
     pWayPointMan = new WayPointman(colour_func);
     pRouteList = new RouteList;
     g_BasePlatform = new BasePlatform();

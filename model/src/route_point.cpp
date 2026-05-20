@@ -21,10 +21,10 @@
  * Implement route_point.h -- waypoint or mark abstraction
  */
 
+#include <QColor>
 #include <QDateTime>
 #include <QLocale>
 
-#include <wx/colour.h>
 #include <wx/dynarray.h>
 #include <wx/string.h>
 #include <wx/tokenzr.h>
@@ -41,8 +41,9 @@
 #include <wx/listimpl.cpp>
 
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 
-wxColour g_colourWaypointRangeRingsColour;
+QColor g_colourWaypointRangeRingsColour;
 
 int g_LayerIdx;
 
@@ -76,7 +77,7 @@ RoutePoint::RoutePoint() {
   CurrentRect_in_DC = wxRect(0, 0, 0, 0);
   m_NameLocationOffsetX = -10;
   m_NameLocationOffsetY = 8;
-  m_pMarkFont = NULL;
+  m_MarkFontInitialized = false;
   m_btemp = false;
   m_SelectNode = NULL;
   m_ManagerNode = NULL;
@@ -142,6 +143,7 @@ RoutePoint::RoutePoint(RoutePoint *orig) {
   m_NameLocationOffsetX = orig->m_NameLocationOffsetX;
   m_NameLocationOffsetY = orig->m_NameLocationOffsetY;
   m_pMarkFont = orig->m_pMarkFont;
+  m_MarkFontInitialized = orig->m_MarkFontInitialized;
   m_MarkDescription = orig->m_MarkDescription;
   m_btemp = orig->m_btemp;
   m_ScaMin = orig->m_ScaMin;
@@ -207,7 +209,7 @@ RoutePoint::RoutePoint(double lat, double lon, const QString &icon_ident,
   CurrentRect_in_DC = wxRect(0, 0, 0, 0);
   m_NameLocationOffsetX = -10;
   m_NameLocationOffsetY = 8;
-  m_pMarkFont = NULL;
+  m_MarkFontInitialized = false;
   m_btemp = false;
   m_bPreScaled = false;
 
@@ -296,15 +298,17 @@ void RoutePoint::SetName(const QString &name) {
 }
 
 void RoutePoint::CalculateNameExtents() {
-  if (m_pMarkFont) {
+  if (m_MarkFontInitialized) {
     wxScreenDC dc;
+    wxFont wxMarkFont = QFontToWxFont(m_pMarkFont);
 
 #ifdef __WXQT__  // avoiding "painter not active" warning
     int w, h;
-    dc.GetTextExtent(QString_to_wxString(m_MarkName), &w, &h, NULL, NULL, m_pMarkFont);
+    dc.GetTextExtent(QString_to_wxString(m_MarkName), &w, &h, NULL, NULL,
+                     &wxMarkFont);
     m_NameExtents = wxSize(w, h);
 #else
-    dc.SetFont(*m_pMarkFont);
+    dc.SetFont(wxMarkFont);
     m_NameExtents = dc.GetMultiLineTextExtent(QString_to_wxString(m_MarkName));
 #endif
   } else

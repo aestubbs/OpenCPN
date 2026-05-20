@@ -40,6 +40,7 @@
 #include "model/route.h"
 #include "model/routeman.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 
 #include "chartbase.h"
 #include "color_handler.h"
@@ -90,21 +91,21 @@ void RouteGui::Draw(ocpnDC &dc, ChartCanvas *canvas, const LLBBox &box) {
   if (m_route.m_width != WIDTH_UNDEFINED) width = m_route.m_width;
 
   if (m_route.m_bVisible && m_route.m_bRtIsSelected) {
-    wxPen spen = *g_pRouteMan->GetSelectedRoutePen();
+    wxPen spen = QPenToWxPen(g_pRouteMan->GetSelectedRoutePen());
     spen.SetWidth(width);
     dc.SetPen(spen);
-    dc.SetBrush(*g_pRouteMan->GetSelectedRouteBrush());
+    dc.SetBrush(QBrushToWxBrush(g_pRouteMan->GetSelectedRouteBrush()));
   } else if (m_route.m_bVisible) {
     wxPenStyle style = wxPENSTYLE_SOLID;
     wxColour col;
     if (m_route.m_style != wxPENSTYLE_INVALID) style = m_route.m_style;
     if (m_route.m_Colour == "") {
-      col = g_pRouteMan->GetRoutePen()->GetColour();
+      col = QColorToWxColour(g_pRouteMan->GetRoutePen().color());
     } else {
       for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
            i++) {
         if (m_route.m_Colour == ::GpxxColorNames[i]) {
-          col = ::GpxxColors[i];
+          col = QColorToWxColour(::GpxxColors[i]);
           break;
         }
       }
@@ -114,10 +115,10 @@ void RouteGui::Draw(ocpnDC &dc, ChartCanvas *canvas, const LLBBox &box) {
   }
 
   if (m_route.m_bVisible && m_route.m_bRtIsActive) {
-    wxPen spen = *g_pRouteMan->GetActiveRoutePen();
+    wxPen spen = QPenToWxPen(g_pRouteMan->GetActiveRoutePen());
     spen.SetWidth(width);
     dc.SetPen(spen);
-    dc.SetBrush(*g_pRouteMan->GetActiveRouteBrush());
+    dc.SetBrush(QBrushToWxBrush(g_pRouteMan->GetActiveRouteBrush()));
   }
 
   wxPoint rpt1, rpt2;
@@ -352,11 +353,11 @@ void RouteGui::DrawPointWhich(ocpnDC &dc, ChartCanvas *canvas, int iPoint,
 void RouteGui::DrawSegment(ocpnDC &dc, ChartCanvas *canvas, wxPoint *rp1,
                            wxPoint *rp2, ViewPort &vp, bool bdraw_arrow) {
   if (m_route.m_bRtIsSelected)
-    dc.SetPen(*g_pRouteMan->GetSelectedRoutePen());
+    dc.SetPen(QPenToWxPen(g_pRouteMan->GetSelectedRoutePen()));
   else if (m_route.m_bRtIsActive)
-    dc.SetPen(*g_pRouteMan->GetActiveRoutePen());
+    dc.SetPen(QPenToWxPen(g_pRouteMan->GetActiveRoutePen()));
   else
-    dc.SetPen(*g_pRouteMan->GetRoutePen());
+    dc.SetPen(QPenToWxPen(g_pRouteMan->GetRoutePen()));
 
   RenderSegment(dc, rp1->x, rp1->y, rp2->x, rp2->y, vp, bdraw_arrow);
 }
@@ -401,21 +402,21 @@ void RouteGui::DrawGLRouteLines(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc) {
   /* determine color and width */
   wxColour col;
 
-  int width = g_pRouteMan->GetRoutePen()->GetWidth();  // g_route_line_width;
+  int width = g_pRouteMan->GetRoutePen().width();  // g_route_line_width;
   if (m_route.m_width != wxPENSTYLE_INVALID) width = m_route.m_width;
 
   if (m_route.m_bRtIsActive) {
-    col = g_pRouteMan->GetActiveRoutePen()->GetColour();
+    col = QColorToWxColour(g_pRouteMan->GetActiveRoutePen().color());
   } else if (m_route.m_bRtIsSelected) {
-    col = g_pRouteMan->GetSelectedRoutePen()->GetColour();
+    col = QColorToWxColour(g_pRouteMan->GetSelectedRoutePen().color());
   } else {
     if (m_route.m_Colour == "") {
-      col = g_pRouteMan->GetRoutePen()->GetColour();
+      col = QColorToWxColour(g_pRouteMan->GetRoutePen().color());
     } else {
       for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
            i++) {
         if (m_route.m_Colour == ::GpxxColorNames[i]) {
-          col = ::GpxxColors[i];
+          col = QColorToWxColour(::GpxxColors[i]);
           break;
         }
       }

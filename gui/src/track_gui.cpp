@@ -34,6 +34,7 @@
 #include "model/gui_vars.h"
 #include "model/own_ship.h"
 #include "model/routeman.h"
+#include "model/wx_qt_ui_types.h"
 
 #include "color_handler.h"
 #include "gl_chart_canvas.h"
@@ -49,8 +50,7 @@ void TrackPointGui::Draw(ChartCanvas *cc, ocpnDC &dc) {
 
   cc->GetCanvasPointPix(m_point.m_lat, m_point.m_lon, &r);
 
-  wxPen *pen;
-  pen = g_pRouteMan->GetRoutePointPen();
+  wxPen pen = QPenToWxPen(g_pRouteMan->GetRoutePointPen());
 
   int sx2 = 8;
   int sy2 = 8;
@@ -64,7 +64,7 @@ void TrackPointGui::Draw(ChartCanvas *cc, ocpnDC &dc) {
   hilitebox.Inflate(4);
   radius = 4.0f;
 
-  wxColour hi_colour = pen->GetColour();
+  wxColour hi_colour = pen.GetColour();
   unsigned char transparency = 100;
 
   //  Highlite any selected point
@@ -162,7 +162,7 @@ void TrackGui::Draw(ChartCanvas *cc, ocpnDC &dc, ViewPort &VP,
     basic_colour = user_colors::GetDimColor(g_colourTrackLineColour);
 
   wxPenStyle style = wxPENSTYLE_SOLID;
-  int width = g_pRouteMan->GetTrackPen()->GetWidth();
+  int width = g_pRouteMan->GetTrackPen().width();
   wxColour col;
   if (m_track.m_style != wxPENSTYLE_INVALID) style = m_track.m_style;
   if (m_track.m_width != WIDTH_UNDEFINED) width = m_track.m_width;
@@ -175,7 +175,7 @@ void TrackGui::Draw(ChartCanvas *cc, ocpnDC &dc, ViewPort &VP,
     for (unsigned int i = 0; i < sizeof(::GpxxColorNames) / sizeof(QString);
          i++) {
       if (m_track.m_Colour == ::GpxxColorNames[i]) {
-        col = ::GpxxColors[i];
+        col = QColorToWxColour(::GpxxColors[i]);
         break;
       }
     }

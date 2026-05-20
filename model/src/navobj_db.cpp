@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include <QColor>
 #include <QDateTime>
 
 #include <QDir>
@@ -1483,10 +1484,8 @@ bool NavObj_dB::UpdateDBRoutePointAttributes(RoutePoint* point) {
     sqlite3_bind_int(stmt, 15, point->m_bShowWaypointRangeRings);
     sqlite3_bind_text(
         stmt, 16,
-        point->m_wxcWaypointRangeRingsColour.GetAsString(wxC2S_HTML_SYNTAX)
-            .ToStdString()
-            .c_str(),
-        -1, SQLITE_TRANSIENT);
+        point->m_wxcWaypointRangeRingsColour.name().toUtf8().constData(), -1,
+        SQLITE_TRANSIENT);
 
     sqlite3_bind_int(stmt, 17, point->GetScaMin());
     sqlite3_bind_int(stmt, 18, point->GetScaMax());
@@ -1825,7 +1824,8 @@ bool NavObj_dB::LoadAllRoutes() {
         point->m_iWaypointRangeRingsStepUnits = range_ring_units;
         point->SetShowWaypointRangeRings(range_ring_visible == 1);
         // TODO
-        point->m_wxcWaypointRangeRingsColour.Set(range_ring_color);
+        point->m_wxcWaypointRangeRingsColour =
+            QColor(QString::fromStdString(range_ring_color));
 
         point->SetScaMin(scamin);
         point->SetScaMax(scamax);
@@ -2048,7 +2048,8 @@ bool NavObj_dB::LoadAllPoints() {
       point->m_iWaypointRangeRingsStepUnits = range_ring_units;
       point->SetShowWaypointRangeRings(range_ring_visible == 1);
 
-      point->m_wxcWaypointRangeRingsColour.Set(range_ring_color);
+      point->m_wxcWaypointRangeRingsColour =
+          QColor(QString::fromStdString(range_ring_color));
 
       point->SetScaMin(scamin);
       point->SetScaMax(scamax);

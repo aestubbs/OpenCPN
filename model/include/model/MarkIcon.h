@@ -24,26 +24,28 @@
 #ifndef MARKICON_H_
 #define MARKICON_H_
 
+#include <QImage>
 #include <QString>
-
-#include <wx/bitmap.h>
 
 class MarkIcon {
 public:
   MarkIcon() {
     m_blistImageOK = false;
-    piconBitmap = NULL;
+    piconBitmap = nullptr;
     icon_texture = 0;
     preScaled = false;
     listIndex = 0;
   }
-  wxBitmap *piconBitmap;
+  // Cached icon image as a Qt type. Owned by MarkIcon (pointer for backward
+  // compat with the "lazy build, may-be-null" semantics of the old
+  // wxBitmap*; the underlying QImage has implicit sharing so the cost is low).
+  QImage *piconBitmap;
   QString icon_name;
   QString icon_description;
   bool preScaled;
 
   unsigned int icon_texture, tex_w, tex_h;
-  wxImage iconImage;
+  QImage iconImage;
   bool m_blistImageOK;
   int listIndex;
 };

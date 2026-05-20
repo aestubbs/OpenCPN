@@ -27,6 +27,7 @@
 #include "model/select.h"
 #include "model/track.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 
 #ifdef __ANDROID__
 #include <QDebug>
@@ -224,7 +225,7 @@ RoutePoint *GPXLoadWaypoint1(pugi::xml_node &wpt_node, QString def_symbol_name,
   // importing from XML, we must set "number" = 0 to be consistent
   if (!l_bWaypointRangeRingsVisible) pWP->SetWaypointRangeRingsNumber(0);
 
-  pWP->SetWaypointRangeRingsColour(l_wxcWaypointRangeRingsColour);
+  pWP->SetWaypointRangeRingsColour(WxColourToQColor(l_wxcWaypointRangeRingsColour));
   pWP->SetScaMin(l_iWaypointScaleMin);
   pWP->SetScaMax(l_iWaypoinScaleMax);
   pWP->SetUseSca(l_bWaypointUseScale);
@@ -770,19 +771,20 @@ static bool GPXCreateWpt(pugi::xml_node node, RoutePoint *pr,
       units.set_value(pr->m_iWaypointRangeRingsStepUnits);
 
       // Color specification in GPX file must be fully opaque
-      if (pr->m_wxcWaypointRangeRingsColour.IsOk()) {
-        pr->m_wxcWaypointRangeRingsColour.Set(
-            pr->m_wxcWaypointRangeRingsColour.Red(),
-            pr->m_wxcWaypointRangeRingsColour.Green(),
-            pr->m_wxcWaypointRangeRingsColour.Blue(), wxALPHA_OPAQUE);
+      if (pr->m_wxcWaypointRangeRingsColour.isValid()) {
+        pr->m_wxcWaypointRangeRingsColour =
+            QColor(pr->m_wxcWaypointRangeRingsColour.red(),
+                   pr->m_wxcWaypointRangeRingsColour.green(),
+                   pr->m_wxcWaypointRangeRingsColour.blue(), 255);
       } else {
-        pr->m_wxcWaypointRangeRingsColour.Set(0, 0, 0, wxALPHA_OPAQUE);
+        pr->m_wxcWaypointRangeRingsColour = QColor(0, 0, 0, 255);
       }
 
       pugi::xml_attribute colour = child.append_attribute("colour");
+      // QColor::name() returns "#RRGGBB" (HTML syntax), matching wx's
+      // wxC2S_HTML_SYNTAX behavior for opaque colors.
       colour.set_value(
-          pr->m_wxcWaypointRangeRingsColour.GetAsString(wxC2S_HTML_SYNTAX)
-              .utf8_str());
+          pr->m_wxcWaypointRangeRingsColour.name().toUtf8().constData());
     }
     if (flags & OUT_WAYPOINT_SCALE) {
       child = child_ext.append_child("opencpn:scale_min_max");

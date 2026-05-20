@@ -69,6 +69,7 @@
 #include "model/route.h"
 #include "model/routeman.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 #include "model/select.h"
 #include "model/select_item.h"
 #include "model/track.h"
@@ -2260,9 +2261,9 @@ bool ChartCanvas::SetUserOwnship() {
     double factor_dusk = 0.5;
     double factor_night = 0.25;
 
-    wxBitmap *pbmp = pWayPointMan->GetIconBitmap("ownship");
+    const QImage *qpbm = pWayPointMan->GetIconBitmap("ownship");
     m_pos_image_user_day = new wxImage;
-    *m_pos_image_user_day = pbmp->ConvertToImage();
+    *m_pos_image_user_day = qpbm ? QImageToWxImage(*qpbm) : wxImage();
     if (!m_pos_image_user_day->HasAlpha()) m_pos_image_user_day->InitAlpha();
 
     int gimg_width = m_pos_image_user_day->GetWidth();
@@ -11625,16 +11626,18 @@ void ChartCanvas::RenderShipToActive(ocpnDC &dc, bool Use_Opengl) {
 
     // set pen
     int width =
-        g_pRouteMan->GetRoutePen()->GetWidth();  // get default route pen with
+        g_pRouteMan->GetRoutePen().width();  // get default route pen with
     if (rt->m_width != wxPENSTYLE_INVALID)
       width = rt->m_width;  // set route pen style if any
     wxPenStyle style = (wxPenStyle)::StyleValues[wxMin(
         g_shipToActiveStyle, 5)];  // get setting pen style
     if (style == wxPENSTYLE_INVALID) style = wxPENSTYLE_SOLID;  // default style
     wxColour color =
-        g_shipToActiveColor > 0 ? GpxxColors[wxMin(g_shipToActiveColor - 1, 15)]
-                                :  // set setting route pen color
-            g_pRouteMan->GetActiveRoutePen()->GetColour();  // default color
+        g_shipToActiveColor > 0
+            ? QColorToWxColour(
+                  GpxxColors[wxMin(g_shipToActiveColor - 1, 15)])  // setting
+            : QColorToWxColour(
+                  g_pRouteMan->GetActiveRoutePen().color());  // default color
     wxPen *mypen = wxThePenList->FindOrCreatePen(color, width, style);
 
     dc.SetPen(*mypen);
@@ -11738,7 +11741,7 @@ void ChartCanvas::RenderRouteLegs(ocpnDC &dc) {
           double distanceRad = sqrtf(powf((float)(r_rband.x - lastPoint.x), 2) +
                                      powf((float)(r_rband.y - lastPoint.y), 2));
 
-          dc.SetPen(*g_pRouteMan->GetRoutePen());
+          dc.SetPen(QPenToWxPen(g_pRouteMan->GetRoutePen()));
           dc.SetBrush(*wxTRANSPARENT_BRUSH);
           dc.StrokeCircle(lastPoint.x, lastPoint.y, distanceRad);
         }

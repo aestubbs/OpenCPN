@@ -27,12 +27,13 @@
 #include <functional>
 #include <vector>
 
+#include <QColor>
 #include <QDateTime>
+#include <QFont>
+#include <QImage>
 #include <QString>
 #include <QtGlobal>
 
-#include <wx/bitmap.h>
-#include <wx/colour.h>
 #include <wx/string.h>
 
 #include "model/hyperlink.h"
@@ -48,7 +49,7 @@
 //"%d/%m/%Y %H:%M" //"%Y-%m-%d %H:%M"
 
 // Default color, global state
-extern wxColour g_colourWaypointRangeRingsColour; /**< Global instance */
+extern QColor g_colourWaypointRangeRingsColour; /**< Global instance */
 
 extern int g_LayerIdx; /**< Global instance */
 
@@ -161,8 +162,8 @@ public:
   void SetWaypointRangeRingsStepUnits(int i_WaypointRangeRingsStepUnits) {
     m_iWaypointRangeRingsStepUnits = i_WaypointRangeRingsStepUnits;
   };
-  void SetWaypointRangeRingsColour(wxColour wxc_WaypointRangeRingsColour) {
-    m_wxcWaypointRangeRingsColour = wxc_WaypointRangeRingsColour;
+  void SetWaypointRangeRingsColour(const QColor &c_WaypointRangeRingsColour) {
+    m_wxcWaypointRangeRingsColour = c_WaypointRangeRingsColour;
   };
   void SetTideStation(QString TideStation) { m_TideStation = TideStation; };
   void SetScaMin(QString str);
@@ -430,14 +431,20 @@ public:
    */
   QString m_TideStation;
   /**
-   * Font used for rendering the waypoint name.
+   * Font used for rendering the waypoint name. Default-constructed QFont
+   * (i.e. !m_pMarkFont.pointSize() > 0 sense via m_MarkFontInitialized below)
+   * signals "not yet initialized" so the GUI knows to populate it from the
+   * font manager. The pointer-ish "is null" check on the legacy wxFont*
+   * member is replaced by m_MarkFontInitialized.
    */
-  wxFont *m_pMarkFont;
+  QFont m_pMarkFont;
+  /** True once m_pMarkFont has been populated by the font manager. */
+  bool m_MarkFontInitialized;
   /**
    * Color used for rendering the waypoint name.
    * @note Calculated field - Obtained from the font manager.
    */
-  wxColour m_FontColor;
+  QColor m_FontColor;
   /**
    * Size of the waypoint name text when rendered.
    * @note Calculated field - Calculated based on font and text.
@@ -509,7 +516,7 @@ public:
   /**
    * Color for the range rings display.
    */
-  wxColour m_wxcWaypointRangeRingsColour;
+  QColor m_wxcWaypointRangeRingsColour;
   /**
    * Texture identifier for rendered text.
    */
@@ -561,17 +568,18 @@ private:
    * Name of the waypoint.
    */
   QString m_MarkName;
-  wxBitmap *m_pbmIcon;
+  // Non-owning pointer to a QImage owned by WayPointman's icon table.
+  const QImage *m_pbmIcon;
   QString m_IconName;
 
   void *m_SelectNode;
   void *m_ManagerNode;
 
   float m_IconScaleFactor;
-  wxBitmap m_ScaledBMP;
+  QImage m_ScaledBMP;
   bool m_bPreScaled;
   bool m_bDrawDragHandle;
-  wxBitmap m_dragIcon;
+  QImage m_dragIcon;
   int m_drag_line_length_man, m_drag_icon_offset;
   double m_dragHandleLat, m_dragHandleLon;
   int m_draggingOffsetx, m_draggingOffsety;

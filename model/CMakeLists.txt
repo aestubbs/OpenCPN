@@ -292,7 +292,7 @@ target_link_libraries(_model_src PUBLIC _OCPN_MODEL)
 # AUTOMOC runs moc on it, and the Qt socket/core libraries are linked in.
 if (NOT QT_ANDROID)
   set_target_properties(_model_src PROPERTIES AUTOMOC ON)
-  target_link_libraries(_model_src PUBLIC Qt6::Core Qt6::Network Qt6::SerialPort)
+  target_link_libraries(_model_src PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::SerialPort)
 endif ()
 
 # P1.10: Qt 6 file-I/O headers (QFile/QDir/QFileInfo) expose

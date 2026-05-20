@@ -44,6 +44,7 @@
 #include "model/route_point.h"
 #include "model/svg_utils.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 
 #include "ocpn_plugin.h"
 #include "styles.h"
@@ -161,15 +162,13 @@ MarkIcon *WayPointmanGui::ProcessIcon(wxImage image, const wxString &key,
     }
   }
 
-  wxBitmap *pbm = new wxBitmap(image);
   pmi->icon_name = wxString_to_QString(key);
   pmi->icon_description = wxString_to_QString(description);
-  pmi->piconBitmap = NULL;
+  pmi->piconBitmap = nullptr;
   pmi->icon_texture = 0; /* invalidate */
   pmi->preScaled = false;
-  pmi->iconImage = pbm->ConvertToImage();
+  pmi->iconImage = WxImageToQImage(image);
   pmi->m_blistImageOK = false;
-  delete pbm;
 
   return pmi;
 }
@@ -203,8 +202,8 @@ void WayPointmanGui::ProcessIcons(ocpnStyle::Style *style, double displayDPmm) {
 
   for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->size(); i++) {
     MarkIcon *pmi = m_waypoint_man.m_pIconArray->at(i);
-    w = wxMax(w, pmi->iconImage.GetWidth());
-    h = wxMax(h, pmi->iconImage.GetHeight());
+    w = wxMax(w, pmi->iconImage.width());
+    h = wxMax(h, pmi->iconImage.height());
   }
 
   m_waypoint_man.m_bitmapSizeForList = wxMax(w, h);
@@ -472,13 +471,10 @@ void WayPointmanGui::ReloadAllIcons(double displayDPmm) {
 
   for (unsigned int i = 0; i < m_waypoint_man.m_pIconArray->size(); i++) {
     MarkIcon *pmi = m_waypoint_man.m_pIconArray->at(i);
-    wxImage dim_image;
     if (m_waypoint_man.m_cs == GLOBAL_COLOR_SCHEME_DUSK) {
-      dim_image = m_waypoint_man.CreateDimImage(pmi->iconImage, .50);
-      pmi->iconImage = dim_image;
+      pmi->iconImage = m_waypoint_man.CreateDimImage(pmi->iconImage, .50);
     } else if (m_waypoint_man.m_cs == GLOBAL_COLOR_SCHEME_NIGHT) {
-      dim_image = m_waypoint_man.CreateDimImage(pmi->iconImage, .20);
-      pmi->iconImage = dim_image;
+      pmi->iconImage = m_waypoint_man.CreateDimImage(pmi->iconImage, .20);
     }
   }
   ReloadRoutepointIcons();
@@ -560,10 +556,10 @@ MarkIcon *WayPointmanGui::ProcessLegacyIcon(wxString fileName,
 
   pmi->icon_name = wxString_to_QString(key);
   pmi->icon_description = wxString_to_QString(description);
-  pmi->piconBitmap = NULL;
+  pmi->piconBitmap = nullptr;
   pmi->icon_texture = 0; /* invalidate */
   pmi->preScaled = false;
-  pmi->iconImage = imageClip;
+  pmi->iconImage = WxImageToQImage(imageClip);
   pmi->m_blistImageOK = false;
 
   return pmi;
@@ -598,10 +594,10 @@ MarkIcon *WayPointmanGui::ProcessExtendedIcon(wxImage &image,
 
   pmi->icon_name = wxString_to_QString(key);
   pmi->icon_description = wxString_to_QString(description);
-  pmi->piconBitmap = new wxBitmap(imageClip);
+  pmi->piconBitmap = new QImage(WxImageToQImage(imageClip));
   pmi->icon_texture = 0; /* invalidate */
   pmi->preScaled = false;
-  pmi->iconImage = imageClip;
+  pmi->iconImage = WxImageToQImage(imageClip);
   pmi->m_blistImageOK = false;
 
   return pmi;
@@ -667,20 +663,16 @@ void WayPointmanGui::ReloadRoutepointIcons() {
   }
 }
 
-unsigned int WayPointmanGui::GetIconTexture(const wxBitmap *pbm, int &glw,
+unsigned int WayPointmanGui::GetIconTexture(const QImage *pbm, int &glw,
                                             int &glh) {
 #ifdef ocpnUSE_GL
   int index = m_waypoint_man.GetIconIndex(pbm);
   MarkIcon *pmi = m_waypoint_man.m_pIconArray->at(index);
 
   if (!pmi->icon_texture) {
-    /* make rgba texture */
-    wxImage image = pbm->ConvertToImage();
-    unsigned char *d = image.GetData();
-    if (d == 0) {
-      // don't create a texture with junk
-      return 0;
-    }
+    /* make rgba texture directly from the QImage. */
+    if (!pbm || pbm->isNull()) return 0;
+    QImage rgba = pbm->convertToFormat(QImage::Format_RGBA8888);
 
     glGenTextures(1, &pmi->icon_texture);
     glBindTexture(GL_TEXTURE_2D, pmi->icon_texture);
@@ -689,31 +681,17 @@ unsigned int WayPointmanGui::GetIconTexture(const wxBitmap *pbm, int &glw,
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 
-    int w = image.GetWidth(), h = image.GetHeight();
+    int w = rgba.width(), h = rgba.height();
 
     pmi->tex_w = NextPow2(w);
     pmi->tex_h = NextPow2(h);
 
-    unsigned char *a = image.GetAlpha();
-
-    unsigned char mr, mg, mb;
-    if (!a) image.GetOrFindMaskColour(&mr, &mg, &mb);
-
+    // Pack rows into a contiguous RGBA buffer (QImage scanlines may have
+    // padding). RGBA8888 has 4 bytes per pixel.
     unsigned char *e = new unsigned char[4 * w * h];
-    for (int y = 0; y < h; y++) {
-      for (int x = 0; x < w; x++) {
-        unsigned char r, g, b;
-        int off = (y * w + x);
-        r = d[off * 3 + 0];
-        g = d[off * 3 + 1];
-        b = d[off * 3 + 2];
-        e[off * 4 + 0] = r;
-        e[off * 4 + 1] = g;
-        e[off * 4 + 2] = b;
-
-        e[off * 4 + 3] =
-            a ? a[off] : ((r == mr) && (g == mg) && (b == mb) ? 0 : 255);
-      }
+    for (int y = 0; y < h; ++y) {
+      const uchar *src = rgba.constScanLine(y);
+      memcpy(e + y * w * 4, src, w * 4);
     }
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pmi->tex_w, pmi->tex_h, 0, GL_RGBA,

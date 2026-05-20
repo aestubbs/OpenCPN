@@ -73,6 +73,7 @@
 #include "model/cmdline.h"
 #include "model/config_vars.h"
 #include "model/conn_params.h"
+#include "model/wx_qt_ui_types.h"
 #include "model/cutil.h"
 #include "model/geodesic.h"
 #include "model/georef.h"
@@ -299,7 +300,7 @@ int MyConfig::LoadMyConfig() {
   g_iWaypointRangeRingsNumber = 0;
   g_fWaypointRangeRingsStep = 1.0;
   g_iWaypointRangeRingsStepUnits = 0;
-  g_colourWaypointRangeRingsColour = wxColour(*wxRED);
+  g_colourWaypointRangeRingsColour = QColor(255, 0, 0);
   g_bConfirmObjectDelete = true;
 
   g_TrackIntervalSeconds = 60.0;
@@ -1145,7 +1146,8 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
 
   wxString l_wxsWaypointRangeRingsColour;
   CfgRead(*this, "WaypointRangeRingsColour", &l_wxsWaypointRangeRingsColour);
-  g_colourWaypointRangeRingsColour.Set(l_wxsWaypointRangeRingsColour);
+  g_colourWaypointRangeRingsColour =
+      QColor(wxString_to_QString(l_wxsWaypointRangeRingsColour));
 
   if (!CfgReadIf(*this, "WaypointUseScaMin", &g_bUseWptScaMin)) g_bUseWptScaMin = false;
   if (!CfgReadIf(*this, "WaypointScaMinValue", &g_iWpt_ScaMin)) g_iWpt_ScaMin = 2147483646;
@@ -2412,7 +2414,7 @@ void MyConfig::UpdateSettings() {
   CfgWrite(*this, "WaypointRangeRingsStep", g_fWaypointRangeRingsStep);
   CfgWrite(*this, "WaypointRangeRingsStepUnits", g_iWaypointRangeRingsStepUnits);
   CfgWrite(*this, "WaypointRangeRingsColour",
-        g_colourWaypointRangeRingsColour.GetAsString(wxC2S_HTML_SYNTAX));
+           QString_to_wxString(g_colourWaypointRangeRingsColour.name()));
 
   CfgWrite(*this, "ConfirmObjectDeletion", g_bConfirmObjectDelete);
 

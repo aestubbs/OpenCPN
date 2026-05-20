@@ -25,6 +25,7 @@
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 
 // For compilers that support precompilation, includes "wx.h".
 #include <wx/wxprec.h>
@@ -71,7 +72,7 @@ RoutemanDlgCtx RoutemanGui::GetDlgCtx() {
   RoutemanDlgCtx ctx;
   ctx.confirm_delete_ais_mob = []() { return ConfirmDeleteAisMob(); };
   ctx.get_global_colour = [](QString c) {
-    return GetGlobalColor(QString_to_wxString(c));
+    return WxColourToQColor(GetGlobalColor(QString_to_wxString(c)));
   };
   ctx.show_with_fresh_fonts = [] {
     if (console && !g_bhide_route_console) console->ShowWithFreshFonts();

@@ -51,6 +51,7 @@
 #include "model/routeman.h"
 #include "model/track.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 
 #include "observable_globvar.h"
 
@@ -890,31 +891,26 @@ void Routeman::SetColorScheme(ColorScheme cs, double displayDPmm) {
     track_scaled_line_width = std::max(tsline_width, 2.0);
   }
 
-  m_pActiveRoutePointPen = wxThePenList->FindOrCreatePen(
-      wxColour(0, 0, 255), scaled_line_width, wxPENSTYLE_SOLID);
-  m_pRoutePointPen = wxThePenList->FindOrCreatePen(
-      wxColour(0, 0, 255), scaled_line_width, wxPENSTYLE_SOLID);
+  m_ActiveRoutePointPen =
+      QPen(QColor(0, 0, 255), scaled_line_width, Qt::SolidLine);
+  m_RoutePointPen = QPen(QColor(0, 0, 255), scaled_line_width, Qt::SolidLine);
 
   //    Or in something like S-52 compliance
 
-  m_pRoutePen =
-      wxThePenList->FindOrCreatePen(m_route_dlg_ctx.get_global_colour("UINFB"),
-                                    scaled_line_width, wxPENSTYLE_SOLID);
-  m_pSelectedRoutePen =
-      wxThePenList->FindOrCreatePen(m_route_dlg_ctx.get_global_colour("UINFO"),
-                                    scaled_line_width, wxPENSTYLE_SOLID);
-  m_pActiveRoutePen =
-      wxThePenList->FindOrCreatePen(m_route_dlg_ctx.get_global_colour("UARTE"),
-                                    scaled_line_width, wxPENSTYLE_SOLID);
-  m_pTrackPen =
-      wxThePenList->FindOrCreatePen(m_route_dlg_ctx.get_global_colour("CHMGD"),
-                                    track_scaled_line_width, wxPENSTYLE_SOLID);
-  m_pRouteBrush = wxTheBrushList->FindOrCreateBrush(
-      m_route_dlg_ctx.get_global_colour("UINFB"), wxBRUSHSTYLE_SOLID);
-  m_pSelectedRouteBrush = wxTheBrushList->FindOrCreateBrush(
-      m_route_dlg_ctx.get_global_colour("UINFO"), wxBRUSHSTYLE_SOLID);
-  m_pActiveRouteBrush = wxTheBrushList->FindOrCreateBrush(
-      m_route_dlg_ctx.get_global_colour("PLRTE"), wxBRUSHSTYLE_SOLID);
+  m_RoutePen = QPen(m_route_dlg_ctx.get_global_colour("UINFB"),
+                    scaled_line_width, Qt::SolidLine);
+  m_SelectedRoutePen = QPen(m_route_dlg_ctx.get_global_colour("UINFO"),
+                            scaled_line_width, Qt::SolidLine);
+  m_ActiveRoutePen = QPen(m_route_dlg_ctx.get_global_colour("UARTE"),
+                          scaled_line_width, Qt::SolidLine);
+  m_TrackPen = QPen(m_route_dlg_ctx.get_global_colour("CHMGD"),
+                    track_scaled_line_width, Qt::SolidLine);
+  m_RouteBrush =
+      QBrush(m_route_dlg_ctx.get_global_colour("UINFB"), Qt::SolidPattern);
+  m_SelectedRouteBrush =
+      QBrush(m_route_dlg_ctx.get_global_colour("UINFO"), Qt::SolidPattern);
+  m_ActiveRouteBrush =
+      QBrush(m_route_dlg_ctx.get_global_colour("PLRTE"), Qt::SolidPattern);
 }
 
 QString Routeman::GetRouteReverseMessage() {
@@ -1061,45 +1057,31 @@ wxImageList *WayPointman::Getpmarkicon_image_list(int nominal_height) {
   return pmarkicon_image_list;
 }
 
-wxBitmap *WayPointman::CreateDimBitmap(wxBitmap *pBitmap, double factor) {
-  wxImage img = pBitmap->ConvertToImage();
-  int sx = img.GetWidth();
-  int sy = img.GetHeight();
-
-  wxImage new_img(img);
-
-  for (int i = 0; i < sx; i++) {
-    for (int j = 0; j < sy; j++) {
-      if (!img.IsTransparent(i, j)) {
-        new_img.SetRGB(i, j, (unsigned char)(img.GetRed(i, j) * factor),
-                       (unsigned char)(img.GetGreen(i, j) * factor),
-                       (unsigned char)(img.GetBlue(i, j) * factor));
-      }
-    }
-  }
-
-  wxBitmap *pret = new wxBitmap(new_img);
-
-  return pret;
+QImage WayPointman::CreateDimBitmap(const QImage &image, double factor) {
+  return CreateDimImage(image, factor);
 }
 
-wxImage WayPointman::CreateDimImage(wxImage &image, double factor) {
-  int sx = image.GetWidth();
-  int sy = image.GetHeight();
-
-  wxImage new_img(image);
-
-  for (int i = 0; i < sx; i++) {
-    for (int j = 0; j < sy; j++) {
-      if (!image.IsTransparent(i, j)) {
-        new_img.SetRGB(i, j, (unsigned char)(image.GetRed(i, j) * factor),
-                       (unsigned char)(image.GetGreen(i, j) * factor),
-                       (unsigned char)(image.GetBlue(i, j) * factor));
+QImage WayPointman::CreateDimImage(const QImage &image, double factor) {
+  if (image.isNull()) return QImage();
+  QImage src = image.convertToFormat(QImage::Format_ARGB32);
+  QImage out(src.size(), QImage::Format_ARGB32);
+  const int w = src.width();
+  const int h = src.height();
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      QRgb p = src.pixel(x, y);
+      const int a = qAlpha(p);
+      if (a == 0) {
+        out.setPixel(x, y, p);
+      } else {
+        out.setPixel(x, y,
+                     qRgba(static_cast<int>(qRed(p) * factor),
+                           static_cast<int>(qGreen(p) * factor),
+                           static_cast<int>(qBlue(p) * factor), a));
       }
     }
   }
-
-  return wxImage(new_img);
+  return out;
 }
 
 bool WayPointman::DoesIconExist(const QString &icon_key) const {
@@ -1114,9 +1096,9 @@ bool WayPointman::DoesIconExist(const QString &icon_key) const {
   return false;
 }
 
-wxBitmap *WayPointman::GetIconBitmap(const QString &icon_key) const {
-  wxBitmap *pret = NULL;
-  MarkIcon *pmi = NULL;
+const QImage *WayPointman::GetIconBitmap(const QString &icon_key) const {
+  const QImage *pret = nullptr;
+  MarkIcon *pmi = nullptr;
   unsigned int i;
 
   for (i = 0; i < m_pIconArray->size(); i++) {
@@ -1134,15 +1116,15 @@ wxBitmap *WayPointman::GetIconBitmap(const QString &icon_key) const {
     }
   }
 
-  if (i == m_pIconArray->size())          // "circle" not found
-    pmi = m_pIconArray->at(0);  // use item 0
+  if (i == m_pIconArray->size())  // "circle" not found
+    pmi = m_pIconArray->at(0);    // use item 0
 
   if (pmi) {
     if (pmi->piconBitmap)
       pret = pmi->piconBitmap;
     else {
-      if (pmi->iconImage.IsOk()) {
-        pmi->piconBitmap = new wxBitmap(pmi->iconImage);
+      if (!pmi->iconImage.isNull()) {
+        pmi->piconBitmap = new QImage(pmi->iconImage);
         pret = pmi->piconBitmap;
       }
     }
@@ -1178,23 +1160,33 @@ bool WayPointman::GetIconPrescaled(const QString &icon_key) const {
     return false;
 }
 
-wxBitmap WayPointman::GetIconBitmapForList(int index, int height) const {
-  wxBitmap pret;
+QImage WayPointman::GetIconBitmapForList(int index, int height) const {
+  QImage pret;
   MarkIcon *pmi;
 
   if (index >= 0) {
     pmi = m_pIconArray->at(index);
     // Scale the icon to "list size" if necessary
-    if (pmi->iconImage.GetHeight() != height) {
+    if (pmi->iconImage.height() != height) {
       int w = height;
       int h = height;
-      int w0 = pmi->iconImage.GetWidth();
-      int h0 = pmi->iconImage.GetHeight();
+      int w0 = pmi->iconImage.width();
+      int h0 = pmi->iconImage.height();
 
-      wxImage icon_resized = pmi->iconImage;  // make a copy
+      QImage icon_resized = pmi->iconImage;  // make a copy
       if (h0 <= h && w0 <= w) {
-        icon_resized = pmi->iconImage.Resize(
-            wxSize(w, h), wxPoint(w / 2 - w0 / 2, h / 2 - h0 / 2));
+        // Resize without scaling: paste centered onto a w x h transparent
+        // canvas.
+        QImage canvas(w, h, QImage::Format_ARGB32);
+        canvas.fill(Qt::transparent);
+        const int ox = w / 2 - w0 / 2;
+        const int oy = h / 2 - h0 / 2;
+        for (int y = 0; y < h0; ++y) {
+          for (int x = 0; x < w0; ++x) {
+            canvas.setPixel(ox + x, oy + y, pmi->iconImage.pixel(x, y));
+          }
+        }
+        icon_resized = canvas;
       } else {
         // rescale in one or two directions to avoid cropping, then resize to
         // fit to cell
@@ -1202,19 +1194,26 @@ wxBitmap WayPointman::GetIconBitmapForList(int index, int height) const {
         int w1 = w;
         if (h0 > h)
           w1 = qRound((double)w0 * ((double)h / (double)h0));
-
         else if (w0 > w)
           h1 = qRound((double)h0 * ((double)w / (double)w0));
 
-        icon_resized = pmi->iconImage.Rescale(w1, h1);
-        icon_resized = pmi->iconImage.Resize(
-            wxSize(w, h), wxPoint(w / 2 - w1 / 2, h / 2 - h1 / 2));
+        QImage scaled = pmi->iconImage.scaled(
+            w1, h1, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        QImage canvas(w, h, QImage::Format_ARGB32);
+        canvas.fill(Qt::transparent);
+        const int ox = w / 2 - w1 / 2;
+        const int oy = h / 2 - h1 / 2;
+        for (int y = 0; y < h1; ++y) {
+          for (int x = 0; x < w1; ++x) {
+            canvas.setPixel(ox + x, oy + y, scaled.pixel(x, y));
+          }
+        }
+        icon_resized = canvas;
       }
 
-      pret = wxBitmap(icon_resized);
-
+      pret = icon_resized;
     } else
-      pret = wxBitmap(pmi->iconImage);
+      pret = pmi->iconImage;
   }
 
   return pret;
@@ -1252,7 +1251,7 @@ QString *WayPointman::GetIconKey(int index) const {
   return pret;
 }
 
-int WayPointman::GetIconIndex(const wxBitmap *pbm) const {
+int WayPointman::GetIconIndex(const QImage *pbm) const {
   unsigned int ret = 0;
   MarkIcon *pmi;
 
@@ -1268,20 +1267,24 @@ int WayPointman::GetIconIndex(const wxBitmap *pbm) const {
   return ret;
 }
 
-int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
+int WayPointman::GetIconImageListIndex(const QImage *pbm) const {
   MarkIcon *pmi = m_pIconArray->at(GetIconIndex(pbm));
 
   // Build a "list - sized" image
   if (pmarkicon_image_list && !pmi->m_blistImageOK) {
-    int h0 = pmi->iconImage.GetHeight();
-    int w0 = pmi->iconImage.GetWidth();
+    int h0 = pmi->iconImage.height();
+    int w0 = pmi->iconImage.width();
     int h = m_bitmapSizeForList;
     int w = m_bitmapSizeForList;
 
-    wxImage icon_larger = pmi->iconImage;  // make a copy
+    // Build the resized wxImage for the image list.  The icon resize/scale
+    // logic still uses wx because the wxImageList consumer is wx; this is one
+    // of the few spots in WayPointman that intentionally crosses the bridge.
+    wxImage src_wx = QImageToWxImage(pmi->iconImage);
+    wxImage icon_larger = src_wx;
     if (h0 <= h && w0 <= w) {
-      icon_larger = pmi->iconImage.Resize(
-          wxSize(w, h), wxPoint(w / 2 - w0 / 2, h / 2 - h0 / 2));
+      icon_larger =
+          src_wx.Resize(wxSize(w, h), wxPoint(w / 2 - w0 / 2, h / 2 - h0 / 2));
     } else {
       // We want to maintain the aspect ratio of the original image, but need
       // the canvas to fit the fixed cell size rescale in one or two directions
@@ -1295,7 +1298,7 @@ int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
       else if (w0 > w)
         h1 = qRound((double)h0 * ((double)w / (double)w0));
 
-      icon_larger = pmi->iconImage.Rescale(w1, h1).Resize(
+      icon_larger = src_wx.Rescale(w1, h1).Resize(
           wxSize(w, h), wxPoint(w / 2 - w1 / 2, h / 2 - h1 / 2));
     }
 
@@ -1322,7 +1325,7 @@ int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
     int ym = xbmp.GetHeight() / 2;
     int dp = xm / 2;
     int width = std::max(xm / 10, 2);
-    wxPen red(m_get_global_colour("URED"), width);
+    wxPen red(QColorToWxColour(m_get_global_colour("URED")), width);
     mdc.SetPen(red);
     mdc.DrawLine(xm - dp, ym - dp, xm + dp, ym + dp);
     mdc.DrawLine(xm - dp, ym + dp, xm + dp, ym - dp);
@@ -1345,7 +1348,7 @@ int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
     ym = fbmp.GetHeight() / 2;
     dp = xm / 2;
     width = std::max(xm / 10, 2);
-    wxPen fred(m_get_global_colour("UGREN"), width);
+    wxPen fred(QColorToWxColour(m_get_global_colour("UGREN")), width);
     fmdc.SetPen(fred);
     fmdc.DrawLine(xm - dp, ym + dp, xm + dp, ym + dp);
     fmdc.SelectObject(wxNullBitmap);
@@ -1362,11 +1365,11 @@ int WayPointman::GetIconImageListIndex(const wxBitmap *pbm) const {
   return pmi->listIndex;
 }
 
-int WayPointman::GetXIconImageListIndex(const wxBitmap *pbm) const {
+int WayPointman::GetXIconImageListIndex(const QImage *pbm) const {
   return GetIconImageListIndex(pbm) + 1;
 }
 
-int WayPointman::GetFIconImageListIndex(const wxBitmap *pbm) const {
+int WayPointman::GetFIconImageListIndex(const QImage *pbm) const {
   return GetIconImageListIndex(pbm) + 2;
 }
 
@@ -1434,7 +1437,8 @@ void WayPointman::ClearRoutePointFonts() {
   //    Iterate on the RoutePoint list, clearing Font pointers
   //    This is typically done globally after a font switch
   for (RoutePoint *pr : *m_pWayPointList) {
-    pr->m_pMarkFont = NULL;
+    pr->m_pMarkFont = QFont();
+    pr->m_MarkFontInitialized = false;
   }
 }
 

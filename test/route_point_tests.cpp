@@ -14,7 +14,7 @@ class RoutePointScaleTest : public ::testing::Test {
 protected:
   void SetUp() override {
     waypoints = std::make_unique<WayPointman>(
-        [](QString) { return wxColour(0, 0, 0); });
+        [](QString) { return QColor(0, 0, 0); });
     pWayPointMan = waypoints.get();
   }
 

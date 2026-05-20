@@ -39,6 +39,7 @@
 #include "model/route.h"
 #include "model/routeman.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 #include "model/svg_utils.h"
 
 #include "color_handler.h"
@@ -82,55 +83,65 @@ void RoutePointGui::Draw(ocpnDC &dc, ChartCanvas *canvas, wxPoint *rpn,
     return;
   }
 
-  wxPen *pen;
+  wxPen pen;
   if (m_point.m_bBlink)
-    pen = g_pRouteMan->GetActiveRoutePointPen();
+    pen = QPenToWxPen(g_pRouteMan->GetActiveRoutePointPen());
   else
-    pen = g_pRouteMan->GetRoutePointPen();
+    pen = QPenToWxPen(g_pRouteMan->GetRoutePointPen());
 
   //  Substitue icon?
   if (m_point.m_IconIsDirty) ReLoadIcon();
-  wxBitmap *pbm;
+  const QImage *pbm;
   if ((m_point.m_bIsActive) && (m_point.m_IconName != "mob"))
     pbm = pWayPointMan->GetIconBitmap("activepoint");
   else
     pbm = m_point.m_pbmIcon;
 
-  wxBitmap *pbms = NULL;
   if ((g_MarkScaleFactorExp > 1.0) && !m_point.m_bPreScaled) {
     if (m_point.m_IconScaleFactor != g_MarkScaleFactorExp) {
-      wxImage scaled_image = pbm->ConvertToImage();
-      int new_width = pbm->GetWidth() * g_MarkScaleFactorExp;
-      int new_height = pbm->GetHeight() * g_MarkScaleFactorExp;
-      m_point.m_ScaledBMP = wxBitmap(
-          scaled_image.Scale(new_width, new_height, wxIMAGE_QUALITY_HIGH));
+      int new_width = pbm->width() * g_MarkScaleFactorExp;
+      int new_height = pbm->height() * g_MarkScaleFactorExp;
+      m_point.m_ScaledBMP = pbm->scaled(
+          new_width, new_height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
       m_point.m_IconScaleFactor = g_MarkScaleFactorExp;
     }
-    if (m_point.m_ScaledBMP.IsOk()) pbm = &m_point.m_ScaledBMP;
+    if (!m_point.m_ScaledBMP.isNull()) pbm = &m_point.m_ScaledBMP;
   }
 
-  int sx2 = pbm->GetWidth() / 2;
-  int sy2 = pbm->GetHeight() / 2;
+  // Bridge: convert to wxBitmap for drawing via wxDC. Step 2 will replace
+  // ocpnDC drawing with Qt drawing.
+  wxBitmap wxbm = QImageToWxBitmap(*pbm);
+  int sx2 = wxbm.GetWidth() / 2;
+  int sy2 = wxbm.GetHeight() / 2;
 
   //    Calculate the mark drawing extents
   wxRect r1(r.x - sx2, r.y - sy2, sx2 * 2, sy2 * 2);  // the bitmap extents
 
   if (m_point.m_bShowName) {
-    if (0 == m_point.m_pMarkFont) {
+    if (!m_point.m_MarkFontInitialized) {
       wxFont *dFont = FontMgr::Get().GetFont(_("Marks"));
       int font_size = wxMax(8, dFont->GetPointSize());
       font_size /= OCPN_GetWinDIPScaleFactor();
 
-      m_point.m_pMarkFont = FontMgr::Get().FindOrCreateFont(
+      wxFont *new_font = FontMgr::Get().FindOrCreateFont(
           font_size, dFont->GetFamily(), dFont->GetStyle(), dFont->GetWeight(),
           false, dFont->GetFaceName());
+      // Bridge: convert wx font to QFont (font_mgr is still wx).
+      m_point.m_pMarkFont = QFont(
+          QString::fromStdString(new_font->GetFaceName().utf8_string()),
+          font_size,
+          new_font->GetWeight() == wxFONTWEIGHT_BOLD ? QFont::Bold
+                                                    : QFont::Normal,
+          new_font->GetStyle() == wxFONTSTYLE_ITALIC);
+      m_point.m_MarkFontInitialized = true;
 
-      m_point.m_FontColor = FontMgr::Get().GetFontColor(_("Marks"));
+      m_point.m_FontColor =
+          WxColourToQColor(FontMgr::Get().GetFontColor(_("Marks")));
       m_point.CalculateNameExtents();
     }
 
-    if (m_point.m_pMarkFont) {
+    if (m_point.m_MarkFontInitialized) {
       wxRect r2(r.x + m_point.m_NameLocationOffsetX,
                 r.y + m_point.m_NameLocationOffsetY, m_point.m_NameExtents.x,
                 m_point.m_NameExtents.y);
@@ -150,7 +161,7 @@ void RoutePointGui::Draw(ocpnDC &dc, ChartCanvas *canvas, wxPoint *rpn,
     radius = 4.0f;
   }
 
-  wxColour hi_colour = pen->GetColour();
+  wxColour hi_colour = pen.GetColour();
   unsigned char transparency = 100;
   if (m_point.m_bRPIsBeingEdited) {
     hi_colour = GetGlobalColor("YELO1");
@@ -168,7 +179,7 @@ void RoutePointGui::Draw(ocpnDC &dc, ChartCanvas *canvas, wxPoint *rpn,
   if (m_point.m_bBlink && (g_blinker_tick & 1)) bDrawHL = true;
 
   if ((!bDrawHL) && (NULL != m_point.m_pbmIcon)) {
-    dc.DrawBitmap(*pbm, r.x - sx2, r.y - sy2, true);
+    dc.DrawBitmap(wxbm, r.x - sx2, r.y - sy2, true);
     // on MSW, the dc Bounding box is not updated on DrawBitmap() method.
     // Do it explicitely here for all platforms.
     dc.CalcBoundingBox(r.x - sx2, r.y - sy2);
@@ -176,9 +187,10 @@ void RoutePointGui::Draw(ocpnDC &dc, ChartCanvas *canvas, wxPoint *rpn,
   }
 
   if (m_point.m_bShowName && m_point.m_MarkName.length()) {
-    if (m_point.m_pMarkFont) {
-      dc.SetFont(*m_point.m_pMarkFont);
-      dc.SetTextForeground(m_point.m_FontColor);
+    if (m_point.m_MarkFontInitialized) {
+      wxFont wxmf = QFontToWxFont(m_point.m_pMarkFont);
+      dc.SetFont(wxmf);
+      dc.SetTextForeground(QColorToWxColour(m_point.m_FontColor));
 
       dc.DrawText(QString_to_wxString(m_point.m_MarkName),
                   r.x + m_point.m_NameLocationOffsetX,
@@ -204,12 +216,12 @@ void RoutePointGui::Draw(ocpnDC &dc, ChartCanvas *canvas, wxPoint *rpn,
         sqrt(pow((double)(r.x - r1.x), 2) + pow((double)(r.y - r1.y), 2));
     int pix_radius = (int)lpp;
 
-    wxPen ppPen1(m_point.m_wxcWaypointRangeRingsColour, 2);
+    wxColour ring_col = QColorToWxColour(m_point.m_wxcWaypointRangeRingsColour);
+    wxPen ppPen1(ring_col, 2);
     wxBrush saveBrush = dc.GetBrush();
     wxPen savePen = dc.GetPen();
     dc.SetPen(ppPen1);
-    dc.SetBrush(wxBrush(m_point.m_wxcWaypointRangeRingsColour,
-                        wxBRUSHSTYLE_TRANSPARENT));
+    dc.SetBrush(wxBrush(ring_col, wxBRUSHSTYLE_TRANSPARENT));
 
     for (int i = 1; i <= m_point.m_iWaypointRangeRingsNumber; i++)
       dc.StrokeCircle(r.x, r.y, i * pix_radius);
@@ -227,7 +239,7 @@ void RoutePointGui::Draw(ocpnDC &dc, ChartCanvas *canvas, wxPoint *rpn,
   if (m_point.m_bBlink)
     g_blink_rect = m_point.CurrentRect_in_DC;  // also save for global blinker
 
-  delete pbms;  // the potentially scaled bitmap
+  // (pbms removed: scaled image is now an owned QImage member m_ScaledBMP)
 }
 
 #ifdef ocpnUSE_GL
@@ -279,33 +291,41 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
 
   //    Substitute icon?
   if (m_point.m_IconIsDirty) ReLoadIcon();
-  wxBitmap *pbm;
+  const QImage *pbm;
   if ((m_point.m_bIsActive) && (m_point.m_IconName != "mob"))
     pbm = pWayPointMan->GetIconBitmap("activepoint");
   else
     pbm = m_point.m_pbmIcon;
 
   //  If icon is corrupt, there is really nothing else to do...
-  if (!pbm || !pbm->IsOk()) return;
+  if (!pbm || pbm->isNull()) return;
 
-  int sx2 = pbm->GetWidth() / 2;
-  int sy2 = pbm->GetHeight() / 2;
+  int sx2 = pbm->width() / 2;
+  int sy2 = pbm->height() / 2;
 
   //    Calculate the mark drawing extents
   wxRect r1(r.x - sx2, r.y - sy2, sx2 * 2, sy2 * 2);  // the bitmap extents
 
   wxRect r3 = r1;
   if (m_point.m_bShowName) {
-    if (!m_point.m_pMarkFont) {
+    if (!m_point.m_MarkFontInitialized) {
       wxFont *dFont = FontMgr::Get().GetFont(_("Marks"));
       int font_size = wxMax(8, dFont->GetPointSize());
       font_size /= OCPN_GetWinDIPScaleFactor();
 
-      m_point.m_pMarkFont = FontMgr::Get().FindOrCreateFont(
+      wxFont *new_font = FontMgr::Get().FindOrCreateFont(
           font_size, dFont->GetFamily(), dFont->GetStyle(), dFont->GetWeight(),
           false, dFont->GetFaceName());
+      m_point.m_pMarkFont = QFont(
+          QString::fromStdString(new_font->GetFaceName().utf8_string()),
+          font_size,
+          new_font->GetWeight() == wxFONTWEIGHT_BOLD ? QFont::Bold
+                                                    : QFont::Normal,
+          new_font->GetStyle() == wxFONTSTYLE_ITALIC);
+      m_point.m_MarkFontInitialized = true;
 
-      m_point.m_FontColor = FontMgr::Get().GetFontColor(_("Marks"));
+      m_point.m_FontColor =
+          WxColourToQColor(FontMgr::Get().GetFontColor(_("Marks")));
       if (m_point.m_iTextTexture) {
         glDeleteTextures(1, &m_point.m_iTextTexture);
         m_point.m_iTextTexture = 0;
@@ -314,7 +334,7 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
       m_point.CalculateNameExtents();
     }
 
-    if (m_point.m_pMarkFont) {
+    if (m_point.m_MarkFontInitialized) {
       wxRect r2(r.x + m_point.m_NameLocationOffsetX,
                 r.y + m_point.m_NameLocationOffsetY, m_point.m_NameExtents.x,
                 m_point.m_NameExtents.y);
@@ -370,8 +390,7 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
   if (m_point.m_bPtIsSelected) {
     wxColour hi_colour;
     if (m_point.m_bBlink) {
-      wxPen *pen = g_pRouteMan->GetActiveRoutePointPen();
-      hi_colour = pen->GetColour();
+      hi_colour = QColorToWxColour(g_pRouteMan->GetActiveRoutePointPen().color());
     } else {
       hi_colour = GetGlobalColor("YELO1");
     }
@@ -440,7 +459,7 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
     glDisable(GL_TEXTURE_2D);
   }
 
-  if (m_point.m_bShowName && m_point.m_pMarkFont) {
+  if (m_point.m_bShowName && m_point.m_MarkFontInitialized) {
     int w = m_point.m_NameExtents.x, h = m_point.m_NameExtents.y;
     if (!m_point.m_iTextTexture && w && h) {
 #if 0
@@ -477,8 +496,9 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
                       e);
       delete[] e;
 #else
+      wxFont wxmf2 = QFontToWxFont(m_point.m_pMarkFont);
       wxScreenDC sdc;
-      sdc.SetFont(*m_point.m_pMarkFont);
+      sdc.SetFont(wxmf2);
 
       /* create bitmap of appropriate size and select it */
       wxBitmap bmp(w, h);
@@ -490,7 +510,7 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
       temp_dc.Clear();
 
       /* draw the text white */
-      temp_dc.SetFont(*m_point.m_pMarkFont);
+      temp_dc.SetFont(wxmf2);
       temp_dc.SetTextForeground(wxColour(255, 255, 255));
       temp_dc.DrawText(QString_to_wxString(m_point.m_MarkName), 0, 0);
       temp_dc.SelectObject(wxNullBitmap);
@@ -503,9 +523,9 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
       unsigned char *im = image.GetData();
 
       if (im) {
-        unsigned int r = m_point.m_FontColor.Red();
-        unsigned int g = m_point.m_FontColor.Green();
-        unsigned int b = m_point.m_FontColor.Blue();
+        unsigned int r = m_point.m_FontColor.red();
+        unsigned int g = m_point.m_FontColor.green();
+        unsigned int b = m_point.m_FontColor.blue();
         for (int i = 0; i < h; i++) {
           for (int j = 0; j < w; j++) {
             unsigned int index = ((i * w) + j) * 4;
@@ -598,8 +618,8 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
         sqrt(pow((double)(r.x - r1.x), 2) + pow((double)(r.y - r1.y), 2));
     int pix_radius = (int)lpp;
 
-    wxColor ring_dim_color =
-        user_colors::GetDimColor(m_point.m_wxcWaypointRangeRingsColour);
+    wxColor ring_dim_color = user_colors::GetDimColor(
+        QColorToWxColour(m_point.m_wxcWaypointRangeRingsColour));
 
     // 0.5 mm nominal, but not less than 1 pixel
     double platform_pen_width =
@@ -617,7 +637,7 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
   }
 
   // Render Drag handle if enabled
-  if (m_point.m_bDrawDragHandle && m_point.m_dragIcon.IsOk()) {
+  if (m_point.m_bDrawDragHandle && !m_point.m_dragIcon.isNull()) {
     //  A line, southeast, scaled to the size of the icon
     double platform_pen_width = wxRound(
         wxMax(1.0, g_Platform->GetDisplayDPmm() /
@@ -644,8 +664,8 @@ void RoutePointGui::DrawGL(ViewPort &vp, ChartCanvas *canvas, ocpnDC &dc,
     glEnable(GL_BLEND);
 
     int x = r.x + m_point.m_drag_icon_offset,
-        y = r.y + m_point.m_drag_icon_offset, w = m_point.m_dragIcon.GetWidth(),
-        h = m_point.m_dragIcon.GetHeight();
+        y = r.y + m_point.m_drag_icon_offset, w = m_point.m_dragIcon.width(),
+        h = m_point.m_dragIcon.height();
 
     float scale = 1.0;
 
@@ -785,7 +805,7 @@ void RoutePointGui::ShowScaleWarningMessage(ChartCanvas *canvas) {
 void RoutePointGui::EnableDragHandle(bool bEnable) {
   m_point.m_bDrawDragHandle = bEnable;
   if (bEnable) {
-    if (!m_point.m_dragIcon.IsOk()) {
+    if (m_point.m_dragIcon.isNull()) {
       // Get the icon
       // What size?
       int bm_size = g_Platform->GetDisplayDPmm() * 9;  // 9 mm nominal
@@ -794,8 +814,13 @@ void RoutePointGui::EnableDragHandle(bool bEnable) {
       wxString UserIconPath = g_Platform->GetSharedDataDir() + "uidata" +
                               QChar(QDir::separator()).toLatin1();
 
-      m_point.m_dragIcon = LoadSVG(UserIconPath + "DragHandle.svg", bm_size,
-                                   bm_size, m_point.m_pbmIcon);
+      // LoadSVG returns wxBitmap (still wx in step 1); the default-bitmap
+      // arg is a wxBitmap*, so we bridge m_pbmIcon (QImage*) at the call.
+      wxBitmap default_bm =
+          m_point.m_pbmIcon ? QImageToWxBitmap(*m_point.m_pbmIcon) : wxBitmap();
+      wxBitmap loaded_drag = LoadSVG(UserIconPath + "DragHandle.svg", bm_size,
+                                     bm_size, &default_bm);
+      m_point.m_dragIcon = WxBitmapToQImage(loaded_drag);
 
       // build a texture
 #ifdef ocpnUSE_GL
@@ -808,7 +833,7 @@ void RoutePointGui::EnableDragHandle(bool bEnable) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 
-        wxImage image = m_point.m_dragIcon.ConvertToImage();
+        wxImage image = loaded_drag.ConvertToImage();
         int w = image.GetWidth(), h = image.GetHeight();
 
         m_point.m_dragIconTextureWidth = NextPow2(w);
@@ -849,7 +874,7 @@ void RoutePointGui::EnableDragHandle(bool bEnable) {
 #endif
 
       // set the drawing metrics
-      if (m_point.m_dragIcon.IsOk()) {
+      if (!m_point.m_dragIcon.isNull()) {
         m_point.m_drag_line_length_man = bm_size;
         m_point.m_drag_icon_offset = bm_size;
       } else {
@@ -902,7 +927,8 @@ void RoutePointGui::ReLoadIcon() {
 #endif
 
   m_point.m_IconScaleFactor = -1;  // Force scaled icon reload
-  m_point.m_pMarkFont = 0;         // Force Font color reload
+  m_point.m_pMarkFont = QFont();   // Force Font color reload
+  m_point.m_MarkFontInitialized = false;
   m_point.m_IconIsDirty = false;
 }
 

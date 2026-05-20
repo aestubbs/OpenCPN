@@ -85,6 +85,7 @@
 #include "model/ais_state_vars.h"
 #include "model/ais_target_data.h"
 #include "model/wx_qt_string.h"
+#include "model/wx_qt_ui_types.h"
 #include "model/cmdline.h"
 #include "model/comm_drv_factory.h"
 #include "model/comm_util.h"
@@ -2460,7 +2461,8 @@ void options::CreatePanel_Routes(size_t parent, int border_size,
   if (fillCombo) {
     for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
       QString* ps = pWayPointMan->GetIconDescription(i);
-      wxBitmap bmp = pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight());
+      wxBitmap bmp = QImageToWxBitmap(
+          pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight()));
 
       pWaypointDefaultIconChoice->Append(QString_to_wxString(*ps), bmp);
     }
@@ -2484,7 +2486,8 @@ void options::CreatePanel_Routes(size_t parent, int border_size,
   if (fillCombo) {
     for (int i = 0; i < pWayPointMan->GetNumIcons(); i++) {
       QString* ps = pWayPointMan->GetIconDescription(i);
-      wxBitmap bmp = pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight());
+      wxBitmap bmp = QImageToWxBitmap(
+          pWayPointMan->GetIconBitmapForList(i, 2 * GetCharHeight()));
 
       pRoutepointDefaultIconChoice->Append(QString_to_wxString(*ps), bmp);
     }
@@ -6433,7 +6436,10 @@ void options::SetInitialSettings() {
   buf.Printf("%.3f", g_fWaypointRangeRingsStep);
   pWaypointRangeRingsStep->SetValue(buf);
   m_itemWaypointRangeRingsUnits->SetSelection(g_iWaypointRangeRingsStepUnits);
-  m_colourWaypointRangeRingsColour->SetColour(g_colourWaypointRangeRingsColour);
+  {
+    wxColour tmp_col = QColorToWxColour(g_colourWaypointRangeRingsColour);
+    m_colourWaypointRangeRingsColour->SetColour(tmp_col);
+  }
   OnWaypointRangeRingSelect(eDummy);
   pShowshipToActive->SetValue(g_bShowShipToActive);
   m_shipToActiveStyle->SetSelection(g_shipToActiveStyle);
@@ -7389,11 +7395,11 @@ void options::ApplyChanges(wxCommandEvent& event) {
   g_iWaypointRangeRingsStepUnits =
       m_itemWaypointRangeRingsUnits->GetSelection();
   g_colourWaypointRangeRingsColour =
-      m_colourWaypointRangeRingsColour->GetColour();
+      WxColourToQColor(m_colourWaypointRangeRingsColour->GetColour());
   g_colourWaypointRangeRingsColour =
-      wxColour(g_colourWaypointRangeRingsColour.Red(),
-               g_colourWaypointRangeRingsColour.Green(),
-               g_colourWaypointRangeRingsColour.Blue());
+      QColor(g_colourWaypointRangeRingsColour.red(),
+             g_colourWaypointRangeRingsColour.green(),
+             g_colourWaypointRangeRingsColour.blue());
   g_bWayPointPreventDragging = pWayPointPreventDragging->GetValue();
 
   g_bConfirmObjectDelete = pConfirmObjectDeletion->GetValue();

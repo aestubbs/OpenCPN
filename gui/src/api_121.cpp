@@ -37,6 +37,7 @@
 #include "model/gui_events.h"
 #include "model/gui_vars.h"
 #include "model/navobj_db.h"
+#include "model/wx_qt_ui_types.h"
 #include "model/notification_manager.h"
 #include "model/own_ship.h"
 #include "model/route.h"
@@ -98,7 +99,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
   dst->nrange_rings = src->m_iWaypointRangeRingsNumber;
   dst->RangeRingSpace = src->m_fWaypointRangeRingsStep;
   dst->RangeRingSpaceUnits = src->m_iWaypointRangeRingsStepUnits;
-  dst->RangeRingColor = src->m_wxcWaypointRangeRingsColour;
+  dst->RangeRingColor = QColorToWxColour(src->m_wxcWaypointRangeRingsColour);
   dst->m_TideStation = QString_to_wxString(src->m_TideStation);
 
   // Get other extended info
@@ -161,7 +162,7 @@ static RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src,
   pWP->SetWaypointRangeRingsNumber(src->nrange_rings);
   pWP->SetWaypointRangeRingsStep(src->RangeRingSpace);
   pWP->SetWaypointRangeRingsStepUnits(src->RangeRingSpaceUnits);
-  pWP->SetWaypointRangeRingsColour(src->RangeRingColor);
+  pWP->SetWaypointRangeRingsColour(WxColourToQColor(src->RangeRingColor));
   pWP->SetTideStation(wxString_to_QString(src->m_TideStation));
   pWP->SetScaMin(src->scamin);
   pWP->SetUseSca(src->b_useScamin);
@@ -295,7 +296,7 @@ static void PlugInExFromRoutePoint(PlugIn_Waypoint_Ex* dst,
   // Get the range ring info
   dst->nrange_rings = src->m_iWaypointRangeRingsNumber;
   dst->RangeRingSpace = src->m_fWaypointRangeRingsStep;
-  dst->RangeRingColor = src->m_wxcWaypointRangeRingsColour;
+  dst->RangeRingColor = QColorToWxColour(src->m_wxcWaypointRangeRingsColour);
 
   // Get other extended info
   dst->IsNameVisible = src->m_bShowName;
@@ -453,10 +454,11 @@ static std::shared_ptr<HostApi121::PiPointContext> GetContextAtPoint(
 }
 
 static wxBitmap GetObjectIcon_PlugIn(const wxString& name) {
-  if (pWayPointMan)
-    return *pWayPointMan->GetIconBitmap(wxString_to_QString(name));
-  else
-    return wxNullBitmap;
+  if (pWayPointMan) {
+    const QImage* qi = pWayPointMan->GetIconBitmap(wxString_to_QString(name));
+    if (qi) return QImageToWxBitmap(*qi);
+  }
+  return wxNullBitmap;
 }
 
 static bool IsRouteActive(wxString route_guid) {

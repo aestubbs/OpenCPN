@@ -875,8 +875,7 @@ bool ConfigMgr::SaveTemplate(wxString fileName) {
   conf->setValue("WaypointRangeRingsStepUnits",
                  g_iWaypointRangeRingsStepUnits);
   conf->setValue("WaypointRangeRingsColour",
-                 wxString_to_QString(g_colourWaypointRangeRingsColour.GetAsString(
-                     wxC2S_HTML_SYNTAX)));
+                 g_colourWaypointRangeRingsColour.name());
 
   conf->setValue("ConfirmObjectDeletion", g_bConfirmObjectDelete);
 

@@ -25,6 +25,8 @@
 #ifndef WAYPOINT_GUI_H_
 #define WAYPOINT_GUI_H_
 
+#include <QImage>
+
 #include "model/routeman.h"
 #include "styles.h"
 
@@ -39,7 +41,7 @@ public:
   void ProcessUserIcons(ocpnStyle::Style *style, double displayDPmm);
   MarkIcon *ProcessIcon(wxImage image, const wxString &key,
                         const wxString &description, bool add_in_front = false);
-  unsigned int GetIconTexture(const wxBitmap *pmb, int &glw, int &glh);
+  unsigned int GetIconTexture(const QImage *pmb, int &glw, int &glh);
 
   void ReloadRoutepointIcons();
 

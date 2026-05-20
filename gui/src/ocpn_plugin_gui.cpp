@@ -48,6 +48,7 @@
 #include "o_sound/o_sound.h"
 
 #include "model/ais_decoder.h"
+#include "model/wx_qt_ui_types.h"
 #include "model/comm_bridge.h"
 #include "model/comm_navmsg_bus.h"
 #include "model/gui_vars.h"
@@ -1996,7 +1997,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
   dst->nrange_rings = src->m_iWaypointRangeRingsNumber;
   dst->RangeRingSpace = src->m_fWaypointRangeRingsStep;
   dst->RangeRingSpaceUnits = src->m_iWaypointRangeRingsStepUnits;
-  dst->RangeRingColor = src->m_wxcWaypointRangeRingsColour;
+  dst->RangeRingColor = QColorToWxColour(src->m_wxcWaypointRangeRingsColour);
   dst->m_TideStation = QString_to_wxString(src->m_TideStation);
 
   // Get other extended info
@@ -2069,7 +2070,7 @@ RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src, bool b_permanent) {
   pWP->SetWaypointRangeRingsNumber(src->nrange_rings);
   pWP->SetWaypointRangeRingsStep(src->RangeRingSpace);
   pWP->SetWaypointRangeRingsStepUnits(src->RangeRingSpaceUnits);
-  pWP->SetWaypointRangeRingsColour(src->RangeRingColor);
+  pWP->SetWaypointRangeRingsColour(WxColourToQColor(src->RangeRingColor));
   pWP->SetTideStation(wxString_to_QString(src->m_TideStation));
   pWP->SetScaMin(src->scamin);
   pWP->SetUseSca(src->b_useScamin);
@@ -2157,7 +2158,8 @@ bool UpdateSingleWaypointExV2(PlugIn_Waypoint_ExV2* pwaypoint) {
     prp->SetWaypointRangeRingsNumber(pwaypoint->nrange_rings);
     prp->SetWaypointRangeRingsStep(pwaypoint->RangeRingSpace);
     prp->SetWaypointRangeRingsStepUnits(pwaypoint->RangeRingSpaceUnits);
-    prp->SetWaypointRangeRingsColour(pwaypoint->RangeRingColor);
+    prp->SetWaypointRangeRingsColour(
+        WxColourToQColor(pwaypoint->RangeRingColor));
     prp->SetTideStation(wxString_to_QString(pwaypoint->m_TideStation));
     prp->SetScaMin(pwaypoint->scamin);
     prp->SetUseSca(pwaypoint->b_useScamin);
@@ -2354,7 +2356,7 @@ static void PlugInExFromRoutePoint(PlugIn_Waypoint_Ex* dst,
   // Get the range ring info
   dst->nrange_rings = src->m_iWaypointRangeRingsNumber;
   dst->RangeRingSpace = src->m_fWaypointRangeRingsStep;
-  dst->RangeRingColor = src->m_wxcWaypointRangeRingsColour;
+  dst->RangeRingColor = QColorToWxColour(src->m_wxcWaypointRangeRingsColour);
 
   // Get other extended info
   dst->IsNameVisible = src->m_bShowName;
@@ -2408,7 +2410,7 @@ RoutePoint* CreateNewPoint(const PlugIn_Waypoint_Ex* src, bool b_permanent) {
   pWP->SetIconName(wxString_to_QString(src->IconName));
   pWP->SetWaypointRangeRingsNumber(src->nrange_rings);
   pWP->SetWaypointRangeRingsStep(src->RangeRingSpace);
-  pWP->SetWaypointRangeRingsColour(src->RangeRingColor);
+  pWP->SetWaypointRangeRingsColour(WxColourToQColor(src->RangeRingColor));
   pWP->SetScaMin(src->scamin);
   pWP->SetUseSca(src->b_useScamin);
   pWP->SetNameShown(src->IsNameVisible);
@@ -2503,7 +2505,8 @@ bool UpdateSingleWaypointEx(PlugIn_Waypoint_Ex* pwaypoint) {
     // Extended fields
     prp->SetWaypointRangeRingsNumber(pwaypoint->nrange_rings);
     prp->SetWaypointRangeRingsStep(pwaypoint->RangeRingSpace);
-    prp->SetWaypointRangeRingsColour(pwaypoint->RangeRingColor);
+    prp->SetWaypointRangeRingsColour(
+        WxColourToQColor(pwaypoint->RangeRingColor));
     prp->SetScaMin(pwaypoint->scamin);
     prp->SetUseSca(pwaypoint->b_useScamin);
     prp->SetNameShown(pwaypoint->IsNameVisible);
