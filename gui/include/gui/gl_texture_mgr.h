@@ -27,9 +27,10 @@
 
 #include <list>
 
+#include <QThread>
+
 #include <wx/event.h>
 #include <wx/string.h>
-#include <wx/thread.h>
 #include <wx/timer.h>
 
 const wxEventType wxEVT_OCPN_COMPRESSIONTHREAD = wxNewEventType();
@@ -51,11 +52,14 @@ public:
   wxString msgx;
 };
 
-class CompressionPoolThread : public wxThread {
+class CompressionPoolThread : public QThread {
 public:
   CompressionPoolThread(JobTicket *ticket, wxEvtHandler *message_target);
-  void *Entry();
 
+protected:
+  void run() override;
+
+public:
   wxEvtHandler *m_pMessageTarget;
   JobTicket *m_ticket;
 };

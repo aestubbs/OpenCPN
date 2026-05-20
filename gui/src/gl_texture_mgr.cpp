@@ -29,6 +29,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QList>
 #include <QMutex>
@@ -439,7 +440,15 @@ private:
     timespec tp;
 };
 #else
-class OCPNStopWatch : public wxStopWatch {};
+class OCPNStopWatch {
+public:
+  OCPNStopWatch() { m_timer.start(); }
+  void Start() { m_timer.restart(); }
+  qint64 Time() const { return m_timer.elapsed(); }
+
+private:
+  QElapsedTimer m_timer;
+};
 #endif
 
 static void throttle_func(void *data) {
@@ -660,11 +669,9 @@ CompressionPoolThread::CompressionPoolThread(JobTicket *ticket,
                                              wxEvtHandler *message_target) {
   m_pMessageTarget = message_target;
   m_ticket = ticket;
-
-  Create();
 }
 
-void *CompressionPoolThread::Entry() {
+void CompressionPoolThread::run() {
 #ifdef __MSVC__
   _set_se_translator(my_translate);
 
@@ -676,7 +683,7 @@ void *CompressionPoolThread::Entry() {
   try
 #endif
   {
-    SetPriority(WXTHREAD_MIN_PRIORITY);
+    // QThread priority is set via the start(Priority) overload below.
 
     if (!m_ticket->DoJob()) m_ticket->b_isaborted = true;
 
@@ -687,9 +694,6 @@ void *CompressionPoolThread::Entry() {
       m_pMessageTarget->QueueEvent(Nevent.Clone());
       // from here m_ticket is undefined (if deleted in event handler)
     }
-
-    return 0;
-
   }  // try
 #ifdef __MSVC__
   catch (SE_Exception e) {
@@ -700,8 +704,6 @@ void *CompressionPoolThread::Entry() {
       Nevent.type = 0;
       m_pMessageTarget->QueueEvent(Nevent.Clone());
     }
-
-    return 0;
   }
 #endif
 }
@@ -1083,8 +1085,9 @@ bool glTextureManager::DoThreadJob(JobTicket *pticket) {
   ///    long)todo_list.GetCount() << g_tex_mem_used;
   CompressionPoolThread *t = new CompressionPoolThread(pticket, this);
   pticket->pthread = t;
-
-  t->Run();
+  // Detached lifetime: QThread will be freed once run() returns.
+  QObject::connect(t, &QThread::finished, t, &QObject::deleteLater);
+  t->start(QThread::LowestPriority);
 
   return true;
 }

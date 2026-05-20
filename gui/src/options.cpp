@@ -171,6 +171,7 @@ static inline wxString ttCoordFormat() {
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QString>
@@ -429,14 +430,14 @@ OCPNChartDirPanel::OCPNChartDirPanel(wxWindow* parent, wxWindowID id,
 
 OCPNChartDirPanel::~OCPNChartDirPanel() {}
 
-static wxStopWatch swclick;
+static QElapsedTimer swclick;
 #ifdef __ANDROID__
 static int downx, downy;
 #endif
 
 void OCPNChartDirPanel::OnClickDown(wxMouseEvent& event) {
 #ifdef __ANDROID__
-  swclick.Start();
+  swclick.restart();
   event.GetPosition(&downx, &downy);
 #else
   DoChartSelected();
@@ -445,8 +446,8 @@ void OCPNChartDirPanel::OnClickDown(wxMouseEvent& event) {
 
 void OCPNChartDirPanel::OnClickUp(wxMouseEvent& event) {
 #ifdef __ANDROID__
-  qDebug() << swclick.Time();
-  if (swclick.Time() < 200) {
+  qDebug() << static_cast<qint64>(swclick.elapsed());
+  if (swclick.elapsed() < 200) {
     int upx, upy;
     event.GetPosition(&upx, &upy);
     if ((fabs(upx - downx) < GetCharWidth()) &&
@@ -454,7 +455,7 @@ void OCPNChartDirPanel::OnClickUp(wxMouseEvent& event) {
       DoChartSelected();
     }
   }
-  swclick.Start();
+  swclick.restart();
 #endif
 }
 

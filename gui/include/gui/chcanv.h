@@ -32,6 +32,7 @@
 #include <wx/treectrl.h>
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QList>
 
 #ifdef ocpnUSE_GL
@@ -1120,7 +1121,7 @@ private:
 
   int m_wheelzoom_stop_oneshot;
   int m_last_wheel_dir;
-  wxStopWatch m_wheelstopwatch;
+  QElapsedTimer m_wheelstopwatch;
   double m_zoom_target;
 
   int m_curtrack_timer_msec;
@@ -1380,8 +1381,8 @@ private:
   NotificationsList *m_NotificationsList;
   ObservableListener evt_notificationlist_change_listener;
 
-  wxStopWatch m_sw_left_down;
-  wxStopWatch m_sw_left_up;
+  QElapsedTimer m_sw_left_down;
+  QElapsedTimer m_sw_left_up;
   long m_sw_down_time;
   long m_sw_up_time;
   wxTimer m_tap_timer;

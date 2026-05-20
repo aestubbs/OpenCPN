@@ -32,6 +32,8 @@
 // glcanvas.h which includes GL/gl.h
 #include "gl_headers.h"
 
+#include <QElapsedTimer>
+
 #include <wx/bitmap.h>
 #include <wx/colour.h>
 #include <wx/event.h>
@@ -210,7 +212,7 @@ public:
   ChartCanvas *m_pParentCanvas;
   ocpnDC m_gldc;
 
-  wxStopWatch m_glstopwatch;
+  QElapsedTimer m_glstopwatch;
 
 protected:
   void RenderS57TextOverlay(ViewPort &VPoint);

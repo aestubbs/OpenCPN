@@ -26,9 +26,10 @@
 
 #include <vector>
 
+#include <QThread>
+
 #include <wx/event.h>
 #include <wx/string.h>
-#include <wx/thread.h>
 
 #include "s57chart.h"
 
@@ -120,11 +121,14 @@ public:
 //----------------------------------------------------------------------------
 // s57 Chart Thread based SENC creator
 //----------------------------------------------------------------------------
-class SENCBuildThread : public wxThread {
+class SENCBuildThread : public QThread {
 public:
   SENCBuildThread(SENCJobTicket *ticket, SENCThreadManager *manager);
-  void *Entry();
 
+protected:
+  void run() override;
+
+public:
   wxString m_FullPath000;
   wxString m_SENCFileName;
   s57chart *m_chart;

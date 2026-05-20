@@ -34,6 +34,8 @@
 #include <string>
 #include <vector>
 
+#include <QMutex>
+
 #include "viewport.h"
 #include "poly_math.h"
 #include "color_types.h"
@@ -159,7 +161,7 @@ private:
   PolygonFileHeader polyHeader;
   void readPolygonFileHeader(FILE *polyfile, PolygonFileHeader *header);
 
-  wxMutex mutex1, mutex2;
+  QMutex mutex1, mutex2;
 
   ViewPort last_rendered_vp;
 };

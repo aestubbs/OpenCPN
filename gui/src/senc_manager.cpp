@@ -29,6 +29,8 @@
 
 #include "senc_manager.h"
 
+#include <QThread>
+
 #include "model/config_vars.h"
 
 #include "s57chart.h"
@@ -76,7 +78,7 @@ wxEvent *OCPN_BUILDSENC_ThreadEvent::Clone() const {
 SENCThreadManager::SENCThreadManager() {
   // ideally we would use the cpu count -1, and only launch jobs
   // when the idle load average is sufficient (greater than 1)
-  int nCPU = wxMax(1, wxThread::GetCPUCount());
+  int nCPU = wxMax(1, QThread::idealThreadCount());
   if (g_nCPUCount > 0) nCPU = g_nCPUCount;
 
   // obviously there's at least one CPU!
@@ -145,8 +147,10 @@ void SENCThreadManager::StartTopJob() {
       SENCBuildThread *thread = new SENCBuildThread(startCandidate, this);
       startCandidate->m_thread = thread;
       startCandidate->m_status = THREAD_STARTED;
-      thread->SetPriority(20);
-      thread->Run();
+      // Detached lifetime: QThread will be freed once run() returns.
+      QObject::connect(thread, &QThread::finished, thread,
+                       &QObject::deleteLater);
+      thread->start(QThread::LowPriority);
       nRunning++;
     }
   }
@@ -256,11 +260,9 @@ SENCBuildThread::SENCBuildThread(SENCJobTicket *ticket,
   m_SENCFileName = ticket->m_SENCFileName;
   m_manager = manager;
   m_ticket = ticket;
-
-  Create();
 }
 
-void *SENCBuildThread::Entry() {
+void SENCBuildThread::run() {
   // #ifdef __MSVC__
   //   _set_se_translator(my_translate);
 
@@ -304,13 +306,12 @@ void *SENCBuildThread::Entry() {
     //  return BUILD_SENC_NOK_PERMANENT;
     // else
     //  return ret;
-
-    return 0;
   }  // try
 
   // #ifdef __MSVC__
   catch (const std::exception &e /*SE_Exception e*/) {
     const char *msg = e.what();
+    (void)msg;
     if (m_manager) {
       //             OCPN_CompressionThreadEvent
       //             Nevent(wxEVT_OCPN_COMPRESSIONTHREAD, 0);
@@ -319,8 +320,6 @@ void *SENCBuildThread::Entry() {
       //             Nevent.type = 0;
       //             m_manager->QueueEvent(Nevent.Clone());
     }
-
-    return 0;
   }
   // #endif
 }

@@ -29,6 +29,7 @@
 #include <list>
 #include <vector>
 
+#include <QElapsedTimer>
 #include <QFileInfo>
 
 #include "model/wx_qt_string.h"
@@ -824,20 +825,20 @@ bool GshhsPolyReader::crossing1(wxLineF trajectWorld) {
           clati = (GSSH_SUBM * 90 + clat) / GSSH_SUBM;
       GshhsPolyCell *&cel = allCells[cloni][clati];
       if (!cel) {
-        mutex1.Lock();
+        mutex1.lock();
         if (!cel) {
           /* load the needed cell from disk */
           cel = new GshhsPolyCell(fpoly, cloni, clati - 90, &polyHeader);
           wxASSERT(cel);
         }
-        mutex1.Unlock();
+        mutex1.unlock();
       }
 
       int hash = GSSH_SUBM * (GSSH_SUBM * (90 - clati) + clat - cloni) + clonx;
       std::vector<wxLineF> *&high_res_map = cel->high_res_map[hash];
       wxASSERT(hash >= 0 && hash < GSSH_SUBM * GSSH_SUBM);
       if (!high_res_map) {
-        mutex2.Lock();
+        mutex2.lock();
         if (!high_res_map) {
           /* Build the needed sub cell of line segments from the cell */
           contour_list &poly1 = cel->getPoly1();
@@ -876,7 +877,7 @@ bool GshhsPolyReader::crossing1(wxLineF trajectWorld) {
             }
           }
         }
-        mutex2.Unlock();
+        mutex2.unlock();
       }
 
       for (std::vector<wxLineF>::iterator it2 = high_res_map->begin();
@@ -1261,7 +1262,8 @@ void GshhsReader::LoadQuality(int newQuality)  // 5 levels: 0=low ... 4=full
 {
   if (quality == newQuality) return;
 
-  wxStopWatch perftimer;
+  QElapsedTimer perftimer;
+  perftimer.start();
 
   wxString fname;
 
@@ -1310,8 +1312,8 @@ void GshhsReader::LoadQuality(int newQuality)  // 5 levels: 0=low ... 4=full
         }
     }
 #endif
-  wxLogMessage("Loading World Chart Q=%d in %ld ms.", quality,
-               perftimer.Time());
+  wxLogMessage("Loading World Chart Q=%d in %lld ms.", quality,
+               static_cast<long long>(perftimer.elapsed()));
 }
 
 //-----------------------------------------------------------------------

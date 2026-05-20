@@ -85,10 +85,12 @@
 #include "model/navobj_db.h"
 #include "model/nav_object_database.h"
 #include "model/navutil_base.h"
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QLocale>
+#include <QThread>
 
 #include "model/notification_manager.h"
 #include "model/own_ship.h"
@@ -7326,17 +7328,16 @@ void ApplyLocale() {
   }
 }
 
-class ParseENCWorkerThread : public wxThread {
+class ParseENCWorkerThread : public QThread {
 public:
-  ParseENCWorkerThread(wxString filename, Extent &ext, int scale)
-      : wxThread(wxTHREAD_JOINABLE) {
+  ParseENCWorkerThread(wxString filename, Extent &ext, int scale) {
     m_filename = filename;
     m_ext = ext;
     m_scale = scale;
-    Create();
   }
 
-  void *Entry() {
+protected:
+  void run() override {
     //         ChartBase *pchart = ChartData->OpenChartFromDB(m_filename,
     //         FULL_INIT); ChartData->DeleteCacheChart(pchart);
     s57chart *newChart = new s57chart;
@@ -7346,9 +7347,9 @@ public:
 
     newChart->FindOrCreateSenc(m_filename);
     delete newChart;
-    return 0;
   }
 
+public:
   wxString m_filename;
   Extent m_ext;
   int m_scale;
@@ -7443,7 +7444,7 @@ void ParseAllENC(wxWindow *parent) {
   if (g_nCPUCount > 0)
     thread_count = g_nCPUCount;
   else
-    thread_count = wxThread::GetCPUCount();
+    thread_count = QThread::idealThreadCount();
 
   if (thread_count < 1) {
     // obviously there's at least one CPU!
@@ -7506,7 +7507,7 @@ void ParseAllENC(wxWindow *parent) {
     msg.Printf(_("Distance from Ownship:  %4.0f NMi"), distance);
 
     count++;
-    if (wxThread::IsMain()) {
+    if (QThread::currentThread() == QCoreApplication::instance()->thread()) {
       if (prog) {
         wxSize sz = prog->GetSize();
         if (sz.x > 600) {
@@ -7533,7 +7534,7 @@ void ParseAllENC(wxWindow *parent) {
                                  false);  // no progress dialog required
       delete newChart;
 
-      if (wxThread::IsMain()) {
+      if (QThread::currentThread() == QCoreApplication::instance()->thread()) {
         msg.Printf(_("ENC Completed."));
         if (prog) {
           prog->Update(count, msg, &skip);
@@ -7561,7 +7562,7 @@ void ParseAllENC(wxWindow *parent) {
       if (t == 0) {
         //                ::wxYield();                // allow ChartCanvas main
         //                message loop to run
-        wxThread::Sleep(1); /* wait for a worker to finish */
+        QThread::msleep(1); /* wait for a worker to finish */
       }
     }
 #endif

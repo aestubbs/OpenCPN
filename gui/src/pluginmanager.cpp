@@ -38,6 +38,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
@@ -3153,12 +3154,12 @@ void PluginPanel::SetActionLabel(wxString& label) {
   Refresh();
 }
 
-static wxStopWatch swclick;
+static QElapsedTimer swclick;
 static int downx, downy;
 
 void PluginPanel::OnPluginSelected(wxMouseEvent& event) {
 #ifdef __ANDROID__
-  swclick.Start();
+  swclick.restart();
   event.GetPosition(&downx, &downy);
 #else
   DoPluginSelect();
@@ -3167,8 +3168,8 @@ void PluginPanel::OnPluginSelected(wxMouseEvent& event) {
 
 void PluginPanel::OnPluginSelectedUp(wxMouseEvent& event) {
 #ifdef __ANDROID__
-  qDebug() << swclick.Time();
-  if (swclick.Time() < 200) {
+  qDebug() << static_cast<qint64>(swclick.elapsed());
+  if (swclick.elapsed() < 200) {
     int upx, upy;
     event.GetPosition(&upx, &upy);
     if ((fabs(upx - downx) < GetCharWidth()) &&
@@ -3176,7 +3177,7 @@ void PluginPanel::OnPluginSelectedUp(wxMouseEvent& event) {
       DoPluginSelect();
     }
   }
-  swclick.Start();
+  swclick.restart();
 #endif
 }
 

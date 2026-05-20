@@ -33,10 +33,13 @@
 #include "wx/wx.h"
 #endif  // precompiled headers
 
+#include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <QThread>
 
 #include <wx/arrimpl.cpp>
 #include <wx/filename.h>  // kept for API boundary types in headers
@@ -1710,10 +1713,12 @@ int Osenc::createSenc200(const wxString &FullPath000,
 
 #if wxUSE_PROGRESSDLG
 
-  wxStopWatch progsw;
+  QElapsedTimer progsw;
+  progsw.start();
   int nProg = poReader->GetFeatureCount();
 
-  if (wxThread::IsMain() && b_showProg) {
+  if (QThread::currentThread() == QCoreApplication::instance()->thread() &&
+      b_showProg) {
     m_ProgDialog = new wxGenericProgressDialog();
 
     wxFont *qFont = GetOCPNScaledFont(_("Dialog"));
@@ -1741,8 +1746,8 @@ int Osenc::createSenc200(const wxString &FullPath000,
       // We update only every 200 milliseconds to improve performance as
       // updating the dialog is very expensive...
       // WXGTK is measurably slower even with 100ms here
-      if (m_ProgDialog && progsw.Time() > 200) {
-        progsw.Start();
+      if (m_ProgDialog && progsw.elapsed() > 200) {
+        progsw.restart();
 
         wxString sobj =
             wxString(objectDef->GetDefnRef()->GetName(), wxConvUTF8);

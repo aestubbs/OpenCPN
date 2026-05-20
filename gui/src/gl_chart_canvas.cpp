@@ -368,6 +368,8 @@ void glChartCanvas::Init() {
   b_timeGL = true;
   m_last_render_time = -1;
 
+  m_glstopwatch.start();
+
   m_LRUtime = 0;
 
   m_tideTex = 0;
@@ -3796,8 +3798,9 @@ void glChartCanvas::Render() {
 
   if (!g_true_zoom && m_binPinch) return;
 
-  // if (m_binPinch) printf("    %ld Render Start\n", m_glstopwatch.Time());
-  long render_start_time = m_glstopwatch.Time();
+  // if (m_binPinch) printf("    %lld Render Start\n",
+  // static_cast<long long>(m_glstopwatch.elapsed()));
+  long render_start_time = static_cast<long>(m_glstopwatch.elapsed());
 
 #if defined(USE_ANDROID_GLES2) || defined(ocpnUSE_GLSL)
   loadShaders(GetCanvasIndex());
@@ -5415,7 +5418,7 @@ void glChartCanvas::OnEvtZoomGesture(wxZoomGestureEvent &event) {
     double projected_scale = m_cache_vp.chart_scale;
 
     if (event.IsGestureStart()) {
-      m_glstopwatch.Start();
+      m_glstopwatch.restart();
       printf("\nStart--------------\n");
       m_binPinch = true;
       m_pParentCanvas->m_inPinch = true;

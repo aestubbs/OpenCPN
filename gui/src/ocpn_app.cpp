@@ -105,6 +105,7 @@
 #include "model/wx_qt_string.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
@@ -693,7 +694,7 @@ bool MyApp::OnExceptionInMainLoop() {
 
 void MyApp::OnActivateApp(wxActivateEvent &event) { return; }
 
-static wxStopWatch init_sw;
+static QElapsedTimer init_sw;
 
 int MyApp::OnRun() {
   if (m_exitcode != -2) return m_exitcode;
@@ -723,6 +724,7 @@ MyApp::MyApp()
 WallpaperFrame *g_wallpaper;
 
 bool MyApp::OnInit() {
+  init_sw.start();
   if (!wxApp::OnInit()) return false;
 
   // Start pumping the Qt event loop so the Qt observable mechanism can
@@ -1279,7 +1281,8 @@ bool MyApp::OnInit() {
   androidHideBusyIcon();
 #endif
   wxLogMessage(
-      wxString::Format(_("OpenCPN Initialized in %ld ms."), init_sw.Time()));
+      wxString::Format(_("OpenCPN Initialized in %lld ms."),
+                       static_cast<long long>(init_sw.elapsed())));
 
   wxMilliSleep(100);
 

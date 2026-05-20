@@ -21,8 +21,6 @@
  * Implement gl_texture_descr.h -- OpenGL texture container
  */
 
-#include <wx/thread.h>
-
 #include "gl_texture_descr.h"
 
 #if defined(__ANDROID__)
@@ -30,8 +28,6 @@
 #elif defined(__WXQT__) || defined(__WXGTK__)
 #include <GL/glew.h>
 #endif
-
-wxCriticalSection gs_critSect;
 
 glTextureDescriptor::glTextureDescriptor() {
   for (int i = 0; i < 10; i++) {

@@ -402,8 +402,9 @@ ChartCanvas::ChartCanvas(wxFrame *frame, int canvasIndex, wxWindow *nmea_log)
   m_inLongPress = false;
   m_sw_down_time = 0;
   m_sw_up_time = 0;
-  m_sw_left_down.Start();
-  m_sw_left_up.Start();
+  m_sw_left_down.start();
+  m_sw_left_up.start();
+  m_wheelstopwatch.start();
 
   SetupGlCanvas();
 
@@ -1010,8 +1011,8 @@ void ChartCanvas::OnRightDown(wxMouseEvent &event) { MouseEvent(event); }
 
 void ChartCanvas::OnLeftUp(wxMouseEvent &event) {
 #ifdef __WXGTK__
-  long dt = m_sw_left_up.Time() - m_sw_up_time;
-  m_sw_up_time = m_sw_left_up.Time();
+  long dt = static_cast<long>(m_sw_left_up.elapsed()) - m_sw_up_time;
+  m_sw_up_time = static_cast<long>(m_sw_left_up.elapsed());
 
   // printf("  dt %ld\n",dt);
   if (dt < 5) {
@@ -1048,8 +1049,8 @@ void ChartCanvas::OnLeftDown(wxMouseEvent &event) {
 
   //  Detect and manage multiple left-downs coming from GTK mouse emulation
 #ifdef __WXGTK__
-  long dt = m_sw_left_down.Time() - m_sw_down_time;
-  m_sw_down_time = m_sw_left_down.Time();
+  long dt = static_cast<long>(m_sw_left_down.elapsed()) - m_sw_down_time;
+  m_sw_down_time = static_cast<long>(m_sw_left_down.elapsed());
 
   // printf("Left_DOWN_Entry:  dt: %ld\n", dt);
 
@@ -3733,7 +3734,7 @@ void ChartCanvas::DoMovement(long dt) {
     }
 
     if (m_wheelzoom_stop_oneshot > 0) {
-      if (m_wheelstopwatch.Time() > m_wheelzoom_stop_oneshot) {
+      if (m_wheelstopwatch.elapsed() > m_wheelzoom_stop_oneshot) {
         m_wheelzoom_stop_oneshot = 0;
         StopMovement();
       }
@@ -10329,7 +10330,7 @@ bool ChartCanvas::MouseEventProcessCanvas(wxMouseEvent &event) {
     if (wheel_dir < 0) factor = 1 / factor;
 
     if (g_bsmoothpanzoom) {
-      if ((m_wheelstopwatch.Time() < m_wheelzoom_stop_oneshot)) {
+      if ((m_wheelstopwatch.elapsed() < m_wheelzoom_stop_oneshot)) {
         if (wheel_dir == m_last_wheel_dir) {
           m_wheelzoom_stop_oneshot += mouse_wheel_oneshot;
           //                    m_zoom_target /= factor;
@@ -10337,7 +10338,7 @@ bool ChartCanvas::MouseEventProcessCanvas(wxMouseEvent &event) {
           StopMovement();
       } else {
         m_wheelzoom_stop_oneshot = mouse_wheel_oneshot;
-        m_wheelstopwatch.Start(0);
+        m_wheelstopwatch.restart();
         //                m_zoom_target =  VPoint.chart_scale / factor;
       }
     }
