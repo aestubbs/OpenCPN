@@ -26,6 +26,8 @@
 
 #include <wx/xml/xml.h>
 
+#include <QList>
+
 #include "chartbase.h"
 #include "chartbase.h"
 #include "chartdbs.h"
@@ -123,7 +125,7 @@ public:
                                        bool bLargest, ChartTypeEnum New_Type,
                                        ChartFamilyEnum New_Family_Fallback);
 
-  wxArrayPtrVoid *GetChartCache(void) { return pChartCache; }
+  QList<CacheEntry *> *GetChartCache(void) { return pChartCache; }
   std::vector<int> GetCSArray(ChartStack *ps);
 
   int GetStackEntry(ChartStack *ps, wxString fp);
@@ -186,7 +188,7 @@ private:
   void DeleteCacheEntry(CacheEntry *pce, bool bDelTexture = false,
                         const wxString &msg = wxEmptyString);
 
-  wxArrayPtrVoid *pChartCache;
+  QList<CacheEntry *> *pChartCache;
   int m_ticks;
 
   bool m_b_locked;

@@ -68,7 +68,7 @@
 #include "tc_win.h"
 #include "undo.h"
 
-WX_DEFINE_ARRAY_PTR(ChartCanvas *, arrayofCanvasPtr);
+using arrayofCanvasPtr = QList<ChartCanvas *>;
 
 #ifdef __ANDROID__
 #define STAT_FIELD_TICK -1

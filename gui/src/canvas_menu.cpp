@@ -587,7 +587,7 @@ void CanvasMenuHandler::CanvasPopupMenu(int x, int y, int seltype) {
 
   SetMenuItemFont1(subItemChart);
 
-  if (g_pGroupArray->GetCount()) {
+  if (g_pGroupArray->size()) {
 #ifdef __WXMSW__
     MenuAppend1(subMenuChart, wxID_CANCEL, _("temporary"));
 #endif
@@ -596,9 +596,9 @@ void CanvasMenuHandler::CanvasPopupMenu(int x, int y, int seltype) {
 
     SetMenuItemFont1(subItem0);
 
-    for (unsigned int i = 0; i < g_pGroupArray->GetCount(); i++) {
+    for (unsigned int i = 0; i < g_pGroupArray->size(); i++) {
       subItem0 = subMenuChart->AppendRadioItem(
-          ID_DEF_MENU_GROUPBASE + i + 1, g_pGroupArray->Item(i)->m_group_name);
+          ID_DEF_MENU_GROUPBASE + i + 1, g_pGroupArray->at(i)->m_group_name);
       SetMenuItemFont1(subItem0);
     }
 
@@ -1065,7 +1065,7 @@ void CanvasMenuHandler::AddPluginContextMenuItems(wxMenu *contextMenu,
   ArrayOfPlugInMenuItems item_array =
       g_pi_manager->GetPluginContextMenuItemArray();
 
-  for (unsigned int i = 0; i < item_array.GetCount(); i++) {
+  for (unsigned int i = 0; i < item_array.size(); i++) {
     PlugInMenuItemContainer *pimis = item_array[i];
     if (!pimis->b_viz) continue;
 
@@ -1990,7 +1990,7 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
       ArrayOfPlugInMenuItems item_array =
           g_pi_manager->GetPluginContextMenuItemArray();
 
-      for (unsigned int i = 0; i < item_array.GetCount(); i++) {
+      for (unsigned int i = 0; i < item_array.size(); i++) {
         PlugInMenuItemContainer *pimis = item_array[i];
         int target_id = pimis->id;
 
@@ -2046,7 +2046,7 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
   //  Chart Groups....
   if ((event.GetId() >= ID_DEF_MENU_GROUPBASE) &&
       (event.GetId() <=
-       ID_DEF_MENU_GROUPBASE + (int)g_pGroupArray->GetCount())) {
+       ID_DEF_MENU_GROUPBASE + (int)g_pGroupArray->size())) {
     parent->SetGroupIndex(event.GetId() - ID_DEF_MENU_GROUPBASE);
   }
 

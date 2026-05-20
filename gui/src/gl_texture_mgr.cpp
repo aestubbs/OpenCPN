@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QList>
 
 #include <wx/wxprec.h>
 #include <wx/progdlg.h>
@@ -180,8 +181,7 @@ public:
   double distance;
 };
 
-WX_DECLARE_OBJARRAY(compress_target, ArrayOfCompressTargets);
-// WX_DEFINE_OBJARRAY(ArrayOfCompressTargets);
+using ArrayOfCompressTargets = QList<compress_target>;
 
 JobTicket::JobTicket() {
   for (int i = 0; i < 10; i++) {
@@ -1198,8 +1198,8 @@ bool glTextureManager::TextureCrunch(double factor) {
     if (!bGLMemCrunch) break;
 
     // For each canvas
-    for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-      ChartCanvas *cc = g_canvasArray.Item(i);
+    for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+      ChartCanvas *cc = g_canvasArray.at(i);
       if (cc) {
         if (cc->GetVP().b_quilt)  // quilted
         {
@@ -1257,8 +1257,8 @@ bool glTextureManager::FactoryCrunch(double factor) {
     // and ocpn will eventually run out of file descriptors
 
     // For each canvas
-    for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-      ChartCanvas *cc = g_canvasArray.Item(i);
+    for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+      ChartCanvas *cc = g_canvasArray.at(i);
       if (cc) {
         if (cc->GetVP().b_quilt)  // quilted
         {
@@ -1384,11 +1384,11 @@ void glTextureManager::BuildCompressedCache() {
 
     wxString filename = cte.GetFullSystemPath();
 
-    compress_target *pct = new compress_target;
-    pct->distance = distance;
-    pct->chart_path = filename;
+    compress_target ct;
+    ct.distance = distance;
+    ct.chart_path = filename;
 
-    ct_array.Add(pct);
+    ct_array.append(ct);
   }
 
   // create progress dialog
@@ -1453,7 +1453,7 @@ void glTextureManager::BuildCompressedCache() {
   m_skip = false;
   int yield = 0;
 
-  for (m_jcnt = 0; m_jcnt < ct_array.GetCount(); m_jcnt++) {
+  for (m_jcnt = 0; m_jcnt < (unsigned int)ct_array.size(); m_jcnt++) {
     wxString filename = ct_array[m_jcnt].chart_path;
     wxString CompressedCacheFilePath = CompressedCachePath(filename);
     double distance = ct_array[m_jcnt].distance;

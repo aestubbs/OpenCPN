@@ -459,7 +459,7 @@ int Osenc::ingestHeader(const wxString &senc_file_name) {
 
         float *pf = (float *)malloc(point_count * 2 * sizeof(float));
         memcpy(pf, &pPayload->point_array, point_count * 2 * sizeof(float));
-        m_AuxPtrArray.Add(pf);
+        m_AuxPtrArray.append(pf);
 
         break;
       }
@@ -481,7 +481,7 @@ int Osenc::ingestHeader(const wxString &senc_file_name) {
 
         float *pf = (float *)malloc(point_count * 2 * sizeof(float));
         memcpy(pf, &pPayload->point_array, point_count * 2 * sizeof(float));
-        m_NoCovrPtrArray.Add(pf);
+        m_NoCovrPtrArray.append(pf);
 
         break;
       }

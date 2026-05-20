@@ -30,6 +30,7 @@
 #include <vector>
 #include <atomic>
 
+#include <QList>
 #include <QStringList>
 
 #include <wx/progdlg.h>
@@ -40,7 +41,8 @@
 #include "LLRegion.h"
 #include "chartdb_thread.h"
 
-class ChartGroupArray;                 // forward
+class ChartGroup;                      // forward
+using ChartGroupArray = QList<ChartGroup *>;
 extern ChartGroupArray *g_pGroupArray; /**< Global instance */
 class ChartBase;  // Circular if including chcanv.h in gui...
 
@@ -51,7 +53,7 @@ public:
   wxString magic_number;
 };
 
-WX_DECLARE_OBJARRAY(ChartDirInfo, ArrayOfCDI);
+using ArrayOfCDI = QList<ChartDirInfo>;
 WX_DECLARE_STRING_HASH_MAP(int, ChartCollisionsHashMap);
 
 #define ID_TIMER_UPDATE_PROGRESS 10337
@@ -63,7 +65,6 @@ static const int DB_VERSION_PREVIOUS = 17;
 static const int DB_VERSION_CURRENT = 18;
 
 class ChartDatabase;
-class ChartGroupArray;
 
 struct ChartTableEntry_onDisk_18 {
   int EntryOffset;
@@ -298,8 +299,6 @@ private:
 // Chart Database
 ///////////////////////////////////////////////////////////////////////
 
-WX_DECLARE_OBJARRAY(ChartTableEntry, ChartTable);
-
 #define CTE_THREAD_MAX 1
 
 /**
@@ -469,9 +468,6 @@ private:
 //    Chart Group Structure Definitions
 //-------------------------------------------------------------------------------------------
 class ChartGroupElement;
-class ChartGroup;
-
-WX_DEFINE_ARRAY_PTR(ChartGroup *, ChartGroupArray);
 
 /**
  * Represents an individual component within a ChartGroup.

@@ -31,6 +31,7 @@
 #include <unordered_map>
 
 #include <QDateTime>
+#include <QList>
 
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
@@ -89,7 +90,7 @@
 
 #define ATTRIBUTE_ID_PRIM 50000
 
-WX_DEFINE_ARRAY_PTR(float *, SENCFloatPtrArray);
+using SENCFloatPtrArray = QList<float *>;
 
 //--------------------------------------------------------------------------
 //      Utility Structures

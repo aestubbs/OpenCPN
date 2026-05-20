@@ -28,6 +28,8 @@
 #include "wx/wx.h"
 #endif
 
+#include <QList>
+
 #include "wx/config.h"
 #include "wx/wxprec.h"
 
@@ -89,6 +91,6 @@ public:
   bool bEnableBasemapTile;
 };
 
-WX_DEFINE_ARRAY_PTR(canvasConfig *, arrayofCanvasConfigPtr);
+using arrayofCanvasConfigPtr = QList<canvasConfig *>;
 
 #endif

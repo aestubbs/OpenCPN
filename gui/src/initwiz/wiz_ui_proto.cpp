@@ -17,7 +17,7 @@ FirstUseWiz::FirstUseWiz(wxWindow* parent, wxWindowID id, const wxString& title,
   this->SetSizeHints(wxSize(700, 600), wxDefaultSize);
 
   wxWizardPageSimple* m_wpLangUnits = new wxWizardPageSimple(this);
-  m_pages.Add(m_wpLangUnits);
+  m_pages.append(m_wpLangUnits);
 
   wxBoxSizer* bSizerLangUnitsTop;
   bSizerLangUnitsTop = new wxBoxSizer(wxVERTICAL);
@@ -144,7 +144,7 @@ FirstUseWiz::FirstUseWiz(wxWindow* parent, wxWindowID id, const wxString& title,
   m_wpLangUnits->SetSizer(bSizerLangUnitsTop);
   m_wpLangUnits->Layout();
   wxWizardPageSimple* m_wpConnections = new wxWizardPageSimple(this);
-  m_pages.Add(m_wpConnections);
+  m_pages.append(m_wpConnections);
 
   wxBoxSizer* bSizerConnectionsTop;
   bSizerConnectionsTop = new wxBoxSizer(wxVERTICAL);
@@ -187,7 +187,7 @@ FirstUseWiz::FirstUseWiz(wxWindow* parent, wxWindowID id, const wxString& title,
   m_wpConnections->Layout();
   bSizerConnectionsTop->Fit(m_wpConnections);
   wxWizardPageSimple* m_wpCharts = new wxWizardPageSimple(this);
-  m_pages.Add(m_wpCharts);
+  m_pages.append(m_wpCharts);
 
   wxBoxSizer* bSizerChartsTop;
   bSizerChartsTop = new wxBoxSizer(wxVERTICAL);
@@ -228,7 +228,7 @@ FirstUseWiz::FirstUseWiz(wxWindow* parent, wxWindowID id, const wxString& title,
   m_wpCharts->SetSizer(bSizerChartsTop);
   m_wpCharts->Layout();
   wxWizardPageSimple* m_wpFinish = new wxWizardPageSimple(this);
-  m_pages.Add(m_wpFinish);
+  m_pages.append(m_wpFinish);
 
   wxBoxSizer* bSizerFinish;
   bSizerFinish = new wxBoxSizer(wxVERTICAL);
@@ -252,9 +252,9 @@ FirstUseWiz::FirstUseWiz(wxWindow* parent, wxWindowID id, const wxString& title,
 
   this->Centre(wxBOTH);
 
-  for (unsigned int i = 1; i < m_pages.GetCount(); i++) {
-    m_pages.Item(i)->SetPrev(m_pages.Item(i - 1));
-    m_pages.Item(i - 1)->SetNext(m_pages.Item(i));
+  for (unsigned int i = 1; i < m_pages.size(); i++) {
+    m_pages.at(i)->SetPrev(m_pages.at(i - 1));
+    m_pages.at(i - 1)->SetNext(m_pages.at(i));
   }
 
   // Connect Events
@@ -307,5 +307,5 @@ FirstUseWiz::~FirstUseWiz() {
       wxCommandEventHandler(FirstUseWiz::m_btnAddChartDirOnButtonClick), NULL,
       this);
 
-  m_pages.Clear();
+  m_pages.clear();
 }

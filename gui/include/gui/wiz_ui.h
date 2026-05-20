@@ -84,7 +84,7 @@ public:
   void m_btnAddChartDirOnButtonClick(wxCommandEvent& event);
 
   bool Run() {
-    FitToPage(m_pages[m_pages.Count() - 1]);
+    FitToPage(m_pages[m_pages.size() - 1]);
     return RunWizard(m_pages[0]);
   }
 

@@ -31,6 +31,7 @@
 
 #include "config.h"
 
+#include <QList>
 #include <QStringList>
 
 #include <wx/wx.h>
@@ -131,7 +132,7 @@ public:
 };
 
 //    Define an array of PlugIn MenuItem Containers
-WX_DEFINE_ARRAY_PTR(PlugInMenuItemContainer*, ArrayOfPlugInMenuItems);
+using ArrayOfPlugInMenuItems = QList<PlugInMenuItemContainer*>;
 
 class PlugInToolbarToolContainer {
 public:
@@ -162,7 +163,7 @@ public:
 };
 
 //    Define an array of PlugIn ToolbarTool Containers
-WX_DEFINE_ARRAY_PTR(PlugInToolbarToolContainer*, ArrayOfPlugInToolbarTools);
+using ArrayOfPlugInToolbarTools = QList<PlugInToolbarToolContainer*>;
 
 //-----------------------------------------------------------------------------------------------------
 //
@@ -363,7 +364,7 @@ public:
   DECLARE_EVENT_TABLE()
 };
 
-WX_DEFINE_ARRAY_PTR(PluginPanel*, ArrayOfPluginPanel);
+using ArrayOfPluginPanel = QList<PluginPanel*>;
 
 /*
  * Panel with a single + sign which opens the "Add/download plugins" dialog.

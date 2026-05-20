@@ -28,6 +28,8 @@
 #include <wx/gdicmn.h>
 #include <wx/tokenzr.h>
 
+#include "model/wx_qt_string.h"
+
 #include "gl_headers.h"  // Must come before anything using GL stuff
 
 #include "model/config_vars.h"
@@ -333,7 +335,7 @@ const wxString &FontMgr::GetDialogString(int i) const {
   return (*it)->m_dialogstring;
 }
 
-wxArrayString FontMgr::GetDialogStrings(const wxString &locale) const {
+QStringList FontMgr::GetDialogStrings(const wxString &locale) const {
   std::set<wxString> uniqueStrings;
 
   for (auto node = m_fontlist->begin(); node != m_fontlist->end(); ++node) {
@@ -342,10 +344,10 @@ wxArrayString FontMgr::GetDialogStrings(const wxString &locale) const {
       uniqueStrings.insert(pmfd->m_dialogstring);
     }
   }
-  wxArrayString strings;
+  QStringList strings;
   strings.reserve(uniqueStrings.size());  // Pre-allocate for efficiency
   for (const auto &str : uniqueStrings) {
-    strings.Add(str);
+    strings.append(wxString_to_QString(str));
   }
 
   return strings;
@@ -556,10 +558,10 @@ static wxString FontCandidates[] = {_("AISTargetAlert"),
 
 void FontMgr::ScrubList() {
   wxString now_locale = g_locale;
-  wxArrayString string_array;
+  QStringList string_array;
 
   //  Build the composite candidate array
-  wxArrayString candidateArray;
+  QStringList candidateArray;
   unsigned int i = 0;
 
   // The fixed, static list
@@ -569,17 +571,17 @@ void FontMgr::ScrubList() {
       break;
     }
 
-    candidateArray.Add(candidate);
+    candidateArray.append(wxString_to_QString(candidate));
     i++;
   }
 
   //  The Aux Key array
-  for (unsigned int i = 0; i < m_AuxKeyArray.GetCount(); i++) {
-    candidateArray.Add(m_AuxKeyArray[i]);
+  for (int i = 0; i < m_AuxKeyArray.size(); i++) {
+    candidateArray.append(m_AuxKeyArray[i]);
   }
 
-  for (unsigned int i = 0; i < candidateArray.GetCount(); i++) {
-    wxString candidate = candidateArray[i];
+  for (int i = 0; i < candidateArray.size(); i++) {
+    wxString candidate = QString_to_wxString(candidateArray[i]);
 
     //  For each font identifier string in the FontCandidate array...
 
@@ -594,7 +596,7 @@ void FontMgr::ScrubList() {
       wxString tlocale = pmfd->m_configstring.BeforeFirst('-');
       if (tlocale == now_locale) {
         if (trans == pmfd->m_dialogstring) {
-          string_array.Add(pmfd->m_dialogstring);
+          string_array.append(wxString_to_QString(pmfd->m_dialogstring));
         }
       }
     }
@@ -610,8 +612,8 @@ void FontMgr::ScrubList() {
     wxString tlocale = pmfd->m_configstring.BeforeFirst('-');
     if (tlocale == now_locale) {
       bool bfound = false;
-      for (unsigned int i = 0; i < string_array.GetCount(); i++) {
-        if (string_array[i] == pmfd->m_dialogstring) {
+      for (int i = 0; i < string_array.size(); i++) {
+        if (string_array[i] == wxString_to_QString(pmfd->m_dialogstring)) {
           bfound = true;
           break;
         }
@@ -651,10 +653,11 @@ void FontMgr::ScrubList() {
 }
 
 bool FontMgr::AddAuxKey(wxString key) {
-  for (unsigned int i = 0; i < m_AuxKeyArray.GetCount(); i++) {
-    if (m_AuxKeyArray[i] == key) return false;
+  QString qkey = wxString_to_QString(key);
+  for (int i = 0; i < m_AuxKeyArray.size(); i++) {
+    if (m_AuxKeyArray[i] == qkey) return false;
   }
-  m_AuxKeyArray.Add(key);
+  m_AuxKeyArray.append(qkey);
   return true;
 }
 

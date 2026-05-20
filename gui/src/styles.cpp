@@ -234,7 +234,7 @@ wxBitmap Style::GetIconScaled(const wxString& name, double scaleFactor,
   int index = iconIndex[name];  // FIXME: this operation is not const but should
                                 // be, use 'find'
 
-  Icon* icon = (Icon*)icons[index];
+  Icon* icon = icons[index];
   if (icon->size.x == 0) icon->size = toolSize[currentOrientation];
 
   return GetIcon(name, icon->size.x * scaleFactor, icon->size.y * scaleFactor,
@@ -253,7 +253,7 @@ wxBitmap Style::GetIcon(const wxString& name, int width, int height,
   int index = iconIndex[name];  // FIXME: this operation is not const but should
                                 // be, use 'find'
 
-  Icon* icon = (Icon*)icons[index];
+  Icon* icon = icons[index];
 
   if (icon->loaded && !bforceReload) return icon->icon;
   if (icon->size.x == 0) icon->size = toolSize[currentOrientation];
@@ -298,7 +298,7 @@ wxBitmap Style::GetToolIcon(const wxString& toolname, int iconType,
 
   int index = toolIndex[toolname];
 
-  Tool* tool = (Tool*)tools[index];
+  Tool* tool = tools[index];
 
   wxSize size = tool->customSize;
   if (size.x == 0) size = toolSize[currentOrientation];
@@ -712,13 +712,13 @@ void Style::SetColorScheme(ColorScheme cs) {
 }
 
 void Style::Unload() {
-  for (unsigned int i = 0; i < tools.Count(); i++) {
-    Tool* tool = (Tool*)tools[i];
+  for (unsigned int i = 0; i < tools.size(); i++) {
+    Tool* tool = tools[i];
     tool->Unload();
   }
 
-  for (unsigned int i = 0; i < icons.Count(); i++) {
-    Icon* icon = (Icon*)icons[i];
+  for (unsigned int i = 0; i < icons.size(); i++) {
+    Icon* icon = icons[i];
     icon->Unload();
   }
 }
@@ -751,15 +751,15 @@ Style::Style() {
 }
 
 Style::~Style() {
-  for (unsigned int i = 0; i < tools.Count(); i++) {
-    delete (Tool*)(tools[i]);
+  for (unsigned int i = 0; i < tools.size(); i++) {
+    delete tools[i];
   }
-  tools.Clear();
+  tools.clear();
 
-  for (unsigned int i = 0; i < icons.Count(); i++) {
-    delete (Icon*)(icons[i]);
+  for (unsigned int i = 0; i < icons.size(); i++) {
+    delete icons[i];
   }
-  icons.Clear();
+  icons.clear();
 
   if (graphics) delete graphics;
 
@@ -790,10 +790,10 @@ StyleManager::StyleManager(const wxString& configDir) {
 }
 
 StyleManager::~StyleManager() {
-  for (unsigned int i = 0; i < styles.Count(); i++) {
-    delete (Style*)(styles[i]);
+  for (unsigned int i = 0; i < styles.size(); i++) {
+    delete styles[i];
   }
-  styles.Clear();
+  styles.clear();
 }
 
 void StyleManager::Init(const wxString& fromPath) {
@@ -857,7 +857,7 @@ void StyleManager::Init(const wxString& fromPath) {
     for (; styleElem; styleElem = styleElem->NextSiblingElement()) {
       if (wxString(styleElem->Value(), wxConvUTF8) == "style") {
         Style* style = new Style();
-        styles.Add(style);
+        styles.append(style);
 
         style->name = wxString(styleElem->Attribute("name"), wxConvUTF8);
         style->sysname = wxString(styleElem->Attribute("sysname"), wxConvUTF8);
@@ -926,9 +926,9 @@ void StyleManager::Init(const wxString& fromPath) {
               wxString nodeType(iconNode->Value(), wxConvUTF8);
               if (nodeType == "icon") {
                 Icon* icon = new Icon();
-                style->icons.Add(icon);
+                style->icons.append(icon);
                 icon->name = wxString(iconNode->Attribute("name"), wxConvUTF8);
-                style->iconIndex[icon->name] = style->icons.Count() - 1;
+                style->iconIndex[icon->name] = style->icons.size() - 1;
                 TiXmlHandle handle(iconNode);
                 TiXmlElement* tag =
                     handle.Child("icon-location", 0).ToElement();
@@ -1086,9 +1086,9 @@ void StyleManager::Init(const wxString& fromPath) {
 
               if (nodeType == "tool") {
                 Tool* tool = new Tool();
-                style->tools.Add(tool);
+                style->tools.append(tool);
                 tool->name = wxString(toolNode->Attribute("name"), wxConvUTF8);
-                style->toolIndex[tool->name] = style->tools.Count() - 1;
+                style->toolIndex[tool->name] = style->tools.size() - 1;
                 TiXmlHandle toolHandle(toolNode);
                 TiXmlElement* toolTag =
                     toolHandle.Child("icon-location", 0).ToElement();
@@ -1144,8 +1144,8 @@ void StyleManager::SetStyle(wxString name) {
   //  If not, just use the "first" style
   bool bstyleFound = false;
 
-  for (unsigned int i = 0; i < styles.Count(); i++) {
-    style = (Style*)(styles.Item(i));
+  for (unsigned int i = 0; i < styles.size(); i++) {
+    style = styles.at(i);
     if (style->name == name) {
       bstyleFound = true;
       break;
@@ -1154,8 +1154,8 @@ void StyleManager::SetStyle(wxString name) {
 
   if ((name.Length() == 0) || !bstyleFound) selectFirst = true;
 
-  for (unsigned int i = 0; i < styles.Count(); i++) {
-    style = (Style*)(styles[i]);
+  for (unsigned int i = 0; i < styles.size(); i++) {
+    style = styles[i];
     if (style->name == name || selectFirst) {
       if (style->graphics) {
         currentStyle = style;

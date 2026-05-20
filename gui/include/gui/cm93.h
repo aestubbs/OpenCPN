@@ -27,6 +27,8 @@
 #include <wx/listctrl.h>
 #include <wx/spinctrl.h>
 
+#include <QStringList>
+
 #include "chcanv.h"
 #include "model/cutil.h"  // for types
 #include "ocpn_region.h"
@@ -236,8 +238,8 @@ public:
 private:
   int m_max_class;
   int m_max_attr;
-  wxArrayString *m_S57ClassArray;
-  wxArrayString *m_AttrArray;
+  QStringList *m_S57ClassArray;
+  QStringList *m_AttrArray;
   int *m_GeomTypeArray;
   char *m_ValTypeArray;
   bool m_ok;
@@ -399,7 +401,7 @@ private:
   wxString m_LastFileName;
 
   LLRegion m_region;
-  wxArrayString m_noFindArray;
+  QStringList m_noFindArray;
 };
 
 //----------------------------------------------------------------------------

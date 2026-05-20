@@ -31,6 +31,8 @@
 #include <wx/gdicmn.h>
 #include <wx/string.h>
 
+#include <QList>
+
 #include "model/ocpn_types.h"
 #include "color_types.h"
 
@@ -187,9 +189,9 @@ public:
   wxPoint activeBGlocation[2];
   wxPoint normalBGlocation[2];
   wxSize verticalIconOffset;
-  wxArrayPtrVoid tools;
+  QList<Tool*> tools;
   intHash toolIndex;
-  wxArrayPtrVoid icons;
+  QList<Icon*> icons;
   intHash iconIndex;
   wxBitmap* graphics;
 
@@ -234,11 +236,11 @@ public:
   }
   const wxString& GetStyleNextInvocation() const { return nextInvocationStyle; }
   Style* GetCurrentStyle();
-  wxArrayPtrVoid GetArrayOfStyles() { return styles; };
+  QList<Style*> GetArrayOfStyles() { return styles; };
 
 private:
   bool isOK;
-  wxArrayPtrVoid styles;
+  QList<Style*> styles;
   Style* currentStyle;
   wxString nextInvocationStyle;
 };

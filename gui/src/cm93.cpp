@@ -617,8 +617,9 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
   m_max_class = iclass_max;
 
   //    Create the class name array
-  m_S57ClassArray = new wxArrayString;
-  m_S57ClassArray->Add("NULLNM", iclass_max + 1);
+  m_S57ClassArray = new QStringList;
+  for (int k = 0; k < iclass_max + 1; k++)
+    m_S57ClassArray->append(QStringLiteral("NULLNM"));
 
   //    And an array of ints describing the geometry type per class
   m_GeomTypeArray = (int *)malloc((iclass_max + 1) * sizeof(int));
@@ -642,8 +643,8 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
       //  geom type, ascii
       wxString geo_type = tkz.GetNextToken();
 
-      m_S57ClassArray->Insert(class_name, iclass);
-      m_S57ClassArray->RemoveAt(iclass + 1);
+      m_S57ClassArray->insert(iclass, wxString_to_QString(class_name));
+      m_S57ClassArray->removeAt(iclass + 1);
 
       int igeom_type = -1;  // default unknown
       wxChar geo_type_primary = geo_type[0];
@@ -713,8 +714,9 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
 
       //    Create the attribute label array
 
-      m_AttrArray = new wxArrayString;
-      m_AttrArray->Add("NULLNM", iattr_max + 1);
+      m_AttrArray = new QStringList;
+      for (int k = 0; k < iattr_max + 1; k++)
+        m_AttrArray->append(QStringLiteral("NULLNM"));
 
       //    And an array of chars describing the attribute value type
       m_ValTypeArray = (char *)malloc((iattr_max + 1) * sizeof(char));
@@ -742,8 +744,8 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
             token.ToLong(&liattr);
             int iattr = liattr;
 
-            m_AttrArray->Insert(attr_name, iattr);
-            m_AttrArray->RemoveAt(iattr + 1);
+            m_AttrArray->insert(iattr, wxString_to_QString(attr_name));
+            m_AttrArray->removeAt(iattr + 1);
 
             //    Skip some
             token = tkz.GetNextToken();
@@ -827,8 +829,9 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
 
         //    Create the attribute label array
 
-        m_AttrArray = new wxArrayString;
-        m_AttrArray->Add("NULLNM", iattr_max + 1);
+        m_AttrArray = new QStringList;
+        for (int k = 0; k < iattr_max + 1; k++)
+          m_AttrArray->append(QStringLiteral("NULLNM"));
 
         //    And an array of chars describing the attribute value type
         m_ValTypeArray = (char *)malloc((iattr_max + 1) * sizeof(char));
@@ -857,8 +860,8 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
               token.ToLong(&liattr);
               int iattr = liattr;
 
-              m_AttrArray->Insert(attr_name, iattr);
-              m_AttrArray->RemoveAt(iattr + 1);
+              m_AttrArray->insert(iattr, wxString_to_QString(attr_name));
+              m_AttrArray->removeAt(iattr + 1);
 
               token = tkz.GetNextToken().Trim();
 
@@ -903,14 +906,14 @@ wxString cm93_dictionary::GetClassName(int iclass) {
   if ((iclass > m_max_class) || (iclass < 0))
     return ("Unknown");
   else
-    return (m_S57ClassArray->Item(iclass));
+    return QString_to_wxString(m_S57ClassArray->at(iclass));
 }
 
 wxString cm93_dictionary::GetAttrName(int iattr) {
   if ((iattr > m_max_attr) || (iattr < 0))
     return ("UnknownAttr");
   else
-    return (m_AttrArray->Item(iattr));
+    return QString_to_wxString(m_AttrArray->at(iattr));
 }
 
 //      char vtype = m_pDict->m_ValTypeArray[iattr];
@@ -4243,7 +4246,7 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
   // than nnn items. "nnn" determined by experimentation/intuition. Could also
   // be platform dependent.
   bool b_useNoFind = true;
-  if (m_noFindArray.GetCount() > 500) b_useNoFind = false;
+  if (m_noFindArray.size() > 500) b_useNoFind = false;
 
   wxString fileroot;
   fileroot.Printf("%04d%04d", ilatroot, ilonroot);
@@ -4266,11 +4269,12 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
   bool bfound = false;
   wxString compfile;
   if (b_useNoFind) {
-    if (m_noFindArray.Index(key) == wxNOT_FOUND) {
+    QString qkey = wxString_to_QString(key);
+    if (!m_noFindArray.contains(qkey)) {
       if (::wxFileExists(file))
         bfound = true;
       else
-        m_noFindArray.Add(key);
+        m_noFindArray.append(qkey);
     }
   } else {
     if (::wxFileExists(file)) bfound = true;
@@ -4279,12 +4283,13 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
 
   if (!bfound) {  // try compressed version
     if (b_useNoFind) {
-      if (m_noFindArray.Index(key + ".xz") == wxNOT_FOUND) {
+      QString qkey_xz = wxString_to_QString(key + ".xz");
+      if (!m_noFindArray.contains(qkey_xz)) {
         if (::wxFileExists(file + ".xz")) {
           compfile = file + ".xz";
         }
       } else {
-        m_noFindArray.Add(key + ".xz");
+        m_noFindArray.append(qkey_xz);
       }
     } else {
       if (::wxFileExists(file + ".xz")) compfile = file + ".xz";
@@ -4313,12 +4318,13 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
     file1.Prepend(fileroot);
 
     if (b_useNoFind) {
-      if (m_noFindArray.Index(key) == wxNOT_FOUND) {
+      QString qkey = wxString_to_QString(key);
+      if (!m_noFindArray.contains(qkey)) {
         if (::wxFileExists(file1)) {
           bfound = true;
           file = file1;  // found the file as lowercase, substitute the name
         } else {
-          m_noFindArray.Add(key);
+          m_noFindArray.append(qkey);
         }
       }
     } else {
@@ -4330,11 +4336,12 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
 
     if (!bfound) {  // try compressed version
       if (b_useNoFind) {
-        if (m_noFindArray.Index(key + ".xz") == wxNOT_FOUND) {
+        QString qkey_xz = wxString_to_QString(key + ".xz");
+        if (!m_noFindArray.contains(qkey_xz)) {
           if (::wxFileExists(file1 + ".xz"))
             compfile = file1 + ".xz";
           else
-            m_noFindArray.Add(key + ".xz");
+            m_noFindArray.append(qkey_xz);
         }
       } else {
         if (::wxFileExists(file1 + ".xz")) compfile = file1 + ".xz";
@@ -4343,7 +4350,7 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
   }
 
   if (g_bDebugCM93) {
-    printf("noFind count: %d\n", (int)m_noFindArray.GetCount());
+    printf("noFind count: %d\n", (int)m_noFindArray.size());
   }
 
   if (!bfound && !compfile.Length()) return 0;

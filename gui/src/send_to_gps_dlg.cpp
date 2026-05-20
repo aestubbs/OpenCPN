@@ -121,7 +121,7 @@ void SendToGpsDlg::CreateControls(const wxString& hint) {
   delete pSerialArray;
 
   // Add any defined Network connections supporting "output"
-  wxArrayString netconns;
+  QStringList netconns;
   for (auto* cp : TheConnectionParams()) {
     wxString netident;
 
@@ -129,13 +129,13 @@ void SendToGpsDlg::CreateControls(const wxString& hint) {
         (cp->NetProtocol == TCP)) {
       netident << "TCP:" << cp->NetworkAddress << ":" << cp->NetworkPort;
       m_itemCommListBox->Append(netident);
-      netconns.Add(netident);
+      netconns.append(wxString_to_QString(netident));
     }
     if ((cp->IOSelect != DS_TYPE_INPUT) && cp->Type == NETWORK &&
         (cp->NetProtocol == UDP)) {
       netident << "UDP:" << cp->NetworkAddress << ":" << cp->NetworkPort;
       m_itemCommListBox->Append(netident);
-      netconns.Add(netident);
+      netconns.append(wxString_to_QString(netident));
     }
   }
 
@@ -164,13 +164,8 @@ void SendToGpsDlg::CreateControls(const wxString& hint) {
   if (!g_uploadConnection.IsEmpty()) {
     if (g_uploadConnection.Lower().StartsWith("tcp") ||
         g_uploadConnection.Lower().StartsWith("udp")) {
-      bool b_connExists = false;
-      for (unsigned int i = 0; i < netconns.GetCount(); i++) {
-        if (g_uploadConnection.IsSameAs(netconns[i])) {
-          b_connExists = true;
-          break;
-        }
-      }
+      bool b_connExists =
+          netconns.contains(wxString_to_QString(g_uploadConnection));
       if (b_connExists) m_itemCommListBox->SetValue(g_uploadConnection);
     } else
       m_itemCommListBox->SetValue(g_uploadConnection);

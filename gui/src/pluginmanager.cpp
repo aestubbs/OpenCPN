@@ -1162,20 +1162,20 @@ void PlugInManager::OnPluginDeactivate(const PlugInContainer* pic) {
   }
 
   //    Deactivate (Remove) any ToolbarTools added by this PlugIn
-  for (unsigned int i = 0; i < m_PlugInToolbarTools.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInToolbarTools.size(); i++) {
     PlugInToolbarToolContainer* pttc = m_PlugInToolbarTools[i];
 
     if (pttc->m_pplugin == pic->m_pplugin) {
-      m_PlugInToolbarTools.Remove(pttc);
+      m_PlugInToolbarTools.removeOne(pttc);
       delete pttc;
     }
   }
 
   //    Deactivate (Remove) any ContextMenu items addded by this PlugIn
-  for (unsigned int i = 0; i < m_PlugInMenuItems.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInMenuItems.size(); i++) {
     PlugInMenuItemContainer* pimis = m_PlugInMenuItems[i];
     if (pimis->m_pplugin == pic->m_pplugin) {
-      m_PlugInMenuItems.Remove(pimis);
+      m_PlugInMenuItems.removeOne(pimis);
       delete pimis;
     }
   }
@@ -1635,7 +1635,7 @@ int PlugInManager::AddCanvasContextMenuItemPIM(wxMenuItem* pitem,
   pmic->m_in_menu = name;
   pmic->extended = is_extended;
 
-  m_PlugInMenuItems.Add(pmic);
+  m_PlugInMenuItems.append(pmic);
 
   m_plugin_menu_item_id_next++;
 
@@ -1643,11 +1643,11 @@ int PlugInManager::AddCanvasContextMenuItemPIM(wxMenuItem* pitem,
 }
 
 void PlugInManager::RemoveCanvasContextMenuItem(int item, const char* name) {
-  for (unsigned int i = 0; i < m_PlugInMenuItems.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInMenuItems.size(); i++) {
     PlugInMenuItemContainer* pimis = m_PlugInMenuItems[i];
     {
       if (pimis->id == item) {
-        m_PlugInMenuItems.Remove(pimis);
+        m_PlugInMenuItems.removeOne(pimis);
         delete pimis;
         break;
       }
@@ -1657,7 +1657,7 @@ void PlugInManager::RemoveCanvasContextMenuItem(int item, const char* name) {
 
 void PlugInManager::SetCanvasContextMenuItemViz(int item, bool viz,
                                                 const char* name) {
-  for (unsigned int i = 0; i < m_PlugInMenuItems.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInMenuItems.size(); i++) {
     PlugInMenuItemContainer* pimis = m_PlugInMenuItems[i];
     {
       if (pimis->id == item && !strcmp(name, pimis->m_in_menu)) {
@@ -1670,7 +1670,7 @@ void PlugInManager::SetCanvasContextMenuItemViz(int item, bool viz,
 
 void PlugInManager::SetCanvasContextMenuItemGrey(int item, bool grey,
                                                  const char* name) {
-  for (unsigned int i = 0; i < m_PlugInMenuItems.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInMenuItems.size(); i++) {
     PlugInMenuItemContainer* pimis = m_PlugInMenuItems[i];
     {
       if (pimis->id == item && !strcmp(name, pimis->m_in_menu)) {
@@ -1872,7 +1872,7 @@ int PlugInManager::AddToolbarTool(wxString label, wxBitmap* bitmap,
   pttc->b_toggle = false;
   pttc->id = m_plugin_tool_id_next;
 
-  m_PlugInToolbarTools.Add(pttc);
+  m_PlugInToolbarTools.append(pttc);
 
   m_plugin_tool_id_next++;
 
@@ -1915,7 +1915,7 @@ int PlugInManager::AddToolbarTool(wxString label, wxString SVGfile,
   pttc->b_toggle = false;
   pttc->id = m_plugin_tool_id_next;
 
-  m_PlugInToolbarTools.Add(pttc);
+  m_PlugInToolbarTools.append(pttc);
 
   m_plugin_tool_id_next++;
 
@@ -1923,11 +1923,11 @@ int PlugInManager::AddToolbarTool(wxString label, wxString SVGfile,
 }
 
 void PlugInManager::RemoveToolbarTool(int tool_id) {
-  for (unsigned int i = 0; i < m_PlugInToolbarTools.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInToolbarTools.size(); i++) {
     PlugInToolbarToolContainer* pttc = m_PlugInToolbarTools[i];
     {
       if (pttc->id == tool_id) {
-        m_PlugInToolbarTools.Remove(pttc);
+        m_PlugInToolbarTools.removeOne(pttc);
         delete pttc;
         break;
       }
@@ -1937,7 +1937,7 @@ void PlugInManager::RemoveToolbarTool(int tool_id) {
 }
 
 void PlugInManager::SetToolbarToolViz(int item, bool viz) {
-  for (unsigned int i = 0; i < m_PlugInToolbarTools.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInToolbarTools.size(); i++) {
     PlugInToolbarToolContainer* pttc = m_PlugInToolbarTools[i];
     {
       if (pttc->id == item) {
@@ -1950,7 +1950,7 @@ void PlugInManager::SetToolbarToolViz(int item, bool viz) {
 }
 
 void PlugInManager::SetToolbarItemState(int item, bool toggle) {
-  for (unsigned int i = 0; i < m_PlugInToolbarTools.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInToolbarTools.size(); i++) {
     PlugInToolbarToolContainer* pttc = m_PlugInToolbarTools[i];
     {
       if (pttc->id == item) {
@@ -1964,7 +1964,7 @@ void PlugInManager::SetToolbarItemState(int item, bool toggle) {
 
 void PlugInManager::SetToolbarItemBitmaps(int item, wxBitmap* bitmap,
                                           wxBitmap* bmpRollover) {
-  for (unsigned int i = 0; i < m_PlugInToolbarTools.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInToolbarTools.size(); i++) {
     PlugInToolbarToolContainer* pttc = m_PlugInToolbarTools[i];
     {
       if (pttc->id == item) {
@@ -2006,7 +2006,7 @@ void PlugInManager::SetToolbarItemBitmaps(int item, wxBitmap* bitmap,
 void PlugInManager::SetToolbarItemBitmaps(int item, wxString SVGfile,
                                           wxString SVGfileRollover,
                                           wxString SVGfileToggled) {
-  for (unsigned int i = 0; i < m_PlugInToolbarTools.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInToolbarTools.size(); i++) {
     PlugInToolbarToolContainer* pttc = m_PlugInToolbarTools[i];
     {
       if (pttc->id == item) {
@@ -2023,7 +2023,7 @@ void PlugInManager::SetToolbarItemBitmaps(int item, wxString SVGfile,
 }
 
 opencpn_plugin* PlugInManager::FindToolOwner(const int id) {
-  for (unsigned int i = 0; i < m_PlugInToolbarTools.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PlugInToolbarTools.size(); i++) {
     PlugInToolbarToolContainer* pc = m_PlugInToolbarTools[i];
     if (id == pc->id) return pc->m_pplugin;
   }
@@ -2555,7 +2555,7 @@ void PluginListPanel::ReloadPluginPanels() {
   }
 
   auto plugins = PluginLoader::GetInstance()->GetPlugInArray();
-  m_PluginItems.Clear();
+  m_PluginItems.clear();
 
   wxWindowList kids = GetChildren();
   for (unsigned int i = 0; i < kids.GetCount(); i++) {
@@ -2625,7 +2625,7 @@ void PluginListPanel::AddPlugin(const std::string& name) {
   DimeControl(panel);
   panel->SetSelected(false);
   GetSizer()->Add(panel, 0, wxEXPAND);
-  m_PluginItems.Add(panel);
+  m_PluginItems.append(panel);
   m_pluginSpacer = g_Platform->GetDisplayDPmm() * 1.0;
   GetSizer()->AddSpacer(m_pluginSpacer);
 }
@@ -2635,7 +2635,7 @@ void PluginListPanel::AddPlugin(const PlugInData& pic) {
       new PluginPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, pic);
   pPluginPanel->SetSelected(false);
   GetSizer()->Add(pPluginPanel, 0, wxEXPAND);
-  m_PluginItems.Add(pPluginPanel);
+  m_PluginItems.append(pPluginPanel);
 
   m_pluginSpacer = g_Platform->GetDisplayDPmm() * 1.0;
   GetSizer()->AddSpacer(m_pluginSpacer);
@@ -2654,8 +2654,8 @@ void PluginListPanel::AddPlugin(const PlugInData& pic) {
 int PluginListPanel::ComputePluginSpace(ArrayOfPluginPanel plugins,
                                         wxBoxSizer* sizer) {
   int max_dy = 0;
-  for (size_t i = 0; i < plugins.GetCount(); i++) {
-    auto panel = plugins.Item(i);
+  for (int i = 0; i < plugins.size(); i++) {
+    auto panel = plugins.at(i);
     bool was_selected = panel->GetSelected();
     panel->SetSelected(false);
     sizer->Layout();
@@ -2675,7 +2675,7 @@ int PluginListPanel::ComputePluginSpace(ArrayOfPluginPanel plugins,
 PluginListPanel::~PluginListPanel() {}
 
 void PluginListPanel::UpdateSelections() {
-  for (unsigned int i = 0; i < m_PluginItems.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PluginItems.size(); i++) {
     PluginPanel* pPluginPanel = m_PluginItems[i];
     if (pPluginPanel) {
       pPluginPanel->SetSelected(pPluginPanel->GetSelected());
@@ -2705,7 +2705,7 @@ void PluginListPanel::SelectPlugin(PluginPanel* pi) {
   //  Measure, and ensure that the selected item is fully visible in the
   //  vertical scroll box.
   int htop = 0;
-  for (unsigned int i = 0; i < m_PluginItems.GetCount(); i++) {
+  for (unsigned int i = 0; i < m_PluginItems.size(); i++) {
     PluginPanel* pPluginPanel = m_PluginItems[i];
     int yd = pPluginPanel->GetSize().y;
     htop += yd;
@@ -2723,13 +2723,13 @@ void PluginListPanel::SelectPlugin(PluginPanel* pi) {
 }
 
 void PluginListPanel::MoveUp(PluginPanel* pi) {
-  int pos = m_PluginItems.Index(pi);
+  int pos = m_PluginItems.indexOf(pi);
   if (pos == 0)  // The first one can't be moved further up
     return;
-  m_PluginItems.RemoveAt(pos);
+  m_PluginItems.removeAt(pos);
   // m_pitemBoxSizer01->Remove( pos * 2 + 1 );
   // m_pitemBoxSizer01->Remove( pos * 2 );
-  m_PluginItems.Insert(pi, pos - 1);
+  m_PluginItems.insert(pos - 1, pi);
   wxStaticLine* itemStaticLine = new wxStaticLine(
       this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLI_HORIZONTAL);
   // m_pitemBoxSizer01->Insert( (pos - 1) * 2, itemStaticLine, 0,
@@ -2744,14 +2744,14 @@ void PluginListPanel::MoveUp(PluginPanel* pi) {
 }
 
 void PluginListPanel::MoveDown(PluginPanel* pi) {
-  int pos = m_PluginItems.Index(pi);
-  if (pos == (int)m_PluginItems.Count() -
+  int pos = m_PluginItems.indexOf(pi);
+  if (pos == (int)m_PluginItems.size() -
                  1)  // The last one can't be moved further down
     return;
-  m_PluginItems.RemoveAt(pos);
+  m_PluginItems.removeAt(pos);
   // m_pitemBoxSizer01->Remove( pos * 2 + 1 );
   // m_pitemBoxSizer01->Remove( pos * 2 );
-  m_PluginItems.Insert(pi, pos + 1);
+  m_PluginItems.insert(pos + 1, pi);
   wxStaticLine* itemStaticLine = new wxStaticLine(
       this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLI_HORIZONTAL);
   // m_pitemBoxSizer01->Insert( (pos + 1) * 2 - 1, itemStaticLine, 0,

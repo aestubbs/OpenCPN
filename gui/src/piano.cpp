@@ -52,8 +52,6 @@
 #include "gl_chart_canvas.h"
 #endif
 
-WX_DEFINE_OBJARRAY(RectArray);
-
 #define PIANO_EVENT_TIMER 73566
 #define DEFERRED_KEY_CLICK_DOWN 1
 #define DEFERRED_KEY_CLICK_UP 2

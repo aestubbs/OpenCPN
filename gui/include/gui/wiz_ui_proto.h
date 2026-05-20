@@ -31,7 +31,10 @@
 #include <wx/html/htmlwin.h>
 #include <wx/wizard.h>
 #include <wx/dynarray.h>
-WX_DEFINE_ARRAY_PTR(wxWizardPageSimple*, WizardPages);
+
+#include <QList>
+
+using WizardPages = QList<wxWizardPageSimple*>;
 
 ///////////////////////////////////////////////////////////////////////////
 

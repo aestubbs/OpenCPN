@@ -1382,7 +1382,7 @@ bool OCPNFatCombo::SetFont(const wxFont& font) {
 void OCPNFatCombo::OnDrawItem(wxDC& dc, const wxRect& rect, int item,
                               int flags) const {
   int offset_x = 10;
-  //    dc.DrawBitmap(bmpArray.Item(item), rect.x, rect.y + (rect.height -
+  //    dc.DrawBitmap(bmpArray.at(item), rect.x, rect.y + (rect.height -
   //    bmpHeight)/2, true);
   dc.SetFont(*dfont);
 
@@ -1408,8 +1408,8 @@ void OCPNFatCombo::OnDrawItem(wxDC& dc, const wxRect& rect, int item,
 }
 
 wxCoord OCPNFatCombo::OnMeasureItem(size_t item) const {
-  if (item < bmpArray.GetCount())
-    return wxMax(itemHeight, bmpArray.Item(item).GetHeight());
+  if (item < bmpArray.size())
+    return wxMax(itemHeight, bmpArray.at(item).GetHeight());
 
   return itemHeight * 12 / 10;
 }
@@ -1417,7 +1417,7 @@ wxCoord OCPNFatCombo::OnMeasureItem(size_t item) const {
 wxCoord OCPNFatCombo::OnMeasureItemWidth(size_t item) const { return -1; }
 
 int OCPNFatCombo::Append(const wxString& item, wxBitmap bmp) {
-  bmpArray.Add(bmp);
+  bmpArray.append(bmp);
   int idx = wxOwnerDrawnComboBox::Append(item);
 
   return idx;
@@ -1425,7 +1425,7 @@ int OCPNFatCombo::Append(const wxString& item, wxBitmap bmp) {
 
 void OCPNFatCombo::Clear() {
   wxOwnerDrawnComboBox::Clear();
-  bmpArray.Clear();
+  bmpArray.clear();
 }
 
 BEGIN_EVENT_TABLE(options, wxDialog)
@@ -2595,9 +2595,9 @@ void options::CreatePanel_ChartsLoad(size_t parent, int border_size,
   itemStaticBoxSizerUpdate->Add(itemFlexGridSizerUpdate, 1, wxEXPAND, 5);
 
   // Currently loaded chart dirs
-  ActiveChartArray.Clear();
-  for (size_t i = 0; i < m_CurrentDirList.GetCount(); i++) {
-    ActiveChartArray.Add(m_CurrentDirList[i]);
+  ActiveChartArray.clear();
+  for (size_t i = 0; i < m_CurrentDirList.size(); i++) {
+    ActiveChartArray.append(m_CurrentDirList[i]);
   }
 
   UpdateChartDirList();
@@ -2613,7 +2613,7 @@ void options::UpdateChartDirList() {
   panelVector.clear();
 
   // Add new panels
-  for (size_t i = 0; i < ActiveChartArray.GetCount(); i++) {
+  for (size_t i = 0; i < ActiveChartArray.size(); i++) {
     OCPNChartDirPanel* chartPanel =
         new OCPNChartDirPanel(m_scrollWinChartList, wxID_ANY, wxDefaultPosition,
                               wxSize(-1, -1), ActiveChartArray[i]);
@@ -2779,11 +2779,11 @@ void options::ClearConfigList() {
 }
 
 void options::BuildConfigList() {
-  wxArrayString configGUIDs = ConfigMgr::Get().GetConfigGUIDArray();
+  QStringList configGUIDs = ConfigMgr::Get().GetConfigGUIDArray();
 
-  for (size_t i = 0; i < configGUIDs.GetCount(); i++) {
-    wxPanel* pp =
-        ConfigMgr::Get().GetConfigPanel(m_scrollWinConfigList, configGUIDs[i]);
+  for (int i = 0; i < configGUIDs.size(); i++) {
+    wxPanel* pp = ConfigMgr::Get().GetConfigPanel(
+        m_scrollWinConfigList, QString_to_wxString(configGUIDs[i]));
     if (pp) {
       m_panelBackgroundUnselected = pp->GetBackgroundColour();
       m_boxSizerConfigs->Add(pp, 1, wxEXPAND);
@@ -3960,7 +3960,7 @@ void ChartGroupsUI::CompletePanel() {
 
   page0BoxSizer->Add(defaultAllCtl, 1, wxALIGN_TOP | wxALL | wxEXPAND);
 
-  m_DirCtrlArray.Add(defaultAllCtl);
+  m_DirCtrlArray.append(defaultAllCtl);
 
   //    Add the Chart Group (page) "New" and "Delete" buttons
   m_pNewGroupButton =
@@ -5584,12 +5584,12 @@ void options::CreatePanel_UI(size_t parent, int border_size,
       new wxChoice(itemPanelFont, ID_CHOICE_FONTELEMENT, wxDefaultPosition,
                    fontChoiceSize, 0, NULL, wxCB_SORT);
 
-  wxArrayString uniqueStrings = FontMgr::Get().GetDialogStrings(g_locale);
-  for (size_t i = 0; i < uniqueStrings.GetCount(); i++) {
-    m_itemFontElementListBox->Append(uniqueStrings[i]);
+  QStringList uniqueStrings = FontMgr::Get().GetDialogStrings(g_locale);
+  for (int i = 0; i < uniqueStrings.size(); i++) {
+    m_itemFontElementListBox->Append(QString_to_wxString(uniqueStrings[i]));
   }
 
-  if (uniqueStrings.GetCount()) m_itemFontElementListBox->SetSelection(0);
+  if (!uniqueStrings.isEmpty()) m_itemFontElementListBox->SetSelection(0);
 
   itemFontStaticBoxSizer->Add(m_itemFontElementListBox, 0, wxALL, border_size);
 
@@ -5623,9 +5623,9 @@ void options::CreatePanel_UI(size_t parent, int border_size,
 
   m_itemStyleListBox = new wxChoice(itemPanelFont, ID_STYLESCOMBOBOX);
 
-  wxArrayPtrVoid styles = g_StyleManager->GetArrayOfStyles();
-  for (unsigned int i = 0; i < styles.Count(); i++) {
-    ocpnStyle::Style* style = (ocpnStyle::Style*)(styles[i]);
+  QList<ocpnStyle::Style*> styles = g_StyleManager->GetArrayOfStyles();
+  for (int i = 0; i < styles.size(); i++) {
+    ocpnStyle::Style* style = styles[i];
     m_itemStyleListBox->Append(style->name);
   }
   m_itemStyleListBox->SetStringSelection(
@@ -6266,9 +6266,9 @@ void options::SetInitialSettings() {
 
   // Initial Charts Load
 
-  ActiveChartArray.Clear();
-  for (size_t i = 0; i < m_CurrentDirList.GetCount(); i++) {
-    ActiveChartArray.Add(m_CurrentDirList[i]);
+  ActiveChartArray.clear();
+  for (size_t i = 0; i < m_CurrentDirList.size(); i++) {
+    ActiveChartArray.append(m_CurrentDirList[i]);
   }
 
   // ChartGroups
@@ -6729,8 +6729,8 @@ void options::SetInitialVectorSettings() {
     // MARINERS_STANDARD display category
     bool benableMarStd = false;
     // .. for each canvas...
-    for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-      ChartCanvas* cc = g_canvasArray.Item(i);
+    for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+      ChartCanvas* cc = g_canvasArray.at(i);
       if (cc) {
         if (cc->GetENCDisplayCategory() == MARINERS_STANDARD) {
           benableMarStd = true;
@@ -7064,7 +7064,7 @@ void options::AddChartDir(const wxString& dir) {
 
   ChartDirInfo cdi;
   cdi.fullpath = dirAdd;
-  ActiveChartArray.Add(cdi);
+  ActiveChartArray.append(cdi);
 
   UpdateChartDirList();
 
@@ -7076,9 +7076,9 @@ void options::AddChartDir(const wxString& dir) {
 void options::UpdateDisplayedChartDirList(ArrayOfCDI p) {
   // Called by pluginmanager after adding single chart to database
 
-  ActiveChartArray.Clear();
-  for (size_t i = 0; i < p.GetCount(); i++) {
-    ActiveChartArray.Add(p[i]);
+  ActiveChartArray.clear();
+  for (size_t i = 0; i < p.size(); i++) {
+    ActiveChartArray.append(p[i]);
   }
 
   UpdateChartDirList();
@@ -7086,9 +7086,9 @@ void options::UpdateDisplayedChartDirList(ArrayOfCDI p) {
 
 void options::UpdateWorkArrayFromDisplayPanel() {
   wxString dirname;
-  int n = ActiveChartArray.GetCount();
+  int n = ActiveChartArray.size();
   if (m_pWorkDirList) {
-    m_pWorkDirList->Clear();
+    m_pWorkDirList->clear();
     for (int i = 0; i < n; i++) {
       dirname = ActiveChartArray[i].fullpath;
       if (!dirname.IsEmpty()) {
@@ -7105,12 +7105,12 @@ void options::UpdateWorkArrayFromDisplayPanel() {
         bool b_added = FALSE;
         //                        if(m_pCurrentDirList)
         {
-          int nDir = m_CurrentDirList.GetCount();
+          int nDir = m_CurrentDirList.size();
 
           for (int i = 0; i < nDir; i++) {
             if (m_CurrentDirList[i].fullpath == dirname) {
               ChartDirInfo cdi = m_CurrentDirList[i];
-              m_pWorkDirList->Add(cdi);
+              m_pWorkDirList->append(cdi);
               b_added = TRUE;
               break;
             }
@@ -7119,7 +7119,7 @@ void options::UpdateWorkArrayFromDisplayPanel() {
         if (!b_added) {
           ChartDirInfo cdin;
           cdin.fullpath = dirname;
-          m_pWorkDirList->Add(cdin);
+          m_pWorkDirList->append(cdin);
         }
       }
     }
@@ -7901,7 +7901,7 @@ ArrayOfCDI options::GetSelectedChartDirs() {
   ArrayOfCDI rv;
   for (size_t i = 0; i < panelVector.size(); i++) {
     if (panelVector[i]->IsSelected()) {
-      rv.Add(panelVector[i]->GetCDI());
+      rv.append(panelVector[i]->GetCDI());
     }
   }
 
@@ -7912,7 +7912,7 @@ ArrayOfCDI options::GetUnSelectedChartDirs() {
   ArrayOfCDI rv;
   for (size_t i = 0; i < panelVector.size(); i++) {
     if (!panelVector[i]->IsSelected()) {
-      rv.Add(panelVector[i]->GetCDI());
+      rv.append(panelVector[i]->GetCDI());
     }
   }
 
@@ -7921,7 +7921,7 @@ ArrayOfCDI options::GetUnSelectedChartDirs() {
 
 void options::SetDirActionButtons() {
   ArrayOfCDI selArray = GetSelectedChartDirs();
-  if (selArray.GetCount())
+  if (selArray.size())
     m_removeBtn->Enable();
   else
     m_removeBtn->Disable();
@@ -7929,9 +7929,9 @@ void options::SetDirActionButtons() {
 
 void options::OnButtondeleteClick(wxCommandEvent& event) {
   ArrayOfCDI unselArray = GetUnSelectedChartDirs();
-  ActiveChartArray.Clear();
-  for (size_t i = 0; i < unselArray.GetCount(); i++) {
-    ActiveChartArray.Add(unselArray[i]);
+  ActiveChartArray.clear();
+  for (size_t i = 0; i < unselArray.size(); i++) {
+    ActiveChartArray.append(unselArray[i]);
   }
 
   UpdateChartDirList();
@@ -7941,8 +7941,8 @@ void options::OnButtondeleteClick(wxCommandEvent& event) {
 #if 0
   if (m_pWorkDirList) {
     pActiveChartsList->DeleteAllItems();
-    for (size_t id = 0; id < m_pWorkDirList->GetCount(); id++) {
-      wxString dirname = m_pWorkDirList->Item(id).fullpath;
+    for (size_t id = 0; id < m_pWorkDirList->size(); id++) {
+      wxString dirname = m_pWorkDirList->at(id).fullpath;
       wxListItem li;
       li.SetId(id);
       li.SetAlign(wxLIST_FORMAT_LEFT);
@@ -8334,8 +8334,8 @@ They can be decompressed again using unxz or 7 zip programs."),
 
   if (m_pWorkDirList) {
     pActiveChartsList->DeleteAllItems();
-    for (size_t id = 0; id < m_pWorkDirList->GetCount(); id++) {
-      wxString dirname = m_pWorkDirList->Item(id).fullpath;
+    for (size_t id = 0; id < m_pWorkDirList->size(); id++) {
+      wxString dirname = m_pWorkDirList->at(id).fullpath;
       wxListItem li;
       li.SetId(id);
       li.SetAlign(wxLIST_FORMAT_LEFT);
@@ -8978,8 +8978,8 @@ wxString GetOCPNKnownLanguage(const wxString lang_canonical) {
 
 ChartGroupArray* ChartGroupsUI::CloneChartGroupArray(ChartGroupArray* s) {
   ChartGroupArray* d = new ChartGroupArray;
-  for (unsigned int i = 0; i < s->GetCount(); i++) {
-    ChartGroup* psg = s->Item(i);
+  for (int i = 0; i < s->size(); i++) {
+    ChartGroup* psg = s->at(i);
     ChartGroup* pdg = new ChartGroup;
     pdg->m_group_name = psg->m_group_name;
     pdg->m_element_array.reserve(psg->m_element_array.size());
@@ -8987,7 +8987,7 @@ ChartGroupArray* ChartGroupsUI::CloneChartGroupArray(ChartGroupArray* s) {
     for (auto& elem : psg->m_element_array)
       pdg->m_element_array.push_back(elem);
 
-    d->Add(pdg);
+    d->append(pdg);
   }
   return d;
 }
@@ -9029,7 +9029,7 @@ ChartGroupsUI::ChartGroupsUI(wxWindow* parent) : wxScrolledWindow(parent) {
 }
 
 ChartGroupsUI::~ChartGroupsUI() {
-  m_DirCtrlArray.Clear();
+  m_DirCtrlArray.clear();
   m_GroupNB->Disconnect(
       wxEVT_COMMAND_NOTEBOOK_PAGE_CHANGED,
       wxNotebookEventHandler(ChartGroupsUI::OnGroupPageChange), NULL, this);
@@ -9046,7 +9046,7 @@ void ChartGroupsUI::PopulateTrees() {
   //    Fill in the "Active chart" tree control
   //    from the options dialog "Active Chart Directories" list
   QStringList dir_array;
-  int nDir = m_db_dirs.GetCount();
+  int nDir = m_db_dirs.size();
   for (int i = 0; i < nDir; i++) {
     wxString dirname = m_db_dirs[i].fullpath;
     if (!dirname.IsEmpty()) dir_array.append(wxString_to_QString(dirname));
@@ -9060,7 +9060,7 @@ void ChartGroupsUI::PopulateTrees() {
   //    Fill in the Page 0 tree control
   //    from the options dialog "Active Chart Directories" list
   QStringList dir_array0;
-  int nDir0 = m_db_dirs.GetCount();
+  int nDir0 = m_db_dirs.size();
   for (int i = 0; i < nDir0; i++) {
     wxString dirname = m_db_dirs[i].fullpath;
     if (!dirname.IsEmpty()) dir_array0.append(wxString_to_QString(dirname));
@@ -9115,9 +9115,9 @@ void ChartGroupsUI::PopulateTreeCtrl(wxTreeCtrl* ptc,
 void ChartGroupsUI::OnInsertChartItem(wxCommandEvent& event) {
   wxString insert_candidate = allAvailableCtl->GetPath();
   if (!insert_candidate.IsEmpty()) {
-    if (m_DirCtrlArray.GetCount()) {
+    if (m_DirCtrlArray.size()) {
       wxGenericDirCtrl* pDirCtrl = (m_DirCtrlArray[m_GroupSelectedPage]);
-      ChartGroup* pGroup = m_pGroupArray->Item(m_GroupSelectedPage - 1);
+      ChartGroup* pGroup = m_pGroupArray->at(m_GroupSelectedPage - 1);
       if (pDirCtrl) {
         wxTreeCtrl* ptree = pDirCtrl->GetTreeCtrl();
         if (ptree) {
@@ -9154,9 +9154,9 @@ void ChartGroupsUI::OnInsertChartItem(wxCommandEvent& event) {
 }
 
 void ChartGroupsUI::OnRemoveChartItem(wxCommandEvent& event) {
-  if (m_DirCtrlArray.GetCount()) {
+  if (m_DirCtrlArray.size()) {
     wxGenericDirCtrl* pDirCtrl = (m_DirCtrlArray[m_GroupSelectedPage]);
-    ChartGroup* pGroup = m_pGroupArray->Item(m_GroupSelectedPage - 1);
+    ChartGroup* pGroup = m_pGroupArray->at(m_GroupSelectedPage - 1);
 
     if (pDirCtrl) {
       wxString sel_item = pDirCtrl->GetPath();
@@ -9277,7 +9277,7 @@ void ChartGroupsUI::OnNewGroup(wxCommandEvent& event) {
       AddEmptyGroupPage(pd->GetValue());
       ChartGroup* pGroup = new ChartGroup;
       pGroup->m_group_name = pd->GetValue();
-      m_pGroupArray->Add(pGroup);
+      m_pGroupArray->append(pGroup);
 
       m_GroupSelectedPage =
           m_GroupNB->GetPageCount() - 1;  // select the new page
@@ -9295,8 +9295,8 @@ void ChartGroupsUI::OnNewGroup(wxCommandEvent& event) {
 
 void ChartGroupsUI::OnDeleteGroup(wxCommandEvent& event) {
   if (0 != m_GroupSelectedPage) {
-    m_DirCtrlArray.RemoveAt(m_GroupSelectedPage);
-    if (m_pGroupArray) m_pGroupArray->RemoveAt(m_GroupSelectedPage - 1);
+    m_DirCtrlArray.removeAt(m_GroupSelectedPage);
+    if (m_pGroupArray) m_pGroupArray->removeAt(m_GroupSelectedPage - 1);
     m_GroupNB->DeletePage(m_GroupSelectedPage);
     modified = TRUE;
   }
@@ -9348,7 +9348,7 @@ void ChartGroupsUI::OnNodeExpanded(wxTreeEvent& event) {
 
   if (m_GroupSelectedPage <= 0) return;
   wxGenericDirCtrl* pDirCtrl = (m_DirCtrlArray[m_GroupSelectedPage]);
-  ChartGroup* pGroup = m_pGroupArray->Item(m_GroupSelectedPage - 1);
+  ChartGroup* pGroup = m_pGroupArray->at(m_GroupSelectedPage - 1);
   if (!pDirCtrl) return;
 
   wxTreeCtrl* ptree = pDirCtrl->GetTreeCtrl();
@@ -9386,8 +9386,8 @@ void ChartGroupsUI::OnNodeExpanded(wxTreeEvent& event) {
 void ChartGroupsUI::BuildNotebookPages(ChartGroupArray* pGroupArray) {
   ClearGroupPages();
 
-  for (unsigned int i = 0; i < pGroupArray->GetCount(); i++) {
-    ChartGroup* pGroup = pGroupArray->Item(i);
+  for (unsigned int i = 0; i < pGroupArray->size(); i++) {
+    ChartGroup* pGroup = pGroupArray->at(i);
     wxTreeCtrl* ptc = AddEmptyGroupPage(pGroup->m_group_name);
 
     wxString itemname;
@@ -9419,7 +9419,7 @@ wxTreeCtrl* ChartGroupsUI::AddEmptyGroupPage(const wxString& label) {
   wxTreeItemId rootId = ptree->AddRoot(rootName, 3, -1, rootData);
   ptree->SetItemHasChildren(rootId);
 
-  m_DirCtrlArray.Add(GroupDirCtl);
+  m_DirCtrlArray.append(GroupDirCtl);
 
   return ptree;
 }
@@ -9428,7 +9428,7 @@ void ChartGroupsUI::ClearGroupPages() {
   if (m_GroupNB->GetPageCount() == 0) return;
 
   for (unsigned int i = m_GroupNB->GetPageCount() - 1; i > 0; i--) {
-    m_DirCtrlArray.RemoveAt(i);
+    m_DirCtrlArray.removeAt(i);
     m_GroupNB->DeletePage(i);
   }
 }

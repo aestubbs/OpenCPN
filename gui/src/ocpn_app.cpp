@@ -261,8 +261,6 @@ wxDEFINE_EVENT(EVT_N0183_AIVDO, wxCommandEvent);
 //      Static variable definition
 //------------------------------------------------------------------------------
 
-WX_DEFINE_OBJARRAY(ArrayOfCDI);
-
 static int user_user_id;
 static int file_user_id;
 
@@ -1615,8 +1613,8 @@ void MyApp::BuildMainFrame() {
     // Touch up the AUI manager
     //  Make sure that any pane width is reasonable default value
 #if 0  // TODO nees this?
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       wxSize frameSize = GetClientSize();
       wxSize minSize = g_pauimgr->GetPane(cc).min_size;
@@ -1690,7 +1688,7 @@ void MyApp::LoadChartDatabase() {
   //  Windows installer may have left hints regarding the initial chart dir
   //  selection
 #ifdef __WXMSW__
-  if (g_bFirstRun && (ChartDirArray.GetCount() == 0)) {
+  if (g_bFirstRun && (ChartDirArray.size() == 0)) {
     int ndirs = 0;
 
     wxRegKey RegKey(wxString("HKEY_LOCAL_MACHINE\\SOFTWARE\\OpenCPN"));
@@ -1708,7 +1706,7 @@ void MyApp::LoadChartDatabase() {
         cdi.fullpath = token.Trim();
         cdi.magic_number = "";
 
-        ChartDirArray.Add(cdi);
+        ChartDirArray.append(cdi);
         ndirs++;
       }
     }
@@ -1718,7 +1716,7 @@ void MyApp::LoadChartDatabase() {
       cdi.fullpath = "charts";
       cdi.fullpath.Prepend(g_Platform->GetSharedDataDir());
       cdi.magic_number = "";
-      ChartDirArray.Add(cdi);
+      ChartDirArray.append(cdi);
       ndirs++;
     }
 
@@ -1732,12 +1730,12 @@ void MyApp::LoadChartDatabase() {
   //    TODO  There is a possibility of recreating the dir list from the
   //    database itself......
 
-  if (!ChartDirArray.GetCount())
+  if (!ChartDirArray.size())
     if (::wxFileExists(ChartListFileName)) ::wxRemoveFile(ChartListFileName);
 
   //      Try to load the current chart list Data file
   ChartData = new ChartDB();
-  if (g_NeedDBUpdate == 0 && ChartDirArray.GetCount() &&
+  if (g_NeedDBUpdate == 0 && ChartDirArray.size() &&
       !ChartData->LoadBinary(ChartListFileName, ChartDirArray)) {
     g_NeedDBUpdate = 1;
     g_restore_dbindex = 0;
@@ -1816,12 +1814,12 @@ int MyApp::OnExit() {
   delete g_SencThreadManager;
 
   if (g_pGroupArray) {
-    for (unsigned int igroup = 0; igroup < g_pGroupArray->GetCount();
+    for (unsigned int igroup = 0; igroup < g_pGroupArray->size();
          igroup++) {
-      delete g_pGroupArray->Item(igroup);
+      delete g_pGroupArray->at(igroup);
     }
 
-    g_pGroupArray->Clear();
+    g_pGroupArray->clear();
     delete g_pGroupArray;
   }
 

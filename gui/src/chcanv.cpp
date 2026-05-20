@@ -1164,7 +1164,7 @@ void ChartCanvas::ApplyCanvasConfig(canvasConfig *pcc) {
   m_bFollow = pcc->bFollow;
   if (pcc->GroupID < 0) pcc->GroupID = 0;
 
-  if (pcc->GroupID > (int)g_pGroupArray->GetCount())
+  if (pcc->GroupID > (int)g_pGroupArray->size())
     m_groupIndex = 0;
   else
     m_groupIndex = pcc->GroupID;
@@ -1324,7 +1324,7 @@ void ChartCanvas::SetGroupIndex(int index, bool autoSwitch) {
   SetAlertString("");
 
   int new_index = index;
-  if (index > (int)g_pGroupArray->GetCount()) new_index = 0;
+  if (index > (int)g_pGroupArray->size()) new_index = 0;
 
   bool bgroup_override = false;
   int old_group_index = new_index;
@@ -1334,7 +1334,7 @@ void ChartCanvas::SetGroupIndex(int index, bool autoSwitch) {
     bgroup_override = true;
   }
 
-  if (!autoSwitch && (index <= (int)g_pGroupArray->GetCount()))
+  if (!autoSwitch && (index <= (int)g_pGroupArray->size()))
     new_index = index;
 
   //    Get the currently displayed chart native scale, and the current ViewPort
@@ -1384,7 +1384,7 @@ void ChartCanvas::SetGroupIndex(int index, bool autoSwitch) {
     // show a short timed message box
     wxString msg(_("Group \""));
 
-    ChartGroup *pGroup = g_pGroupArray->Item(new_index - 1);
+    ChartGroup *pGroup = g_pGroupArray->at(new_index - 1);
     msg += pGroup->m_group_name;
 
     msg += _("\" is empty.");
@@ -1399,7 +1399,7 @@ void ChartCanvas::SetGroupIndex(int index, bool autoSwitch) {
   if (bgroup_override) {
     wxString msg(_("Group \""));
 
-    ChartGroup *pGroup = g_pGroupArray->Item(old_group_index - 1);
+    ChartGroup *pGroup = g_pGroupArray->at(old_group_index - 1);
     msg += pGroup->m_group_name;
 
     msg += _("\" is empty, switching to \"All Active Charts\" group.");
@@ -1416,7 +1416,7 @@ bool ChartCanvas::CheckGroup(int igroup) {
   if (igroup < 0)  // negative group is an error
     return false;
 
-  ChartGroup *pGroup = g_pGroupArray->Item(igroup - 1);
+  ChartGroup *pGroup = g_pGroupArray->at(igroup - 1);
 
   if (pGroup->m_element_array.empty())  //  truly empty group prompts a warning,
                                         //  and auto-shift to group 0
@@ -5274,7 +5274,7 @@ void ChartCanvas::LoadVP(ViewPort &vp, bool b_adjust) {
   if (m_pQuilt) m_pQuilt->Invalidate();
 
   //  Make sure that the Selected Group is sensible...
-  //    if( m_groupIndex > (int) g_pGroupArray->GetCount() )
+  //    if( m_groupIndex > (int) g_pGroupArray->size() )
   //        m_groupIndex = 0;
   //    if( !CheckGroup( m_groupIndex ) )
   //        m_groupIndex = 0;
@@ -10542,7 +10542,6 @@ void ChartCanvas::ShowObjectQueryWindow(int x, int y, float zlat, float zlon) {
   ChartPlugInWrapper *target_plugin_chart = NULL;
   s57chart *Chs57 = NULL;
   wxFileName file;
-  wxArrayString files;
 
   ChartBase *target_chart = GetChartAtCursor();
   if (target_chart) {
@@ -11551,7 +11550,7 @@ void ChartCanvas::RenderChartOutline(ocpnDC &dc, int dbIndex, ViewPort &vp) {
 }
 
 static void RouteLegInfo(ocpnDC &dc, wxPoint ref_point,
-                         const wxArrayString &legend) {
+                         const QStringList &legend) {
   wxFont *dFont = FontMgr::Get().GetFont(_("RouteLegInfoRollover"));
 
   int pointsize = dFont->GetPointSize();
@@ -11570,7 +11569,8 @@ static void RouteLegInfo(ocpnDC &dc, wxPoint ref_point,
   int xp, yp;
   int hilite_offset = 3;
 
-  for (wxString line : legend) {
+  for (const QString &qline : legend) {
+    wxString line = QString_to_wxString(qline);
 #ifdef __WXMAC__
     wxScreenDC sdc;
     sdc.GetTextExtent(line, &wl, &hl, NULL, NULL, psRLI_font);
@@ -11593,8 +11593,8 @@ static void RouteLegInfo(ocpnDC &dc, wxPoint ref_point,
   dc.SetPen(wxPen(GetGlobalColor("UBLCK")));
   dc.SetTextForeground(GetGlobalColor("UBLCK"));
 
-  for (wxString line : legend) {
-    dc.DrawText(line, xp, yp);
+  for (const QString &qline : legend) {
+    dc.DrawText(QString_to_wxString(qline), xp, yp);
     yp += hl;
   }
 }
@@ -11734,7 +11734,7 @@ void ChartCanvas::RenderRouteLegs(ocpnDC &dc) {
   }
 
   wxString routeInfo;
-  wxArrayString infoArray;
+  QStringList infoArray;
   double varBrg = 0;
   if (g_bShowTrue)
     routeInfo << wxString::Format(wxString("%03d%c(T) ", wxConvUTF8), (int)brg,
@@ -11749,7 +11749,7 @@ void ChartCanvas::RenderRouteLegs(ocpnDC &dc) {
                                   (int)varBrg, 0x00B0);
   }
   routeInfo << " " << FormatDistanceAdaptive(dist);
-  infoArray.Add(routeInfo);
+  infoArray.append(wxString_to_QString(routeInfo));
   routeInfo.Clear();
 
   // To make it easier to use a route as a bearing on a charted object add for
@@ -11762,7 +11762,7 @@ void ChartCanvas::RenderRouteLegs(ocpnDC &dc) {
     if (g_bShowMag)
       routeInfo << wxString::Format(wxString("%03d%c(M) ", wxConvUTF8),
                                     (int)(varBrg + 180.) % 360, 0x00B0);
-    infoArray.Add(routeInfo);
+    infoArray.append(wxString_to_QString(routeInfo));
     routeInfo.Clear();
   }
 
@@ -11776,7 +11776,7 @@ void ChartCanvas::RenderRouteLegs(ocpnDC &dc) {
   if (!g_btouch) disp_length += dist;  // Add in the to-be-created leg.
   s0 += FormatDistanceAdaptive(disp_length);
 
-  infoArray.Add(s0);
+  infoArray.append(wxString_to_QString(s0));
   routeInfo.Clear();
 
   RouteLegInfo(dc, r_rband, infoArray);

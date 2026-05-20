@@ -33,6 +33,8 @@
 #include <wx/font.h>
 #include <wx/string.h>
 
+#include <QStringList>
+
 #include "font_desc.h"
 #include "font_mgr.h"
 
@@ -156,7 +158,7 @@ public:
    * @param locale If provided, only returns strings for this locale.
    * @return Vector of unique dialog strings
    */
-  wxArrayString GetDialogStrings(const wxString &locale = wxEmptyString) const;
+  QStringList GetDialogStrings(const wxString &locale = wxEmptyString) const;
 
   /**
    * Gets the native font descriptor string for the font at index i.
@@ -197,7 +199,7 @@ public:
    * @return Reference to array containing plugin-defined font element
    * identifiers
    */
-  wxArrayString &GetAuxKeyArray() { return m_AuxKeyArray; }
+  QStringList &GetAuxKeyArray() { return m_AuxKeyArray; }
 
   /**
    * Adds new plugin-defined font configuration key.
@@ -409,7 +411,7 @@ private:  // private for singleton
 
   /** Array of plugin-registered UI element identifiers that supplement standard
    * elements */
-  wxArrayString m_AuxKeyArray;
+  QStringList m_AuxKeyArray;
 };
 
 #endif

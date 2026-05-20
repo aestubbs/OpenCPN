@@ -73,8 +73,6 @@
 
 #define EXTENDED_PROP_PAGE 2  // Index of the extended properties page
 
-WX_DEFINE_OBJARRAY(ArrayOfBitmaps);
-
 MarkInfoDlg* g_pMarkInfoDialog;
 
 OCPNIconCombo::OCPNIconCombo(wxWindow* parent, wxWindowID id,
@@ -129,7 +127,7 @@ wxCoord OCPNIconCombo::OnMeasureItem(size_t item) const {
 wxCoord OCPNIconCombo::OnMeasureItemWidth(size_t item) const { return -1; }
 
 int OCPNIconCombo::Append(const wxString& item, wxBitmap bmp) {
-  bmpArray.Add(bmp);
+  bmpArray.append(bmp);
   int idx = wxOwnerDrawnComboBox::Append(item);
 
   return idx;
@@ -137,7 +135,7 @@ int OCPNIconCombo::Append(const wxString& item, wxBitmap bmp) {
 
 void OCPNIconCombo::Clear() {
   wxOwnerDrawnComboBox::Clear();
-  bmpArray.Clear();
+  bmpArray.clear();
 }
 
 //-------------------------------------------------------------------------------

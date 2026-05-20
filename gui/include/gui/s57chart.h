@@ -63,8 +63,6 @@ enum {
   BUILD_SENC_PENDING
 };
 
-WX_DECLARE_OBJARRAY(S57Obj, ArrayOfS57Obj);
-
 bool s57_CheckExtendedLightSectors(ChartCanvas *cc, int mx, int my,
                                    ViewPort &VPoint,
                                    std::vector<s57Sector_t> &sectorlegs);

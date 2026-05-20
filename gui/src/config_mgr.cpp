@@ -49,6 +49,7 @@
 #include "model/georef.h"
 #include "model/multiplexer.h"
 #include "model/route_point.h"
+#include "model/wx_qt_string.h"
 
 #include "ais.h"
 #include "chartdb.h"
@@ -484,12 +485,12 @@ wxString ConfigMgr::GetTemplateTitle(wxString GUID) {
   return wxEmptyString;
 }
 
-wxArrayString ConfigMgr::GetConfigGUIDArray() {
-  wxArrayString ret_val;
+QStringList ConfigMgr::GetConfigGUIDArray() {
+  QStringList ret_val;
 
   for (auto it = configList->begin(); it != configList->end(); ++it) {
     OCPNConfigObject *look = *it;
-    ret_val.Add(look->m_GUID);
+    ret_val.append(wxString_to_QString(look->m_GUID));
   }
   return ret_val;
 }
@@ -873,11 +874,11 @@ bool ConfigMgr::SaveTemplate(wxString fileName) {
   //  Store the persistent Auxiliary Font descriptor Keys
   conf->SetPath("/Settings/AuxFontKeys");
 
-  wxArrayString keyArray = FontMgr::Get().GetAuxKeyArray();
-  for (unsigned int i = 0; i < keyArray.GetCount(); i++) {
+  QStringList keyArray = FontMgr::Get().GetAuxKeyArray();
+  for (int i = 0; i < keyArray.size(); i++) {
     wxString key;
     key.Printf("Key%i", i);
-    wxString keyval = keyArray[i];
+    wxString keyval = QString_to_wxString(keyArray[i]);
     conf->Write(key, keyval);
   }
 

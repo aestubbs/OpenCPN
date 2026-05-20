@@ -27,6 +27,7 @@
 #include <memory>
 
 #include <QDateTime>
+#include <QList>
 
 /*!
  * Includes
@@ -141,7 +142,7 @@ extern MarkInfoDlg* g_pMarkInfoDialog; /**< global instance */
 class OCPNIconCombo;       // forward
 class SaveDefaultsDialog;  // forward
 
-WX_DECLARE_OBJARRAY(wxBitmap, ArrayOfBitmaps);
+using ArrayOfBitmaps = QList<wxBitmap>;
 
 /**
  * Custom combobox for selecting waypoint icons. Extends wxOwnerDrawnComboBox to

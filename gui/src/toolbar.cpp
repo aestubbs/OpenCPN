@@ -733,8 +733,8 @@ bool ocpnFloatingToolbarDialog::CheckAndAddPlugInTool(ocpnToolBarSimple *tb) {
   ArrayOfPlugInToolbarTools tool_array =
       g_pi_manager->GetPluginToolbarToolArray();
 
-  for (unsigned int i = 0; i < tool_array.GetCount(); i++) {
-    PlugInToolbarToolContainer *pttc = tool_array.Item(i);
+  for (unsigned int i = 0; i < tool_array.size(); i++) {
+    PlugInToolbarToolContainer *pttc = tool_array.at(i);
     if (pttc->position == n_tools) {
       wxBitmap *ptool_bmp;
 
@@ -1301,7 +1301,7 @@ bool ocpnToolBarSimple::OnMouseEvent(wxMouseEvent &event, wxPoint &position) {
     if (g_pi_manager) {
       ArrayOfPlugInToolbarTools tool_array =
           g_pi_manager->GetPluginToolbarToolArray();
-      for (unsigned int i = 0; i < tool_array.GetCount(); i++) {
+      for (unsigned int i = 0; i < tool_array.size(); i++) {
         PlugInToolbarToolContainer *pttc = tool_array[i];
         if (tool->GetId() == pttc->id) {
           opencpn_plugin_113 *ppi =
@@ -1985,7 +1985,7 @@ void ocpnToolBarSimple::DoPluginToolUp() {
 
   ArrayOfPlugInToolbarTools tool_array =
       g_pi_manager->GetPluginToolbarToolArray();
-  for (unsigned int i = 0; i < tool_array.GetCount(); i++) {
+  for (unsigned int i = 0; i < tool_array.size(); i++) {
     PlugInToolbarToolContainer *pttc = tool_array[i];
     if (m_last_plugin_down_id == pttc->id) {
       opencpn_plugin_113 *ppi =

@@ -339,8 +339,8 @@ static wxString DropMarkPI(double lat, double lon) {
 }
 
 static wxString RouteCreatePI(int canvas_index, bool start) {
-  if ((size_t)canvas_index < g_canvasArray.GetCount()) {
-    ChartCanvas* cc = g_canvasArray.Item(canvas_index);
+  if ((size_t)canvas_index < g_canvasArray.size()) {
+    ChartCanvas* cc = g_canvasArray.at(canvas_index);
     if (cc) {
       if (start) {
         cc->StartRoute();
@@ -354,8 +354,8 @@ static wxString RouteCreatePI(int canvas_index, bool start) {
 }
 
 static bool DoMeasurePI(int canvas_index, bool start) {
-  if ((size_t)canvas_index < g_canvasArray.GetCount()) {
-    ChartCanvas* cc = g_canvasArray.Item(canvas_index);
+  if ((size_t)canvas_index < g_canvasArray.size()) {
+    ChartCanvas* cc = g_canvasArray.at(canvas_index);
     if (cc) {
       if (start) {
         cc->StartMeasureRoute();
@@ -433,15 +433,15 @@ static void EnableDefaultContextMenus(bool enable) {
 }
 
 static void SetMinZoomScale(double min_scale) {
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas* cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas* cc = g_canvasArray.at(i);
     cc->SetAbsoluteMinScale(min_scale);
   }
 }
 
 static std::shared_ptr<HostApi121::PiPointContext> GetContextAtPoint(
     int x, int y, int canvas_index) {
-  ChartCanvas* cc = g_canvasArray.Item(canvas_index);
+  ChartCanvas* cc = g_canvasArray.at(canvas_index);
   if (cc) {
     return cc->GetCanvasContextAtPoint(x, y);
   } else {

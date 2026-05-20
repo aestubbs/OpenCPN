@@ -1066,8 +1066,6 @@ std::vector<float> ChartTableEntry::GetReducedAuxPlyPoints(int iTable) {
 ///////////////////////////////////////////////////////////////////////
 const int ID_DBS_PROGRESS_UPDATE = wxNewId();
 
-WX_DEFINE_OBJARRAY(ChartTable);
-
 ChartDatabase::ChartDatabase() {
   bValid = false;
   SetBusy(false);
@@ -1282,8 +1280,8 @@ void ChartDatabase::FinalizeChartUpdate() {
   if (gWorldMapLocation != m_gshhg_chart_loc) {
     // ..For each canvas...
     // TODO Move this where?
-    // for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    //  ChartCanvas *cc = g_canvasArray.Item(i);
+    // for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    //  ChartCanvas *cc = g_canvasArray.at(i);
     //  if (cc) cc->ResetWorldBackgroundChart();
     // }
 
@@ -1308,9 +1306,9 @@ bool ChartDatabase::ScrubGroupArray() {
 
   bool b_change = false;
   unsigned int igroup = 0;
-  while (igroup < g_pGroupArray->GetCount()) {
+  while (igroup < g_pGroupArray->size()) {
     bool b_chart_in_element = false;
-    ChartGroup *pGroup = g_pGroupArray->Item(igroup);
+    ChartGroup *pGroup = g_pGroupArray->at(igroup);
 
     for (unsigned int j = 0; j < pGroup->m_element_array.size(); j++) {
       const wxString &element_root = pGroup->m_element_array[j].m_element_name;
@@ -1405,15 +1403,15 @@ bool ChartDatabase::CompareChartDirArray(ArrayOfCDI &test_array) {
   //  Compare the parameter "test_array" with this.m_dir_array
   //    Return true if functionally identical (order does not signify).
 
-  if (test_array.GetCount() != m_dir_array.GetCount()) return false;
+  if (test_array.size() != m_dir_array.size()) return false;
 
   bool bfound_inner;
   unsigned int nfound_outer = 0;
 
-  for (unsigned int i = 0; i < test_array.GetCount(); i++) {
+  for (unsigned int i = 0; i < test_array.size(); i++) {
     ChartDirInfo p = test_array[i];
     bfound_inner = false;
-    for (unsigned int j = 0; j < m_dir_array.GetCount(); j++) {
+    for (unsigned int j = 0; j < m_dir_array.size(); j++) {
       ChartDirInfo q = m_dir_array[j];
 
       if (p.fullpath.IsSameAs(q.fullpath)) {
@@ -1424,11 +1422,11 @@ bool ChartDatabase::CompareChartDirArray(ArrayOfCDI &test_array) {
     if (bfound_inner) nfound_outer++;
   }
 
-  return (nfound_outer == test_array.GetCount());
+  return (nfound_outer == test_array.size());
 }
 
 wxString ChartDatabase::GetMagicNumberCached(wxString dir) {
-  for (unsigned int j = 0; j < m_dir_array.GetCount(); j++) {
+  for (unsigned int j = 0; j < m_dir_array.size(); j++) {
     ChartDirInfo q = m_dir_array[j];
     if (dir.IsSameAs(q.fullpath)) return q.magic_number;
   }
@@ -1838,7 +1836,7 @@ bool ChartDatabase::Update(ArrayOfCDI &dir_array, bool bForce,
 
   //  Get the new charts
 
-  for (unsigned int j = 0; j < dir_array.GetCount(); j++) {
+  for (int j = 0; j < dir_array.size(); j++) {
     ChartDirInfo dir_info = dir_array[j];
 
     // On Android, with SDK >= 30, traversal of a folder that is
@@ -1876,8 +1874,8 @@ bool ChartDatabase::Update(ArrayOfCDI &dir_array, bool bForce,
 
     //  Update the dir_list entry, even if the magic values are the same
     dir_info.magic_number = dir_magic;
-    dir_array.RemoveAt(j);
-    dir_array.Insert(dir_info, j);
+    dir_array.removeAt(j);
+    dir_array.insert(j, dir_info);
 
     m_chartDirs.Add(dir_info.fullpath);
   }  // for
@@ -2741,7 +2739,7 @@ bool ChartDatabase::AddSingleChart(wxString &ChartFullPath,
   ArrayOfCDI NewChartDirArray;
 
   ArrayOfCDI ChartDirArray = GetChartDirArray();
-  for (unsigned int i = 0; i < ChartDirArray.GetCount(); i++) {
+  for (unsigned int i = 0; i < ChartDirArray.size(); i++) {
     ChartDirInfo cdi = ChartDirArray[i];
 
     ChartDirInfo newcdi = cdi;
@@ -2752,14 +2750,14 @@ bool ChartDatabase::AddSingleChart(wxString &ChartFullPath,
       bcfound = true;
     }
 
-    NewChartDirArray.Add(newcdi);
+    NewChartDirArray.append(newcdi);
   }
 
   if (!bcfound) {
     ChartDirInfo cdi;
     cdi.fullpath = dir_name;
     cdi.magic_number = new_magic;
-    NewChartDirArray.Add(cdi);
+    NewChartDirArray.append(cdi);
   }
 
   // Update the database master copy of the CDI array
@@ -2768,7 +2766,7 @@ bool ChartDatabase::AddSingleChart(wxString &ChartFullPath,
   //  Update the list of chart dirs.
   m_chartDirs.Clear();
 
-  for (unsigned int i = 0; i < GetChartDirArray().GetCount(); i++) {
+  for (unsigned int i = 0; i < GetChartDirArray().size(); i++) {
     ChartDirInfo cdi = GetChartDirArray()[i];
     m_chartDirs.Add(cdi.fullpath);
   }
@@ -2807,12 +2805,12 @@ bool ChartDatabase::RemoveSingleChart(wxString &ChartFullPath) {
     ArrayOfCDI NewChartDirArray;
 
     ArrayOfCDI ChartDirArray = GetChartDirArray();
-    for (unsigned int i = 0; i < ChartDirArray.GetCount(); i++) {
+    for (unsigned int i = 0; i < ChartDirArray.size(); i++) {
       ChartDirInfo cdi = ChartDirArray[i];
 
       ChartDirInfo newcdi = cdi;
 
-      if (newcdi.fullpath != fd) NewChartDirArray.Add(newcdi);
+      if (newcdi.fullpath != fd) NewChartDirArray.append(newcdi);
     }
 
     SetChartDirArray(NewChartDirArray);
@@ -2820,7 +2818,7 @@ bool ChartDatabase::RemoveSingleChart(wxString &ChartFullPath) {
 
   //  Update the list of chart dirs.
   m_chartDirs.Clear();
-  for (unsigned int i = 0; i < GetChartDirArray().GetCount(); i++) {
+  for (unsigned int i = 0; i < GetChartDirArray().size(); i++) {
     ChartDirInfo cdi = GetChartDirArray()[i];
     m_chartDirs.Add(cdi.fullpath);
   }
@@ -3115,8 +3113,8 @@ void ChartDatabase::ApplyGroupArray(ChartGroupArray *pGroupArray) {
 
     wxString *chart_full_path = cte.GetpsFullPath();
 
-    for (unsigned int igroup = 0; igroup < pGroupArray->GetCount(); igroup++) {
-      ChartGroup *pGroup = pGroupArray->Item(igroup);
+    for (unsigned int igroup = 0; igroup < pGroupArray->size(); igroup++) {
+      ChartGroup *pGroup = pGroupArray->at(igroup);
       for (const auto &elem : pGroup->m_element_array) {
         wxString element_root = elem.m_element_name;
 

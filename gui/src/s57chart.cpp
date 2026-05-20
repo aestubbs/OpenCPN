@@ -102,8 +102,6 @@
 
 #include <wx/arrimpl.cpp>
 
-WX_DEFINE_OBJARRAY(ArrayOfS57Obj);
-
 WX_DEFINE_LIST(ListOfPI_S57Obj);
 
 WX_DEFINE_LIST(ListOfObjRazRules);  // Implement a list ofObjRazRules

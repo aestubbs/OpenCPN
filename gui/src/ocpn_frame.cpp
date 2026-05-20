@@ -55,6 +55,8 @@
 #include <wx/display.h>
 #include <wx/jsonreader.h>
 
+#include <QList>
+
 #include "o_sound/o_sound.h"
 
 #include "model/ais_decoder.h"
@@ -775,8 +777,8 @@ MyFrame::~MyFrame() {
 void MyFrame::FreezeCharts() {
   // ..For each canvas,
 #ifndef __WXMAC__
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc && !cc->IsFrozen()) cc->Freeze();
   }
 #endif
@@ -800,8 +802,8 @@ void MyFrame::CenterAisTarget(
 void MyFrame::ThawCharts() {
   // ..For each canvas,
 #ifndef __WXMAC__
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc && cc->IsFrozen()) cc->Thaw();
   }
 #endif
@@ -819,8 +821,8 @@ void MyFrame::OnSENCEvtThread(OCPN_BUILDSENC_ThreadEvent &event) {
       if (chart) {
         chart->PostInit(FULL_INIT, global_color_scheme);
         // ..For each canvas, force an S52PLIB reconfig...
-        for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-          ChartCanvas *cc = g_canvasArray.Item(i);
+        for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+          ChartCanvas *cc = g_canvasArray.at(i);
           if (cc) cc->ClearS52PLIBStateHash();  // Force a S52 PLIB re-configure
         }
       }
@@ -843,7 +845,7 @@ void MyFrame::StartRebuildChartDatabase() {
   ArrayOfCDI ChartDirArray;
   pConfig->LoadChartDirArray(ChartDirArray);
 
-  if (ChartDirArray.GetCount()) {
+  if (ChartDirArray.size()) {
     //              Create and Save a new Chart Database based on the hints
     //              given in the config file
     if (g_NeedDBUpdate == 1) {
@@ -909,8 +911,8 @@ void MyFrame::OnMaximize(wxMaximizeEvent &event) {
 }
 
 void MyFrame::ReloadAllVP() {
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->ReloadVP();
   }
 }
@@ -989,8 +991,8 @@ void MyFrame::SetAndApplyColorScheme(ColorScheme cs) {
   SetSystemColors(cs);
 
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->SetColorScheme(cs);
       cc->GetWorldBackgroundChart()->SetColorScheme(cs);
@@ -1085,16 +1087,16 @@ void MyFrame::ApplyGlobalColorSchemetoStatusBar() {
 }
 
 ChartCanvas *MyFrame::GetPrimaryCanvas() {
-  if (g_canvasArray.GetCount() > 0)
-    return g_canvasArray.Item(0);
+  if (g_canvasArray.size() > 0)
+    return g_canvasArray.at(0);
   else
     return NULL;
 }
 
 void MyFrame::CancelAllMouseRoute() {
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->CancelMouseRoute();
   }
 }
@@ -1107,7 +1109,7 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
   if (console) console->Show(false);
 
   // Detach all canvases from AUI manager
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
     ChartCanvas *cc = g_canvasArray[i];
     if (cc) {
       g_pauimgr->DetachPane(cc);
@@ -1115,8 +1117,8 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
   }
 
   // Destroy any existing canvases, except for Primary canvas
-  for (unsigned int i = 1; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 1; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       // pthumbwin = NULL;  // TODO
       // cc->DestroyToolbar();
@@ -1127,25 +1129,25 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
   auto &config_array = ConfigMgr::Get().GetCanvasConfigArray();
 
   // Canvas pointers in config array are now invalid
-  for (unsigned int i = 1; i < config_array.GetCount(); i++) {
-    config_array.Item(i)->canvas = NULL;
+  for (unsigned int i = 1; i < config_array.size(); i++) {
+    config_array.at(i)->canvas = NULL;
   }
 
-  //    g_canvasArray.Clear();
+  //    g_canvasArray.clear();
 
   // Clear the canvas Array, except for Primary canvas
-  for (unsigned int i = 1; i < g_canvasArray.GetCount(); i++) {
-    g_canvasArray.RemoveAt(i);
+  for (unsigned int i = 1; i < g_canvasArray.size(); i++) {
+    g_canvasArray.removeAt(i);
   }
 
   ChartCanvas *cc = NULL;
   switch (g_canvasConfig) {
     default:
     case 0:  // a single canvas
-      if (!g_canvasArray.GetCount() || !config_array.Item(0)) {
+      if (!g_canvasArray.size() || !config_array.at(0)) {
         cc = new ChartCanvas(this, 0,
                              m_data_monitor);  // the chart display canvas
-        g_canvasArray.Add(cc);
+        g_canvasArray.append(cc);
       } else {
         cc = g_canvasArray[0];
       }
@@ -1157,11 +1159,11 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
         cc->GetglCanvas()->Show();
       }
 #endif
-      config_array.Item(0)->canvas = cc;
+      config_array.at(0)->canvas = cc;
 
       cc->SetDisplaySizeMM(g_display_size_mm);
 
-      cc->ApplyCanvasConfig(config_array.Item(0));
+      cc->ApplyCanvasConfig(config_array.at(0));
 
       //            cc->SetToolbarPosition(wxPoint( g_maintoolbar_x,
       //            g_maintoolbar_y ));
@@ -1179,9 +1181,9 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
       break;
 
     case 1: {  // two canvas, horizontal
-      if (!g_canvasArray.GetCount() || !g_canvasArray[0]) {
+      if (!g_canvasArray.size() || !g_canvasArray[0]) {
         cc = new ChartCanvas(this, 0, m_data_monitor);  // chart display canvas
-        g_canvasArray.Add(cc);
+        g_canvasArray.append(cc);
       } else {
         cc = g_canvasArray[0];
       }
@@ -1192,9 +1194,9 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
         if (!cc->GetglCanvas()) cc->SetupGlCanvas();
       }
 #endif
-      config_array.Item(0)->canvas = cc;
+      config_array.at(0)->canvas = cc;
 
-      cc->ApplyCanvasConfig(config_array.Item(0));
+      cc->ApplyCanvasConfig(config_array.at(0));
 
       cc->SetDisplaySizeMM(g_display_size_mm);
       cc->ConfigureChartBar();
@@ -1212,23 +1214,23 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
       g_pauimgr->GetPane(cc).CenterPane();
 
       cc = new ChartCanvas(this, 1, m_data_monitor);  // chart display canvas
-      g_canvasArray.Add(cc);
+      g_canvasArray.append(cc);
 
       //  There is not yet a config descriptor for canvas 2, so create one by
       //  copy ctor from canvas {0}.
-      if (config_array.GetCount() < 2) {
-        canvasConfig *pcc = new canvasConfig(*config_array.Item(0));
+      if (config_array.size() < 2) {
+        canvasConfig *pcc = new canvasConfig(*config_array.at(0));
         pcc->configIndex = 1;
 
         // Arbitrarily establish the initial size of the new canvas to be
         // half the screen width.
         pcc->canvasSize = wxSize(GetClientSize().x / 2, GetClientSize().y);
-        config_array.Add(pcc);
+        config_array.append(pcc);
       }
 
-      config_array.Item(1)->canvas = cc;
+      config_array.at(1)->canvas = cc;
 
-      cc->ApplyCanvasConfig(config_array.Item(1));
+      cc->ApplyCanvasConfig(config_array.at(1));
 
       cc->SetDisplaySizeMM(g_display_size_mm);
       cc->ConfigureChartBar();
@@ -1247,7 +1249,7 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
       g_pauimgr->GetPane(cc).Right();
 
 #ifdef __ANDROID__
-      config_array.Item(1)->canvasSize =
+      config_array.at(1)->canvasSize =
           wxSize(GetClientSize().x / 2, GetClientSize().y);
       g_pauimgr->GetPane(cc).BestSize(GetClientSize().x / 2, GetClientSize().y);
 #endif
@@ -1255,8 +1257,8 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
       // If switching fromsingle canvas to 2-canvas mode dynamically,
       //  try to use the latest persisted size for the new second canvas.
       if (b_useStoredSize) {
-        int ccw = config_array.Item(1)->canvasSize.x;
-        int cch = config_array.Item(1)->canvasSize.y;
+        int ccw = config_array.at(1)->canvasSize.x;
+        int cch = config_array.at(1)->canvasSize.y;
 
         // Check for undefined size, and set a nice default size if necessary.
         if (ccw < GetClientSize().x / 10) {
@@ -1280,9 +1282,9 @@ void MyFrame::CreateCanvasLayout(bool b_useStoredSize) {
 
   delete console;
   if (g_canvasArray.size() > 1)
-    console = new APConsole(g_canvasArray.Item(1));  // the console
+    console = new APConsole(g_canvasArray.at(1));  // the console
   else
-    console = new APConsole(g_canvasArray.Item(0));
+    console = new APConsole(g_canvasArray.at(0));
   console->SetColorScheme(global_color_scheme);
 
   // Draw console if persisted route is active
@@ -1329,14 +1331,14 @@ ChartCanvas *MyFrame::GetCanvasUnderMouse() {
 
   switch (g_canvasConfig) {
     case 1:
-      cc = ConfigMgr::Get().GetCanvasConfigArray().Item(0);
+      cc = ConfigMgr::Get().GetCanvasConfigArray().at(0);
       if (cc) {
         ChartCanvas *canvas = cc->canvas;
         if (canvas->GetScreenRect().Contains(
                 /*canvas->ScreenToClient*/ (screenPoint)))
           return canvas;
       }
-      cc = ConfigMgr::Get().GetCanvasConfigArray().Item(1);
+      cc = ConfigMgr::Get().GetCanvasConfigArray().at(1);
       if (cc) {
         ChartCanvas *canvas = cc->canvas;
         if (canvas->GetScreenRect().Contains(
@@ -1346,7 +1348,7 @@ ChartCanvas *MyFrame::GetCanvasUnderMouse() {
       break;
 
     default:
-      cc = ConfigMgr::Get().GetCanvasConfigArray().Item(0);
+      cc = ConfigMgr::Get().GetCanvasConfigArray().at(0);
       if (cc) {
         ChartCanvas *canvas = cc->canvas;
         if (canvas->GetScreenRect().Contains(
@@ -1364,14 +1366,14 @@ int MyFrame::GetCanvasIndexUnderMouse() {
 
   switch (g_canvasConfig) {
     case 1:
-      cc = ConfigMgr::Get().GetCanvasConfigArray().Item(0);
+      cc = ConfigMgr::Get().GetCanvasConfigArray().at(0);
       if (cc) {
         ChartCanvas *canvas = cc->canvas;
         if (canvas->GetScreenRect().Contains(
                 /*canvas->ScreenToClient*/ (screenPoint)))
           return 0;
       }
-      cc = ConfigMgr::Get().GetCanvasConfigArray().Item(1);
+      cc = ConfigMgr::Get().GetCanvasConfigArray().at(1);
       if (cc && cc->canvas) {
         ChartCanvas *canvas = cc->canvas;
         if (canvas->GetScreenRect().Contains(
@@ -1381,7 +1383,7 @@ int MyFrame::GetCanvasIndexUnderMouse() {
       break;
 
     default:
-      cc = ConfigMgr::Get().GetCanvasConfigArray().Item(0);
+      cc = ConfigMgr::Get().GetCanvasConfigArray().at(0);
       if (cc) {
         ChartCanvas *canvas = cc->canvas;
         if (canvas->GetScreenRect().Contains(
@@ -1442,7 +1444,7 @@ void MyFrame::SwitchKBFocusCanvas(ChartCanvas *pCanvas) {
     //  So the logic needs a switch
     switch (g_canvasConfig) {
       case 1:
-        cc = ConfigMgr::Get().GetCanvasConfigArray().Item(0);
+        cc = ConfigMgr::Get().GetCanvasConfigArray().at(0);
         if (cc) {
           ChartCanvas *canvas = cc->canvas;
           if (canvas && (canvas == test)) {
@@ -1450,7 +1452,7 @@ void MyFrame::SwitchKBFocusCanvas(ChartCanvas *pCanvas) {
             nTargetGTK = 0;
           }
         }
-        cc = ConfigMgr::Get().GetCanvasConfigArray().Item(1);
+        cc = ConfigMgr::Get().GetCanvasConfigArray().at(1);
         if (cc) {
           ChartCanvas *canvas = cc->canvas;
           if (canvas && (canvas == test)) {
@@ -1467,7 +1469,7 @@ void MyFrame::SwitchKBFocusCanvas(ChartCanvas *pCanvas) {
 #endif
           target = ConfigMgr::Get()
                        .GetCanvasConfigArray()
-                       .Item(nfinalTarget)
+                       .at(nfinalTarget)
                        ->canvas;
           if (target) {
             target->SetFocus();
@@ -1532,8 +1534,8 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
 
   // If we happen to have the measure tool open on Ctrl-Q quit
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc && cc->IsMeasureActive()) {
       cc->CancelMeasureRoute();
     }
@@ -1552,8 +1554,8 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
 
   // Make sure the saved perspective minimum canvas sizes are essentially
   // undefined
-  //     for(unsigned int i=0 ; i < g_canvasArray.GetCount() ; i++){
-  //         ChartCanvas *cc = g_canvasArray.Item(i);
+  //     for(unsigned int i=0 ; i < g_canvasArray.size() ; i++){
+  //         ChartCanvas *cc = g_canvasArray.at(i);
   //         if(cc)
   //             g_pauimgr->GetPane( cc ).MinSize(10,10);
   //     }
@@ -1727,12 +1729,12 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
   g_focusCanvas = NULL;
 
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->Destroy();
   }
 
-  g_canvasArray.Clear();
+  g_canvasArray.clear();
 
   g_pauimgr->UnInit();
   delete g_pauimgr;
@@ -1888,8 +1890,8 @@ void MyFrame::OnMove(wxMoveEvent &event) {
     }
   }
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->SetMUIBarPosition();
       cc->SetDisplaySizeMM(g_display_size_mm);
@@ -1940,7 +1942,7 @@ void MyFrame::TriggerRecaptureTimer() {
 void MyFrame::OnRecaptureTimer(wxTimerEvent &event) { /*Raise();*/ }
 
 void MyFrame::SetCanvasSizes(wxSize frameSize) {
-  if (!g_canvasArray.GetCount()) return;
+  if (!g_canvasArray.size()) return;
 
 #if 0
     int cccw = frameSize.x;
@@ -1952,7 +1954,7 @@ void MyFrame::SetCanvasSizes(wxSize frameSize) {
     default:
     case 0:
 #if 0
-            cc = g_canvasArray.Item(0);
+            cc = g_canvasArray.at(0);
             if( cc ) {
                 cc->GetSize( &cur_width, &cur_height );
                 if( ( cur_width != cccw ) || ( cur_height != ccch ) ) {
@@ -1967,17 +1969,17 @@ void MyFrame::SetCanvasSizes(wxSize frameSize) {
 
     case 1:
 #if 0
-            cc = g_canvasArray.Item(1);
+            cc = g_canvasArray.at(1);
             if( cc ) {
-               int ccw = g_canvasConfigArray.Item(1)->canvasSize.x;
-               int cch = g_canvasConfigArray.Item(1)->canvasSize.y;
+               int ccw = g_canvasConfigArray.at(1)->canvasSize.x;
+               int cch = g_canvasConfigArray.at(1)->canvasSize.y;
 
                ccw = wxMin(ccw, cccw * 8 / 10);
                ccw = wxMax(ccw, cccw * 2 / 10);
                if(cccw < 100)
                    ccw = 20;
 
-               g_canvasConfigArray.Item(1)->canvasSize = wxSize(ccw, cch);
+               g_canvasConfigArray.at(1)->canvasSize = wxSize(ccw, cch);
 //               g_pauimgr->GetPane(cc).MinSize(cccw * 2 / 10, ccch);
 
 #if 1  // ndef __WXMSW__
@@ -2011,8 +2013,8 @@ void MyFrame::OnIconize(wxIconizeEvent &event) {
   }
 
   // .. for each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc && cc->GetMUIBar()) {
       if (cc->GetMUIBar()->GetCanvasOptions()) {
         if (cc->GetMUIBar()->GetCanvasOptions()->IsShown()) {
@@ -2144,8 +2146,8 @@ void MyFrame::ODoSetSize() {
   if (console) PositionConsole();
 
   // .. for each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->FormatPianoKeys();
   }
 
@@ -2337,8 +2339,8 @@ void MyFrame::DestroyPersistentDialogs() {
 
 void MyFrame::RefreshGroupIndices() {
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->canvasRefreshGroupIndex();
   }
 }
@@ -2853,8 +2855,8 @@ void MyFrame::ScheduleReconfigAndSettingsReload(bool reload, bool new_dialog) {
   // Trying to reload the previously displayed chart by name as saved in
   // pathArray Also, restoring the previous chart VPScale, if possible
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       int index_hint = -1;
       if (i < pathArray.GetCount())
@@ -2913,8 +2915,8 @@ void MyFrame::OnToolbarAnimateTimer(wxTimerEvent &event) {
 void MyFrame::InvalidateAllGL() {
 #ifdef ocpnUSE_GL
   // For each canvas
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->InvalidateGL();
       cc->Refresh();
@@ -2925,8 +2927,8 @@ void MyFrame::InvalidateAllGL() {
 
 void MyFrame::RefreshAllCanvas(bool bErase) {
   // For each canvas
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->Refresh(bErase);
     }
@@ -2971,8 +2973,8 @@ void MyFrame::DoSettings() {
 
   // ..For each canvas...
   bool b_loadHarmonics = false;
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       if (cc->GetbShowCurrent() || cc->GetbShowTide()) b_loadHarmonics = true;
     }
@@ -3864,16 +3866,16 @@ void MyFrame::UpdateGlobalMenuItems(ChartCanvas *cc) {
 
 void MyFrame::InvalidateAllCanvasUndo() {
   // .. for each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->undo->InvalidateUndo();
   }
 }
 #if 0
 void MyFrame::SubmergeAllCanvasToolbars() {
   // .. for each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->SubmergeToolbar();
   }
 }
@@ -3881,8 +3883,8 @@ void MyFrame::SubmergeAllCanvasToolbars() {
 void MyFrame::SurfaceAllCanvasToolbars() {
   if (g_bshowToolbar) {
     // .. for each canvas...
-    for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-      ChartCanvas *cc = g_canvasArray.Item(i);
+    for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+      ChartCanvas *cc = g_canvasArray.at(i);
       if (cc && cc->GetToolbarEnable()) cc->SurfaceToolbar();
     }
   }
@@ -3907,8 +3909,8 @@ void MyFrame::JumpToPosition(ChartCanvas *cc, double lat, double lon,
 void MyFrame::UpdateCanvasConfigDescriptors() {
   // ..For each canvas...
   for (unsigned int i = 0;
-       i < ConfigMgr::Get().GetCanvasConfigArray().GetCount(); i++) {
-    canvasConfig *cc = ConfigMgr::Get().GetCanvasConfigArray().Item(i);
+       i < ConfigMgr::Get().GetCanvasConfigArray().size(); i++) {
+    canvasConfig *cc = ConfigMgr::Get().GetCanvasConfigArray().at(i);
     if (cc) {
       ChartCanvas *chart = cc->canvas;
       if (chart) {
@@ -4066,8 +4068,8 @@ void MyFrame::DoOptionsDialog() {
   pathArray.Clear();
   // ..For each canvas.
   // TODO  FIX ANDROID codepath..
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       wxString chart_file_name;
       if (cc->GetQuiltMode()) {
@@ -4182,8 +4184,8 @@ void MyFrame::ProcessOptionsDialog(int rr, ArrayOfCDI *pNewDirArray) {
     g_display_size_mm = wxMax(50, g_Platform->GetDisplaySizeMM());
   }
 
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->SetDisplaySizeMM(g_display_size_mm);
   }
 
@@ -4208,8 +4210,8 @@ void MyFrame::ProcessOptionsDialog(int rr, ArrayOfCDI *pNewDirArray) {
   }
 
   // Apply any needed updates to each canvas
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->ApplyGlobalSettings();
   }
 
@@ -4240,8 +4242,8 @@ void MyFrame::ProcessOptionsDialog(int rr, ArrayOfCDI *pNewDirArray) {
   //  We set the compass size
   SetGPSCompassScale();
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->GetCompass()->SetScaleFactor(g_compass_scalefactor);
       if (!charts_updating) cc->UpdateCanvasControlBar();
@@ -4255,8 +4257,8 @@ void MyFrame::ProcessOptionsDialog(int rr, ArrayOfCDI *pNewDirArray) {
   if ((rr & MENU_CHANGED) == MENU_CHANGED) BuildMenuBar();
 
   //  Rebuild cursors
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->RebuildCursors();
     }
@@ -4278,8 +4280,8 @@ void MyFrame::ProcessOptionsDialog(int rr, ArrayOfCDI *pNewDirArray) {
   // Inform the canvases
   if (b_masterScaleChange || bMuiChange) {
     // ..For each canvas...
-    for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-      ChartCanvas *cc = g_canvasArray.Item(i);
+    for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+      ChartCanvas *cc = g_canvasArray.at(i);
       if (cc) {
         cc->ProcessNewGUIScale();
       }
@@ -4307,7 +4309,7 @@ void MyFrame::ProcessOptionsDialog(int rr, ArrayOfCDI *pNewDirArray) {
 bool MyFrame::CheckGroup(int igroup) {
   if (igroup == 0) return true;  // "all charts" is always OK
 
-  ChartGroup *pGroup = g_pGroupArray->Item(igroup - 1);
+  ChartGroup *pGroup = g_pGroupArray->at(igroup - 1);
 
   if (!pGroup->m_element_array.size())  //  truly empty group is OK
     return true;
@@ -4332,9 +4334,9 @@ bool MyFrame::ScrubGroupArray() {
 
   bool b_change = false;
   unsigned int igroup = 0;
-  while (igroup < g_pGroupArray->GetCount()) {
+  while (igroup < g_pGroupArray->size()) {
     bool b_chart_in_element = false;
-    ChartGroup *pGroup = g_pGroupArray->Item(igroup);
+    ChartGroup *pGroup = g_pGroupArray->at(igroup);
 
     for (unsigned int j = 0; j < pGroup->m_element_array.size(); j++) {
       const wxString &element_root = pGroup->m_element_array[j].m_element_name;
@@ -4373,8 +4375,8 @@ bool MyFrame::ScrubGroupArray() {
 
 void MyFrame::RefreshCanvasOther(ChartCanvas *ccThis) {
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc && (cc != ccThis)) cc->Refresh();
   }
 }
@@ -4391,8 +4393,8 @@ void MyFrame::ChartsRefresh() {
   FrameTenHzTimer.Stop();
 
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       int currentIndex = cc->GetpCurrentStack()->GetCurrentEntrydbIndex();
       if (cc->GetQuiltMode()) {
@@ -4409,8 +4411,8 @@ void MyFrame::ChartsRefresh() {
 }
 
 void MyFrame::InvalidateAllQuilts() {
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->InvalidateQuilt();
       cc->SetQuiltRefChart(-1);
@@ -4430,8 +4432,8 @@ bool MyFrame::UpdateChartDatabaseInplace(ArrayOfCDI &DirArray, bool b_force,
   FrameCOGTimer.Stop();
 
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->InvalidateQuilt();
       cc->SetQuiltRefChart(-1);
@@ -4609,8 +4611,8 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
 
       // Rebuild chart database, if necessary
       if (g_NeedDBUpdate > 0) {
-        for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-          ChartCanvas *cc = g_canvasArray.Item(i);
+        for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+          ChartCanvas *cc = g_canvasArray.at(i);
           if (cc) {
             cc->SetGroupIndex(0, false);  // all charts
           }
@@ -4713,8 +4715,8 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
       WayPointmanGui(*pWayPointMan)
           .SetColorScheme(global_color_scheme, g_Platform->GetDisplayDPmm());
       // Reload the ownship icon from UserIcons, if present
-      for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-        ChartCanvas *cc = g_canvasArray.Item(i);
+      for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+        ChartCanvas *cc = g_canvasArray.at(i);
         if (cc) {
           if (cc->SetUserOwnship()) cc->SetColorScheme(global_color_scheme);
         }
@@ -4804,8 +4806,8 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
         //  the last run of the app. This will be triggered at the next
         //  DoChartUpdate()
         if (g_pi_manager->IsAnyPlugInChartEnabled()) {
-          for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-            ChartCanvas *cc = g_canvasArray.Item(i);
+          for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+            ChartCanvas *cc = g_canvasArray.at(i);
             if (cc) cc->SetFirstAuto(true);
           }
         }
@@ -4816,8 +4818,8 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
 
       wxLogMessage("OnInitTimer...Finalize Canvases");
 
-      for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-        ChartCanvas *cc = g_canvasArray.Item(i);
+      for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+        ChartCanvas *cc = g_canvasArray.at(i);
         if (cc) {
           cc->CreateMUIBar();
           cc->CheckGroupValid();
@@ -5200,12 +5202,12 @@ void MyFrame::OnMemFootTimer(wxTimerEvent &event) {
     ChartCanvas *cc = GetPrimaryCanvas();
     if (ChartData && cc) {
       //    Get a local copy of the cache info
-      wxArrayPtrVoid *pCache = ChartData->GetChartCache();
-      unsigned int nCache = pCache->GetCount();
+      QList<CacheEntry *> *pCache = ChartData->GetChartCache();
+      unsigned int nCache = pCache->size();
       CacheEntry *pcea = new CacheEntry[nCache];
 
       for (unsigned int i = 0; i < nCache; i++) {
-        CacheEntry *pce = (CacheEntry *)(pCache->Item(i));
+        CacheEntry *pce = pCache->at(i);
         pcea[i] = *pce;  // ChartBase *Ch = (ChartBase *)pce->pChart;
       }
 
@@ -5229,14 +5231,14 @@ void MyFrame::OnMemFootTimer(wxTimerEvent &event) {
         //    is realized
 
         unsigned int idelete = 0;  // starting at top. which is oldest
-        unsigned int idelete_max = pCache->GetCount();
+        unsigned int idelete_max = pCache->size();
 
         //    How many can be deleted?
         unsigned int minimum_cache = 1;
         if (cc->GetQuiltMode()) minimum_cache = cc->GetQuiltChartCount();
 
         while ((memsize > (g_MemFootMB * 1000)) &&
-               (pCache->GetCount() > minimum_cache) &&
+               (pCache->size() > minimum_cache) &&
                (idelete < idelete_max)) {
           int memsizeb = memsize;
 
@@ -5667,8 +5669,8 @@ void MyFrame::OnFrameTimer1(wxTimerEvent &event) {
   bool bactiveRouteUpdate = RoutemanGui(*g_pRouteMan).UpdateProgress();
 
   // For each canvas....
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       cc->DrawBlinkObjects();
 
@@ -5730,8 +5732,8 @@ void MyFrame::OnFrameTimer1(wxTimerEvent &event) {
   if (AnchorAlertOn1 || AnchorAlertOn2) bnew_view = true;
 
   // For each canvas....
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       if (g_bopengl) {
 #ifdef ocpnUSE_GL
@@ -5849,8 +5851,8 @@ bool MyFrame::SendJSON_WMM_Var_Request(double lat, double lon,
 
 void MyFrame::TouchAISActive() {
   // .. for each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->TouchAISToolActive();
   }
 }
@@ -5859,8 +5861,8 @@ void MyFrame::UpdateAISTool() {
   if (!g_pAIS) return;
 
   // .. for each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->UpdateAISTBTool();
   }
 }
@@ -5868,8 +5870,8 @@ void MyFrame::UpdateAISTool() {
 //    Cause refresh of active Tide/Current data, if displayed
 void MyFrame::OnFrameTCTimer(wxTimerEvent &event) {
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->SetbTCUpdate(true);
   }
 
@@ -5883,8 +5885,8 @@ void MyFrame::OnFrameCOGTimer(wxTimerEvent &event) {
 
   // ..For each canvas...
   bool b_rotate = false;
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) b_rotate |= (cc->GetUpMode() != NORTH_UP_MODE);
   }
 
@@ -5903,8 +5905,8 @@ void MyFrame::OnFrameCOGTimer(wxTimerEvent &event) {
 
 void MyFrame::DoCOGSet() {
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->DoCanvasCOGSet();
   }
 }
@@ -5958,8 +5960,8 @@ void MyFrame::UpdateRotationState(double rotation) {
 
 void MyFrame::UpdateGPSCompassStatusBoxes(bool b_force_new) {
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->UpdateGPSCompassStatusBox(b_force_new);
   }
 }
@@ -6043,8 +6045,8 @@ void MyFrame::SetChartUpdatePeriod() {
   //  So we need to use a slower update time constant to preserve adequate UI
   //  performance
   bool bskewdc = false;
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) {
       if (!g_bopengl && !cc->GetVP().b_quilt) {
         if (fabs(cc->GetVP().skew) > 0.0001) bskewdc = true;
@@ -6065,8 +6067,8 @@ void MyFrame::UpdateControlBar(ChartCanvas *cc) {
 
 void MyFrame::selectChartDisplay(int type, int family) {
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->selectCanvasChartDisplay(type, family);
   }
 
@@ -6083,8 +6085,8 @@ bool MyFrame::DoChartUpdate() {
   bool return_val = false;
 
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) return_val |= cc->DoCanvasUpdate();
   }
 
@@ -6241,8 +6243,8 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
     // Refresh tide displays if time source changed
     if (oldTimeSource != gTimeSource) {
       // Refresh all canvases that might show tide info
-      for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-        ChartCanvas *cc = g_canvasArray.Item(i);
+      for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+        ChartCanvas *cc = g_canvasArray.at(i);
         if (cc && (cc->GetbShowTide() || cc->GetbShowCurrent())) {
           cc->Refresh(false);
 
@@ -6710,8 +6712,8 @@ void MyFrame::applySettingsString(wxString settings) {
   //  for the toolbar.
   SetGPSCompassScale();
   // ..For each canvas...
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->GetCompass()->SetScaleFactor(g_compass_scalefactor);
   }
   UpdateGPSCompassStatusBoxes(true);
@@ -6948,8 +6950,8 @@ ocpnToolBarSimple *MyFrame::CreateMasterToolbar() {
   //  Set PlugIn tool toggle states
   ArrayOfPlugInToolbarTools tool_array =
       g_pi_manager->GetPluginToolbarToolArray();
-  for (unsigned int i = 0; i < tool_array.GetCount(); i++) {
-    PlugInToolbarToolContainer *pttc = tool_array.Item(i);
+  for (unsigned int i = 0; i < tool_array.size(); i++) {
+    PlugInToolbarToolContainer *pttc = tool_array.at(i);
     if (!pttc->b_viz) continue;
 
     if (pttc->kind == wxITEM_CHECK) tb->ToggleTool(pttc->id, pttc->b_toggle);
@@ -6981,8 +6983,8 @@ bool MyFrame::CheckAndAddPlugInTool() {
   ArrayOfPlugInToolbarTools tool_array =
       g_pi_manager->GetPluginToolbarToolArray();
 
-  for (unsigned int i = 0; i < tool_array.GetCount(); i++) {
-    PlugInToolbarToolContainer *pttc = tool_array.Item(i);
+  for (unsigned int i = 0; i < tool_array.size(); i++) {
+    PlugInToolbarToolContainer *pttc = tool_array.at(i);
     if (pttc->position == n_tools) {
       wxBitmap *ptool_bmp;
 
@@ -7033,8 +7035,8 @@ bool MyFrame::AddDefaultPositionPlugInTools() {
   ArrayOfPlugInToolbarTools tool_array =
       g_pi_manager->GetPluginToolbarToolArray();
 
-  for (unsigned int i = 0; i < tool_array.GetCount(); i++) {
-    PlugInToolbarToolContainer *pttc = tool_array.Item(i);
+  for (unsigned int i = 0; i < tool_array.size(); i++) {
+    PlugInToolbarToolContainer *pttc = tool_array.at(i);
 
     //      Tool is currently tagged as invisible
     if (!pttc->b_viz) continue;
@@ -7272,8 +7274,8 @@ void ApplyLocale() {
   gFrame->BuildMenuBar();
 
   //  Give all canvas a chance to update, if needed
-  for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
-    ChartCanvas *cc = g_canvasArray.Item(i);
+  for (unsigned int i = 0; i < g_canvasArray.size(); i++) {
+    ChartCanvas *cc = g_canvasArray.at(i);
     if (cc) cc->CanvasApplyLocale();
   }
 
@@ -7383,11 +7385,7 @@ public:
   double distance;
 };
 
-WX_DECLARE_OBJARRAY(compress_target, ArrayOfCompressTargets);
-WX_DEFINE_OBJARRAY(ArrayOfCompressTargets);
-
-#include <wx/arrimpl.cpp>
-// end duplicated code
+using ArrayOfCompressTargets = QList<compress_target>;
 
 void ParseAllENC(wxWindow *parent) {
   MySortedArrayInt idx_sorted_by_distance(CompareInts);
@@ -7424,11 +7422,11 @@ void ParseAllENC(wxWindow *parent) {
 
     wxString filename(cte.GetpFullPath(), wxConvUTF8);
 
-    compress_target *pct = new compress_target;
-    pct->distance = distance;
-    pct->chart_path = filename;
+    compress_target ct;
+    ct.distance = distance;
+    ct.chart_path = filename;
 
-    ct_array.push_back(pct);
+    ct_array.push_back(ct);
   }
 
   int thread_count = 0;

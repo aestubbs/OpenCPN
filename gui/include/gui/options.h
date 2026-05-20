@@ -247,7 +247,7 @@ enum {
   ID_TENHZCHECKBOX
 };
 
-WX_DEFINE_ARRAY_PTR(wxGenericDirCtrl *, ArrayOfDirCtrls);
+using ArrayOfDirCtrls = QList<wxGenericDirCtrl *>;
 
 class options;              // forward
 extern options *g_options;  ///< Global instance

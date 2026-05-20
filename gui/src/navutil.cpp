@@ -1431,7 +1431,7 @@ bool MyConfig::LoadChartDirArray(ArrayOfCDI &ChartDirArray) {
   SetPath("/ChartDirectories");
   int iDirMax = GetNumberOfEntries();
   if (iDirMax) {
-    ChartDirArray.Empty();
+    ChartDirArray.clear();
     wxString str, val;
     long dummy;
     int nAdjustChartDirs = 0;
@@ -1471,7 +1471,7 @@ bool MyConfig::LoadChartDirArray(ArrayOfCDI &ChartDirArray) {
         cdi.fullpath = dirname.BeforeFirst('^');
         cdi.magic_number = dirname.AfterFirst('^');
 
-        ChartDirArray.Add(cdi);
+        ChartDirArray.append(cdi);
         iDir++;
       }
 
@@ -1499,7 +1499,7 @@ bool MyConfig::UpdateChartDirs(ArrayOfCDI &dir_array) {
     }
   }
 
-  iDirMax = dir_array.GetCount();
+  iDirMax = dir_array.size();
 
   for (int iDir = 0; iDir < iDirMax; iDir++) {
     ChartDirInfo cdi = dir_array[iDir];
@@ -1526,10 +1526,10 @@ void MyConfig::CreateConfigGroups(ChartGroupArray *pGroupArray) {
   if (!pGroupArray) return;
 
   SetPath("/Groups");
-  Write("GroupCount", (int)pGroupArray->GetCount());
+  Write("GroupCount", (int)pGroupArray->size());
 
-  for (unsigned int i = 0; i < pGroupArray->GetCount(); i++) {
-    ChartGroup *pGroup = pGroupArray->Item(i);
+  for (unsigned int i = 0; i < pGroupArray->size(); i++) {
+    ChartGroup *pGroup = pGroupArray->at(i);
     wxString s;
     s.Printf("Group%d", i + 1);
     s.Prepend("/Groups/");
@@ -1602,7 +1602,7 @@ void MyConfig::LoadConfigGroups(ChartGroupArray *pGroupArray) {
       }
       pGroup->m_element_array.push_back(std::move(pelement));
     }
-    pGroupArray->Add(pGroup);
+    pGroupArray->append(pGroup);
   }
 }
 
@@ -1617,7 +1617,7 @@ void MyConfig::LoadCanvasConfigs(bool bApplyAsTemplate) {
   if (!HasEntry("CanvasConfig")) {
     pcc = new canvasConfig(0);
     pcc->LoadFromLegacyConfig(this);
-    config_array.Add(pcc);
+    config_array.append(pcc);
 
     return;
   }
@@ -1625,25 +1625,25 @@ void MyConfig::LoadCanvasConfigs(bool bApplyAsTemplate) {
   Read("CanvasConfig", (int *)&g_canvasConfig, 0);
 
   // Do not recreate canvasConfigs when applying config dynamically
-  if (config_array.GetCount() == 0) {  // This is initial load from startup
+  if (config_array.size() == 0) {  // This is initial load from startup
     s.Printf("/Canvas/CanvasConfig%d", 1);
     SetPath(s);
     canvasConfig *pcca = new canvasConfig(0);
     LoadConfigCanvas(pcca, bApplyAsTemplate);
-    config_array.Add(pcca);
+    config_array.append(pcca);
 
     s.Printf("/Canvas/CanvasConfig%d", 2);
     SetPath(s);
     pcca = new canvasConfig(1);
     LoadConfigCanvas(pcca, bApplyAsTemplate);
-    config_array.Add(pcca);
+    config_array.append(pcca);
   } else {  // This is a dynamic (i.e. Template) load
     canvasConfig *pcca = config_array[0];
     s.Printf("/Canvas/CanvasConfig%d", 1);
     SetPath(s);
     LoadConfigCanvas(pcca, bApplyAsTemplate);
 
-    if (config_array.GetCount() > 1) {
+    if (config_array.size() > 1) {
       canvasConfig *pcca = config_array[1];
       s.Printf("/Canvas/CanvasConfig%d", 2);
       SetPath(s);
@@ -1653,7 +1653,7 @@ void MyConfig::LoadCanvasConfigs(bool bApplyAsTemplate) {
       SetPath(s);
       pcca = new canvasConfig(1);
       LoadConfigCanvas(pcca, bApplyAsTemplate);
-      config_array.Add(pcca);
+      config_array.append(pcca);
     }
   }
 }
@@ -1715,7 +1715,7 @@ void MyConfig::LoadConfigCanvas(canvasConfig *cConfig, bool bApplyAsTemplate) {
 
   // Special check for group selection when applied as template
   if (cConfig->GroupID && bApplyAsTemplate) {
-    if (cConfig->GroupID > (int)g_pGroupArray->GetCount()) cConfig->GroupID = 0;
+    if (cConfig->GroupID > (int)g_pGroupArray->size()) cConfig->GroupID = 0;
   }
 
   Read("canvasShowTides", &cConfig->bShowTides, 0);
@@ -1766,8 +1766,8 @@ void MyConfig::SaveCanvasConfigs() {
       s.Printf("/Canvas/CanvasConfig%d", 1);
       SetPath(s);
 
-      if (config_array.GetCount() > 0) {
-        pcc = config_array.Item(0);
+      if (config_array.size() > 0) {
+        pcc = config_array.at(0);
         if (pcc) {
           SaveConfigCanvas(pcc);
         }
@@ -1776,17 +1776,17 @@ void MyConfig::SaveCanvasConfigs() {
 
     case 1:
 
-      if (config_array.GetCount() > 1) {
+      if (config_array.size() > 1) {
         s.Printf("/Canvas/CanvasConfig%d", 1);
         SetPath(s);
-        pcc = config_array.Item(0);
+        pcc = config_array.at(0);
         if (pcc) {
           SaveConfigCanvas(pcc);
         }
 
         s.Printf("/Canvas/CanvasConfig%d", 2);
         SetPath(s);
-        pcc = config_array.Item(1);
+        pcc = config_array.at(1);
         if (pcc) {
           SaveConfigCanvas(pcc);
         }
@@ -2309,11 +2309,11 @@ void MyConfig::UpdateSettings() {
   //  Store the persistent Auxiliary Font descriptor Keys
   SetPath("/Settings/AuxFontKeys");
 
-  wxArrayString keyArray = FontMgr::Get().GetAuxKeyArray();
-  for (unsigned int i = 0; i < keyArray.GetCount(); i++) {
+  QStringList keyArray = FontMgr::Get().GetAuxKeyArray();
+  for (int i = 0; i < keyArray.size(); i++) {
     wxString key;
     key.Printf("Key%i", i);
-    wxString keyval = keyArray[i];
+    wxString keyval = QString_to_wxString(keyArray[i]);
     Write(key, keyval);
   }
 

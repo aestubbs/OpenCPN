@@ -33,6 +33,8 @@
 #include <wx/panel.h>
 #include <wx/string.h>
 
+#include <QStringList>
+
 #include "canvas_config.h"
 
 class OCPNConfigCatalog;  // forward -- in config_mgr.cpp
@@ -52,7 +54,7 @@ public:
   wxString CreateNamedConfig(const wxString &title, const wxString &description,
                              wxString UUID);
   bool DeleteConfig(wxString GUID);
-  wxArrayString GetConfigGUIDArray();
+  QStringList GetConfigGUIDArray();
 
   wxPanel *GetConfigPanel(wxWindow *parent, wxString GUID);
   wxString GetTemplateTitle(wxString GUID);
