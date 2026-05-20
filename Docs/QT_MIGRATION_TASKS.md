@@ -7,14 +7,17 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6 and P1.7 done — the model layer's
-`wxString` sweep and the `wxDateTime`/`wxTimeSpan` sweep are both complete.
-The shared `model/wx_qt_string.h` helpers centralize wx⇄Qt string
-conversions; `QDateTime`/`qint64`-seconds is the time/duration vocabulary
-throughout. Remaining wx datetime references are deliberate boundaries:
-the frozen plugin ABI (`PlugIn_*` types), `wxDateTime`-typed wx pickers
-(swept in P1.10), and `wxFileName::GetModificationTime()` callers (P1.10).
-Next: P1.8 (`wxArrayString` / wx containers → Qt/STL).
+SignalK/SocketCAN parked (P1.5m). P1.6, P1.7 and P1.8 done — the model's
+`wxString`, `wxDateTime`/`wxTimeSpan` and wx-container sweeps are all
+complete. `QStringList`, `QList<T*>`, `QHash`/`QSet` are the container
+vocabulary; `model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string
+conversions; `QDateTime`/`qint64`-seconds is the time/duration vocabulary.
+Remaining wx-typed references are deliberate boundaries — the frozen
+plugin ABI, `wxDir`/`wxFileName` callers (P1.10), wx-widget plumbing,
+`wxList`-node container types owning raw resources (deferred ownership
+pass), and a handful of external library boundaries (S52PLIB color/ATON
+arrays, GLU tesselator). Next: P1.9 (`wxConfig`/`wxFileConfig` →
+`QSettings`).
 **Last updated:** 2026-05-20.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -311,7 +314,40 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         `ChartBase::m_EdDate` → `QDateTime`), `time_textbox` kept hybrid
         (wxTimePickerCtrl-compat shim — pickers go in P1.10), wx file-time
         boundary call sites adapted.
-- [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
+- [x] **P1.8** Replace wx containers with Qt — Qt throughout, STL only at
+      facade boundaries where Qt isn't viable over wx. Done in 3 steps:
+  - [x] **P1.8-1** Model layer + plugin-ABI bridging. Header typedef
+        changes (`ArrayOfMmsiProperties` / `ArrayOfPlugIns` /
+        `ArrayOfMarkIcon` → `QList<T*>`, `AIS_Target_Name_Hash` →
+        `QHash<int, wxString>`); `GetRouteArrayContaining` returns
+        `QList<Route*>*` (strongly typed); `EnumerateSerialPorts` returns
+        `QStringList*`. `model/plugin_api.cpp` tokenizer bridged.
+        `ConnectionParams::Input/OutputSentenceList` deliberately kept
+        `wxArrayString` (the GUI write/read boundary).
+  - [x] **P1.8-2** Top GUI consumers. `m_pSerialArray` /
+        `m_font_element_array` / `m_plugin_order` /
+        `m_missing_name_array` / `pMessageOnceArray` /
+        `ConfigGUIDs` retyped to `QStringList`; `priority_gui` /
+        `pluginmanager` / `navutil` / `options` tokenizers and array
+        ops migrated. Pure widget-fill `wxArrayString` locals
+        (`filter_dlg`, parts of `options`/`connection_edit`) kept wx
+        per the GUI-boundary rule.
+  - [x] **P1.8-3** GUI mop-up. Header typedefs across `cm93` /
+        `styles` / `font_mgr` / `o_senc` / `pluginmanager` /
+        `chartdbs` / `chartdb` / `chcanv` / `canvas_config` /
+        `mark_info` / `config_mgr` (vestigial `WX_DECLARE_OBJARRAY`
+        decls removed; remainder → `using = QList<T*>` / `QStringList`).
+        `compress_target` arrays in `ocpn_frame` / `gl_texture_mgr`
+        rewritten from heap-pointer wxObjArray to `QList` by value.
+        Total: 168 remaining wx-container hits, all categorized
+        boundaries (frozen plugin ABI, `wxDir`/`wxFileName`, wx-widget
+        plumbing, `wxExecute`, `wxLocale::AddCatalog`, S52PLIB-owned,
+        `wxAUI`/`wxListCtrl` API). The `cm93` covr-desc OBJARRAY +
+        `wxList`-node iteration, `station_data` / `tc_data_source` /
+        `idx_entry` ownership-by-add arrays, `PatchList`, and
+        `SortedArrayOfMarkIcon` are deferred — their contained types
+        own raw resources in their destructors with no copy ctor, so
+        the conversion needs a dedicated ownership pass.
 - [ ] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract `config_vars`.
 - [ ] **P1.10** Replace file I/O (`wxFileName`/`wxDir`/`chartdata_input_stream`) with `QFile`/`QDir`.
 - [ ] **P1.11** Replace threading primitives (`wxThread`/`wxMutex`/`wxSemaphore`).
@@ -640,3 +676,26 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   pickers (swept with the GUI pickers in P1.10), `wxFileName::Get*Time()`
   callers (P1.10), and the `time_textbox.h` `wxTimePickerCtrl`-compat shim
   (also P1.10).
+- 2026-05-20 — P1.8 done: the model's wx-container sweep is closed in 3
+  steps. `QStringList`, `QList<T*>`, `QHash`/`QSet` are the container
+  vocabulary throughout. The strategy was Qt-first with std only at facade
+  boundaries where Qt isn't viable (none arose; Qt always sufficed).
+  Notable header typedef changes hit hard once and ripple cleanly:
+  `ArrayOfPlugIns`, `ArrayOfMarkIcon`, `ArrayOfMmsiProperties`,
+  `AIS_Target_Name_Hash`, `ChartGroupArray`, `ArrayOfCDI`,
+  `arrayofCanvasPtr`, plugin-menu/toolbar/panel arrays, and the styles /
+  font_mgr / cm93 / o_senc internals. `GetRouteArrayContaining` returns
+  `QList<Route*>*` (strongly typed — callers were already casting). The
+  `compress_target` heap-pointer wxObjArrays in `ocpn_frame` /
+  `gl_texture_mgr` are rewritten to `QList<compress_target>` by value
+  (ownership semantics preserved -- nothing held outside pointers).
+  Remaining 168 wx-container hits are all in deliberate boundary buckets
+  (frozen plugin ABI, `wxDir`/`wxFileName` callers for P1.10,
+  pure-wx-widget-fill locals, `wxExecute`/`wxLocale`/Android Bluetooth
+  APIs, S52PLIB-owned `wxArrayPtrVoid`, `wxAUI`/`wxListCtrl` API). Five
+  container families with non-trivial ownership semantics (cm93's
+  `Array_Of_M_COVR_Desc` + `List_Of_M_COVR_Desc`, `PatchList`,
+  `ArrayOfStationData`, `ArrayOfTCDSources`, `ArrayOfIDXEntry`,
+  `SortedArrayOfMarkIcon`) are deferred to a dedicated ownership pass --
+  their contained types own raw resources without copy ctors, so naïve
+  wxObjArray → QList migration would double-free.
