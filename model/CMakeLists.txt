@@ -321,65 +321,9 @@ if (LINUX)
   endif ()
 endif ()
 
-if (OCPN_USE_CURL)
-
-  if (NOT CMAKE_HOST_WIN32)
-    set(OCPN_USE_EXTERN_CURL ON)
-  endif ()
-
-  if (NOT QT_ANDROID)
-    if (OCPN_USE_EXTERN_CURL)
-      find_package(CURL REQUIRED)
-      message(STATUS "ocpn: using external curl libraries...")
-      message(STATUS "  curl includes: " ${CURL_INCLUDE_DIRS})
-      message(STATUS "  curl libraries: " ${CURL_LIBRARIES})
-
-      target_include_directories(_OCPN_MODEL INTERFACE ${CURL_INCLUDE_DIRS})
-    else ()
-      include("Curl")
-      message(STATUS "Using bundled curl library...")
-    endif ()
-
-    pkg_search_module(SYS_WXCURL libwxcurl wxcurl)
-    use_bundled_lib(USE_BUNDLED_WXCURL wxcurl)
-    if (SYS_WXCURL_FOUND AND NOT USE_BUNDLED_WXCURL)
-      message(STATUS "Building with system wxcurl")
-      target_include_directories(
-        _OCPN_MODEL INTERFACE ${CURL_INCLUDE_DIRS} ${SYS_WXCURL_INCLUDE_DIR}
-      )
-      target_link_libraries(_OCPN_MODEL INTERFACE ${SYS_WXCURL_LIBRARIES})
-    else ()
-      message(STATUS "Building with bundled wxcurl")
-      include("Curl")
-      set(WXCURL_ABI ${PKG_TARGET} CACHE INTERNAL "")
-      set(WXCURL_ABI_VERSION ${PKG_TARGET_VERSION} CACHE INTERNAL "")
-      set(WXCURL_OCPN_VERSION ${PACKAGE_VERSION} CACHE INTERNAL "")
-      add_subdirectory("${CMAKE_SOURCE_DIR}/libs/wxcurl" ${CMAKE_BINARY_DIR}/curl2)
-      target_link_libraries(_OCPN_MODEL INTERFACE ocpn::wxcurl)
-    endif ()
-
-    target_link_libraries(_OCPN_MODEL INTERFACE ${CURL_LIBRARIES})
-
-    if (WIN32 AND OCPN_USE_EXTERN_CURL)
-      find_library(
-        CURL_LIBRARY_DLL
-        NAMES curl curllib libcurl_imp curllib_static libcurl
-        PATH_SUFFIXES dll
-      )
-      install(FILES ${CURL_LIBRARY_DLL} DESTINATION ".")
-    endif ()
-  else ()
-    target_include_directories(
-      _OCPN_MODEL
-        INTERFACE ${CMAKE_SOURCE_DIR}/buildandroid/libcurl/${ARCH}/include
-    )
-    target_link_libraries(
-      _OCPN_MODEL
-        INTERFACE
-          ${CMAKE_SOURCE_DIR}/buildandroid/libcurl/${ARCH}/lib/libcurl.a
-    )
-  endif ()
-endif ()
+# OCPN_USE_CURL still gates the OpenCPN download API entrypoints in
+# gui/src/pluginmanager.cpp, but the transport is now QNetworkAccessManager
+# (Qt6::Network) -- libcurl/wxcurl are no longer linked. See P1.13.
 
 if (NOT WIN32)
   if(APPLE AND OCPN_USE_DEPS_BUNDLE)

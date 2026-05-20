@@ -25,7 +25,8 @@
 
 #include <wx/statline.h>
 
-#include <curl/curl.h>
+#include <QMetaEnum>
+#include <QNetworkReply>
 
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
@@ -69,8 +70,13 @@ static PeerDlgResult RunStatusDlg(PeerDlg kind, int status) {
       if (status >= 0) {
         ss << _("Server HTTP response is :") << status;
       } else {
-        ss << _("Curl transfer error: ")
-           << curl_easy_strerror(static_cast<CURLcode>(-status));
+        // peer_client.cpp encodes a QNetworkReply::NetworkError as -code.
+        // Decode it back via QMetaEnum for a human-readable name.
+        const int code = -static_cast<int>(status);
+        const auto meta = QMetaEnum::fromType<QNetworkReply::NetworkError>();
+        const char* name = meta.valueToKey(code);
+        ss << _("Network transfer error: ")
+           << (name ? name : "unknown") << " (" << code << ")";
       }
       OCPNMessageDialog dlg(NULL, ss.str(), _("OpenCPN Info"),
                             wxICON_ERROR | wxOK | wxCANCEL);

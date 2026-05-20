@@ -29,8 +29,6 @@
 
 #include <wx/tokenzr.h>
 
-#include <curl/curl.h>
-
 #include "model/peer_client.h"
 #include "model/rest_server.h"
 #include "model/semantic_vers.h"

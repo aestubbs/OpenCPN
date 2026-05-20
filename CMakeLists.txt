@@ -1557,7 +1557,11 @@ add_subdirectory(libs/gui)
 target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::guilib)
 
 if (NOT QT_ANDROID)
-  target_link_libraries(${PACKAGE_NAME} PRIVATE Qt6::Core)
+  # PlugInManager (gui/include/gui/pluginmanager.h) is a Q_OBJECT class for the
+  # QNAM-based download wiring (P1.13). AUTOMOC runs moc over the GUI headers
+  # so its vtable gets emitted.
+  set_target_properties(${PACKAGE_NAME} PROPERTIES AUTOMOC ON)
+  target_link_libraries(${PACKAGE_NAME} PRIVATE Qt6::Core Qt6::Network)
 endif ()
 
 if (MSVC)

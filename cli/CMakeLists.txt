@@ -40,12 +40,6 @@ if (MSVC)
   target_link_libraries(opencpn-cmd PRIVATE setupapi.lib psapi.lib)
 endif ()
 
-if (TARGET ocpn::wxcurl)
-  target_link_libraries(opencpn-cmd PRIVATE ocpn::wxcurl)
-else ()
-  target_link_libraries(opencpn-cmd PRIVATE ${SYS_WXCURL_LIBRARIES})
-endif ()
-
 target_link_libraries(opencpn-cmd PRIVATE ${wxWidgets_LIBRARIES})
 if (TARGET ocpn::wxsvg)
   target_link_libraries(opencpn-cmd PRIVATE ocpn::wxsvg)

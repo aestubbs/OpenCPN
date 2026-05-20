@@ -47,8 +47,17 @@
 #include <QJsonParseError>
 #include <QJsonValue>
 #include <QMutexLocker>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QSslConfiguration>
+#include <QSslSocket>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <QTimer>
+#include <QUrl>
+
+#include <wx/progdlg.h>
 
 #include "model/wx_qt_string.h"
 #include "config_compat_helpers.h"
@@ -186,7 +195,6 @@
 #endif
 
 typedef __LA_INT64_T la_int64_t;  //  "older" libarchive versions support
-enum { CurlThreadId = wxID_HIGHEST + 1 };
 
 #if wxUSE_XLOCALE || !wxCHECK_VERSION(3, 0, 0)
 extern wxLocale* plocale_def_lang;
@@ -870,10 +878,6 @@ PlugInToolbarToolContainer::~PlugInToolbarToolContainer() {
 PlugInManager* s_ppim;
 
 BEGIN_EVENT_TABLE(PlugInManager, wxEvtHandler)
-#if !defined(__ANDROID__) && defined(OCPN_USE_CURL)
-EVT_CURL_END_PERFORM(CurlThreadId, PlugInManager::OnEndPerformCurlDownload)
-EVT_CURL_DOWNLOAD(CurlThreadId, PlugInManager::OnCurlDownload)
-#endif
 END_EVENT_TABLE()
 
 static void event_message_box(const wxString& msg) {
@@ -891,8 +895,10 @@ static void OnLoadPlugin(const PlugInContainer* pic) {
 
 PlugInManager::PlugInManager(AbstractTopFrame* parent) {
 #if !defined(__ANDROID__) && defined(OCPN_USE_CURL)
-  m_pCurlThread = NULL;
-  m_pCurl = 0;
+  m_qnam = new QNetworkAccessManager(this);
+  m_active_reply = nullptr;
+  m_download_evHandler = nullptr;
+  m_downloadHandle = nullptr;
 #endif
   s_ppim = this;
   m_parent = parent;
@@ -918,7 +924,7 @@ PlugInManager::PlugInManager(AbstractTopFrame* parent) {
 #endif
 
 #if !defined(__ANDROID__) && defined(OCPN_USE_CURL)
-  wxCurlBase::Init();
+  // QNAM does not need global init/shutdown.
   m_last_online = false;
   m_last_online_chk = -1;
 #endif
@@ -957,7 +963,12 @@ PlugInManager::PlugInManager(AbstractTopFrame* parent) {
 }
 PlugInManager::~PlugInManager() {
 #if !defined(__ANDROID__) && defined(OCPN_USE_CURL)
-  wxCurlBase::Shutdown();
+  if (m_active_reply) {
+    m_active_reply->abort();
+    m_active_reply->deleteLater();
+    m_active_reply = nullptr;
+  }
+  // m_qnam is parented to `this` -- destroyed automatically as a QObject child.
 #endif
   delete m_utilHandler;
 }
@@ -5357,42 +5368,91 @@ _OCPN_DLStatus OCPN_downloadFile(const wxString& url,
   }
 
 #elif defined(OCPN_USE_CURL)
+  // Modal download: QNAM does the transfer; a wxProgressDialog drives the UI
+  // (Qt's QProgressDialog would pull in QtWidgets, which the project does not
+  // otherwise need). A QEventLoop spins until the reply finishes, and a Qt
+  // timer pumps wx events + polls the progress dialog's Cancel button so the
+  // wx UI stays responsive throughout.
   QString tfnPath =
       QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
       QDir::separator() + QFileInfo(wxString_to_QString(outputFile)).fileName() +
       "_" + QString::number(QCoreApplication::applicationPid()) + "_" +
       QString::number(QDateTime::currentMSecsSinceEpoch());
-  wxString tfnFull = QString_to_wxString(tfnPath);
-  wxFileOutputStream output(tfnFull);
 
-  wxCurlDownloadDialog ddlg(url, &output, title, message + url, bitmap, parent,
-                            style);
-  wxCurlDialogReturnFlag ret = ddlg.RunModal();
-  output.Close();
+  QFile output(tfnPath);
+  if (!output.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return OCPN_DL_FAILED;
+  }
+
+  QNetworkAccessManager nam;
+  QNetworkRequest req{QUrl(wxString_to_QString(url))};
+  // Mirror the legacy curl behaviour: peer verification disabled, follow
+  // redirects.
+  QSslConfiguration ssl = QSslConfiguration::defaultConfiguration();
+  ssl.setPeerVerifyMode(QSslSocket::VerifyNone);
+  req.setSslConfiguration(ssl);
+  req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                   QNetworkRequest::NoLessSafeRedirectPolicy);
+
+  QNetworkReply* reply = nam.get(req);
+
+  wxProgressDialog dlg(title, message + url, 1000, parent,
+                       wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_CAN_ABORT |
+                           wxPD_ELAPSED_TIME);
+
+  bool user_aborted = false;
+  QObject::connect(reply, &QNetworkReply::downloadProgress, &nam,
+                   [&dlg, reply, &user_aborted](qint64 received, qint64 total) {
+                     int pct = 0;
+                     if (total > 0) {
+                       pct = static_cast<int>((received * 1000) / total);
+                       if (pct > 1000) pct = 1000;
+                     }
+                     if (!dlg.Update(pct)) {
+                       user_aborted = true;
+                       reply->abort();
+                     }
+                   });
+  QObject::connect(reply, &QNetworkReply::readyRead, &nam,
+                   [reply, &output]() { output.write(reply->readAll()); });
+
+  // Periodically pump wx events so the progress dialog (and its Cancel
+  // button) stays alive while we block on the Qt event loop.
+  QTimer pump_timer;
+  QObject::connect(&pump_timer, &QTimer::timeout, &nam,
+                   [&dlg, reply, &user_aborted]() {
+                     if (wxTheApp) wxTheApp->Yield(true);
+                     if (!dlg.Pulse() && !reply->isFinished()) {
+                       user_aborted = true;
+                       reply->abort();
+                     }
+                   });
+  pump_timer.start(100);
+
+  QEventLoop loop;
+  QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+  loop.exec();
+  pump_timer.stop();
+
+  // Drain trailing bytes that arrived between the last readyRead and finished.
+  output.write(reply->readAll());
+  output.close();
 
   _OCPN_DLStatus result = OCPN_DL_UNKNOWN;
-
-  switch (ret) {
-    case wxCDRF_SUCCESS: {
-      QFile::remove(wxString_to_QString(outputFile));
-      if (QFile::copy(tfnPath, wxString_to_QString(outputFile)))
-        result = OCPN_DL_NO_ERROR;
-      else
-        result = OCPN_DL_FAILED;
-      break;
-    }
-    case wxCDRF_FAILED: {
+  const QNetworkReply::NetworkError net_err = reply->error();
+  if (user_aborted ||
+      net_err == QNetworkReply::OperationCanceledError) {
+    result = OCPN_DL_ABORTED;
+  } else if (net_err == QNetworkReply::NoError) {
+    QFile::remove(wxString_to_QString(outputFile));
+    if (QFile::copy(tfnPath, wxString_to_QString(outputFile)))
+      result = OCPN_DL_NO_ERROR;
+    else
       result = OCPN_DL_FAILED;
-      break;
-    }
-    case wxCDRF_USER_ABORTED: {
-      result = OCPN_DL_ABORTED;
-      break;
-    }
-    default:
-      wxASSERT(false);  // This should never happen because we handle all
-                        // possible cases of ret
+  } else {
+    result = OCPN_DL_FAILED;
   }
+  reply->deleteLater();
   if (QFile::exists(tfnPath)) QFile::remove(tfnPath);
   return result;
 
@@ -5443,62 +5503,39 @@ _OCPN_DLStatus OCPN_downloadFileBackground(const wxString& url,
   return OCPN_DL_STARTED;
 
 #elif defined(OCPN_USE_CURL)
-  if (g_pi_manager->m_pCurlThread)  // We allow just one download at a time. Do
-                                    // we want more? Or at least return some
-                                    // other status in this case?
+  // Only one background download at a time -- matches the old wxcurl design.
+  if (g_pi_manager->m_active_reply) return OCPN_DL_FAILED;
+
+  auto* out = new QFile(wxString_to_QString(outputFile));
+  if (!out->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    delete out;
     return OCPN_DL_FAILED;
-  g_pi_manager->m_pCurlThread =
-      new wxCurlDownloadThread(g_pi_manager, CurlThreadId);
-  bool http = (url.StartsWith(wxS("http:")) || url.StartsWith(wxS("https:")));
-  bool keep = false;
-  if (http && g_pi_manager->m_pCurl &&
-      dynamic_cast<wxCurlHTTP*>(g_pi_manager->m_pCurl.get())) {
-    keep = true;
   }
-  if (!keep) {
-    g_pi_manager->m_pCurl = 0;
-  }
+  g_pi_manager->m_dl_output = out;
 
-  bool failed = false;
-  if (!g_pi_manager->HandleCurlThreadError(
-          g_pi_manager->m_pCurlThread->SetURL(url, g_pi_manager->m_pCurl),
-          g_pi_manager->m_pCurlThread, url))
-    failed = true;
-  if (!failed) {
-    g_pi_manager->m_pCurl = g_pi_manager->m_pCurlThread->GetCurlSharedPtr();
-    if (!g_pi_manager->HandleCurlThreadError(
-            g_pi_manager->m_pCurlThread->SetOutputStream(
-                new wxFileOutputStream(outputFile)),
-            g_pi_manager->m_pCurlThread))
-      failed = true;
-  }
-  if (!failed) {
-    g_pi_manager->m_download_evHandler = handler;
-    g_pi_manager->m_downloadHandle = handle;
+  QNetworkRequest req{QUrl(wxString_to_QString(url))};
+  // Mirror legacy curl behaviour (no peer verify, follow redirects).
+  QSslConfiguration ssl = QSslConfiguration::defaultConfiguration();
+  ssl.setPeerVerifyMode(QSslSocket::VerifyNone);
+  req.setSslConfiguration(ssl);
+  req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                   QNetworkRequest::NoLessSafeRedirectPolicy);
 
-    wxCurlThreadError err = g_pi_manager->m_pCurlThread->Download();
-    if (err != wxCTE_NO_ERROR) {
-      g_pi_manager->HandleCurlThreadError(
-          err, g_pi_manager->m_pCurlThread);  // shows a message to the user
-      g_pi_manager->m_pCurlThread->Abort();
-      failed = true;
-    }
-  }
+  g_pi_manager->m_download_evHandler = handler;
+  g_pi_manager->m_downloadHandle = handle;
 
-  if (!failed) return OCPN_DL_STARTED;
+  QNetworkReply* reply = g_pi_manager->m_qnam->get(req);
+  g_pi_manager->m_active_reply = reply;
 
-  if (g_pi_manager->m_pCurlThread) {
-    if (g_pi_manager->m_pCurlThread->IsAlive())
-      g_pi_manager->m_pCurlThread->Abort();
-    if (g_pi_manager->m_pCurlThread->GetOutputStream())
-      delete (g_pi_manager->m_pCurlThread->GetOutputStream());
-    wxDELETE(g_pi_manager->m_pCurlThread);
-    g_pi_manager->m_download_evHandler = NULL;
-    g_pi_manager->m_downloadHandle = NULL;
-    return OCPN_DL_STARTED;
-  }
-  g_pi_manager->m_pCurl = 0;
-  return OCPN_DL_FAILED;
+  // Stream chunks into the output file as they arrive.
+  QObject::connect(reply, &QNetworkReply::readyRead, g_pi_manager,
+                   [reply, out]() { out->write(reply->readAll()); });
+  QObject::connect(reply, &QNetworkReply::downloadProgress, g_pi_manager,
+                   &PlugInManager::OnDownloadProgress);
+  QObject::connect(reply, &QNetworkReply::finished, g_pi_manager,
+                   &PlugInManager::OnDownloadFinished);
+
+  return OCPN_DL_STARTED;
 
 #else
   return OCPN_DL_FAILED;
@@ -5513,14 +5550,10 @@ void OCPN_cancelDownloadFileBackground(long handle) {
   finishAndroidFileDownload();
   if (g_piEventHandler) g_piEventHandler->clearBackgroundMode();
 #else
-  if (g_pi_manager->m_pCurlThread) {
-    g_pi_manager->m_pCurlThread->Abort();
-    delete (g_pi_manager->m_pCurlThread->GetOutputStream());
-    wxDELETE(g_pi_manager->m_pCurlThread);
-    g_pi_manager->m_download_evHandler = NULL;
-    g_pi_manager->m_downloadHandle = NULL;
+  if (g_pi_manager->m_active_reply) {
+    g_pi_manager->m_active_reply->abort();
+    // OnDownloadFinished() cleans up the reply + output file.
   }
-  g_pi_manager->m_pCurl = 0;
 #endif
 #endif
 }
@@ -5537,17 +5570,42 @@ _OCPN_DLStatus OCPN_postDataHttp(const wxString& url,
   return OCPN_DL_NO_ERROR;
 
 #elif defined(OCPN_USE_CURL)
-  wxCurlHTTP post;
-  post.SetOpt(CURLOPT_TIMEOUT, timeout_secs);
-  size_t res = post.Post(parameters.ToAscii(), parameters.Len(), url);
+  QNetworkAccessManager nam;
+  QNetworkRequest req{QUrl(wxString_to_QString(url))};
+  // Mirror the old curl POST: no explicit Content-Type, peer verify off,
+  // follow redirects.
+  QSslConfiguration ssl = QSslConfiguration::defaultConfiguration();
+  ssl.setPeerVerifyMode(QSslSocket::VerifyNone);
+  req.setSslConfiguration(ssl);
+  req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                   QNetworkRequest::NoLessSafeRedirectPolicy);
 
-  if (res) {
-    result = wxString(post.GetResponseBody().c_str(), wxConvUTF8);
-    return OCPN_DL_NO_ERROR;
-  } else
+  const QByteArray body = wxString_to_QString(parameters).toUtf8();
+  QNetworkReply* reply = nam.post(req, body);
+
+  QEventLoop loop;
+  QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+  bool timed_out = false;
+  if (timeout_secs > 0) {
+    QTimer::singleShot(timeout_secs * 1000, &loop,
+                       [&loop, &timed_out]() {
+                         timed_out = true;
+                         loop.quit();
+                       });
+  }
+  loop.exec();
+  if (timed_out && !reply->isFinished()) reply->abort();
+
+  _OCPN_DLStatus rc;
+  if (!timed_out && reply->error() == QNetworkReply::NoError) {
+    result = QString_to_wxString(QString::fromUtf8(reply->readAll()));
+    rc = OCPN_DL_NO_ERROR;
+  } else {
     result = wxEmptyString;
-
-  return OCPN_DL_FAILED;
+    rc = OCPN_DL_FAILED;
+  }
+  reply->deleteLater();
+  return rc;
 
 #else
   return OCPN_DL_FAILED;
@@ -5562,9 +5620,21 @@ bool OCPN_isOnline() {
 #if !defined(__ANDROID__) && defined(OCPN_USE_CURL)
   if (QDateTime::currentDateTime().toSecsSinceEpoch() >
       g_pi_manager->m_last_online_chk + ONLINE_CHECK_RETRY) {
-    wxCurlHTTP get;
-    get.Head("http://yahoo.com/");
-    g_pi_manager->m_last_online = get.GetResponseCode() > 0;
+    QNetworkAccessManager nam;
+    QNetworkRequest req{QUrl("http://yahoo.com/")};
+    QNetworkReply* reply = nam.head(req);
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    // 5s safety timeout -- the old curl call had no explicit timeout but
+    // blocked indefinitely, which we won't replicate.
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+    loop.exec();
+    if (!reply->isFinished()) reply->abort();
+    const int http_status =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    g_pi_manager->m_last_online =
+        reply->error() == QNetworkReply::NoError && http_status > 0;
+    reply->deleteLater();
 
     g_pi_manager->m_last_online_chk = static_cast<long>(
         QDateTime::currentDateTime().toSecsSinceEpoch());
@@ -5576,12 +5646,24 @@ bool OCPN_isOnline() {
 }
 
 #if !defined(__ANDROID__) && defined(OCPN_USE_CURL)
-void PlugInManager::OnEndPerformCurlDownload(wxCurlEndPerformEvent& ev) {
+void PlugInManager::OnDownloadFinished() {
+  QNetworkReply* reply = m_active_reply;
+  if (!reply) return;
+
+  // Drain any final bytes the readyRead handler did not see and close the
+  // sink file before we tell the caller the download is done.
+  if (m_dl_output) {
+    m_dl_output->write(reply->readAll());
+    m_dl_output->close();
+    delete m_dl_output;
+    m_dl_output = nullptr;
+  }
+
   OCPN_downloadEvent event(wxEVT_DOWNLOAD_EVENT, 0);
-  if (ev.IsSuccessful()) {
+  const QNetworkReply::NetworkError net_err = reply->error();
+  if (net_err == QNetworkReply::NoError) {
     event.setDLEventStatus(OCPN_DL_NO_ERROR);
   } else {
-    g_pi_manager->m_pCurl = 0;
     event.setDLEventStatus(OCPN_DL_FAILED);
   }
   event.setDLEventCondition(OCPN_DL_EVENT_TYPE_END);
@@ -5589,73 +5671,24 @@ void PlugInManager::OnEndPerformCurlDownload(wxCurlEndPerformEvent& ev) {
 
   if (m_download_evHandler) {
     m_download_evHandler->AddPendingEvent(event);
-    m_download_evHandler = NULL;
-    m_downloadHandle = NULL;
+    m_download_evHandler = nullptr;
+    m_downloadHandle = nullptr;
   }
 
-  if (m_pCurlThread) {
-    m_pCurlThread->Wait();
-    if (!m_pCurlThread->IsAborting()) {
-      delete (m_pCurlThread->GetOutputStream());
-      wxDELETE(m_pCurlThread);
-    }
-  }
+  m_active_reply = nullptr;
+  reply->deleteLater();
 }
 
-void PlugInManager::OnCurlDownload(wxCurlDownloadEvent& ev) {
+void PlugInManager::OnDownloadProgress(qint64 received, qint64 total) {
   OCPN_downloadEvent event(wxEVT_DOWNLOAD_EVENT, 0);
   event.setDLEventStatus(OCPN_DL_UNKNOWN);
   event.setDLEventCondition(OCPN_DL_EVENT_TYPE_PROGRESS);
-  event.setTotal(ev.GetTotalBytes());
-  event.setTransferred(ev.GetDownloadedBytes());
+  event.setTotal(total);
+  event.setTransferred(received);
   event.setComplete(false);
 
   if (m_download_evHandler) {
     m_download_evHandler->AddPendingEvent(event);
   }
-}
-
-bool PlugInManager::HandleCurlThreadError(wxCurlThreadError err,
-                                          wxCurlBaseThread* p,
-                                          const wxString& url) {
-  switch (err) {
-    case wxCTE_NO_ERROR:
-      return true;  // ignore this
-
-    case wxCTE_NO_RESOURCE:
-      wxLogError(
-          wxS("Insufficient resources for correct execution of the program."));
-      break;
-
-    case wxCTE_ALREADY_RUNNING:
-      wxFAIL;  // should never happen!
-      break;
-
-    case wxCTE_INVALID_PROTOCOL:
-      wxLogError(wxS("The URL '%s' uses an unsupported protocol."),
-                 url.c_str());
-      break;
-
-    case wxCTE_NO_VALID_STREAM:
-      wxFAIL;  // should never happen - the user streams should always be valid!
-      break;
-
-    case wxCTE_ABORTED:
-      return true;  // ignore this
-
-    case wxCTE_CURL_ERROR: {
-      wxString ws = wxS("unknown");
-      if (p->GetCurlSession())
-        ws =
-            wxString(p->GetCurlSession()->GetErrorString().c_str(), wxConvUTF8);
-      wxLogError(wxS("Network error: %s"), ws.c_str());
-    } break;
-  }
-
-  // stop the thread
-  if (p->IsAlive()) p->Abort();
-
-  // this is an unrecoverable error:
-  return false;
 }
 #endif

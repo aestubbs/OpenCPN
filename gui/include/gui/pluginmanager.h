@@ -32,6 +32,7 @@
 #include "config.h"
 
 #include <QList>
+#include <QObject>
 #include <QStringList>
 
 #include <wx/wx.h>
@@ -42,12 +43,9 @@
 #include <wx/hyperlink.h>
 #include <wx/tglbtn.h>
 
-#ifndef __ANDROID__
-#ifdef OCPN_USE_CURL
-#include <wx/curl/http.h>
-#include <wx/curl/dialog.h>
-#endif
-#endif
+class QFile;
+class QNetworkAccessManager;
+class QNetworkReply;
 
 #include "o_sound/o_sound.h"
 
@@ -171,7 +169,10 @@ using ArrayOfPlugInToolbarTools = QList<PlugInToolbarToolContainer*>;
 
 class BlacklistUI;
 
-class PlugInManager : public wxEvtHandler {
+// QObject must come FIRST in the inheritance list for Qt's moc to work with
+// multiple-inheritance (see the comm_drv_signalk_net pattern from P1.11).
+class PlugInManager : public QObject, public wxEvtHandler {
+  Q_OBJECT
 public:
   PlugInManager(AbstractTopFrame* parent);
   virtual ~PlugInManager();
@@ -342,23 +343,29 @@ private:
 #ifdef OCPN_USE_CURL
 
 public:
-  wxCurlDownloadThread* m_pCurlThread;
-  // The libcurl handle being re used for the transfer.
-  std::shared_ptr<wxCurlBase> m_pCurl;
-
-  // returns true if the error can be ignored
-  bool HandleCurlThreadError(wxCurlThreadError err, wxCurlBaseThread* p,
-                             const wxString& url = wxEmptyString);
-  void OnEndPerformCurlDownload(wxCurlEndPerformEvent& ev);
-  void OnCurlDownload(wxCurlDownloadEvent& ev);
+  // Background download state (replaces the wxcurl thread / handle pair).
+  // The QNetworkAccessManager is owned by PlugInManager; the active reply is
+  // re-set per download and freed in OnDownloadFinished.
+  QNetworkAccessManager* m_qnam = nullptr;
+  QNetworkReply* m_active_reply = nullptr;
+  // Output sink for the active background download. Owned here so it outlives
+  // the OCPN_downloadFileBackground() call frame.
+  QFile* m_dl_output = nullptr;
 
   wxEvtHandler* m_download_evHandler;
   long* m_downloadHandle;
   bool m_last_online;
   long m_last_online_chk;
+
+public Q_SLOTS:
+  // Wired to QNetworkReply::finished and QNetworkReply::downloadProgress for
+  // the background download started by OCPN_downloadFileBackground().
+  void OnDownloadFinished();
+  void OnDownloadProgress(qint64 received, qint64 total);
 #endif
 #endif
 
+private:
   DECLARE_EVENT_TABLE()
 };
 
