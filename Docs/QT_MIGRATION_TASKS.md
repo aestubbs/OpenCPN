@@ -7,9 +7,10 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6–P1.13 done — the model's
+SignalK/SocketCAN parked (P1.5m). P1.6–P1.14 done — the model's
 `wxString` / `wxDateTime` / wx-container / `wxConfig` / file-I/O /
-threading-and-timer / JSON / networking sweeps are all complete.
+threading-and-timer / JSON / networking / route-mark-UI-types sweeps
+are all complete.
 `QStringList` / `QList<T*>` / `QHash` / `QSet` are the container
 vocabulary; `model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string
 conversions; `QDateTime` / `qint64`-seconds is the time/duration
@@ -25,9 +26,8 @@ the `GetSignalkPayload` `wxJSONValue` shim), the chart-reader
 `wxInputStream`/`wxOutputStream` streams, `wxStandardPaths` on macOS
 bundle paths, wx-widget plumbing (Phase 3), deferred-ownership
 container types, `libs/wxservdisc` (mDNS — service discovery, separate
-concern), and the post-P1.9 config call-site helpers. Next: P1.14
-(abstract route/mark UI types: `wxColour`/`wxPen`/`wxBitmap` →
-`QColor`/`QPen`/`QImage`).
+concern), and the post-P1.9 config call-site helpers. Next: P1.15
+(final Phase 1 verification — core compiles wx-free; unit tests pass).
 **Last updated:** 2026-05-20.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -542,7 +542,26 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         `curl_easy_strerror` mapper now decodes the negative
         `QNetworkReply::NetworkError` sentinel `peer_client` sets via
         `QMetaEnum::valueToKey`.
-- [ ] **P1.14** Abstract route/mark UI types (`wxColour`/`wxPen`/`wxBitmap`) → `QColor`/`QPen`/`QImage`.
+- [x] **P1.14** Abstract route/mark UI types (`wxColour`→`QColor`,
+      `wxPen`→`QPen`, `wxBrush`→`QBrush`, `wxBitmap`→`QImage`,
+      `wxFont`→`QFont`) in the model surface. The wider GUI drawing
+      code stays wx — Phase 3 / QtQuick port territory. Added
+      `model/include/model/wx_qt_ui_types.h` (header-only) with the
+      inline `QColorToWxColour` / `WxColourToQColor` /
+      `QImageToWxImage` / `QImageToWxBitmap` / `WxImageToQImage` /
+      `WxBitmapToQImage` / `QPenToWxPen` / `QBrushToWxBrush` /
+      `QFontToWxFont` bridges for the model⇄wx-GUI boundary. `Route
+      Point` font is now a `QFont` value member with a parallel
+      `m_MarkFontInitialized` flag (preserves the legacy "null-pointer
+      means-not-yet-loaded" semantic); `MarkIcon::piconBitmap` stays a
+      heap pointer (`QImage*`, owned by `WayPointman`) to keep the
+      lazy-build semantic. Routeman's icon API
+      (`GetIconBitmap`/`Get{Icon,X,F}ImageListIndex`) returns
+      `const QImage*`; `GetIconImageListIndex` still produces a wx
+      image list (consumers are wx widgets) but builds it from a
+      `QImage` via the bridge. CMake adds `Qt6::Gui` to the model.
+      `QColor::name()` replaces `wxColour::GetAsString(wxC2S_HTML_SYNTAX)`
+      for config I/O (bytewise-equivalent for opaque colors).
 - [ ] **P1.15** Verify: core compiles wx-free; unit tests pass.
 
 ## Phase 2 — Scene graph + LayerCompositor  (est. 10–16 wks)
@@ -1004,3 +1023,24 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   routing through `libs/mdns` (we already have it vendored) or a Qt-
   native zeroconf solution. Listed in the deliberate-boundaries
   ledger.
+- 2026-05-20 — P1.14 done: route/mark UI types abstracted in the model.
+  `QColor` / `QPen` / `QBrush` / `QImage` / `QFont` replace `wxColour`
+  / `wxPen` / `wxBrush` / `wxBitmap` / `wxFont` across `routeman` /
+  `route` / `route_point` / `MarkIcon`. The wider GUI rendering code
+  (chcanv, ais, options, etc.) stays wx — that's Phase 3 / QtQuick
+  port territory. Added `model/include/model/wx_qt_ui_types.h` —
+  header-only bridge helpers (`QColorToWxColour` / `WxColourToQColor`
+  / `QImageToWxImage` / `QImageToWxBitmap` / `WxImageToQImage` /
+  `WxBitmapToQImage` / `QPenToWxPen` / `QBrushToWxBrush` /
+  `QFontToWxFont`) for the model⇄wx-GUI boundary, joining
+  `wx_qt_string.h` and the implicit `QDateTime`↔`wxDateTime` time-t
+  bridges. GUI consumers (route_point_gui, route_gui, track_gui,
+  chcanv, ais, mark_info, options, navutil, ocpn_plugin_gui, api_121)
+  adapt at the call site using these helpers. Two preserved legacy
+  semantics worth noting: `RoutePoint::m_pMarkFont` was a `wxFont*`
+  whose null value meant "not yet loaded" — replaced by a `QFont`
+  value member plus a parallel `bool m_MarkFontInitialized` flag;
+  `MarkIcon::piconBitmap` stays a heap pointer (`QImage*`, owned by
+  `WayPointman`) so the same lazy-build semantic continues to work.
+  CMake adds `Qt6::Gui` publicly to the model target (its headers now
+  consume `QColor`/`QPen`/`QBrush`/`QImage`/`QFont`).
