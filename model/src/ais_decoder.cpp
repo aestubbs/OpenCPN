@@ -2006,12 +2006,10 @@ void AisDecoder::HandleSignalK(const SignalKMsgPtr &sK_msg) {
   if (mmsi == g_OwnShipmmsi) return;
 
 #if 0
-    wxString dbg;
-    wxJSONWriter writer;
-    writer.Write(root, dbg);
-
-    wxString msg( "AisDecoder::OnEvtSignalK: " );
-    msg.append(dbg);
+    QJsonDocument dbg_doc(root);
+    wxString msg("AisDecoder::OnEvtSignalK: ");
+    msg.append(wxString::FromUTF8(
+        dbg_doc.toJson(QJsonDocument::Compact).constData()));
     wxLogMessage(msg);
 #endif
   std::shared_ptr<AisTargetData> pTargetData = nullptr;

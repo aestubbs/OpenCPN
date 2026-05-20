@@ -50,7 +50,7 @@
 #include <wx/gdicmn.h>
 #include <wx/glcanvas.h>
 #include <wx/image.h>
-#include <wx/jsonval.h>
+#include <QJsonObject>
 #include <wx/log.h>
 #include <wx/pen.h>
 #include <wx/progdlg.h>
@@ -1238,16 +1238,16 @@ void glChartCanvas::SetupOpenGL() {
 
 void glChartCanvas::SendJSONConfigMessage() {
   if (g_pi_manager) {
-    wxJSONValue v;
+    QJsonObject v;
     v["setupComplete"] = m_bsetup;
     v["useStencil"] = s_b_useStencil;
     v["useStencilAP"] = s_b_useStencilAP;
     v["useScissorTest"] = s_b_useScissorTest;
     v["useFBO"] = s_b_useFBO;
     v["useVBO"] = g_b_EnableVBO;
-    v["TextureRectangleFormat"] = g_texture_rectangle_format;
-    wxString msg_id("OCPN_OPENGL_CONFIG");
-    SendJSONMessageToAllPlugins(msg_id, v);
+    v["TextureRectangleFormat"] =
+        static_cast<int>(g_texture_rectangle_format);
+    SendJSONMessageToAllPlugins(QStringLiteral("OCPN_OPENGL_CONFIG"), v);
   }
 }
 void glChartCanvas::SetupCompression() {

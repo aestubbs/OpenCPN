@@ -23,6 +23,8 @@
 
 #include "gl_headers.h"  // Must come before anything using GL stuff
 
+#include <QJsonObject>
+
 // For compilers that support precompilation, includes "wx.h".
 #include <wx/wxprec.h>
 
@@ -1373,10 +1375,10 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
         g_AW2GUID.Clear();
       }
       if (!guid.IsEmpty()) {
-        wxJSONValue v;
-        v["GUID"] = guid;
-        wxString msg_id("OCPN_ANCHOR_WATCH_CLEARED");
-        SendJSONMessageToAllPlugins(msg_id, v);
+        QJsonObject v;
+        v["GUID"] = wxString_to_QString(guid);
+        SendJSONMessageToAllPlugins(QStringLiteral("OCPN_ANCHOR_WATCH_CLEARED"),
+                                    v);
       }
       break;
     }
@@ -1405,10 +1407,9 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
         }
       }
       if (!guid.IsEmpty()) {
-        wxJSONValue v;
-        v["GUID"] = guid;
-        wxString msg_id("OCPN_ANCHOR_WATCH_SET");
-        SendJSONMessageToAllPlugins(msg_id, v);
+        QJsonObject v;
+        v["GUID"] = wxString_to_QString(guid);
+        SendJSONMessageToAllPlugins(QStringLiteral("OCPN_ANCHOR_WATCH_SET"), v);
       }
       break;
     }

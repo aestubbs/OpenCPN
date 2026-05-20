@@ -43,12 +43,16 @@
 #include <regex>
 #include <wx/sckaddr.h>
 #include <wx/socket.h>
-#include <wx/jsonval.h>
-#include <wx/jsonreader.h>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
 #include "wiz_ui.h"
 #include "config_compat_helpers.h"
 #include "ocpn_platform.h"
 #include "model/comm_drv_n2k_net.h"
+#include "model/wx_qt_string.h"
 #include "model/conn_params.h"
 #include "model/logger.h"
 #include "model/mdns_query.h"
@@ -573,22 +577,22 @@ void FirstUseWizImpl::EnumerateCAN() {
   for (const auto& l : output) {
     fis.Append(l);
   }
-  wxJSONReader reader;
-  wxJSONValue root;
-  reader.Parse(fis, &root);
-  if (reader.GetErrorCount() > 0) {
+  QJsonParseError perr;
+  const QJsonDocument doc =
+      QJsonDocument::fromJson(QByteArray(fis.utf8_str()), &perr);
+  if (perr.error != QJsonParseError::NoError) {
     DEBUG_LOG << "Failed to parse JSON output from ip.";
-    for (const auto& l : reader.GetErrors()) {
-      DEBUG_LOG << " - " << l;
-    }
+    DEBUG_LOG << " - " << perr.errorString().toStdString();
     return;
   }
-  if (root.IsArray()) {
-    for (int i = 0; i < root.Size(); i++) {
-      const wxJSONValue iface = root[i];
-      if (iface.HasMember("ifname") && iface.HasMember("link_type")) {
-        wxString ifname = iface.Get("ifname", "").AsString();
-        wxString link_type = iface.Get("link_type", "").AsString();
+  if (doc.isArray()) {
+    const QJsonArray arr = doc.array();
+    for (const QJsonValue& iv : arr) {
+      const QJsonObject iface = iv.toObject();
+      if (iface.contains("ifname") && iface.contains("link_type")) {
+        wxString ifname =
+            QString_to_wxString(iface.value("ifname").toString());
+        QString link_type = iface.value("link_type").toString();
         if (link_type == "can") {
           DEBUG_LOG << "Found CAN interface: " << ifname;
           ConnectionParams params;

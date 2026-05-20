@@ -30,11 +30,11 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QJsonObject>
 #include <QtGlobal>
 
 #include <wx/wxprec.h>
 #include <wx/image.h>
-#include <wx/jsonval.h>
 
 #include "model/ais_decoder.h"
 #include "model/autopilot_output.h"
@@ -224,10 +224,10 @@ RoutePoint *Routeman::FindBestActivatePoint(Route *pR, double lat, double lon,
 
 bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
   g_bAllowShipToActive = false;
-  wxJSONValue v;
-  v["Route_activated"] = QString_to_wxString(pRouteToActivate->m_RouteNameString);
-  v["GUID"] = QString_to_wxString(pRouteToActivate->m_GUID);
-  json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_ACTIVATED");
+  QJsonObject v;
+  v["Route_activated"] = pRouteToActivate->m_RouteNameString;
+  v["GUID"] = pRouteToActivate->m_GUID;
+  json_msg.Notify(std::make_shared<QJsonObject>(v), "OCPN_RTE_ACTIVATED");
   if (g_bPluginHandleAutopilotRoute) return true;
 
   // Capture and maintain a list of data connections configured as "output"
@@ -288,11 +288,11 @@ bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
 
 bool Routeman::ActivateRoutePoint(Route *pA, RoutePoint *pRP_target) {
   g_bAllowShipToActive = false;
-  wxJSONValue v;
-  v["GUID"] = QString_to_wxString(pRP_target->m_GUID);
-  v["WP_activated"] = QString_to_wxString(pRP_target->GetName());
+  QJsonObject v;
+  v["GUID"] = pRP_target->m_GUID;
+  v["WP_activated"] = pRP_target->GetName();
 
-  json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_WPT_ACTIVATED");
+  json_msg.Notify(std::make_shared<QJsonObject>(v), "OCPN_WPT_ACTIVATED");
 
   if (g_bPluginHandleAutopilotRoute) return true;
 
@@ -359,16 +359,16 @@ bool Routeman::ActivateRoutePoint(Route *pA, RoutePoint *pRP_target) {
 
 bool Routeman::ActivateNextPoint(Route *pr, bool skipped) {
   g_bAllowShipToActive = false;
-  wxJSONValue v;
+  QJsonObject v;
   bool result = false;
   if (pActivePoint) {
     pActivePoint->m_bBlink = false;
     pActivePoint->m_bIsActive = false;
 
     v["isSkipped"] = skipped;
-    v["GUID"] = QString_to_wxString(pActivePoint->m_GUID);
-    v["GUID_WP_arrived"] = QString_to_wxString(pActivePoint->m_GUID);
-    v["WP_arrived"] = QString_to_wxString(pActivePoint->GetName());
+    v["GUID"] = pActivePoint->m_GUID;
+    v["GUID_WP_arrived"] = pActivePoint->m_GUID;
+    v["WP_arrived"] = pActivePoint->GetName();
   }
   int n_index_active = pActiveRoute->GetIndexOf(pActivePoint);
   if (n_index_active < 0) return false;
@@ -389,8 +389,8 @@ bool Routeman::ActivateNextPoint(Route *pr, bool skipped) {
     }
   }
   if (result) {
-    v["Next_WP"] = QString_to_wxString(pActivePoint->GetName());
-    v["GUID_Next_WP"] = QString_to_wxString(pActivePoint->m_GUID);
+    v["Next_WP"] = pActivePoint->GetName();
+    v["GUID_Next_WP"] = pActivePoint->m_GUID;
 
     pActivePoint->m_bBlink = true;
     pActivePoint->m_bIsActive = true;
@@ -407,7 +407,7 @@ bool Routeman::ActivateNextPoint(Route *pr, bool skipped) {
     /// }
     m_prop_dlg_ctx.set_enroute_point(pr, pActivePoint);
 
-    json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_WPT_ARRIVED");
+    json_msg.Notify(std::make_shared<QJsonObject>(v), "OCPN_WPT_ARRIVED");
   }
   return result;
 }
@@ -423,15 +423,15 @@ bool Routeman::DeactivateRoute(bool b_arrival) {
     pActiveRoute->m_pRouteActivePoint = NULL;
     g_active_route.Clear();
 
-    wxJSONValue v;
+    QJsonObject v;
     if (!b_arrival) {
-      v["Route_deactivated"] = QString_to_wxString(pActiveRoute->m_RouteNameString);
-      v["GUID"] = QString_to_wxString(pActiveRoute->m_GUID);
-      json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_DEACTIVATED");
+      v["Route_deactivated"] = pActiveRoute->m_RouteNameString;
+      v["GUID"] = pActiveRoute->m_GUID;
+      json_msg.Notify(std::make_shared<QJsonObject>(v), "OCPN_RTE_DEACTIVATED");
     } else {
-      v["GUID"] = QString_to_wxString(pActiveRoute->m_GUID);
-      v["Route_ended"] = QString_to_wxString(pActiveRoute->m_RouteNameString);
-      json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_RTE_ENDED");
+      v["GUID"] = pActiveRoute->m_GUID;
+      v["Route_ended"] = pActiveRoute->m_RouteNameString;
+      json_msg.Notify(std::make_shared<QJsonObject>(v), "OCPN_RTE_ENDED");
     }
   }
 

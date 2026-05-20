@@ -56,6 +56,8 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QStandardPaths>
 #include <QStringList>
 
@@ -11157,22 +11159,24 @@ void pupHandler_PasteTrack() {
 }
 
 bool ChartCanvas::InvokeCanvasMenu(int x, int y, int seltype) {
-  wxJSONValue v;
+  QJsonObject v;
   v["CanvasIndex"] = GetCanvasIndexUnderMouse();
   v["CursorPosition_x"] = x;
   v["CursorPosition_y"] = y;
   // Send a limited set of selection types depending on what is
   // found under the mouse point.
-  if (seltype & SELTYPE_UNKNOWN) v["SelectionType"] = "Canvas";
-  if (seltype & SELTYPE_ROUTEPOINT) v["SelectionType"] = "RoutePoint";
-  if (seltype & SELTYPE_AISTARGET) v["SelectionType"] = "AISTarget";
+  if (seltype & SELTYPE_UNKNOWN) v["SelectionType"] = QStringLiteral("Canvas");
+  if (seltype & SELTYPE_ROUTEPOINT)
+    v["SelectionType"] = QStringLiteral("RoutePoint");
+  if (seltype & SELTYPE_AISTARGET)
+    v["SelectionType"] = QStringLiteral("AISTarget");
 
-  wxJSONWriter w;
-  wxString out;
-  w.Write(v, out);
-  SendMessageToAllPlugins("OCPN_CONTEXT_CLICK", out);
+  const QJsonDocument doc(v);
+  const QByteArray out = doc.toJson(QJsonDocument::Compact);
+  SendMessageToAllPlugins("OCPN_CONTEXT_CLICK",
+                          wxString::FromUTF8(out.constData(), out.size()));
 
-  json_msg.Notify(std::make_shared<wxJSONValue>(v), "OCPN_CONTEXT_CLICK");
+  json_msg.Notify(std::make_shared<QJsonObject>(v), "OCPN_CONTEXT_CLICK");
 
 #if 0
 #define SELTYPE_UNKNOWN 0x0001
@@ -11847,12 +11851,12 @@ void ChartCanvas::UpdateCanvasS52PLIBConfig() {
   }
 
   if (bSendPlibState) {
-    wxJSONValue v;
+    QJsonObject v;
     v["OpenCPN Version Major"] = VERSION_MAJOR;
     v["OpenCPN Version Minor"] = VERSION_MINOR;
     v["OpenCPN Version Patch"] = VERSION_PATCH;
-    v["OpenCPN Version Date"] = VERSION_DATE;
-    v["OpenCPN Version Full"] = VERSION_FULL;
+    v["OpenCPN Version Date"] = QString::fromUtf8(VERSION_DATE);
+    v["OpenCPN Version Full"] = QString::fromUtf8(VERSION_FULL);
 
     //  S52PLIB state
     v["OpenCPN S52PLIB ShowText"] = GetShowENCText();
@@ -11888,9 +11892,9 @@ void ChartCanvas::UpdateCanvasS52PLIBConfig() {
         g_Platform->GetChartScaleFactorExp(g_ChartScaleFactor);
     v["OpenCPN Display Width"] = (int)g_display_size_mm;
 
-    wxJSONWriter w;
-    wxString out;
-    w.Write(v, out);
+    const QJsonDocument doc(v);
+    const QByteArray bytes = doc.toJson(QJsonDocument::Compact);
+    const wxString out = wxString::FromUTF8(bytes.constData(), bytes.size());
 
     if (!g_lastS52PLIBPluginMessage.IsSameAs(out)) {
       SendMessageToAllPlugins(wxString("OpenCPN Config"), out);

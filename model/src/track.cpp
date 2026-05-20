@@ -77,7 +77,7 @@ millions of points.
 
 #include <wx/colour.h>
 #include <wx/event.h>
-#include <wx/jsonval.h>
+#include <QJsonObject>
 #include <wx/pen.h>
 #include <wx/progdlg.h>
 #include <wx/string.h>
@@ -688,13 +688,13 @@ TrackPoint *Track::AddNewPoint(vector2D point, QDateTime time) {
 
   NavObj_dB::GetInstance().AddTrackPoint(this, tPoint);
 
-  // send a wxJson message to all plugins
-  wxJSONValue v;
+  // send a JSON message to all plugins
+  QJsonObject v;
   v["lat"] = tPoint->m_lat;
   v["lon"] = tPoint->m_lon;
-  v["Track_ID"] = QString_to_wxString(m_GUID);
+  v["Track_ID"] = m_GUID;
   std::string msg_id("OCPN_TRK_POINT_ADDED");
-  JsonEvent::getInstance().Notify(msg_id, std::make_shared<wxJSONValue>(v));
+  JsonEvent::getInstance().Notify(msg_id, std::make_shared<QJsonObject>(v));
 
   return tPoint;
 }

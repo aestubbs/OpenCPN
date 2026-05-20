@@ -27,8 +27,6 @@
 
 #include "gl_headers.h"  // Must come before anything using GL stuff
 
-#include <wx/json_defs.h>
-#include <wx/jsonreader.h>
 #include <wx/tokenzr.h>
 
 #include <curl/curl.h>

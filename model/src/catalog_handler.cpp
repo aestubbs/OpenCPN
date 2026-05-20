@@ -34,7 +34,12 @@
 #include <QStandardPaths>
 #include <QString>
 
-#include <wx/jsonreader.h>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
+
 #include <wx/log.h>
 
 #include "model/base_platform.h"
@@ -349,22 +354,24 @@ catalog_status CatalogHandler::LoadChannels(std::ostream* stream) {
 }
 
 catalog_status CatalogHandler::LoadChannels(const std::string& json) {
-  wxJSONValue node;
-  wxJSONReader parser;
-  parser.Parse(json.c_str(), &node);
-  if (!node.IsArray()) {
+  QJsonParseError err;
+  const QJsonDocument doc =
+      QJsonDocument::fromJson(QByteArray::fromStdString(json), &err);
+  if (!doc.isArray()) {
     wxLogMessage("Cannot parse json (toplevel)");
-    error_msg = parser.GetErrors().Item(0).ToStdString();
+    error_msg = (err.error != QJsonParseError::NoError)
+                    ? err.errorString().toStdString()
+                    : std::string("not an array");
     return ServerStatus::JSON_ERROR;
   }
-  auto branches = node.AsArray();
-  wxLogMessage("Got %d branches", branches->Count());
+  const QJsonArray branches = doc.array();
+  wxLogMessage("Got %d branches", branches.size());
   channels.clear();
-  for (size_t i = 0; i < branches->Count(); i += 1) {
-    auto branch = branches->Item(i);
-    channels.push_back(branch["name"].AsString().ToStdString());
+  for (const QJsonValue& branch : branches) {
+    channels.push_back(
+        branch.toObject().value("name").toString().toStdString());
   }
-  if (branches->Count() > 0) {
+  if (branches.size() > 0) {
     wxLogMessage("First branch: %s", channels[0].c_str());
   }
   return ServerStatus::OK;

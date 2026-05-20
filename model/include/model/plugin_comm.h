@@ -24,15 +24,34 @@
 #ifndef PLUGIN_COMM_H
 #define PLUGIN_COMM_H
 
+#include <QJsonObject>
+#include <QString>
+
 #include <wx/event.h>
-#include <wx/jsonval.h>
 #include <wx/string.h>
 
 #include "model/ocpn_types.h"
 
+// Forward declaration kept for the transitional wxJSONValue overload of
+// SendJSONMessageToAllPlugins() below.  Step 2 of the P1.12 migration will
+// remove that overload along with this declaration.
+class wxJSONValue;
+
 void SendMessageToAllPlugins(const wxString& message_id,
                              const wxString& message_body);
 
+/** Send a JSON message to all interested plugins.
+ *
+ *  The message is serialized via Qt and forwarded to plugins as the JSON text
+ *  it represents (plugins receive it through their wxString-based
+ *  SetPluginMessage hook).
+ */
+void SendJSONMessageToAllPlugins(const QString& message_id,
+                                 const QJsonObject& v);
+
+// Transitional wxJSONValue overload -- to be removed in step 2 of P1.12 once
+// the remaining wxJSON callers (ocpn_frame.cpp, pluginmanager.cpp,
+// track_prop_dlg.cpp) have been converted.
 void SendJSONMessageToAllPlugins(const wxString& message_id, wxJSONValue v);
 
 void SendAISSentenceToAllPlugIns(const wxString& sentence);

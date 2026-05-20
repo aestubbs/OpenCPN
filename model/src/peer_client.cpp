@@ -29,8 +29,10 @@
 
 #include <curl/curl.h>
 
-#include <wx/json_defs.h>
-#include <wx/jsonreader.h>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+
 #include <wx/log.h>
 #include <wx/string.h>
 
@@ -197,25 +199,25 @@ static void SaveClientKey(std::string& server_name, std::string key) {
 }
 static RestServerResult ParseServerJson(const MemoryStruct& reply,
                                         PeerData& peer_data) {
-  wxString body(reply.memory);
-  wxJSONValue root;
-  wxJSONReader reader;
-  int num_errors = reader.Parse(body, &root);
-  if (num_errors != 0) {
-    for (const auto& error : reader.GetErrors()) {
+  QJsonParseError err;
+  const QJsonDocument doc = QJsonDocument::fromJson(
+      QByteArray(reply.memory, static_cast<int>(reply.size)), &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+    if (err.error != QJsonParseError::NoError) {
       wxLogMessage("Json server reply parse error: %s",
-                   error.ToStdString().c_str());
+                   err.errorString().toStdString().c_str());
     }
-    peer_data.run_status_dlg(PeerDlg::JsonParseError, num_errors);
+    peer_data.run_status_dlg(PeerDlg::JsonParseError, 1);
     peer_data.api_version = SemanticVersion(-1, -1);
     return RestServerResult::Void;
   }
-  if (root.HasMember("version")) {
-    auto s = root["version"].AsString().ToStdString();
+  const QJsonObject root = doc.object();
+  if (root.contains("version")) {
+    auto s = root.value("version").toString().toStdString();
     peer_data.api_version = SemanticVersion::parse(s);
   }
-  if (root.HasMember("result")) {
-    return static_cast<RestServerResult>(root["result"].AsInt());
+  if (root.contains("result")) {
+    return static_cast<RestServerResult>(root.value("result").toInt());
   } else {
     return RestServerResult::Void;
   }
@@ -359,15 +361,15 @@ static void SendObjects(std::string& body, const std::string& api_key,
     struct MemoryStruct chunk;
     long response_code = ApiPost(url.str(), body, peer_data, &chunk);
     if (response_code == 200) {
-      wxString json(chunk.memory);
-      wxJSONValue root;
-      wxJSONReader reader;
-
-      int num_errors = reader.Parse(json, &root);
-      if (num_errors > 0)
-        wxLogDebug("SendObjects, parse errors: %d", num_errors);
+      QJsonParseError perr;
+      const QJsonDocument doc = QJsonDocument::fromJson(
+          QByteArray(chunk.memory, static_cast<int>(chunk.size)), &perr);
+      if (perr.error != QJsonParseError::NoError)
+        wxLogDebug("SendObjects, parse error: %s",
+                   perr.errorString().toStdString().c_str());
+      const QJsonObject root = doc.object();
       // Capture the result
-      int result = root["result"].AsInt();
+      int result = root.value("result").toInt();
       if (result > 0) {
         peer_data.run_status_dlg(PeerDlg::ErrorReturn, result);
       } else {
@@ -383,13 +385,14 @@ static void SendObjects(std::string& body, const std::string& api_key,
 
 /** Parse json message in chunk, return "result" from server. */
 static int CheckChunk(struct MemoryStruct& chunk, const std::string& guid) {
-  wxString body(chunk.memory);
-  wxJSONValue root;
-  wxJSONReader reader;
-  int num_errors = reader.Parse(body, &root);
-  if (num_errors > 0)
-    wxLogDebug("CheckChunk: parsing errors found: %d", num_errors);
-  int result = root["result"].AsInt();
+  QJsonParseError perr;
+  const QJsonDocument doc = QJsonDocument::fromJson(
+      QByteArray(chunk.memory, static_cast<int>(chunk.size)), &perr);
+  if (perr.error != QJsonParseError::NoError)
+    wxLogDebug("CheckChunk: parse error: %s",
+               perr.errorString().toStdString().c_str());
+  const QJsonObject root = doc.object();
+  int result = root.value("result").toInt();
   if (result != 0) {
     wxLogDebug("Server rejected guid %s, status: %d", guid.c_str(), result);
     return result;

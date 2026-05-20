@@ -32,9 +32,6 @@
 #include <QString>
 #include <QStringList>
 
-#include <wx/jsonreader.h>
-#include <wx/jsonval.h>
-#include <wx/jsonwriter.h>
 #include <wx/tokenzr.h>
 
 #include "model/comm_driver.h"

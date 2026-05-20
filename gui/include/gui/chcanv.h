@@ -897,7 +897,7 @@ public:
 
   /**
    * Notified with message targeting all plugins. Contains a message type
-   * string and a wxJSONValue shared_ptr.
+   * string and a `std::shared_ptr<QJsonObject>` payload.
    */
   EventVar json_msg;
 

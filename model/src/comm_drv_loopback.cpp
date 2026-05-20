@@ -34,7 +34,10 @@
 #include <string>
 #include <vector>
 
-#include <wx/jsonreader.h>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+
 #include <wx/log.h>
 #include <wx/string.h>
 
@@ -94,12 +97,14 @@ static NavMsgPtr Parse0183(const string& iface, const string& type,
 
 static NavMsgPtr ParseSignalk(const string& iface, const string& type,
                               const string& msg) {
-  wxJSONValue root;
-  wxJSONReader reader;
-  int err_count = reader.Parse(msg, &root);
+  QJsonParseError err;
+  const QJsonDocument doc =
+      QJsonDocument::fromJson(QByteArray::fromStdString(msg), &err);
   std::string context;
-  if (err_count == 0) {
-    if (root.HasMember("context")) context = root["context"].AsString();
+  if (err.error == QJsonParseError::NoError && doc.isObject()) {
+    const QJsonObject root = doc.object();
+    if (root.contains("context"))
+      context = root.value("context").toString().toStdString();
   }
   return make_shared<SignalkMsg>(type, context, msg, iface);
 }

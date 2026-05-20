@@ -26,6 +26,10 @@
 #include <sstream>
 #include <vector>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QString>
 #include <QStringList>
 
@@ -73,27 +77,47 @@ std::string GetPluginMsgPayload(PluginMsgId id, ObservedEvt ev) {
 
 std::shared_ptr<void> GetSignalkPayload(ObservedEvt ev) {
   auto msg = UnpackEvtPointer<SignalkMsg>(ev);
-  wxJSONReader reader;
-  wxJSONValue data;
-  reader.Parse(wxString(msg->raw_message), &data);
 
-  wxJSONValue root(wxJSONTYPE_OBJECT);
-  root["Data"] = data;
-  root["ErrorCount"] = reader.GetErrorCount();
-  root["WarningCount"] = reader.GetWarningCount();
+  // Parse the SignalK message with Qt.
+  QJsonParseError perr;
+  const QJsonDocument data_doc = QJsonDocument::fromJson(
+      QByteArray::fromStdString(msg->raw_message), &perr);
 
-  root["Errors"] = wxJSONValue(wxJSONTYPE_ARRAY);
-  for (size_t i = 0; i < reader.GetErrors().GetCount(); i++)
-    root["Errors"].Append(reader.GetErrors().Item(i));
+  QJsonValue data_val;
+  if (data_doc.isObject())
+    data_val = data_doc.object();
+  else if (data_doc.isArray())
+    data_val = data_doc.array();
 
-  root["Warnings"] = wxJSONValue(wxJSONTYPE_ARRAY);
-  for (size_t i = 0; i < reader.GetWarnings().GetCount(); i++)
-    root["Warnings"].Append(reader.GetWarnings().Item(i));
+  // Build the message envelope as a QJsonObject -- mirrors the legacy
+  // wxJSONValue layout below so plugins receive identical fields.
+  QJsonObject root_q;
+  root_q["Data"] = data_val;
+  root_q["ErrorCount"] =
+      (perr.error == QJsonParseError::NoError) ? 0 : 1;
+  root_q["WarningCount"] = 0;
 
-  root["Context"] = msg->context;
-  root["ContextSelf"] = msg->context_self;
+  QJsonArray errors;
+  if (perr.error != QJsonParseError::NoError) errors.append(perr.errorString());
+  root_q["Errors"] = errors;
+  root_q["Warnings"] = QJsonArray();
 
-  return static_pointer_cast<void>(std::make_shared<wxJSONValue>(root));
+  root_q["Context"] = QString::fromStdString(msg->context);
+  root_q["ContextSelf"] = QString::fromStdString(msg->context_self);
+
+  // Plugin-ABI boundary: the public contract is std::shared_ptr<void> pointing
+  // at a wxJSONValue (see ocpn_plugin.h:6320-6326).  Serialize the QJsonObject
+  // and re-parse with wxJSONReader to produce a wxJSONValue payload.  This
+  // double-encode is fine here: only called when a plugin pulls the SignalK
+  // payload, not a hot path.
+  QJsonDocument doc_q(root_q);
+  const QByteArray bytes = doc_q.toJson(QJsonDocument::Compact);
+  wxJSONReader reader_wx;
+  wxJSONValue root_wx;
+  reader_wx.Parse(wxString::FromUTF8(bytes.constData(), bytes.size()),
+                  &root_wx);
+  return static_pointer_cast<void>(
+      std::make_shared<wxJSONValue>(std::move(root_wx)));
 }
 
 std::shared_ptr<PI_Notification> GetNotificationMsgPayload(NotificationMsgId id,

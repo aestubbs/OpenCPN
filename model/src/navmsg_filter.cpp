@@ -23,11 +23,15 @@
 
 #include <fstream>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
+
 #include "model/base_platform.h"
 #include "model/navmsg_filter.h"
 
-#include "wx/jsonreader.h"
-#include "wx/jsonwriter.h"
 #include "wx/log.h"
 
 #include "std_filesystem.h"
@@ -121,65 +125,56 @@ static std::string StateToString(State state) {
   return "";  // for the compiler
 }
 
-static void ParseBuses(NavmsgFilter& filter, wxJSONValue json_val) {
-  for (int i = 0; i < json_val.Size(); i++) {
-    auto str = json_val[i].AsString().ToStdString();
-    filter.buses.insert(NavAddr::StringToBus(str));
+static void ParseBuses(NavmsgFilter& filter, const QJsonArray& arr) {
+  for (const QJsonValue& v : arr)
+    filter.buses.insert(NavAddr::StringToBus(v.toString().toStdString()));
+}
+
+static void ParseDirections(NavmsgFilter& filter, const QJsonArray& arr) {
+  for (const QJsonValue& v : arr)
+    filter.directions.insert(StringToDirection(v.toString().toStdString()));
+}
+
+static void ParseAccepted(NavmsgFilter& filter, const QJsonArray& arr) {
+  for (const QJsonValue& v : arr)
+    filter.accepted.insert(StringToAccepted(v.toString().toStdString()));
+}
+
+static void ParseStatus(NavmsgFilter& filter, const QJsonArray& arr) {
+  for (const QJsonValue& v : arr)
+    filter.status.insert(StringToState(v.toString().toStdString()));
+}
+
+static void ParseMsgFilter(NavmsgFilter& filter, const QJsonObject& obj) {
+  if (obj.contains("blockedMsg")) {
+    const QJsonArray arr = obj.value("blockedMsg").toArray();
+    for (const QJsonValue& v : arr)
+      filter.exclude_msg.insert(v.toString().toStdString());
+  } else if (obj.contains("allowedMsg")) {
+    const QJsonArray arr = obj.value("allowedMsg").toArray();
+    for (const QJsonValue& v : arr)
+      filter.include_msg.insert(v.toString().toStdString());
   }
 }
 
-static void ParseDirections(NavmsgFilter& filter, wxJSONValue json_val) {
-  for (int i = 0; i < json_val.Size(); i++) {
-    auto str = json_val[i].AsString().ToStdString();
-    filter.directions.insert(StringToDirection(str));
-  }
+static void ParseInterfaces(NavmsgFilter& filter, const QJsonArray& arr) {
+  for (const QJsonValue& v : arr)
+    filter.interfaces.insert(v.toString().toStdString());
 }
 
-static void ParseAccepted(NavmsgFilter& filter, wxJSONValue json_val) {
-  for (int i = 0; i < json_val.Size(); i++) {
-    auto str = json_val[i].AsString().ToStdString();
-    filter.accepted.insert(StringToAccepted(str));
-  }
-}
-
-static void ParseStatus(NavmsgFilter& filter, wxJSONValue json_val) {
-  for (int i = 0; i < json_val.Size(); i++) {
-    auto str = json_val[i].AsString().ToStdString();
-    filter.status.insert(StringToState(str));
-  }
-}
-
-static void ParseMsgFilter(NavmsgFilter& filter, wxJSONValue json_val) {
-  if (json_val.HasMember("blockedMsg")) {
-    auto val = json_val["blockedMsg"];
-    for (int i = 0; i < val.Size(); i++)
-      filter.exclude_msg.insert(val[i].AsString().ToStdString());
-  } else if (json_val.HasMember("allowedMsg")) {
-    auto val = json_val["allowedMsg"];
-    for (int i = 0; i < val.Size(); i++)
-      filter.include_msg.insert(val[i].AsString().ToStdString());
-  }
-}
-
-static void ParseInterfaces(NavmsgFilter& filter, wxJSONValue json_val) {
-  for (int i = 0; i < json_val.Size(); i++)
-    filter.interfaces.insert(json_val[i].AsString().ToStdString());
-}
-
-static void ParsePgn(NavmsgFilter& filter, wxJSONValue json_val) {
+static void ParsePgn(NavmsgFilter& filter, const QJsonArray& arr) {
   try {
-    for (int i = 0; i < json_val.Size(); i++)
-      filter.pgns.insert(std::stoi(json_val[i].AsString().ToStdString()));
+    for (const QJsonValue& v : arr)
+      filter.pgns.insert(std::stoi(v.toString().toStdString()));
   } catch (...) {
     return;
   }
 }
 
-static void ParseSource(NavmsgFilter& filter, wxJSONValue json_val) {
+static void ParseSource(NavmsgFilter& filter, const QJsonArray& arr) {
   try {
-    for (int i = 0; i < json_val.Size(); i++) {
-      filter.src_pgns.insert(std::stoi(json_val[i].AsString().ToStdString()));
-    }
+    for (const QJsonValue& v : arr)
+      filter.src_pgns.insert(std::stoi(v.toString().toStdString()));
   } catch (...) {
     return;
   }
@@ -264,71 +259,107 @@ NavmsgFilter NavmsgFilter::Parse(const fs::path& path) {
 }
 
 NavmsgFilter NavmsgFilter::Parse(const std::string& string) {
-  wxJSONValue root;
-  wxJSONReader reader;
-  int err_count = reader.Parse(string, &root);
-  if (err_count > 0) {
+  QJsonParseError err;
+  QByteArray bytes = QByteArray::fromStdString(string);
+  QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
+  // The legacy wxJSON parser tolerated missing trailing braces; some shipped
+  // system filters rely on that.  Retry by appending closing braces until the
+  // document parses or we give up.
+  for (int attempt = 0;
+       attempt < 4 &&
+       (err.error != QJsonParseError::NoError || !doc.isObject());
+       ++attempt) {
+    bytes.append('}');
+    doc = QJsonDocument::fromJson(bytes, &err);
+  }
+  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
     wxLogWarning("Error parsing filter XML");
-    for (auto& e : reader.GetErrors())
-      wxLogWarning("Parse error: %s", e.c_str());
+    if (err.error != QJsonParseError::NoError)
+      wxLogWarning("Parse error: %s", err.errorString().toStdString().c_str());
     return NavmsgFilter(false);
   }
+  const QJsonObject root = doc.object();
+  if (!root.contains("filter") || !root.value("filter").isObject())
+    return NavmsgFilter(false);
+  const QJsonObject f = root.value("filter").toObject();
   NavmsgFilter filter;
-  filter.m_name = root["filter"]["name"].AsString();
-  filter.m_description = root["filter"]["description"].AsString();
-  if (root["filter"].HasMember("buses"))
-    ParseBuses(filter, root["filter"]["buses"]);
-  if (root["filter"].HasMember("accepted"))
-    ParseAccepted(filter, root["filter"]["accepted"]);
-  if (root["filter"].HasMember("status"))
-    ParseStatus(filter, root["filter"]["status"]);
-  if (root["filter"].HasMember("directions"))
-    ParseDirections(filter, root["filter"]["directions"]);
-  if (root["filter"].HasMember("msgFilter"))
-    ParseMsgFilter(filter, root["filter"]["msgFilter"]);
-  if (root["filter"].HasMember("interfaces"))
-    ParseInterfaces(filter, root["filter"]["interfaces"]);
-  if (root["filter"].HasMember("pgns"))
-    ParsePgn(filter, root["filter"]["pgns"]);
-  if (root["filter"].HasMember("src_pgns"))
-    ParseSource(filter, root["filter"]["src_pgns"]);
+  filter.m_name = f.value("name").toString().toStdString();
+  filter.m_description = f.value("description").toString().toStdString();
+  if (f.contains("buses")) ParseBuses(filter, f.value("buses").toArray());
+  if (f.contains("accepted"))
+    ParseAccepted(filter, f.value("accepted").toArray());
+  if (f.contains("status")) ParseStatus(filter, f.value("status").toArray());
+  if (f.contains("directions"))
+    ParseDirections(filter, f.value("directions").toArray());
+  if (f.contains("msgFilter"))
+    ParseMsgFilter(filter, f.value("msgFilter").toObject());
+  if (f.contains("interfaces"))
+    ParseInterfaces(filter, f.value("interfaces").toArray());
+  if (f.contains("pgns")) ParsePgn(filter, f.value("pgns").toArray());
+  if (f.contains("src_pgns"))
+    ParseSource(filter, f.value("src_pgns").toArray());
   return filter;
 }
 
 std::string NavmsgFilter::to_string() const {
-  wxJSONValue root;
-  root["filter"]["name"] = m_name;
-  root["filter"]["description"] = m_description;
-  wxJSONValue& filter = root["filter"];
+  QJsonObject filter;
+  filter["name"] = QString::fromStdString(m_name);
+  filter["description"] = QString::fromStdString(m_description);
 
   if (!buses.empty()) {
-    for (auto b : buses) filter["buses"].Append(NavAddr::BusToString(b));
-  };
+    QJsonArray arr;
+    for (auto b : buses)
+      arr.append(QString::fromStdString(NavAddr::BusToString(b)));
+    filter["buses"] = arr;
+  }
   if (!directions.empty()) {
-    for (auto d : directions) filter["directions"].Append(DirectionToString(d));
-  };
+    QJsonArray arr;
+    for (auto d : directions)
+      arr.append(QString::fromStdString(DirectionToString(d)));
+    filter["directions"] = arr;
+  }
   if (!accepted.empty()) {
-    for (auto a : accepted) filter["accepted"].Append(AcceptedToString(a));
-  };
+    QJsonArray arr;
+    for (auto a : accepted)
+      arr.append(QString::fromStdString(AcceptedToString(a)));
+    filter["accepted"] = arr;
+  }
   if (!status.empty()) {
-    for (auto s : status) filter["status"].Append(StateToString(s));
-  };
+    QJsonArray arr;
+    for (auto s : status) arr.append(QString::fromStdString(StateToString(s)));
+    filter["status"] = arr;
+  }
   if (!include_msg.empty()) {
-    for (auto m : include_msg) filter["msgFilter"]["allowedMsg"].Append(m);
+    QJsonArray arr;
+    for (const auto& m : include_msg) arr.append(QString::fromStdString(m));
+    QJsonObject msgf;
+    msgf["allowedMsg"] = arr;
+    filter["msgFilter"] = msgf;
   } else if (!exclude_msg.empty()) {
-    for (auto m : exclude_msg) filter["msgFilter"]["blockedMsg"].Append(m);
+    QJsonArray arr;
+    for (const auto& m : exclude_msg) arr.append(QString::fromStdString(m));
+    QJsonObject msgf;
+    msgf["blockedMsg"] = arr;
+    filter["msgFilter"] = msgf;
   }
   if (!interfaces.empty()) {
-    for (auto i : interfaces) filter["interfaces"].Append(i);
+    QJsonArray arr;
+    for (const auto& i : interfaces) arr.append(QString::fromStdString(i));
+    filter["interfaces"] = arr;
   }
   if (!pgns.empty()) {
-    for (auto p : pgns) filter["pgns"].Append(p.to_string());
+    QJsonArray arr;
+    for (auto p : pgns) arr.append(QString::fromStdString(p.to_string()));
+    filter["pgns"] = arr;
   }
   if (!src_pgns.empty()) {
-    for (auto p : src_pgns) filter["src_pgns"].Append(p.to_string());
+    QJsonArray arr;
+    for (auto p : src_pgns) arr.append(QString::fromStdString(p.to_string()));
+    filter["src_pgns"] = arr;
   }
-  wxJSONWriter writer;
-  wxString ws;
-  writer.Write(root, ws);
-  return ws.ToStdString();
+  QJsonObject root;
+  root["filter"] = filter;
+  // Use indented output to preserve the previous wxJSONWriter default style.
+  const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
+  return std::string(bytes.constData(), bytes.size());
 }

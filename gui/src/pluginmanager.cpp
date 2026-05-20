@@ -41,6 +41,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonObject>
 #include <QMutexLocker>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -931,8 +932,10 @@ PlugInManager::PlugInManager(AbstractTopFrame* parent) {
   evt_json_to_all_plugins_listener.Listen(g_pRouteMan->json_msg, this,
                                           EVT_JSON_TO_ALL_PLUGINS);
   Bind(EVT_JSON_TO_ALL_PLUGINS, [&](ObservedEvt& ev) {
-    auto json = std::static_pointer_cast<const wxJSONValue>(ev.GetSharedPtr());
-    SendJSONMessageToAllPlugins(ev.GetString(), *json);
+    // Routeman now emits a shared_ptr<QJsonObject>.  See P1.12 step 1.
+    auto json = std::static_pointer_cast<const QJsonObject>(ev.GetSharedPtr());
+    SendJSONMessageToAllPlugins(
+        wxString_to_QString(ev.GetString()), *json);
   });
 
   wxDEFINE_EVENT(EVT_LEGINFO_TO_ALL_PLUGINS, ObservedEvt);
@@ -1086,8 +1089,10 @@ void PlugInManager::HandlePluginLoaderEvents() {
     SendAisJsonMessage(pTarget);
   });
   Bind(EVT_PLUGMGR_ROUTEMAN_MSG, [&](ObservedEvt& ev) {
-    auto msg = UnpackEvtPointer<wxJSONValue>(ev);
-    SendJSONMessageToAllPlugins(ev.GetString(), *msg);
+    // Routeman now emits a shared_ptr<QJsonObject>.  See P1.12 step 1.
+    auto msg = UnpackEvtPointer<QJsonObject>(ev);
+    SendJSONMessageToAllPlugins(
+        wxString_to_QString(ev.GetString()), *msg);
   });
 }
 

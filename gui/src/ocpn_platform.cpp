@@ -59,8 +59,11 @@
 #include <wx/filename.h>
 #include <wx/tokenzr.h>
 #include <wx/textfile.h>
-#include <wx/jsonval.h>
-#include <wx/jsonreader.h>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
 
 #include "config.h"
 
@@ -621,14 +624,13 @@ void OCPNPlatform::OnExit_2() {
 
 #ifdef ocpnUSE_GL
 
-bool HasGLExt(wxJSONValue &glinfo, const std::string ext) {
-  if (!glinfo.HasMember("GL_EXTENSIONS")) {
+bool HasGLExt(const QJsonObject &glinfo, const std::string ext) {
+  if (!glinfo.contains("GL_EXTENSIONS")) {
     return false;
   }
-  for (int i = 0; i < glinfo["GL_EXTENSIONS"].Size(); i++) {
-    if (glinfo["GL_EXTENSIONS"][i].AsString() == ext) {
-      return true;
-    }
+  const QJsonArray exts = glinfo.value("GL_EXTENSIONS").toArray();
+  for (const QJsonValue &v : exts) {
+    if (v.toString().toStdString() == ext) return true;
   }
   return false;
 }
@@ -672,40 +674,48 @@ bool OCPNPlatform::BuildGLCaps(void *pbuf) {
     return false;
   }
 
-  wxFileInputStream fis(gl_json);
-  wxJSONReader reader;
-  wxJSONValue root;
-  reader.Parse(fis, &root);
-  if (reader.GetErrorCount() > 0) {
-    wxLogMessage("Failed to parse JSON output from OpenGL test utility.");
-    for (const auto &l : reader.GetErrors()) {
-      wxLogMessage(l);
-    }
+  QFile gl_json_file(QString::fromStdString(gl_json));
+  if (!gl_json_file.open(QIODevice::ReadOnly)) {
+    wxLogMessage("Failed to open OpenGL test utility output: %s",
+                 gl_json.c_str());
     return false;
   }
+  const QByteArray gl_bytes = gl_json_file.readAll();
+  gl_json_file.close();
+
+  QJsonParseError perr;
+  const QJsonDocument doc = QJsonDocument::fromJson(gl_bytes, &perr);
+  if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
+    wxLogMessage("Failed to parse JSON output from OpenGL test utility.");
+    if (perr.error != QJsonParseError::NoError)
+      wxLogMessage("%s", perr.errorString().toStdString().c_str());
+    return false;
+  }
+  const QJsonObject root = doc.object();
 
   OCPN_GLCaps *pcaps = (OCPN_GLCaps *)pbuf;
 
-  if (root.HasMember("GL_RENDERER")) {
-    pcaps->Renderer = root["GL_RENDERER"].AsString();
+  if (root.contains("GL_RENDERER")) {
+    pcaps->Renderer = root.value("GL_RENDERER").toString().toStdString();
   } else {
     wxLogMessage("GL_RENDERER not found.");
     return false;
   }
-  if (root.HasMember("GL_VERSION")) {
-    pcaps->Version = root["GL_VERSION"].AsString();
+  if (root.contains("GL_VERSION")) {
+    pcaps->Version = root.value("GL_VERSION").toString().toStdString();
   } else {
     wxLogMessage("GL_VERSION not found.");
     return false;
   }
-  if (root.HasMember("GL_SHADING_LANGUAGE_VERSION")) {
-    pcaps->GLSL_Version = root["GL_SHADING_LANGUAGE_VERSION"].AsString();
+  if (root.contains("GL_SHADING_LANGUAGE_VERSION")) {
+    pcaps->GLSL_Version =
+        root.value("GL_SHADING_LANGUAGE_VERSION").toString().toStdString();
   } else {
     wxLogMessage("GL_SHADING_LANGUAGE_VERSION not found.");
     return false;
   }
-  if (root.HasMember("GL_USABLE")) {
-    if (!root["GL_USABLE"].AsBool()) {
+  if (root.contains("GL_USABLE")) {
+    if (!root.value("GL_USABLE").toBool()) {
       wxLogMessage("OpenGL test utility reports that OpenGL is not usable.");
       return false;
     }
