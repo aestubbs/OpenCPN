@@ -29,7 +29,7 @@
 
 #include <wx/tokenzr.h>
 #include <wx/string.h>
-#include <wx/datetime.h>
+#include <QDateTime>
 
 #include "model/comm_ais.h"
 
@@ -155,8 +155,7 @@ bool Parse_VDXBitstring(AisBitstring *bstr, AisTargetData *ptd) {
   bool parse_result = false;
   bool b_posn_report = false;
 
-  wxDateTime now = wxDateTime::Now();
-  now.MakeGMT();
+  QDateTime now = QDateTime::currentDateTimeUtc();
   int message_ID = bstr->GetInt(1, 6);  // Parse on message ID
   ptd->MID = message_ID;
 
@@ -187,7 +186,7 @@ bool Parse_VDXBitstring(AisBitstring *bstr, AisTargetData *ptd) {
         ptd->Lat = lat_tentative;
         ptd->b_positionDoubtful = false;
         ptd->b_positionOnceValid = true;  // Got the position at least once
-        ptd->PositionReportTicks = now.GetTicks();
+        ptd->PositionReportTicks = now.toSecsSinceEpoch();
       } else
         ptd->b_positionDoubtful = true;
 
@@ -223,9 +222,11 @@ bool Parse_VDXBitstring(AisBitstring *bstr, AisTargetData *ptd) {
 
           if ((ptd->m_utc_hour < 24) && (ptd->m_utc_min < 60) &&
               (ptd->m_utc_sec < 60)) {
-            wxDateTime rx_time(ptd->m_utc_hour, ptd->m_utc_min, ptd->m_utc_sec);
+            QDateTime rx_time(QDate::currentDate(),
+                              QTime(ptd->m_utc_hour, ptd->m_utc_min,
+                                    ptd->m_utc_sec));
 #ifdef AIS_DEBUG
-            rx_ticks = rx_time.GetTicks();
+            rx_ticks = rx_time.toSecsSinceEpoch();
             if (!b_firstrx) {
               first_rx_ticks = rx_ticks;
               b_firstrx = true;
@@ -247,7 +248,7 @@ bool Parse_VDXBitstring(AisBitstring *bstr, AisTargetData *ptd) {
       if (mmsi_start == 97) {
         ptd->Class = AIS_SART;
         ptd->StaticReportTicks =
-            now.GetTicks();  // won't get a static report, so fake it here
+            now.toSecsSinceEpoch();  // won't get a static report, so fake it here
 
         //    On receipt of Msg 3, force any existing SART target out of
         //    acknowledge mode by adjusting its ack_time to yesterday This will
@@ -257,7 +258,7 @@ bool Parse_VDXBitstring(AisBitstring *bstr, AisTargetData *ptd) {
         //    use. After all, the target is on-screen, and in the AIS target
         //    list. So lets just honor the programmed ACK timout value for SART
         //    targets as well
-        // ptd->m_ack_time = wxDateTime::Now() - wxTimeSpan::Day();
+        // ptd->m_ack_time = QDateTime::currentDateTime().addDays(-1);
       }
 
       parse_result = true;  // so far so good
@@ -289,7 +290,7 @@ bool Parse_VDXBitstring(AisBitstring *bstr, AisTargetData *ptd) {
         ptd->Lat = lat_tentative;
         ptd->b_positionDoubtful = false;
         ptd->b_positionOnceValid = true;  // Got the position at least once
-        ptd->PositionReportTicks = now.GetTicks();
+        ptd->PositionReportTicks = now.toSecsSinceEpoch();
       } else
         ptd->b_positionDoubtful = true;
 

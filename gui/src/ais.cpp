@@ -35,7 +35,7 @@
 
 #include <wx/wx.h>
 #include <wx/tokenzr.h>
-#include <wx/datetime.h>
+#include <QDateTime>
 #include <wx/wfstream.h>
 #include <wx/imaglist.h>
 #include <wx/window.h>
@@ -254,8 +254,7 @@ void AISDrawAreaNotices(ocpnDC &dc, ViewPort &vp, ChartCanvas *cp) {
   if (cp == NULL) return;
   if (!g_pAIS || !cp->GetShowAIS() || !g_bShowAreaNotices) return;
 
-  wxDateTime now = wxDateTime::Now();
-  now.MakeGMT();
+  QDateTime now = QDateTime::currentDateTimeUtc();
 
   bool b_pens_set = false;
   wxPen pen_save;
@@ -1498,9 +1497,8 @@ static void AISDrawTarget(AisTargetData *td, ocpnDC &dc, ViewPort &vp,
     if (g_bDrawAISRealtime &&
         (td->Class == AIS_CLASS_A || td->Class == AIS_CLASS_B) &&
         td->SOG > g_AIS_RealtPred_Kts && td->SOG < 102.2) {
-      wxDateTime now = wxDateTime::Now();
-      now.MakeGMT();
-      int target_age = now.GetTicks() - td->PositionReportTicks;
+      QDateTime now = QDateTime::currentDateTimeUtc();
+      int target_age = now.toSecsSinceEpoch() - td->PositionReportTicks;
 
       float lat, lon;
       spherical_ll_gc_ll(td->Lat, td->Lon, td->COG,

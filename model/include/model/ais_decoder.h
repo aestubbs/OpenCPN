@@ -29,9 +29,9 @@
 #include <memory>
 #include <vector>
 
+#include <QDateTime>
 #include <QString>
 
-#include <wx/datetime.h>  // wxDateTime -- P1.7
 #include <wx/event.h>     // wxEvtHandler / wxTimer -- P1.11
 #include <wx/string.h>    // wxString -- MmsiProperties + name-file boundary
 
@@ -170,7 +170,7 @@ private:
 
   void getAISTarget(long mmsi, std::shared_ptr<AisTargetData> &pTargetData,
                     std::shared_ptr<AisTargetData> &pStaleTarget,
-                    bool &bnewtarget, int &last_report_ticks, wxDateTime &now);
+                    bool &bnewtarget, int &last_report_ticks, QDateTime &now);
   void handleUpdate(const std::shared_ptr<AisTargetData> &pTargetData,
                     bool bnewtarget, const rapidjson::Value &update);
   void updateItem(const std::shared_ptr<AisTargetData> &pTargetData,

@@ -29,9 +29,10 @@
 #include <vector>
 #include <unordered_map>
 
+#include <QDateTime>
 #include <QString>
+#include <QtGlobal>
 
-#include <wx/datetime.h>
 #include <wx/intl.h>
 
 #include "model/meteo_points.h"
@@ -139,8 +140,8 @@ struct Ais8_001_22 {
   int hour;         // UTC!
   int minute;
   int duration_minutes;  // Time from the start until the notice expires
-  wxDateTime start_time;
-  wxDateTime expiry_time;
+  QDateTime start_time;
+  QDateTime expiry_time;
   Ais8_001_22_SubAreaList sub_areas;
 };
 
@@ -241,7 +242,7 @@ public:
   int m_utc_sec;
   QString m_date_string;
 
-  wxDateTime m_ack_time;
+  QDateTime m_ack_time;
   bool b_in_ack_timeout;
 
   double Range_NM;

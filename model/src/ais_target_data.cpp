@@ -25,7 +25,7 @@
 
 #include <QString>
 
-#include <wx/datetime.h>
+#include <QDateTime>
 #include <wx/intl.h>
 #include <wx/string.h>
 
@@ -224,10 +224,9 @@ AisTargetData::AisTargetData(AisTargetCallbacks cb) : m_callbacks(cb) {
   Lat = 0.;
   Lon = 0.;
 
-  wxDateTime now = wxDateTime::Now();
-  now.MakeGMT();
-  PositionReportTicks = now.GetTicks();  // Default is my idea of NOW
-  StaticReportTicks = now.GetTicks();
+  QDateTime now = QDateTime::currentDateTimeUtc();
+  PositionReportTicks = now.toSecsSinceEpoch();  // Default is my idea of NOW
+  StaticReportTicks = now.toSecsSinceEpoch();
   b_lost = false;
   b_removed = false;
 
@@ -443,7 +442,7 @@ QString AisTargetData::GetFullName() {
 
 QString AisTargetData::BuildQueryResult() {
   QString html;
-  wxDateTime now = wxDateTime::Now();
+  QDateTime now = QDateTime::currentDateTime();
 
   QString tableStart =
       "\n<table width=100% border=0 cellpadding=1 cellspacing=0>\n";
@@ -693,8 +692,8 @@ QString AisTargetData::BuildQueryResult() {
     QString posTypeStr;
     if (b_positionDoubtful) posTypeStr += FromWx(_(" (Last Known)"));
 
-    now.MakeGMT();
-    int target_age = now.GetTicks() - PositionReportTicks;
+    now = now.toUTC();
+    int target_age = now.toSecsSinceEpoch() - PositionReportTicks;
 
     html += vertSpacer + rowStart + FromWx(_("Position")) + posTypeStr +
             "</font></td><td align=right><font size=-2>" +
@@ -721,12 +720,9 @@ QString AisTargetData::BuildQueryResult() {
     day = m_date_string.mid(0, 2).toLong();
     month = m_date_string.mid(2, 2).toLong();
     year = m_date_string.mid(4, 2).toLong();
-    wxDateTime date;
-    date.SetDay(day);
-    date.SetMonth((wxDateTime::Month)(month - 1));
-    date.SetYear(year + 2000);
+    QDateTime date(QDate(year + 2000, month, day), QTime(0, 0));
 
-    QString f_date = FromWx(date.FormatISODate());
+    QString f_date = date.date().toString(Qt::ISODate);
 
     html += vertSpacer + rowStart + FromWx(_("Report as of")) + rowEnd +
             rowStartH + "<b>" + f_date + "</b> at <b>" +
@@ -746,10 +742,10 @@ QString AisTargetData::BuildQueryResult() {
 
       if ((ETA_Mo) && (ETA_Hr < 24)) {
         int yearOffset = 0;
-        if (now.GetMonth() > (ETA_Mo - 1)) yearOffset = 1;
-        wxDateTime eta(ETA_Day, wxDateTime::Month(ETA_Mo - 1),
-                       now.GetYear() + yearOffset, ETA_Hr, ETA_Min);
-        html += FromWx(eta.Format("%b %d %H:%M"));
+        if (now.date().month() > ETA_Mo) yearOffset = 1;
+        QDateTime eta(QDate(now.date().year() + yearOffset, ETA_Mo, ETA_Day),
+                      QTime(ETA_Hr, ETA_Min));
+        html += eta.toString("MMM dd HH:mm");
       } else
         html += "---";
       html += rowEnd;

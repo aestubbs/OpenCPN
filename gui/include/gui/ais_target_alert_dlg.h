@@ -24,6 +24,8 @@
  * Class AISTargetAlertDialog and helpers
  */
 
+#include <QDateTime>
+
 #include <wx/dialog.h>
 #include <wx/html/htmlwin.h>
 
@@ -79,7 +81,7 @@ public:
   void UpdateText();
   void RecalculateSize(void);
 
-  wxDateTime dtAlertExpireTime;
+  QDateTime dtAlertExpireTime;
 
 private:
   void CreateControls();

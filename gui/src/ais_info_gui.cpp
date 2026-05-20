@@ -31,7 +31,8 @@
 #include <wx/wx.h>
 #endif  // precompiled headers
 
-#include <wx/datetime.h>
+#include <QDateTime>
+
 #include <wx/event.h>
 #include <wx/string.h>
 
@@ -136,7 +137,7 @@ AisInfoGui::AisInfoGui() {
   m_bAIS_Audio_Alert_On = false;
   m_bAIS_AlertPlaying = false;
   m_alarm_defer_count = -1;
-  m_lastMMSItime = wxDateTime::Now();
+  m_lastMMSItime = QDateTime::currentDateTime();
 }
 
 void AisInfoGui::OnSoundFinishedAISAudio(wxCommandEvent &event) {
@@ -170,17 +171,17 @@ void AisInfoGui::ShowAisInfo(
   // Maybe Reset deferral counter
   // Arrange to reset deferral counter if 5 seconds have passed without an alarm
   int last_alert_MMSI = m_lastMMSI;
-  wxDateTime last_alert_time = m_lastMMSItime;
+  QDateTime last_alert_time = m_lastMMSItime;
 
   if (palert_target->MMSI != last_alert_MMSI) {
-    wxTimeSpan dt = wxDateTime::Now() - last_alert_time;
-    if (dt.GetSeconds() > 5) {
+    qint64 dt_secs = last_alert_time.secsTo(QDateTime::currentDateTime());
+    if (dt_secs > 5) {
       m_alarm_defer_count = -1;  // reset the counter
     }
   }
 
   m_lastMMSI = palert_target->MMSI;
-  m_lastMMSItime = wxDateTime::Now();
+  m_lastMMSItime = QDateTime::currentDateTime();
 
   // Display all SART/MOB Alerts immediately.
   if (palert_target->Class == AIS_SART) m_alarm_defer_count = 1;
@@ -224,11 +225,11 @@ void AisInfoGui::ShowAisInfo(
 
         g_pais_alert_dialog_active = pAISAlertDialog;
 
-        wxTimeSpan alertLifeTime(0, 1, 0,
-                                 0);  // Alert default lifetime, 1 minute.
+        const qint64 kAlertLifeTimeSecs = 60;  // 1 minute lifetime
         auto alert_dlg_active =
             dynamic_cast<AISTargetAlertDialog *>(g_pais_alert_dialog_active);
-        alert_dlg_active->dtAlertExpireTime = wxDateTime::Now() + alertLifeTime;
+        alert_dlg_active->dtAlertExpireTime =
+            QDateTime::currentDateTime().addSecs(kAlertLifeTimeSecs);
         g_Platform->PositionAISAlert(pAISAlertDialog);
 
         pAISAlertDialog->Show();  // Show modeless, so it stays on the screen
@@ -281,19 +282,19 @@ void AisInfoGui::ShowAisInfo(
     }
 
     if (palert_target) {
-      wxDateTime now = wxDateTime::Now();
+      QDateTime now = QDateTime::currentDateTime();
       if (((AIS_ALERT_SET == palert_target->n_alert_state) &&
            !palert_target->b_in_ack_timeout) ||
           (palert_target->Class == AIS_SART)) {
         alert_dlg_active->UpdateText();
         // Retrigger the alert expiry timeout if alerted now
-        wxTimeSpan alertLifeTime(0, 1, 0,
-                                 0);  // Alert default lifetime, 1 minute.
-        alert_dlg_active->dtAlertExpireTime = wxDateTime::Now() + alertLifeTime;
+        const qint64 kAlertLifeTimeSecs = 60;  // 1 minute lifetime
+        alert_dlg_active->dtAlertExpireTime =
+            QDateTime::currentDateTime().addSecs(kAlertLifeTimeSecs);
       }
       //  In "expiry delay"?
       else if (!palert_target->b_in_ack_timeout &&
-               (now.IsEarlierThan(alert_dlg_active->dtAlertExpireTime))) {
+               (now < alert_dlg_active->dtAlertExpireTime)) {
         alert_dlg_active->UpdateText();
       } else {
         alert_dlg_active->Close();

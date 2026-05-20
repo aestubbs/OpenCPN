@@ -43,7 +43,6 @@
 #include <wx/wx.h>
 #endif
 
-#include <wx/datetime.h>  // wxDateTime -- P1.7
 #include <wx/event.h>     // wxEvtHandler / wxTimer -- P1.11
 #include <wx/string.h>    // wxString -- MmsiProperties + name-file boundary
 #include <wx/textfile.h>  // wxTextFile -- P1.10
@@ -275,8 +274,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
   bool parse_result = false;
   bool b_posn_report = false;
 
-  wxDateTime now = wxDateTime::Now();
-  now.MakeGMT();
+  QDateTime now = QDateTime::currentDateTimeUtc();
   int message_ID = bstr->GetInt(1, 6);  // Parse on message ID
   ptd->MID = message_ID;
 
@@ -314,7 +312,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         ptd->b_positionDoubtful = false;
         ptd->b_positionOnceValid = true;  // Got the position at least once
         ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-        ptd->PositionReportTicks = now.GetTicks();
+        ptd->PositionReportTicks = now.toSecsSinceEpoch();
       } else
         ptd->b_positionDoubtful = true;
 
@@ -350,8 +348,10 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
 
           if ((ptd->m_utc_hour < 24) && (ptd->m_utc_min < 60) &&
               (ptd->m_utc_sec < 60)) {
-            wxDateTime rx_time(ptd->m_utc_hour, ptd->m_utc_min, ptd->m_utc_sec);
-            rx_ticks = rx_time.GetTicks();
+            QDateTime rx_time(QDate::currentDate(),
+                              QTime(ptd->m_utc_hour, ptd->m_utc_min,
+                                    ptd->m_utc_sec));
+            rx_ticks = rx_time.toSecsSinceEpoch();
             if (!b_firstrx) {
               first_rx_ticks = rx_ticks;
               b_firstrx = true;
@@ -372,7 +372,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
       if (mmsi_start == 97) {
         ptd->Class = AIS_SART;
         ptd->StaticReportTicks =
-            now.GetTicks();  // won't get a static report, so fake it here
+            now.toSecsSinceEpoch();  // won't get a static report, so fake it here
 
         //    On receipt of Msg 3, force any existing SART target out of
         //    acknowledge mode by adjusting its ack_time to yesterday This will
@@ -382,7 +382,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         //    use. After all, the target is on-screen, and in the AIS target
         //    list. So lets just honor the programmed ACK timout value for SART
         //    targets as well
-        // ptd->m_ack_time = wxDateTime::Now() - wxTimeSpan::Day();
+        // ptd->m_ack_time = QDateTime::currentDateTime().addDays(-1);
       }
 
       parse_result = true;  // so far so good
@@ -416,7 +416,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         ptd->b_positionDoubtful = false;
         ptd->b_positionOnceValid = true;  // Got the position at least once
         ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-        ptd->PositionReportTicks = now.GetTicks();
+        ptd->PositionReportTicks = now.toSecsSinceEpoch();
       } else
         ptd->b_positionDoubtful = true;
 
@@ -460,7 +460,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         ptd->b_positionDoubtful = false;
         ptd->b_positionOnceValid = true;  // Got the position at least once
         ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-        ptd->PositionReportTicks = now.GetTicks();
+        ptd->PositionReportTicks = now.toSecsSinceEpoch();
       } else
         ptd->b_positionDoubtful = true;
 
@@ -562,7 +562,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
           printf("Low latency position report.\r\n");
 #endif
           ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-          ptd->PositionReportTicks = now.GetTicks();
+          ptd->PositionReportTicks = now.toSecsSinceEpoch();
         }
       } else
         ptd->b_positionDoubtful = true;
@@ -609,7 +609,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
 
           bstr->GetStr(303, 120, &ptd->Destination[0], DESTINATION_LEN - 1);
 
-          ptd->StaticReportTicks = now.GetTicks();
+          ptd->StaticReportTicks = now.toSecsSinceEpoch();
 
           parse_result = true;
         }
@@ -665,7 +665,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         ptd->b_positionDoubtful = false;
         ptd->b_positionOnceValid = true;  // Got the position at least once
         ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-        ptd->PositionReportTicks = now.GetTicks();
+        ptd->PositionReportTicks = now.toSecsSinceEpoch();
       } else
         ptd->b_positionDoubtful = true;
 
@@ -701,7 +701,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         ptd->b_positionDoubtful = false;
         ptd->b_positionOnceValid = true;  // Got the position at least once
         ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-        ptd->PositionReportTicks = now.GetTicks();
+        ptd->PositionReportTicks = now.toSecsSinceEpoch();
       } else
         ptd->b_positionDoubtful = true;
 
@@ -784,7 +784,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
         ptd->b_positionDoubtful = false;
         ptd->b_positionOnceValid = true;  // Got the position at least once
         ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-        ptd->PositionReportTicks = now.GetTicks();
+        ptd->PositionReportTicks = now.toSecsSinceEpoch();
       } else
         ptd->b_positionDoubtful = true;
 
@@ -824,30 +824,32 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
             an.minute = bstr->GetInt(88, 6);
             an.duration_minutes = bstr->GetInt(94, 18);
 
-            wxDateTime now_ = wxDateTime::Now();
-            now_.MakeGMT();
+            QDateTime now_ = QDateTime::currentDateTimeUtc();
 
-            an.start_time.Set(an.day, wxDateTime::Month(an.month - 1),
-                              now_.GetYear(), an.hour, an.minute);
+            an.start_time = QDateTime(
+                QDate(now_.date().year(), an.month, an.day),
+                QTime(an.hour, an.minute), Qt::UTC);
 
             // msg is not supposed to be transmitted more than a day before it
             // comes into effect, so a start_time less than a day or two away
             // might indicate a month rollover
-            if (an.start_time > now_ + wxTimeSpan::Hours(48))
-              an.start_time.Set(an.day, wxDateTime::Month(an.month - 1),
-                                now_.GetYear() - 1, an.hour, an.minute);
+            if (an.start_time > now_.addSecs(qint64(48) * 3600))
+              an.start_time = QDateTime(
+                  QDate(now_.date().year() - 1, an.month, an.day),
+                  QTime(an.hour, an.minute), Qt::UTC);
 
             an.expiry_time =
-                an.start_time + wxTimeSpan::Minutes(an.duration_minutes);
+                an.start_time.addSecs(qint64(an.duration_minutes) * 60);
 
             // msg is not supposed to be transmitted beyond expiration, so
             // taking into account a fudge factor for clock issues, assume an
             // expiry date in the past indicates incorrect year
-            if (an.expiry_time < now_ - wxTimeSpan::Hours(24)) {
-              an.start_time.Set(an.day, wxDateTime::Month(an.month - 1),
-                                now_.GetYear() + 1, an.hour, an.minute);
+            if (an.expiry_time < now_.addSecs(qint64(-24) * 3600)) {
+              an.start_time = QDateTime(
+                  QDate(now_.date().year() + 1, an.month, an.day),
+                  QTime(an.hour, an.minute), Qt::UTC);
               an.expiry_time =
-                  an.start_time + wxTimeSpan::Minutes(an.duration_minutes);
+                  an.start_time.addSecs(qint64(an.duration_minutes) * 60);
             }
 
             // Default case, the IMO format
@@ -1028,7 +1030,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
             ptd->b_positionOnceValid = true;
             b_posn_report = true;
             ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-            ptd->PositionReportTicks = now.GetTicks();
+            ptd->PositionReportTicks = now.toSecsSinceEpoch();
             ptd->b_nameValid = true;
 
             parse_result = true;
@@ -1185,7 +1187,7 @@ static bool Parse_VDXBitstring(AisBitstring *bstr,
             ptd->b_positionDoubtful = false;
             b_posn_report = true;
             ptd->LastPositionReportTicks = ptd->PositionReportTicks;
-            ptd->PositionReportTicks = now.GetTicks();
+            ptd->PositionReportTicks = now.toSecsSinceEpoch();
             ptd->b_nameValid = true;
 
             parse_result = true;
@@ -1541,8 +1543,7 @@ bool AisDecoder::HandleN2K_129038(const N2000MsgPtr &n2k_msg) {
       pTargetData = it->second;  // find current entry
     }
 
-    wxDateTime now = wxDateTime::Now();
-    now.MakeUTC();
+    QDateTime now = QDateTime::currentDateTimeUtc();
 
     // Populate the target_data
     pTargetData->MMSI = mmsi;
@@ -1553,7 +1554,7 @@ bool AisDecoder::HandleN2K_129038(const N2000MsgPtr &n2k_msg) {
     if (97 == pTargetData->MMSI / 10000000) {
       pTargetData->Class = AIS_SART;
       // won't get a static report, so fake it here
-      pTargetData->StaticReportTicks = now.GetTicks();
+      pTargetData->StaticReportTicks = now.toSecsSinceEpoch();
     }
     pTargetData->NavStatus = static_cast<ais_nav_status>(NavStat);
     if (!N2kIsNA(SOG)) pTargetData->SOG = MS2KNOTS(SOG);
@@ -1581,7 +1582,7 @@ bool AisDecoder::HandleN2K_129038(const N2000MsgPtr &n2k_msg) {
     pTargetData->b_lost = false;
     pTargetData->b_positionOnceValid = true;
     pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
-    pTargetData->PositionReportTicks = now.GetTicks();
+    pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
 
     pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
     CommitAISTarget(pTargetData, "", true, bnewtarget);
@@ -1647,8 +1648,7 @@ bool AisDecoder::HandleN2K_129039(const N2000MsgPtr &n2k_msg) {
       pTargetData = it->second;  // find current entry
     }
 
-    wxDateTime now = wxDateTime::Now();
-    now.MakeUTC();
+    QDateTime now = QDateTime::currentDateTimeUtc();
 
     // Populate the target_data
     pTargetData->MMSI = mmsi;
@@ -1669,7 +1669,7 @@ bool AisDecoder::HandleN2K_129039(const N2000MsgPtr &n2k_msg) {
     pTargetData->b_active = true;
     pTargetData->b_lost = false;
     pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
-    pTargetData->PositionReportTicks = now.GetTicks();
+    pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
     pTargetData->b_OwnShip =
         AISTransceiverInformation ==
         tN2kAISTransceiverInformation::N2kaisown_information_not_broadcast;
@@ -1737,8 +1737,7 @@ bool AisDecoder::HandleN2K_129041(const N2000MsgPtr &n2k_msg) {
     // Populate the target_data
     pTargetData->MMSI = mmsi;
 
-    wxDateTime now = wxDateTime::Now();
-    now.MakeUTC();
+    QDateTime now = QDateTime::currentDateTimeUtc();
 
     int offpos = data.OffPositionIndicator;  // off position flag
     int virt = data.VirtualAtoNFlag;         // virtual flag
@@ -1769,7 +1768,7 @@ bool AisDecoder::HandleN2K_129041(const N2000MsgPtr &n2k_msg) {
     pTargetData->b_positionDoubtful = false;
     pTargetData->b_positionOnceValid = true;  // Got the position at least once
     pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
-    pTargetData->PositionReportTicks = now.GetTicks();
+    pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
 
     // FIXME (dave) Populate more fiddly static data
 
@@ -1856,13 +1855,13 @@ bool AisDecoder::HandleN2K_129794(const N2000MsgPtr &n2k_msg) {
 
     if (!N2kIsNA(ETAdate) && !N2kIsNA(ETAtime)) {
       long secs = (ETAdate * 24 * 3600) + qRound(ETAtime);
-      wxDateTime t((time_t)secs);
-      if (t.IsValid()) {
-        wxDateTime tz = t.ToUTC();
-        pTargetData->ETA_Mo = tz.GetMonth() + 1;
-        pTargetData->ETA_Day = tz.GetDay();
-        pTargetData->ETA_Hr = tz.GetHour();
-        pTargetData->ETA_Min = tz.GetMinute();
+      QDateTime t = QDateTime::fromSecsSinceEpoch(secs);
+      if (t.isValid()) {
+        QDateTime tz = t.toUTC();
+        pTargetData->ETA_Mo = tz.date().month();
+        pTargetData->ETA_Day = tz.date().day();
+        pTargetData->ETA_Hr = tz.time().hour();
+        pTargetData->ETA_Min = tz.time().minute();
       }
     }
 
@@ -1991,8 +1990,7 @@ bool AisDecoder::HandleN2K_129793(const N2000MsgPtr &n2k_msg) {
 
   if (ParseN2kPGN129793(v, MessageID, Repeat, UserID, Longitude, Latitude,
                         SecondsSinceMidnight, DaysSinceEpoch)) {
-    wxDateTime now = wxDateTime::Now();
-    now.MakeUTC();
+    QDateTime now = QDateTime::currentDateTimeUtc();
 
     // Is this target already in the global target list?
     //  Search the current AISTargetList for an MMSI match
@@ -2019,7 +2017,7 @@ bool AisDecoder::HandleN2K_129793(const N2000MsgPtr &n2k_msg) {
     pTargetData->b_positionDoubtful = false;
     pTargetData->b_positionOnceValid = true;  // Got the position at least once
     pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
-    pTargetData->PositionReportTicks = now.GetTicks();
+    pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
 
     // FIXME (dave) Populate more fiddly static data
 
@@ -2125,7 +2123,7 @@ void AisDecoder::HandleSignalK(const SignalKMsgPtr &sK_msg) {
   std::shared_ptr<AisTargetData> pStaleTarget = nullptr;
   bool bnewtarget = false;
   int last_report_ticks;
-  wxDateTime now;
+  QDateTime now;
   getAISTarget(mmsi, pTargetData, pStaleTarget, bnewtarget, last_report_ticks,
                now);
   if (pTargetData) {
@@ -2185,10 +2183,10 @@ void AisDecoder::handleUpdate(const std::shared_ptr<AisTargetData> &pTargetData,
       updateItem(pTargetData, bnewtarget, *itr, sfixtime);
     }
   }
-  wxDateTime now = wxDateTime::Now();
-  pTargetData->m_utc_hour = now.ToUTC().GetHour();
-  pTargetData->m_utc_min = now.ToUTC().GetMinute();
-  pTargetData->m_utc_sec = now.ToUTC().GetSecond();
+  QDateTime now = QDateTime::currentDateTimeUtc();
+  pTargetData->m_utc_hour = now.time().hour();
+  pTargetData->m_utc_min = now.time().minute();
+  pTargetData->m_utc_sec = now.time().second();
   // pTargetData->NavStatus = 15; // undefined
   pTargetData->b_active = true;
   pTargetData->b_lost = false;
@@ -2212,13 +2210,12 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
     if (update_path == "navigation.position") {
       if (item["value"].HasMember("latitude") &&
           item["value"].HasMember("longitude")) {
-        wxDateTime now = wxDateTime::Now();
-        now.MakeUTC();
+        QDateTime now = QDateTime::currentDateTimeUtc();
         double lat = item["value"]["latitude"].GetDouble();
         double lon = item["value"]["longitude"].GetDouble();
         pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
-        pTargetData->PositionReportTicks = now.GetTicks();
-        pTargetData->StaticReportTicks = now.GetTicks();
+        pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
+        pTargetData->StaticReportTicks = now.toSecsSinceEpoch();
         pTargetData->Lat = lat;
         pTargetData->Lon = lon;
         pTargetData->b_positionOnceValid = true;
@@ -2826,9 +2823,10 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
       arpa_utc_sec =
           (int)arpa_utc_time - arpa_utc_hour * 10000 - arpa_utc_min * 100;
     } else {
-      arpa_utc_hour = wxDateTime::Now().ToUTC().GetHour();
-      arpa_utc_min = wxDateTime::Now().ToUTC().GetMinute();
-      arpa_utc_sec = wxDateTime::Now().ToUTC().GetSecond();
+      QDateTime arpa_now = QDateTime::currentDateTimeUtc();
+      arpa_utc_hour = arpa_now.time().hour();
+      arpa_utc_min = arpa_now.time().minute();
+      arpa_utc_sec = arpa_now.time().second();
     }
 
     if (arpa_distunit == "K") {
@@ -3238,13 +3236,12 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
     }
 
     //  Grab the stale targets's last report time
-    wxDateTime now = wxDateTime::Now();
-    now.MakeGMT();
+    QDateTime now = QDateTime::currentDateTimeUtc();
 
     if (pStaleTarget)
       last_report_ticks = pStaleTarget->PositionReportTicks;
     else
-      last_report_ticks = now.GetTicks();
+      last_report_ticks = now.toSecsSinceEpoch();
 
     // Delete the stale AIS Target selectable point
     if (pStaleTarget)
@@ -3253,8 +3250,8 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
     if (pTargetData) {
       if (gpsg_mmsi) {
         pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
-        pTargetData->PositionReportTicks = now.GetTicks();
-        pTargetData->StaticReportTicks = now.GetTicks();
+        pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
+        pTargetData->StaticReportTicks = now.toSecsSinceEpoch();
         pTargetData->m_utc_hour = gpsg_utc_hour;
         pTargetData->m_utc_min = gpsg_utc_min;
         pTargetData->m_utc_sec = gpsg_utc_sec;
@@ -3283,7 +3280,7 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
         if (str.mid(3, 3) == "TLL") {
           if (!bnewtarget) {
             int age_of_last =
-                (now.GetTicks() - pTargetData->PositionReportTicks);
+                (now.toSecsSinceEpoch() - pTargetData->PositionReportTicks);
             if (age_of_last > 0) {
               ll_gc_ll_reverse(pTargetData->Lat, pTargetData->Lon, arpa_lat,
                                arpa_lon, &pTargetData->COG, &pTargetData->SOG);
@@ -3302,8 +3299,8 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
           pTargetData->SOG = arpa_sog;
         }
         pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
-        pTargetData->PositionReportTicks = now.GetTicks();
-        pTargetData->StaticReportTicks = now.GetTicks();
+        pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
+        pTargetData->StaticReportTicks = now.toSecsSinceEpoch();
         pTargetData->b_positionOnceValid = true;
         pTargetData->ShipType = 55;  // arpa
         pTargetData->Class = AIS_ARPA;
@@ -3318,13 +3315,13 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
 
         bdecode_result = true;
       } else if (aprs_mmsi) {
-        pTargetData->m_utc_hour = now.GetHour();
-        pTargetData->m_utc_min = now.GetMinute();
-        pTargetData->m_utc_sec = now.GetSecond();
+        pTargetData->m_utc_hour = now.time().hour();
+        pTargetData->m_utc_min = now.time().minute();
+        pTargetData->m_utc_sec = now.time().second();
         pTargetData->MMSI = aprs_mmsi;
         pTargetData->NavStatus = 15;  // undefined
         if (!bnewtarget) {
-          int age_of_last = (now.GetTicks() - pTargetData->PositionReportTicks);
+          int age_of_last = (now.toSecsSinceEpoch() - pTargetData->PositionReportTicks);
           if (age_of_last > 0) {
             ll_gc_ll_reverse(pTargetData->Lat, pTargetData->Lon, aprs_lat,
                              aprs_lon, &pTargetData->COG, &pTargetData->SOG);
@@ -3332,8 +3329,8 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
           }
         }
         pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
-        pTargetData->PositionReportTicks = now.GetTicks();
-        pTargetData->StaticReportTicks = now.GetTicks();
+        pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
+        pTargetData->StaticReportTicks = now.toSecsSinceEpoch();
         pTargetData->Lat = aprs_lat;
         pTargetData->Lon = aprs_lon;
         pTargetData->b_positionOnceValid = true;
@@ -3472,8 +3469,8 @@ void AisDecoder::getAISTarget(long mmsi,
                               std::shared_ptr<AisTargetData> &pTargetData,
                               std::shared_ptr<AisTargetData> &pStaleTarget,
                               bool &bnewtarget, int &last_report_ticks,
-                              wxDateTime &now) {
-  now = wxDateTime::Now();
+                              QDateTime &now) {
+  now = QDateTime::currentDateTime();
   auto it = AISTargetList.find(mmsi);
   if (it == AISTargetList.end())  // not found
   {
@@ -3486,12 +3483,12 @@ void AisDecoder::getAISTarget(long mmsi,
   }
 
   //  Grab the stale targets's last report time
-  now.MakeGMT();
+  now = now.toUTC();
 
   if (pStaleTarget)
     last_report_ticks = pStaleTarget->PositionReportTicks;
   else
-    last_report_ticks = now.GetTicks();
+    last_report_ticks = now.toSecsSinceEpoch();
 
   // Delete the stale AIS Target selectable point
   if (pStaleTarget)
@@ -3658,9 +3655,8 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const QString &str,
   }
 
   //  Get the last report time for this target, if it exists
-  wxDateTime now = wxDateTime::Now();
-  now.MakeGMT();
-  int last_report_ticks = now.GetTicks();
+  QDateTime now = QDateTime::currentDateTimeUtc();
+  int last_report_ticks = now.toSecsSinceEpoch();
 
   //  Search the current AISTargetList for an MMSI match
   auto it = AISTargetList.find(mmsi);
@@ -3676,8 +3672,8 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const QString &str,
     //      extended data
     m_ptentative_dsctarget = AisTargetDataMaker::GetInstance().GetTargetData();
 
-    m_ptentative_dsctarget->PositionReportTicks = now.GetTicks();
-    m_ptentative_dsctarget->StaticReportTicks = now.GetTicks();
+    m_ptentative_dsctarget->PositionReportTicks = now.toSecsSinceEpoch();
+    m_ptentative_dsctarget->StaticReportTicks = now.toSecsSinceEpoch();
 
     m_ptentative_dsctarget->MMSI = mmsi;
     m_ptentative_dsctarget->NavStatus =
@@ -3868,7 +3864,7 @@ void AisDecoder::UpdateOneTrack(AisTargetData *ptarget) {
     AISTargetTrackPoint ptrackpoint;
     ptrackpoint.m_lat = ptarget->Lat;
     ptrackpoint.m_lon = ptarget->Lon;
-    ptrackpoint.m_time = wxDateTime::Now().GetTicks();
+    ptrackpoint.m_time = QDateTime::currentDateTime().toSecsSinceEpoch();
 
     ptarget->m_ptrack.push_back(ptrackpoint);
 
@@ -3876,13 +3872,13 @@ void AisDecoder::UpdateOneTrack(AisTargetData *ptarget) {
       Track *t;
       if (0 == m_persistent_tracks.count(ptarget->MMSI)) {
         t = new Track();
-        wxString iso_date = wxDateTime::Now().FormatISODate();
-        wxString iso_time = wxDateTime::Now().FormatISOTime();
+        QDateTime now_local = QDateTime::currentDateTime();
+        QString iso_date = now_local.date().toString(Qt::ISODate);
+        QString iso_time = now_local.time().toString(Qt::ISODate);
         t->SetName(QString::asprintf(
             "AIS %s (%u) %s %s",
             qUtf8Printable(ptarget->GetFullName()), ptarget->MMSI,
-            static_cast<const char *>(iso_date.mb_str()),
-            static_cast<const char *>(iso_time.mb_str())));
+            qUtf8Printable(iso_date), qUtf8Printable(iso_time)));
         g_TrackList.push_back(t);
         new_track.Notify(t);
         m_persistent_tracks[ptarget->MMSI] = t;
@@ -3892,7 +3888,7 @@ void AisDecoder::UpdateOneTrack(AisTargetData *ptarget) {
       TrackPoint *tp = t->GetLastPoint();
       vector2D point(ptrackpoint.m_lon, ptrackpoint.m_lat);
       TrackPoint *tp1 =
-          t->AddNewPoint(point, wxDateTime(ptrackpoint.m_time).ToUTC());
+          t->AddNewPoint(point, wxDateTime((time_t)ptrackpoint.m_time).ToUTC());
 
       if (tp)
         pSelect->AddSelectableTrackSegment(tp->m_lat, tp->m_lon, tp1->m_lat,
@@ -3906,7 +3902,8 @@ void AisDecoder::UpdateOneTrack(AisTargetData *ptarget) {
       //    Walk the list, removing any track points that are older than the
       //    stipulated time
       time_t test_time =
-          wxDateTime::Now().GetTicks() - (time_t)(g_AISShowTracks_Mins * 60);
+          (time_t)(QDateTime::currentDateTime().toSecsSinceEpoch() -
+                   (qint64)(g_AISShowTracks_Mins * 60));
 
       ptarget->m_ptrack.erase(
           std::remove_if(ptarget->m_ptrack.begin(), ptarget->m_ptrack.end(),
@@ -4047,16 +4044,18 @@ void AisDecoder::UpdateAllAlarms() {
       //  SART and DSC targets always maintain ack timeout
       if (td->Class == AIS_SART) {
         if (td->b_in_ack_timeout) {
-          wxTimeSpan delta = wxDateTime::Now() - td->m_ack_time;
+          qint64 delta_secs =
+              td->m_ack_time.secsTo(QDateTime::currentDateTime());
           // SART Alert obeys fixed 10 minute ACK-TO.
-          if (delta.GetMinutes() >= 10) td->b_in_ack_timeout = false;
+          if (delta_secs / 60 >= 10) td->b_in_ack_timeout = false;
         }
       } else if (g_bAIS_ACK_Timeout ||
                  ((td->Class == AIS_DSC) &&
                   ((td->ShipType == 12) || (td->ShipType == 16)))) {
         if (td->b_in_ack_timeout) {
-          wxTimeSpan delta = wxDateTime::Now() - td->m_ack_time;
-          if (delta.GetMinutes() > g_AckTimeout_Mins)
+          qint64 delta_secs =
+              td->m_ack_time.secsTo(QDateTime::currentDateTime());
+          if (delta_secs / 60 > g_AckTimeout_Mins)
             td->b_in_ack_timeout = false;
         }
       } else {
@@ -4224,8 +4223,7 @@ void AisDecoder::OnTimerAIS(wxTimerEvent &event) {
   //    Scrub the target hash list
   //    removing any targets older than stipulated age
 
-  wxDateTime now = wxDateTime::Now();
-  now.MakeGMT();
+  QDateTime now = QDateTime::currentDateTimeUtc();
 
   std::unordered_map<int, std::shared_ptr<AisTargetData>> &current_targets =
       GetTargetList();
@@ -4244,8 +4242,8 @@ void AisDecoder::OnTimerAIS(wxTimerEvent &event) {
     // xtd(std::make_shared<AisTargetData>(*it->second));
     std::shared_ptr<AisTargetData> xtd = it->second;
 
-    int target_posn_age = now.GetTicks() - xtd->PositionReportTicks;
-    int target_static_age = now.GetTicks() - xtd->StaticReportTicks;
+    int target_posn_age = now.toSecsSinceEpoch() - xtd->PositionReportTicks;
+    int target_static_age = now.toSecsSinceEpoch() - xtd->StaticReportTicks;
 
     //        Global variables controlling lost target handling
     // g_bMarkLost

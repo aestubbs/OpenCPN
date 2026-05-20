@@ -23,6 +23,8 @@
 #ifndef _AIS_INFO_GUI_H
 #define _AIS_INFO_GUI_H
 
+#include <QDateTime>
+
 #include "o_sound/o_sound.h"
 #include "model/ais_target_data.h"
 #include "observable.h"
@@ -47,7 +49,7 @@ public:
   bool m_bAIS_AlertPlaying;
   int m_alarm_defer_count;
   int m_lastMMSI;
-  wxDateTime m_lastMMSItime;
+  QDateTime m_lastMMSItime;
 
   o_sound::Sound* m_AIS_Sound;
   ObservableListener ais_info_listener;

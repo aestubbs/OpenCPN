@@ -26,6 +26,8 @@
 #include "gl_headers.h"
 
 #ifndef WX_PRECOMP
+#include <QDateTime>
+
 #include <wx/wx.h>
 #endif  // precompiled headers
 
@@ -329,7 +331,7 @@ void AISTargetAlertDialog::OnClose(wxCloseEvent &event) {
     auto td = m_pdecoder->Get_Target_Data_From_MMSI(Get_Dialog_MMSI());
     if (td) {
       if (AIS_ALERT_SET == td->n_alert_state) {
-        td->m_ack_time = wxDateTime::Now();
+        td->m_ack_time = QDateTime::currentDateTime();
         td->b_in_ack_timeout = true;
       }
       if (td->b_isDSCtarget) {
@@ -351,7 +353,7 @@ void AISTargetAlertDialog::OnIdAckClick(wxCommandEvent &event) {
     auto td = m_pdecoder->Get_Target_Data_From_MMSI(Get_Dialog_MMSI());
     if (td) {
       if (AIS_ALERT_SET == td->n_alert_state) {
-        td->m_ack_time = wxDateTime::Now();
+        td->m_ack_time = QDateTime::currentDateTime();
         td->b_in_ack_timeout = true;
       }
       if (td->b_isDSCtarget) {

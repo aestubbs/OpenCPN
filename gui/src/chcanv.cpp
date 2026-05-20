@@ -10739,7 +10739,9 @@ void ChartCanvas::ShowObjectQueryWindow(int x, int y, float zlat, float zlon) {
            sa != (*an)->sub_areas.end(); ++sa)
         if (!sa->text.isEmpty())
           objText << wxString::FromUTF8(sa->text.toStdString());
-      objText << "<br>expires: " << (*an)->expiry_time.Format();
+      objText << "<br>expires: "
+              << wxString::FromUTF8(
+                     (*an)->expiry_time.toString(Qt::TextDate).toUtf8());
       objText << "<hr noshade>";
     }
 

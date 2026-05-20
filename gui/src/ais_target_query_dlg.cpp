@@ -23,6 +23,8 @@
 
 #include <wx/wxprec.h>
 
+#include <QDateTime>
+
 #include <wx/html/htmlwin.h>
 
 #include "gl_headers.h"  // Muyst be before anything including GL stuff
@@ -34,6 +36,7 @@
 #include "model/route_point.h"
 #include "model/select.h"
 #include "model/track.h"
+#include "model/wx_qt_string.h"
 
 #include "ais.h"
 #include "ais_target_query_dlg.h"
@@ -107,9 +110,10 @@ void AISTargetQueryDialog::OnIdWptCreateClick(wxCommandEvent &event) {
       n0.Trim();
       wxString mmsi = wxString::Format("%i ", td->MMSI);
       wxString n = "\"" + n0 + "\" " + mmsi;
-      n.append(wxDateTime::Now().Format("%H:%M"));
+      n.append(QString_to_wxString(
+          QDateTime::currentDateTime().toString("HH:mm")));
       // wxString n =  wxString::Format("\"%s\"  %i ",td->ShipName,
-      // td->MMSI).append(wxDateTime::Now().Format("%H:%M"));
+      // td->MMSI).append(QDateTime::currentDateTime().toString("HH:mm"));
       RoutePoint *pWP = new RoutePoint(
           td->Lat, td->Lon,
           QString::fromStdString(g_default_wp_icon.utf8_string()),
@@ -147,17 +151,19 @@ void AISTargetQueryDialog::OnIdTrkCreateClick(wxCommandEvent &event) {
         Track *t = new Track();
 
         {
-          wxString iso_date = wxDateTime::Now().FormatISODate();
-          wxString iso_time = wxDateTime::Now().FormatISOTime();
+          QDateTime now_local = QDateTime::currentDateTime();
+          QString iso_date = now_local.date().toString(Qt::ISODate);
+          QString iso_time = now_local.time().toString(Qt::ISODate);
           t->SetName(QString::asprintf(
               "AIS %s (%u) %s %s",
               qUtf8Printable(td->GetFullName()), td->MMSI,
-              static_cast<const char *>(iso_date.mb_str()),
-              static_cast<const char *>(iso_time.mb_str())));
+              qUtf8Printable(iso_date), qUtf8Printable(iso_time)));
         }
         for (const AISTargetTrackPoint &ptrack_point : td->m_ptrack) {
           vector2D point(ptrack_point.m_lon, ptrack_point.m_lat);
-          tp1 = t->AddNewPoint(point, wxDateTime(ptrack_point.m_time).ToUTC());
+          tp1 =
+              t->AddNewPoint(point, wxDateTime((time_t)ptrack_point.m_time)
+                                        .ToUTC());
           if (tp) {
             pSelect->AddSelectableTrackSegment(tp->m_lat, tp->m_lon, tp1->m_lat,
                                                tp1->m_lon, tp, tp1, t);
