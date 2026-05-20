@@ -1106,6 +1106,15 @@ if (QT_ANDROID)
   include(libs/AndroidLibs.cmake)
 endif ()
 
+# P1.10: Qt 6 file-I/O headers (QFile/QDir/QFileInfo) expose
+# std::filesystem::path overloads that require macOS 10.15+. Bump the
+# OpenCPN target's deployment target to 10.15 to match the model layer,
+# without changing the project-wide CMAKE_OSX_DEPLOYMENT_TARGET (10.13).
+# Qt 6 itself already requires >=10.15 to link, so this is consistent.
+if (APPLE)
+  target_compile_options(${PACKAGE_NAME} PRIVATE -mmacosx-version-min=10.15)
+endif ()
+
 add_library(_opencpn INTERFACE) # plugin link target.
 target_link_libraries(_opencpn INTERFACE ${PACKAGE_NAME})
 target_include_directories(

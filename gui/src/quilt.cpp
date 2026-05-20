@@ -23,9 +23,13 @@
 
 #include <algorithm>
 
+#include <QFileInfo>
+
 #include <wx/wxprec.h>
 #include <wx/list.h>
 #include <wx/listimpl.cpp>
+
+#include "model/wx_qt_string.h"
 
 #include "model/config_vars.h"
 #include "model/ocpn_utils.h"
@@ -1284,8 +1288,8 @@ int Quilt::SelectRefChartByFamily(ChartFamilyEnum family) {
           ChartData->GetChartTableEntry(dbIndex);
 
       // Skip basemaps
-      wxFileName fn(cte_candidate.GetFullPath());
-      if (fn.GetPath().Lower().Contains("basemap")) continue;
+      QFileInfo fn(QString::fromStdString(cte_candidate.GetFullPath()));
+      if (fn.absolutePath().toLower().contains("basemap")) continue;
 
       //  Choose the appropriate reference chart index
       if (cte_candidate.GetChartFamily() == family) {
@@ -1352,8 +1356,8 @@ bool Quilt::BuildExtendedChartStackAndCandidateArray(int ref_db_index,
     const ChartTableEntry &cte = ChartData->GetChartTableEntry(istack);
 
     if (cte.GetChartType() == CHART_TYPE_MBTILES) {
-      wxFileName fn(cte.GetFullPath());
-      if (fn.GetPath().Lower().Contains("basemap")) {
+      QFileInfo fn(QString::fromStdString(cte.GetFullPath()));
+      if (fn.absolutePath().toLower().contains("basemap")) {
         if (!m_parent->GetbEnableBasemapTile()) {
           m_extended_stack_array.pop_back();
           continue;
@@ -1379,8 +1383,8 @@ bool Quilt::BuildExtendedChartStackAndCandidateArray(int ref_db_index,
         // The chart is a possible basemap if the chart path name
         // contains the string "basemap", not case-sensitive
 
-        wxFileName fnb(cte.GetFullPath());
-        if (!fnb.GetPath().Lower().Contains("basemap")) continue;
+        QFileInfo fnb(QString::fromStdString(cte.GetFullPath()));
+        if (!fnb.absolutePath().toLower().contains("basemap")) continue;
       }
     }
 
@@ -1454,8 +1458,8 @@ bool Quilt::BuildExtendedChartStackAndCandidateArray(int ref_db_index,
     const ChartTableEntry &cte = ChartData->GetChartTableEntry(i);
 
     if (cte.GetChartType() == CHART_TYPE_MBTILES) {
-      wxFileName fn(cte.GetFullPath());
-      if (fn.GetPath().Lower().Contains("basemap")) {
+      QFileInfo fn(QString::fromStdString(cte.GetFullPath()));
+      if (fn.absolutePath().toLower().contains("basemap")) {
         if (!m_parent->GetbEnableBasemapTile()) {
           continue;
         }
@@ -1471,8 +1475,8 @@ bool Quilt::BuildExtendedChartStackAndCandidateArray(int ref_db_index,
       //  On android, SDK > 29, we require that the directory of charts be
       //  "writable" as determined by Android Java file system
 #ifdef __ANDROID__
-    wxFileName fn(cte.GetFullSystemPath());
-    if (!androidIsDirWritable(fn.GetPath())) continue;
+    QFileInfo fn(wxString_to_QString(cte.GetFullSystemPath()));
+    if (!androidIsDirWritable(QString_to_wxString(fn.absolutePath()))) continue;
 #endif
     if (cte.GetChartType() == CHART_TYPE_CM93COMP) continue;
 
@@ -1492,8 +1496,8 @@ bool Quilt::BuildExtendedChartStackAndCandidateArray(int ref_db_index,
 
     bool guest_family_include = false;
     if (reference_family != cte.GetChartFamily()) {
-      wxFileName fn(cte.GetFullPath());
-      if (fn.GetPath().Lower().Contains("basemap")) {
+      QFileInfo fn(QString::fromStdString(cte.GetFullPath()));
+      if (fn.absolutePath().toLower().contains("basemap")) {
         guest_family_include = true;
       }
 

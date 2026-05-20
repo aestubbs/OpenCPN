@@ -32,6 +32,12 @@
 #include "wx/wx.h"
 #endif  // precompiled headers
 
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+
 #include <wx/arrstr.h>
 #include <wx/listctrl.h>
 #include <wx/mstream.h>
@@ -39,6 +45,7 @@
 #include <wx/spinctrl.h>
 #include <wx/textfile.h>
 #include <wx/tokenzr.h>
+#include <wx/wfstream.h>
 
 #include "model/plugin_comm.h"
 #include "model/chartdata_input_stream.h"
@@ -84,7 +91,7 @@ static int Get_CM93_CellIndex(double lat, double lon, int scale);
 void Get_CM93_Cell_Origin(int cellindex, int scale, double *lat, double *lon);
 
 void appendOSDirSep(wxString *pString) {
-  wxChar sep = wxFileName::GetPathSeparator();
+  wxChar sep = QDir::separator().toLatin1();
   if (pString->Last() != sep) pString->Append(sep);
 }
 
@@ -335,7 +342,7 @@ bool covr_set::Init(wxChar scale_char, wxString &prefix) {
 
   //    Create the cache file name
   wxString prefix_string = prefix;
-  wxString sep(wxFileName::GetPathSeparator());
+  wxString sep(QDir::separator().toLatin1());
   prefix_string.Replace(sep, "_");
   prefix_string.Replace(":", "_");  // for Windows
 
@@ -360,16 +367,18 @@ bool covr_set::Init(wxChar scale_char, wxString &prefix) {
   m_cachefile += "coverset_sigp.";
   m_cachefile += m_scale_char;
 
-  wxFileName fn(m_cachefile);
-  if (!fn.DirExists()) wxFileName::Mkdir(fn.GetPath(), 0777, wxPATH_MKDIR_FULL);
+  QFileInfo fn(wxString_to_QString(m_cachefile));
+  QString dirPath = fn.absolutePath();
+  if (!QDir(dirPath).exists()) QDir().mkpath(dirPath);
 
   //    Preload the cache
-  if (!wxFileName::FileExists(m_cachefile)) {
+  if (!QFile::exists(wxString_to_QString(m_cachefile))) {
     // The signed file does not exist
     // Check for an old style file, and delete if found.
-    if (wxFileName::FileExists(cache_old_name)) ::wxRemoveFile(cache_old_name);
-    if (wxFileName::FileExists(cache_old_old_name))
-      ::wxRemoveFile(cache_old_old_name);
+    if (QFile::exists(wxString_to_QString(cache_old_name)))
+      QFile::remove(wxString_to_QString(cache_old_name));
+    if (QFile::exists(wxString_to_QString(cache_old_old_name)))
+      QFile::remove(wxString_to_QString(cache_old_old_name));
     return false;
   }
 
@@ -527,29 +536,21 @@ static unsigned char Decode_table[256];
 static bool cm93_decode_table_created;
 
 // Case-insensitive cm93 directory tree depth-first traversal to find the
-// dictionary... This could be made simpler, but matches the old code better as
-// is
-class FindCM93Dictionary : public wxDirTraverser {
-public:
-  FindCM93Dictionary(wxString &path) : m_path(path) {}
-
-  virtual wxDirTraverseResult OnFile(const wxString &filename) {
-    wxString name = filename.AfterLast(wxFileName::GetPathSeparator()).Lower();
-    if (name == "cm93obj.dic") {
-      m_path = filename;
-      return wxDIR_STOP;
+// dictionary. Recurse from `path`; if any file named cm93obj.dic (any case)
+// is found, record its full path in `out_path` and stop.
+static void FindCM93DictionaryInTree(const wxString &path, wxString &out_path) {
+  QDirIterator it(wxString_to_QString(path), QStringList{},
+                  QDir::Files | QDir::NoDotAndDotDot,
+                  QDirIterator::Subdirectories);
+  while (it.hasNext()) {
+    QString file = it.next();
+    if (QFileInfo(file).fileName().compare("cm93obj.dic",
+                                           Qt::CaseInsensitive) == 0) {
+      out_path = QString_to_wxString(file);
+      return;
     }
-
-    return wxDIR_CONTINUE;
   }
-
-  virtual wxDirTraverseResult OnDir(const wxString &WXUNUSED(dirname)) {
-    return wxDIR_CONTINUE;
-  }
-
-private:
-  wxString &m_path;
-};
+}
 
 cm93_dictionary::cm93_dictionary() {
   m_S57ClassArray = NULL;
@@ -567,7 +568,7 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
   wxString dir(dictionary_dir);  // a copy
   bool ret_val = false;
 
-  wxChar sep = wxFileName::GetPathSeparator();
+  wxChar sep = QDir::separator().toLatin1();
   if (dir.Last() != sep) dir.Append(sep);
 
   m_dict_dir = dir;
@@ -577,10 +578,10 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
   wxString sf(dir);
   sf.Append("CM93OBJ.DIC");
 
-  if (!wxFileName::FileExists(sf)) {
+  if (!QFile::exists(wxString_to_QString(sf))) {
     sf = dir;
     sf.Append("cm93obj.dic");
-    if (!wxFileName::FileExists(sf)) return false;
+    if (!QFile::exists(wxString_to_QString(sf))) return false;
   }
 
   wxTextFile file;
@@ -670,12 +671,12 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
   wxString sfa(dir);
   sfa.Append("ATTRLUT.DIC");
 
-  if (!wxFileName::FileExists(sfa)) {
+  if (!QFile::exists(wxString_to_QString(sfa))) {
     sfa = dir;
     sfa.Append("attrlut.dic");
   }
 
-  if (wxFileName::FileExists(sfa)) {
+  if (QFile::exists(wxString_to_QString(sfa))) {
     wxFFileInputStream filea(sfa);
 
     if (filea.IsOk()) {
@@ -785,12 +786,12 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
     sfa = dir;
     sfa.Append("CM93ATTR.DIC");
 
-    if (!wxFileName::FileExists(sfa)) {
+    if (!QFile::exists(wxString_to_QString(sfa))) {
       sfa = dir;
       sfa.Append("cm93attr.dic");
     }
 
-    if (wxFileName::FileExists(sfa)) {
+    if (QFile::exists(wxString_to_QString(sfa))) {
       wxFFileInputStream filea(sfa);
 
       if (filea.IsOk()) {
@@ -1188,7 +1189,7 @@ bool Is_CM93Cell_Present(wxString &fileprefix, double lat, double lon,
   tfile += scale_char;
 
   //    Validate that the directory exists, adjusting case if necessary
-  if (!::wxDirExists(sdir)) {
+  if (!QDir(wxString_to_QString(sdir)).exists()) {
     wxString old_scalechar(scale_char);
     wxString new_scalechar = old_scalechar.Lower();
 
@@ -1197,13 +1198,17 @@ bool Is_CM93Cell_Present(wxString &fileprefix, double lat, double lon,
     sdir += new_scalechar;
   }
 
-  if (::wxDirExists(sdir)) {
-    wxDir dir(sdir);
+  if (QDir(wxString_to_QString(sdir)).exists()) {
+    QDir dir(wxString_to_QString(sdir));
 
-    wxArrayString file_array;
-    int n_files = dir.GetAllFiles(sdir, &file_array, tfile, wxDIR_FILES);
+    // wxDIR_FILES (no recurse), nameFilters via Qt entryList.
+    auto count_matches = [&](const wxString &pattern) -> int {
+      return dir
+          .entryList(QStringList{wxString_to_QString(pattern)}, QDir::Files)
+          .size();
+    };
 
-    if (n_files) return true;
+    if (count_matches(tfile) > 0) return true;
 
     //    Try with alternate case of m_scalechar
     wxString old_scalechar(scale_char);
@@ -1213,14 +1218,10 @@ bool Is_CM93Cell_Present(wxString &fileprefix, double lat, double lon,
     tfile1.Printf("?%03d%04d.", jlat, jlon);
     tfile1 += new_scalechar;
 
-    int n_files1 = dir.GetAllFiles(sdir, &file_array, tfile1, wxDIR_FILES);
-
-    if (n_files1) return true;
+    if (count_matches(tfile1) > 0) return true;
 
     // try compressed
-    n_files = dir.GetAllFiles(sdir, &file_array, tfile + ".xz", wxDIR_FILES);
-
-    if (n_files) return true;
+    if (count_matches(tfile + ".xz") > 0) return true;
   }
 
   return false;
@@ -2401,12 +2402,16 @@ InitReturn cm93chart::Init(const wxString &name, ChartInitFlag flags) {
   m_FullPath = name;
   m_Description = m_FullPath;
 
-  wxFileName fn(name);
+  QFileInfo fn(wxString_to_QString(name));
 
-  if (!m_prefix.Len())
-    m_prefix = fn.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+  if (!m_prefix.Len()) {
+    // wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR returned a trailing-sep path.
+    m_prefix = QString_to_wxString(fn.absolutePath());
+    if (!m_prefix.empty() && m_prefix.Last() != QDir::separator().toLatin1())
+      m_prefix.Append(QDir::separator().toLatin1());
+  }
 
-  m_scalechar = fn.GetExt();
+  m_scalechar = QString_to_wxString(fn.suffix());
 
   //    Figure out the scale from the file name
 
@@ -3897,8 +3902,8 @@ wxPoint2DDouble cm93chart::FindM_COVROffset(double lat, double lon) {
 //    structures
 InitReturn cm93chart::CreateHeaderDataFromCM93Cell() {
   //    Figure out the scale from the file name
-  wxFileName fn(m_FullPath);
-  wxString ext = fn.GetExt();
+  QFileInfo fn(wxString_to_QString(m_FullPath));
+  wxString ext = QString_to_wxString(fn.suffix());
 
   int scale;
   switch ((ext.mb_str())[(size_t)0]) {
@@ -4271,13 +4276,13 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
   if (b_useNoFind) {
     QString qkey = wxString_to_QString(key);
     if (!m_noFindArray.contains(qkey)) {
-      if (::wxFileExists(file))
+      if (QFile::exists(wxString_to_QString(file)))
         bfound = true;
       else
         m_noFindArray.append(qkey);
     }
   } else {
-    if (::wxFileExists(file)) bfound = true;
+    if (QFile::exists(wxString_to_QString(file))) bfound = true;
     ;
   }
 
@@ -4285,14 +4290,15 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
     if (b_useNoFind) {
       QString qkey_xz = wxString_to_QString(key + ".xz");
       if (!m_noFindArray.contains(qkey_xz)) {
-        if (::wxFileExists(file + ".xz")) {
+        if (QFile::exists(wxString_to_QString(file + ".xz"))) {
           compfile = file + ".xz";
         }
       } else {
         m_noFindArray.append(qkey_xz);
       }
     } else {
-      if (::wxFileExists(file + ".xz")) compfile = file + ".xz";
+      if (QFile::exists(wxString_to_QString(file + ".xz")))
+        compfile = file + ".xz";
     }
   }
 
@@ -4320,7 +4326,7 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
     if (b_useNoFind) {
       QString qkey = wxString_to_QString(key);
       if (!m_noFindArray.contains(qkey)) {
-        if (::wxFileExists(file1)) {
+        if (QFile::exists(wxString_to_QString(file1))) {
           bfound = true;
           file = file1;  // found the file as lowercase, substitute the name
         } else {
@@ -4328,7 +4334,7 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
         }
       }
     } else {
-      if (::wxFileExists(file1)) {
+      if (QFile::exists(wxString_to_QString(file1))) {
         bfound = true;
         file = file1;  // found the file as lowercase, substitute the name
       }
@@ -4338,13 +4344,14 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
       if (b_useNoFind) {
         QString qkey_xz = wxString_to_QString(key + ".xz");
         if (!m_noFindArray.contains(qkey_xz)) {
-          if (::wxFileExists(file1 + ".xz"))
+          if (QFile::exists(wxString_to_QString(file1 + ".xz")))
             compfile = file1 + ".xz";
           else
             m_noFindArray.append(qkey_xz);
         }
       } else {
-        if (::wxFileExists(file1 + ".xz")) compfile = file1 + ".xz";
+        if (QFile::exists(wxString_to_QString(file1 + ".xz")))
+          compfile = file1 + ".xz";
       }
     }
   }
@@ -4367,9 +4374,22 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
 
   // Decompress if needed
   if (compfile.Length()) {
-    file = wxFileName::CreateTempFileName(wxFileName(compfile).GetFullName());
+    // Equivalent of wxFileName::CreateTempFileName(prefix): a unique file in
+    // the system temp dir, named with the supplied prefix.
+    QString prefix = QFileInfo(wxString_to_QString(compfile)).fileName();
+    QString tmpPath = QDir(QStandardPaths::writableLocation(
+                              QStandardPaths::TempLocation))
+                          .filePath(prefix + "_XXXXXX");
+    // QFileInfo can't create temp files; manufacture a unique name by
+    // appending a tag, ensuring it does not already exist.
+    int tag = 0;
+    QString candidate;
+    do {
+      candidate = tmpPath + QString::number(tag++);
+    } while (QFile::exists(candidate));
+    file = QString_to_wxString(candidate);
     if (!DecompressXZFile(compfile, file)) {
-      wxRemoveFile(file);
+      QFile::remove(wxString_to_QString(file));
       return 0;
     }
   }
@@ -4387,11 +4407,11 @@ int cm93chart::loadsubcell(int cellindex, wxChar sub_char) {
     msg.Append(file);
     wxLogMessage(msg);
 
-    if (compfile.Length()) wxRemoveFile(file);
+    if (compfile.Length()) QFile::remove(wxString_to_QString(file));
     return 0;
   }
 
-  if (compfile.Length()) wxRemoveFile(file);
+  if (compfile.Length()) QFile::remove(wxString_to_QString(file));
 
   return 1;
 }
@@ -4472,14 +4492,16 @@ cm93_dictionary *cm93manager::FindAndLoadDict(const wxString &file) {
   //    Search for the dictionary files all along the path of the passed
   //    parameter filename
 
-  wxFileName fn(file);
-  wxString path = fn.GetPath((int)(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME));
+  QFileInfo fn(wxString_to_QString(file));
+  wxString path = QString_to_wxString(fn.absolutePath());
+  if (!path.empty() && path.Last() != QDir::separator().toLatin1())
+    path.Append(QDir::separator().toLatin1());
   wxString target;
   unsigned int i = 0;
 
   while (i < path.Len()) {
     target.Append(path[i]);
-    if (path[i] == fn.GetPathSeparator()) {
+    if (path[i] == QDir::separator().toLatin1()) {
       if (pdict->LoadDictionary(target)) {
         retval = pdict;
         break;
@@ -4547,15 +4569,15 @@ cm93compchart::~cm93compchart() {
 InitReturn cm93compchart::Init(const wxString &name, ChartInitFlag flags) {
   m_FullPath = name;
 
-  wxFileName fn(name);
+  QFileInfo fn(wxString_to_QString(name));
 
   wxString target;
   wxString path;
 
   //    Verify that the passed file name exists
-  if (!fn.FileExists()) {
+  if (!fn.isFile()) {
     // It may be a directory
-    if (wxDir::Exists(name)) {
+    if (QDir(wxString_to_QString(name)).exists()) {
       target = name;
       appendOSDirSep(&target);
       path = name;
@@ -4569,15 +4591,19 @@ InitReturn cm93compchart::Init(const wxString &name, ChartInitFlag flags) {
   } else  // its a file that exists
   {
     //    Get the cm93 cell database prefix
-    path = fn.GetPath((int)(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME));
+    path = QString_to_wxString(fn.absolutePath());
+    if (!path.empty() && path.Last() != QDir::separator().toLatin1())
+      path.Append(QDir::separator().toLatin1());
 
     //    Remove two subdirectories from the passed file name
     //    This will give a normal CM93 root
-    wxFileName file_path(path);
-    file_path.RemoveLastDir();
-    file_path.RemoveLastDir();
-
-    target = file_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+    QString qPath = wxString_to_QString(path);
+    QDir d(qPath);
+    d.cdUp();
+    d.cdUp();
+    target = QString_to_wxString(d.absolutePath());
+    if (!target.empty() && target.Last() != QDir::separator().toLatin1())
+      target.Append(QDir::separator().toLatin1());
   }
 
   m_prefixComposite = target;
@@ -5965,19 +5991,19 @@ InitReturn cm93compchart::CreateHeaderData() {
   //        scale coverage region
   wxRect extent_rect;
 
-  wxDir dirt(m_prefixComposite);
-  wxString candidate;
+  QDir dirt(wxString_to_QString(m_prefixComposite));
   wxRegEx test("[0-9]+");
 
-  bool b_cont = dirt.GetFirst(&candidate);
-
-  while (b_cont) {
+  QStringList entries =
+      dirt.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+  for (const QString &qEntry : entries) {
+    wxString candidate = QString_to_wxString(qEntry);
     if (test.Matches(candidate) && (candidate.Len() == 8)) {
       wxString dir = m_prefixComposite;
       dir += candidate;
-      if (wxDir::Exists(dir)) {
-        wxFileName name(dir);
-        wxString num_name = name.GetName();
+      if (QDir(wxString_to_QString(dir)).exists()) {
+        QFileInfo name(wxString_to_QString(dir));
+        wxString num_name = QString_to_wxString(name.completeBaseName());
         long number;
         if (num_name.ToLong(&number)) {
           int ilat = number / 10000;
@@ -5989,7 +6015,6 @@ InitReturn cm93compchart::CreateHeaderData() {
         }
       }
     }
-    b_cont = dirt.GetNext(&candidate);
   }
 
   //    Specify the chart coverage
@@ -6039,7 +6064,7 @@ cm93_dictionary *cm93compchart::FindAndLoadDictFromDir(const wxString &dir) {
 
   while (i < path.Len()) {
     target.Append(path[i]);
-    if (path[i] == wxFileName::GetPathSeparator()) {
+    if (path[i] == QDir::separator().toLatin1()) {
       //                  wxString msg = _T ( " Looking for CM93 dictionary in "
       //                  ); msg.Append ( target ); wxLogMessage ( msg );
 
@@ -6057,18 +6082,23 @@ cm93_dictionary *cm93compchart::FindAndLoadDictFromDir(const wxString &dir) {
   //    Dictionary was not found in linear path of supplied dir.
   //    Could be on branch, so, look at entire tree the hard way.
 
-  wxFileName fnc(dir);
+  // Walk up the directory chain.
+  QString qCur = wxString_to_QString(dir);
   wxString found_dict_file_name;
 
   bool bdone = false;
   while (!bdone) {
-    path = fnc.GetPath(wxPATH_GET_VOLUME);  // get path without sep
+    // The wxFileName fnc walk-up used GetPath() to return the parent dir
+    // without a trailing separator.
+    QFileInfo fnc(qCur);
+    path = QString_to_wxString(fnc.absolutePath());
 
     wxString msg = " Looking harder for CM93 dictionary in ";
     msg.Append(path);
     wxLogMessage(msg);
 
-    if ((path.Len() == 0) || path.IsSameAs(fnc.GetPathSeparator())) {
+    wxString sepStr(QDir::separator().toLatin1());
+    if ((path.Len() == 0) || path.IsSameAs(sepStr)) {
       bdone = true;
       wxLogMessage("Early break1");
       break;
@@ -6084,22 +6114,20 @@ cm93_dictionary *cm93compchart::FindAndLoadDictFromDir(const wxString &dir) {
 
     //    Search here
     //    This takes a while to search a fully populated cm93 tree....
-    wxDir dir(path);
-
-    if (dir.IsOpened()) {
+    if (QDir(wxString_to_QString(path)).exists()) {
       // Find the dictionary name, case insensitively
-      FindCM93Dictionary cm93Dictionary(found_dict_file_name);
-      dir.Traverse(cm93Dictionary);
+      FindCM93DictionaryInTree(path, found_dict_file_name);
       bdone = found_dict_file_name.Len() != 0;
     }
 
-    fnc.Assign(path);  // convert the path to a filename for next loop
+    qCur = wxString_to_QString(path);  // walk up further next iteration
   }
 
   if (found_dict_file_name.Len()) {
-    wxFileName fnd(found_dict_file_name);
-    wxString dpath =
-        fnd.GetPath((int)(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME));
+    QFileInfo fnd(wxString_to_QString(found_dict_file_name));
+    wxString dpath = QString_to_wxString(fnd.absolutePath());
+    if (!dpath.empty() && dpath.Last() != QDir::separator().toLatin1())
+      dpath.Append(QDir::separator().toLatin1());
 
     if (pdict->LoadDictionary(dpath)) retval = pdict;
   }

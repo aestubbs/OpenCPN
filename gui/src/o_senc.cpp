@@ -33,8 +33,13 @@
 #include "wx/wx.h"
 #endif  // precompiled headers
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+
 #include <wx/arrimpl.cpp>
-#include <wx/filename.h>
+#include <wx/filename.h>  // kept for API boundary types in headers
 #include <wx/progdlg.h>
 #include <wx/wfstream.h>
 
@@ -265,8 +270,6 @@ int Osenc::ingestHeader(const wxString &senc_file_name) {
   //  Then check to see if everything is defined as required.
 
   int ret_val = SENC_NO_ERROR;  // default is OK
-
-  wxFileName fn(senc_file_name);
 
   //    Sanity check for existence of file
 
@@ -1083,11 +1086,11 @@ int Osenc::ingestCell(OGRS57DataSource *poS57DS, const wxString &FullPath000,
 
   // Form the .000 filename
   wxString s0_file = working_dir;
-  if (s0_file.Last() != wxFileName::GetPathSeparator())
-    s0_file.Append(wxFileName::GetPathSeparator());
-  wxFileName f000(FullPath000);
+  if (s0_file.Last() != QDir::separator().toLatin1())
+    s0_file.Append(QDir::separator().toLatin1());
+  QFileInfo f000(wxString_to_QString(FullPath000));
 
-  s0_file.Append(f000.GetFullName());
+  s0_file.Append(QString_to_wxString(f000.fileName()));
 
   if (poS57DS->Open(s0_file.mb_str(), TRUE, NULL)) return 1;
 
@@ -1099,8 +1102,8 @@ int Osenc::ingestCell(OGRS57DataSource *poS57DS, const wxString &FullPath000,
 
   // Apply the updates...
   for (unsigned int i_up = 0; i_up < m_tmpup_array.GetCount(); i_up++) {
-    wxFileName fn(m_tmpup_array[i_up]);
-    wxString ext = fn.GetExt();
+    QFileInfo fn(wxString_to_QString(m_tmpup_array[i_up]));
+    wxString ext = QString_to_wxString(fn.suffix());
     long n_upd;
     ext.ToLong(&n_upd);
 
@@ -1197,7 +1200,7 @@ int Osenc::ingestCell(OGRS57DataSource *poS57DS, const wxString &FullPath000,
   poReader->SetOptions(papszReaderOptions);
   CSLDestroy(papszReaderOptions);
 
-  wxRemoveFile(s0_file);
+  QFile::remove(wxString_to_QString(s0_file));
 
   return 0;
 }
@@ -1206,7 +1209,9 @@ int Osenc::ValidateAndCountUpdates(const wxFileName file000,
                                    const wxString CopyDir,
                                    wxString &LastUpdateDate, bool b_copyfiles) {
   int retval = 0;
-  wxFileName last_up_added;
+  // last_up_added is just the full path of the most recently added update
+  // file; track it as a wxString since downstream code only needs the path.
+  wxString last_up_added;
 
   //       wxString DirName000 = file000.GetPath((int)(wxPATH_GET_SEPARATOR |
   //       wxPATH_GET_VOLUME)); wxDir dir(DirName000);
@@ -1238,9 +1243,9 @@ int Osenc::ValidateAndCountUpdates(const wxFileName file000,
         wxString targetFile;
 
         if (jup < m_UpFiles->GetCount()) upFile = m_UpFiles->Item(jup);
-        wxFileName upCheck(upFile);
+        QFileInfo upCheck(wxString_to_QString(upFile));
         long tl = -1;
-        wxString text = upCheck.GetExt();
+        wxString text = QString_to_wxString(upCheck.suffix());
         text.ToLong(&tl);
         if (tl == iff) {
           targetFile = upFile;
@@ -1249,39 +1254,50 @@ int Osenc::ValidateAndCountUpdates(const wxFileName file000,
           targetFile = file000.GetFullName();  // ext will be updated
         }
 
-        wxFileName ufile(targetFile);
+        // Rebuild the update file path: same dir as targetFile, base name
+        // unchanged, extension forced to the 3-digit update index.
+        QFileInfo ufileBase(wxString_to_QString(targetFile));
         wxString sext;
         sext.Printf("%03d", iff);
-        ufile.SetExt(sext);
+        QString ufileFileName = ufileBase.completeBaseName() + "." +
+                                wxString_to_QString(sext);
+        QString ufileFullPath =
+            ufileBase.absolutePath().isEmpty()
+                ? ufileFileName
+                : ufileBase.absolutePath() + QDir::separator() + ufileFileName;
+        QFileInfo ufile(ufileFullPath);
 
         //      Create the target update file name
         wxString cp_ufile = CopyDir;
-        if (cp_ufile.Last() != ufile.GetPathSeparator())
-          cp_ufile.Append(ufile.GetPathSeparator());
+        if (cp_ufile.Last() != QDir::separator().toLatin1())
+          cp_ufile.Append(QDir::separator().toLatin1());
 
-        cp_ufile.Append(ufile.GetFullName());
+        cp_ufile.Append(QString_to_wxString(ufile.fileName()));
 
-        wxString tfile = ufile.GetFullPath();
+        wxString tfile = QString_to_wxString(ufile.absoluteFilePath());
 
         //      Explicit check for a short update file, possibly left over from
         //      a crash...
         int flen = 0;
-        if (ufile.FileExists()) {
-          wxFile uf(ufile.GetFullPath());
-          if (uf.IsOpened()) {
-            flen = uf.Length();
-            uf.Close();
+        if (ufile.isFile()) {
+          QFile uf(ufile.absoluteFilePath());
+          if (uf.open(QIODevice::ReadOnly)) {
+            flen = static_cast<int>(uf.size());
+            uf.close();
           }
         }
 
-        if (ufile.FileExists() &&
+        if (ufile.isFile() &&
             (flen > 25))  // a valid update file or base file
         {
           //      Copy the valid file to the SENC directory
-          bool cpok = wxCopyFile(ufile.GetFullPath(), cp_ufile);
+          // wxCopyFile defaults to overwrite=true, so remove destination first.
+          QFile::remove(wxString_to_QString(cp_ufile));
+          bool cpok = QFile::copy(ufile.absoluteFilePath(),
+                                  wxString_to_QString(cp_ufile));
           if (!cpok) {
             wxString msg("   Cannot copy temporary working ENC file ");
-            msg.Append(ufile.GetFullPath());
+            msg.Append(QString_to_wxString(ufile.absoluteFilePath()));
             msg.Append(" to ");
             msg.Append(cp_ufile);
             wxLogMessage(msg);
@@ -1315,7 +1331,7 @@ int Osenc::ValidateAndCountUpdates(const wxFileName file000,
           wxString msg(
               "WARNING---ENC Update chain incomplete. Substituting NULL "
               "update file: ");
-          msg += ufile.GetFullName();
+          msg += QString_to_wxString(ufile.fileName());
           wxLogMessage(msg);
           wxLogMessage("   Subsequent ENC updates may produce errors.");
           wxLogMessage(
@@ -1343,16 +1359,23 @@ int Osenc::ValidateAndCountUpdates(const wxFileName file000,
     //      Extract the date field from the last of the update files
     //      which is by definition a valid, present update file....
 
-    wxFileName lastfile(last_up_added);
+    QFileInfo lastfileBase(wxString_to_QString(last_up_added));
     wxString last_sext;
     last_sext.Printf("%03d", upmax);
-    lastfile.SetExt(last_sext);
+    QString lastfilePath =
+        lastfileBase.absolutePath().isEmpty()
+            ? lastfileBase.completeBaseName() + "." +
+                  wxString_to_QString(last_sext)
+            : lastfileBase.absolutePath() + QDir::separator() +
+                  lastfileBase.completeBaseName() + "." +
+                  wxString_to_QString(last_sext);
 
     bool bSuccess;
     DDFModule oUpdateModule;
 
     bSuccess =
-        !(oUpdateModule.Open(lastfile.GetFullPath().mb_str(), TRUE) == 0);
+        !(oUpdateModule.Open(
+              QString_to_wxString(lastfilePath).mb_str(), TRUE) == 0);
 
     if (bSuccess) {
       //      Get publish/update date
@@ -1485,22 +1508,31 @@ int Osenc::createSenc200(const wxString &FullPath000,
     // return ERROR_REGISTRAR_NOT_SET;
   }
 
-  wxFileName SENCfile = wxFileName(SENCFileName);
-  wxFileName file000 = wxFileName(FullPath000);
+  QFileInfo SENCfile(wxString_to_QString(SENCFileName));
 
   //      Make the target directory if needed
-  if (true != SENCfile.DirExists(SENCfile.GetPath())) {
-    if (!SENCfile.Mkdir(SENCfile.GetPath())) {
-      errorMessage =
-          "Cannot create SENC file directory for " + SENCfile.GetFullPath();
+  QString sencDirPath = SENCfile.absolutePath();
+  if (!QDir(sencDirPath).exists()) {
+    if (!QDir().mkpath(sencDirPath)) {
+      errorMessage = "Cannot create SENC file directory for " +
+                     QString_to_wxString(SENCfile.absoluteFilePath());
       lockCR.unlock();
       return ERROR_CANNOT_CREATE_SENC_DIR;
     }
   }
 
-  //          Make a temp file to create the SENC in
-  wxFileName tfn;
-  wxString tmp_file = tfn.CreateTempFileName("");
+  //          Make a temp file to create the SENC in.
+  // Equivalent of wxFileName::CreateTempFileName(""): a unique file in
+  // the system temp dir.
+  QString tmpDir =
+      QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+  int tmpTag = 0;
+  QString tmpCandidate;
+  do {
+    tmpCandidate = QDir(tmpDir).filePath(
+        QString("opencpn_senc_%1").arg(tmpTag++));
+  } while (QFile::exists(tmpCandidate));
+  wxString tmp_file = QString_to_wxString(tmpCandidate);
 
   //     FILE *fps57;
   //     const char *pp = "wb";
@@ -1542,7 +1574,8 @@ int Osenc::createSenc200(const wxString &FullPath000,
 
   //  Ingest the .000 cell, with updates applied
 
-  if (ingestCell(poS57DS, FullPath000, SENCfile.GetPath())) {
+  if (ingestCell(poS57DS, FullPath000,
+                 QString_to_wxString(SENCfile.absolutePath()))) {
     errorMessage = "Error ingesting: " + FullPath000;
     delete m_pOutstream;
     lockCR.unlock();
@@ -1669,11 +1702,11 @@ int Osenc::createSenc200(const wxString &FullPath000,
     pEdgeVectorRecordFeature = poReader->ReadVector(feid, RCNM_VE);
   }
 
-  wxString Message = SENCfile.GetFullPath();
+  wxString Message = QString_to_wxString(SENCfile.absoluteFilePath());
   Message.Append("...Ingesting");
 
   wxString Title(_("OpenCPN S57 SENC File Create..."));
-  Title.append(SENCfile.GetFullPath());
+  Title.append(QString_to_wxString(SENCfile.absoluteFilePath()));
 
 #if wxUSE_PROGRESSDLG
 
@@ -1764,17 +1797,21 @@ int Osenc::createSenc200(const wxString &FullPath000,
 
   if (!bcont)  // aborted
   {
-    wxRemoveFile(tmp_file);  // kill the temp file
+    QFile::remove(wxString_to_QString(tmp_file));  // kill the temp file
     ret_code = ERROR_SENCFILE_ABORT;
   }
 
   if (bcont) {
-    bool cpok = wxRenameFile(tmp_file, SENCfile.GetFullPath());
+    // wxRenameFile defaults to overwrite=true; QFile::rename refuses to
+    // overwrite, so remove the destination first.
+    QString destPath = SENCfile.absoluteFilePath();
+    QFile::remove(destPath);
+    bool cpok = QFile::rename(wxString_to_QString(tmp_file), destPath);
     if (!cpok) {
       errorMessage = "   Cannot rename temporary SENC file ";
       errorMessage.Append(tmp_file);
       errorMessage.Append(" to ");
-      errorMessage.Append(SENCfile.GetFullPath());
+      errorMessage.Append(QString_to_wxString(destPath));
       ret_code = ERROR_SENCFILE_ABORT;
     } else
       ret_code = SENC_NO_ERROR;
@@ -3609,7 +3646,7 @@ OGRFeature *Osenc::GetChartNextM_COVR(int &catcov, S57Reader *pENCReader) {
 
 int Osenc::GetBaseFileInfo(const wxString &FullPath000,
                            const wxString &SENCFileName) {
-  wxFileName SENCfile = wxFileName(SENCFileName);
+  QFileInfo SENCfile(wxString_to_QString(SENCFileName));
 
   //  Take a quick scan of the 000 file to get some basic attributes of the
   //  exchange set.
@@ -3625,7 +3662,8 @@ int Osenc::GetBaseFileInfo(const wxString &FullPath000,
 
   //  Ingest the .000 cell, with updates applied
 
-  if (ingestCell(&oS57DS, FullPath000, SENCfile.GetPath())) {
+  if (ingestCell(&oS57DS, FullPath000,
+                 QString_to_wxString(SENCfile.absolutePath()))) {
     errorMessage = "Error ingesting: " + FullPath000;
     return ERROR_INGESTING000;
   }

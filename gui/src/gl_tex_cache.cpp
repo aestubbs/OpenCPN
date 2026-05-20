@@ -24,10 +24,15 @@
 
 #include <stdint.h>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+
 #include <wx/wxprec.h>
 #include <wx/tokenzr.h>
-#include <wx/filename.h>
 #include <wx/wx.h>
+
+#include "model/wx_qt_string.h"
 
 #include "config.h"
 
@@ -152,9 +157,15 @@ glTexFactory::glTexFactory(ChartBase *chart, int raster_format) {
   m_catalog_offset = sizeof(CompressedCacheHeader);
   QDateTime ed = chart->GetEditionDate();
   m_chart_date_binary = (uint32_t)ed.isValid() ? ed.toSecsSinceEpoch() : 0;
-  m_chartfile_date_binary = ::wxFileModificationTime(chart->GetFullPath());
-  m_chartfile_size =
-      (uint32_t)wxFileName::GetSize(chart->GetFullPath()).GetLo();
+  {
+    QFileInfo cfi(wxString_to_QString(chart->GetFullPath()));
+    m_chartfile_date_binary =
+        cfi.lastModified().isValid()
+            ? static_cast<uint32_t>(cfi.lastModified().toSecsSinceEpoch())
+            : 0;
+    // Match the previous wxFileName::GetSize().GetLo() truncation to 32 bits.
+    m_chartfile_size = static_cast<uint32_t>(cfi.size() & 0xFFFFFFFFu);
+  }
   m_ChartPath = chart->GetFullPath();
 
   m_CompressedCacheFilePath = CompressedCachePath(chart->GetFullPath());
@@ -923,12 +934,12 @@ int glTexFactory::GetTextureLevel(glTextureDescriptor *ptd, const wxRect &rect,
       if (p != 0) {
         int size = TextureTileSize(level, true);
 
-        if (m_fs->IsOpened()) {
-          m_fs->Seek(p->texture_offset);
+        if (m_fs && m_fs->isOpen()) {
+          m_fs->seek(p->texture_offset);
           ptd->comp_array[level] = (unsigned char *)malloc(size);
           int max_compressed_size = LZ4_COMPRESSBOUND(g_tile_size);
           char *compressed_data = (char *)malloc(p->compressed_size);
-          m_fs->Read(compressed_data, p->compressed_size);
+          m_fs->read(compressed_data, p->compressed_size);
           LZ4_decompress_fast(compressed_data, (char *)ptd->comp_array[level],
                               size);
           free(compressed_data);
@@ -954,16 +965,19 @@ bool glTexFactory::LoadHeader() {
 
   bool need_new = false;
 
-  if (wxFileName::FileExists(m_CompressedCacheFilePath)) {
-    m_fs = new wxFFile(m_CompressedCacheFilePath, "rb+");
-    if (m_fs->IsOpened()) {
+  QString qCachePath = wxString_to_QString(m_CompressedCacheFilePath);
+
+  if (QFile::exists(qCachePath)) {
+    m_fs = new QFile(qCachePath);
+    if (m_fs->open(QIODevice::ReadWrite)) {
       CompressedCacheHeader hdr;
 
       //  Header is located at the end of the file
-      wxFileOffset hdr_offset = m_fs->Length() - sizeof(hdr);
-      hdr_offset = m_fs->Seek(hdr_offset);
+      qint64 hdr_offset = m_fs->size() - sizeof(hdr);
+      m_fs->seek(hdr_offset);
 
-      if (sizeof(hdr) == m_fs->Read(&hdr, sizeof(hdr))) {
+      if (static_cast<qint64>(sizeof(hdr)) ==
+          m_fs->read(reinterpret_cast<char *>(&hdr), sizeof(hdr))) {
         if (hdr.magic != COMPRESSED_CACHE_MAGIC ||
             hdr.chartdate != m_chart_date_binary ||
             hdr.chartfile_date != m_chartfile_date_binary ||
@@ -971,6 +985,7 @@ bool glTexFactory::LoadHeader() {
             hdr.format != g_raster_format) {
           //  Bad header signature
           delete m_fs;
+          m_fs = nullptr;
           need_new = true;
         } else {  // good header
           n_catalog_entries = hdr.m_nentries;
@@ -981,31 +996,34 @@ bool glTexFactory::LoadHeader() {
         m_catalog_offset = 0;
         WriteCatalogAndHeader();
       }
-    }  // is open
-
+    }    // is open
     else {  // some problem opening file, probably permissions on Win7
       delete m_fs;
+      m_fs = nullptr;
       need_new = true;
-      wxRemoveFile(m_CompressedCacheFilePath);
+      QFile::remove(qCachePath);
     }
 
   }  // exists
 
   else {  // File does not exist
-    wxFileName fn(m_CompressedCacheFilePath);
-    if (!fn.DirExists()) fn.Mkdir();
+    QFileInfo fi(qCachePath);
+    QString dirPath = fi.absolutePath();
+    if (!QDir(dirPath).exists()) QDir().mkpath(dirPath);
     need_new = true;
   }
 
   if (need_new) {
     //  Create new file, with empty catalog, and correct header
-    m_fs = new wxFFile(m_CompressedCacheFilePath, "wb");
+    m_fs = new QFile(qCachePath);
+    m_fs->open(QIODevice::WriteOnly | QIODevice::Truncate);
     n_catalog_entries = 0;
     m_catalog_offset = 0;
     WriteCatalogAndHeader();
     delete m_fs;
 
-    m_fs = new wxFFile(m_CompressedCacheFilePath, "rb+");
+    m_fs = new QFile(qCachePath);
+    m_fs->open(QIODevice::ReadWrite);
   }
   m_hdrOK = true;
   return true;
@@ -1043,7 +1061,7 @@ bool glTexFactory::LoadCatalog() {
     return true;
   }
 
-  m_fs->Seek(m_catalog_offset);
+  m_fs->seek(m_catalog_offset);
 
   CatalogEntry ps;
   int buf_size = ps.GetSerialSize();
@@ -1052,7 +1070,7 @@ bool glTexFactory::LoadCatalog() {
   CatalogEntry p;
   bool bad = false;
   for (int i = 0; i < n_catalog_entries; i++) {
-    m_fs->Read(buf, buf_size);
+    m_fs->read(reinterpret_cast<char *>(buf), buf_size);
     p.DeSerialize(buf);
     if (!AddCacheEntryValue(p)) bad = true;
   }
@@ -1068,8 +1086,8 @@ bool glTexFactory::LoadCatalog() {
 }
 
 bool glTexFactory::WriteCatalogAndHeader() {
-  if (m_fs && m_fs->IsOpened()) {
-    m_fs->Seek(m_catalog_offset);
+  if (m_fs && m_fs->isOpen()) {
+    m_fs->seek(m_catalog_offset);
 
     CatalogEntry ps;
     int buf_size = ps.GetSerialSize();
@@ -1093,7 +1111,7 @@ bool glTexFactory::WriteCatalogAndHeader() {
           p.v = *r;
           new_n_catalog_entries++;
           p.Serialize(buf);
-          m_fs->Write(buf, buf_size);
+          m_fs->write(reinterpret_cast<const char *>(buf), buf_size);
         }
       }
     }
@@ -1109,8 +1127,8 @@ bool glTexFactory::WriteCatalogAndHeader() {
     hdr.chartfile_date = m_chartfile_date_binary;
     hdr.chartfile_size = m_chartfile_size;
 
-    m_fs->Write(&hdr, sizeof(hdr));
-    m_fs->Flush();
+    m_fs->write(reinterpret_cast<const char *>(&hdr), sizeof(hdr));
+    m_fs->flush();
 
     return true;
   } else
@@ -1130,7 +1148,7 @@ bool glTexFactory::UpdateCachePrecomp(unsigned char *data, int data_size,
   // Make sure the file exists
   wxASSERT(m_fs != 0);
 
-  if (!m_fs->IsOpened()) return false;
+  if (!m_fs->isOpen()) return false;
 
   //      Create a new catalog entry
   CatalogEntry p(level, rect.x, rect.y, color_scheme);
@@ -1144,8 +1162,8 @@ bool glTexFactory::UpdateCachePrecomp(unsigned char *data, int data_size,
 
   //      We write the new data at the current catalog offset, overwriting the
   //      old catalog
-  m_fs->Seek(m_catalog_offset);
-  m_fs->Write(data, data_size);
+  m_fs->seek(m_catalog_offset);
+  m_fs->write(reinterpret_cast<const char *>(data), data_size);
 
   //      Write the catalog and Header (which follows the catalog at the end of
   //      the file

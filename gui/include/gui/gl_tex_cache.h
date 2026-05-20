@@ -24,8 +24,9 @@
 #ifndef __GLTEXTCACHE_H__
 #define __GLTEXTCACHE_H__
 
+#include <QFile>
+
 #include <wx/glcanvas.h>
-#include <wx/ffile.h>
 #include <wx/timer.h>
 #include <stdint.h>
 
@@ -180,7 +181,7 @@ private:
 
   bool m_catalogCorrupted;
 
-  wxFFile *m_fs;
+  QFile *m_fs;
   uint32_t m_chart_date_binary;
   uint32_t m_chartfile_date_binary;
   uint32_t m_chartfile_size;

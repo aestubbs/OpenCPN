@@ -26,7 +26,12 @@
 #include <map>
 #include <vector>
 
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
 #include <QLocale>
+#include <QStandardPaths>
 
 #ifdef __ANDROID__
 #include "crashlytics.h"
@@ -46,7 +51,6 @@
 #include <wx/image.h>  // for some reason, needed for msvc???
 #include <wx/tokenzr.h>
 #include <wx/textfile.h>
-#include <wx/filename.h>
 
 #include <wx/listimpl.cpp>
 
@@ -307,7 +311,8 @@ s57chart::~s57chart() {
   free(m_this_chart_context);
 
   if (m_TempFilePath.Length() && (m_FullPath != m_TempFilePath)) {
-    if (::wxFileExists(m_TempFilePath)) wxRemoveFile(m_TempFilePath);
+    QString qTmp = wxString_to_QString(m_TempFilePath);
+    if (QFile::exists(qTmp)) QFile::remove(qTmp);
   }
 
   //  Check the SENCThreadManager to see if this chart is queued or active
@@ -644,23 +649,21 @@ bool s57chart::AdjustVP(ViewPort &vp_last, ViewPort &vp_proposed) {
  */
 
 void s57chart::LoadThumb() {
-  wxFileName fn(m_FullPath);
+  QFileInfo fn(wxString_to_QString(m_FullPath));
   wxString SENCdir = g_SENCPrefix;
 
-  if (SENCdir.Last() != fn.GetPathSeparator())
-    SENCdir.Append(fn.GetPathSeparator());
+  if (SENCdir.Last() != QDir::separator().toLatin1())
+    SENCdir.Append(QDir::separator().toLatin1());
 
-  wxFileName tsfn(SENCdir);
-  tsfn.SetFullName(fn.GetFullName());
-
-  wxFileName ThumbFileNameLook(tsfn);
-  ThumbFileNameLook.SetExt("BMP");
+  // Build SENCdir + <base>.BMP via Qt path joining.
+  QString thumbPath = QDir(wxString_to_QString(SENCdir))
+                          .filePath(fn.completeBaseName() + ".BMP");
 
   wxBitmap *pBMP;
-  if (ThumbFileNameLook.FileExists()) {
+  if (QFile::exists(thumbPath)) {
     pBMP = new wxBitmap;
 
-    pBMP->LoadFile(ThumbFileNameLook.GetFullPath(), wxBITMAP_TYPE_BMP);
+    pBMP->LoadFile(QString_to_wxString(thumbPath), wxBITMAP_TYPE_BMP);
     m_pDIBThumbDay = pBMP;
     m_pDIBThumbOrphan = 0;
     m_pDIBThumbDim = 0;
@@ -2478,9 +2481,9 @@ bool s57chart::DCRenderText(wxMemoryDC &dcinput, const ViewPort &vp) {
 }
 
 bool s57chart::IsCellOverlayType(const wxString &FullPath) {
-  wxFileName fn(FullPath);
+  QFileInfo fn(wxString_to_QString(FullPath));
   //      Get the "Usage" character
-  wxString cname = fn.GetName();
+  wxString cname = QString_to_wxString(fn.completeBaseName());
   if (cname.Length() >= 3)
     return ((cname[2] == 'L') || (cname[2] == 'A'));
   else
@@ -2494,20 +2497,23 @@ InitReturn s57chart::Init(const wxString &name, ChartInitFlag flags) {
 
   wxString ext;
   if (name.Upper().EndsWith(".XZ")) {
-    ext = wxFileName(name.Left(name.Length() - 3)).GetExt();
+    ext = QString_to_wxString(
+        QFileInfo(wxString_to_QString(name.Left(name.Length() - 3))).suffix());
 
     // decompress to temp file to allow seeking
-    m_TempFilePath = wxFileName::GetTempDir() + wxFileName::GetPathSeparator() +
-                     wxFileName(name).GetName();
+    QString tmpDir =
+        QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    m_TempFilePath = QString_to_wxString(QDir(tmpDir).filePath(
+        QFileInfo(wxString_to_QString(name)).completeBaseName()));
 
-    if (!wxFileExists(m_TempFilePath) &&
-        !DecompressXZFile(name, m_TempFilePath)) {
-      wxRemoveFile(m_TempFilePath);
+    QString qTmp = wxString_to_QString(m_TempFilePath);
+    if (!QFile::exists(qTmp) && !DecompressXZFile(name, m_TempFilePath)) {
+      QFile::remove(qTmp);
       return INIT_FAIL_REMOVE;
     }
   } else {
     m_TempFilePath = name;
-    ext = wxFileName(name).GetExt();
+    ext = QString_to_wxString(QFileInfo(wxString_to_QString(name)).suffix());
   }
   m_FullPath = name;
 
@@ -2529,10 +2535,10 @@ InitReturn s57chart::Init(const wxString &name, ChartInitFlag flags) {
 
   m_Description = name;
 
-  wxFileName fn(m_TempFilePath);
+  QFileInfo fn(wxString_to_QString(m_TempFilePath));
 
   //      Get the "Usage" character
-  wxString cname = fn.GetName();
+  wxString cname = QString_to_wxString(fn.completeBaseName());
   m_usage_char = cname[2];
 
   //  Establish a common reference point for the chart
@@ -2549,7 +2555,7 @@ InitReturn s57chart::Init(const wxString &name, ChartInitFlag flags) {
 
   if (flags == HEADER_ONLY) {
     if (ext == "000") {
-      if (!GetBaseFileAttr(fn.GetFullPath()))
+      if (!GetBaseFileAttr(QString_to_wxString(fn.absoluteFilePath())))
         ret_value = INIT_FAIL_REMOVE;
       else {
         if (!CreateHeaderDataFromENC())
@@ -2607,18 +2613,22 @@ InitReturn s57chart::Init(const wxString &name, ChartInitFlag flags) {
 }
 
 wxString s57chart::buildSENCName(const wxString &name) {
-  wxFileName fn(name);
-  fn.SetExt("S57");
-  wxString file_name = fn.GetFullName();
+  QFileInfo fn(wxString_to_QString(name));
+  wxString file_name = QString_to_wxString(fn.completeBaseName()) + ".S57";
 
   //      Set the proper directory for the SENC files
   wxString SENCdir = g_SENCPrefix;
 
-  if (SENCdir.Last() != wxFileName::GetPathSeparator())
-    SENCdir.Append(wxFileName::GetPathSeparator());
+  if (SENCdir.Last() != QDir::separator().toLatin1())
+    SENCdir.Append(QDir::separator().toLatin1());
 
 #if 1
-  wxString source_dir = fn.GetPath(wxPATH_GET_SEPARATOR);
+  // wxPATH_GET_SEPARATOR -> path with trailing separator. QFileInfo
+  // absolutePath() omits it, so append.
+  wxString source_dir = QString_to_wxString(fn.absolutePath());
+  if (!source_dir.empty() &&
+      source_dir.Last() != QDir::separator().toLatin1())
+    source_dir.Append(QDir::separator().toLatin1());
   wxCharBuffer buf = source_dir.ToUTF8();
   unsigned char sha1_out[20];
   sha1((unsigned char *)buf.data(), strlen(buf.data()), sha1_out);
@@ -2633,10 +2643,9 @@ wxString s57chart::buildSENCName(const wxString &name) {
   file_name.Prepend(sha1);
 #endif
 
-  wxFileName tsfn(SENCdir);
-  tsfn.SetFullName(file_name);
-
-  return tsfn.GetFullPath();
+  QString full = QDir(wxString_to_QString(SENCdir))
+                     .filePath(wxString_to_QString(file_name));
+  return QString_to_wxString(full);
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -2648,20 +2657,23 @@ int s57chart::FindOrCreateSenc(const wxString &name, bool b_progress) {
   //  decompress if necessary
   wxString ext;
   if (name.Upper().EndsWith(".XZ")) {
-    ext = wxFileName(name.Left(name.Length() - 3)).GetExt();
+    ext = QString_to_wxString(
+        QFileInfo(wxString_to_QString(name.Left(name.Length() - 3))).suffix());
 
     // decompress to temp file to allow seeking
-    m_TempFilePath = wxFileName::GetTempDir() + wxFileName::GetPathSeparator() +
-                     wxFileName(name).GetName();
+    QString tmpDir =
+        QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    m_TempFilePath = QString_to_wxString(QDir(tmpDir).filePath(
+        QFileInfo(wxString_to_QString(name)).completeBaseName()));
 
-    if (!wxFileExists(m_TempFilePath) &&
-        !DecompressXZFile(name, m_TempFilePath)) {
-      wxRemoveFile(m_TempFilePath);
+    QString qTmp = wxString_to_QString(m_TempFilePath);
+    if (!QFile::exists(qTmp) && !DecompressXZFile(name, m_TempFilePath)) {
+      QFile::remove(qTmp);
       return INIT_FAIL_REMOVE;
     }
   } else {
     m_TempFilePath = name;
-    ext = wxFileName(name).GetExt();
+    ext = QString_to_wxString(QFileInfo(wxString_to_QString(name)).suffix());
   }
   m_FullPath = name;
 
@@ -2680,6 +2692,8 @@ int s57chart::FindOrCreateSenc(const wxString &name, bool b_progress) {
   bool bbuild_new_senc = false;
   m_bneed_new_thumbnail = false;
 
+  // GetUpdateFileArray() takes a wxFileName at the API boundary;
+  // keep this local instance as wxFileName for that call.
   wxFileName FileName000(m_TempFilePath);
 
   //      Look for SENC file in the target directory
@@ -2691,7 +2705,8 @@ int s57chart::FindOrCreateSenc(const wxString &name, bool b_progress) {
   {
     int force_make_senc = 0;
 
-    if (::wxFileExists(m_SENCFileName)) {  // SENC file exists
+    if (QFile::exists(wxString_to_QString(m_SENCFileName))) {  // SENC file
+                                                                // exists
 
       Osenc senc;
       if (senc.ingestHeader(m_SENCFileName)) {
@@ -2761,14 +2776,11 @@ int s57chart::FindOrCreateSenc(const wxString &name, bool b_progress) {
           //          Make simple tests to see if the .000 file is "newer" than
           //          the SENC file representation These tests may be redundant,
           //          since the DSID:EDTN test above should catch new base files
-          // wxFileName::GetTimes() returns wx; convert at the boundary
-          // (wxFileName itself is deferred to P1.10).
-          wxDateTime wx_omod;
-          FileName000.GetTimes(NULL, &wx_omod, NULL);
           QDateTime OModTime000 =
-              QDateTime::fromSecsSinceEpoch(wx_omod.GetTicks());
-          OModTime000 =
-              QDateTime(OModTime000.date(), QTime(0, 0, 0));  // to midnight
+              QFileInfo(wxString_to_QString(m_TempFilePath)).lastModified();
+          if (OModTime000.isValid())
+            OModTime000 = QDateTime(OModTime000.date(),
+                                    QTime(0, 0, 0));  // to midnight
           if (SENCCreateDate.isValid()) {
             if (OModTime000 > SENCCreateDate) {
               wxLogMessage(
@@ -2792,7 +2804,9 @@ int s57chart::FindOrCreateSenc(const wxString &name, bool b_progress) {
 
         if (force_make_senc) bbuild_new_senc = true;
       }
-    } else if (!::wxFileExists(m_SENCFileName))  // SENC file does not exist
+    } else if (!QFile::exists(
+                   wxString_to_QString(m_SENCFileName)))  // SENC file does
+                                                          // not exist
     {
       wxLogMessage("    Rebuilding SENC due to missing SENC file.");
       bbuild_new_senc = true;
@@ -2988,13 +3002,15 @@ void s57chart::InvalidateCache() {
 bool s57chart::BuildThumbnail(const wxString &bmpname) {
   bool ret_code;
 
-  wxFileName ThumbFileName(bmpname);
+  QFileInfo ThumbFileName(wxString_to_QString(bmpname));
 
   //      Make the target directory if needed
-  if (true != ThumbFileName.DirExists(ThumbFileName.GetPath())) {
-    if (!ThumbFileName.Mkdir(ThumbFileName.GetPath())) {
-      wxLogMessage("   Cannot create BMP file directory for " +
-                   ThumbFileName.GetFullPath());
+  QString thumbDir = ThumbFileName.absolutePath();
+  if (!QDir(thumbDir).exists()) {
+    if (!QDir().mkpath(thumbDir)) {
+      wxLogMessage(
+          "   Cannot create BMP file directory for " +
+          QString_to_wxString(ThumbFileName.absoluteFilePath()));
       return false;
     }
   }
@@ -3131,7 +3147,8 @@ bool s57chart::BuildThumbnail(const wxString &bmpname) {
   dc_org.SelectObject(wxNullBitmap);
 
   //   Save the file
-  ret_code = pBMP->SaveFile(ThumbFileName.GetFullPath(), wxBITMAP_TYPE_BMP);
+  ret_code = pBMP->SaveFile(
+      QString_to_wxString(ThumbFileName.absoluteFilePath()), wxBITMAP_TYPE_BMP);
 
   delete pBMP;
 
@@ -3361,15 +3378,19 @@ bool s57chart::CreateHeaderDataFromENC() {
 bool s57chart::CreateHeaderDataFromoSENC() {
   bool ret_val = true;
 
-  wxFFileInputStream fpx(m_SENCFileName);
-  if (!fpx.IsOk()) {
-    if (!::wxFileExists(m_SENCFileName)) {
+  // Quick existence/openability check; the actual reading happens in
+  // Osenc::ingestHeader() below via its own stream wrapper.
+  QString qSenc = wxString_to_QString(m_SENCFileName);
+  QFile fpx(qSenc);
+  if (!fpx.open(QIODevice::ReadOnly)) {
+    if (!QFile::exists(qSenc)) {
       wxString msg("   Cannot open SENC file ");
       msg.Append(m_SENCFileName);
       wxLogMessage(msg);
     }
     return false;
   }
+  fpx.close();
 
   Osenc senc;
   if (senc.ingestHeader(m_SENCFileName)) {
@@ -3556,18 +3577,24 @@ std::list<S57Obj *> *s57chart::GetAssociatedObjects(S57Obj *obj) {
 }
 
 void s57chart::GetChartNameFromTXT(const wxString &FullPath, wxString &Name) {
-  wxFileName fn(FullPath);
+  QFileInfo fn(wxString_to_QString(FullPath));
 
-  wxString target_name = fn.GetName();
+  wxString target_name = QString_to_wxString(fn.completeBaseName());
   target_name.RemoveLast();
 
-  wxString dir_name = fn.GetPath();
+  wxString dir_name = QString_to_wxString(fn.absolutePath());
 
-  wxDir dir(dir_name);  // The directory containing the file
-
+  // Recursive listing of the chart's directory (the default wxDir GetAllFiles
+  // mode used wxDIR_DEFAULT, which recurses).
   wxArrayString FileList;
-
-  dir.GetAllFiles(fn.GetPath(), &FileList);  // list all the files
+  {
+    QDirIterator it(wxString_to_QString(dir_name), QStringList{},
+                    QDir::Files | QDir::NoDotAndDotDot,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      FileList.Add(QString_to_wxString(it.next()));
+    }
+  }
 
   //    Iterate on the file list...
 
@@ -3576,10 +3603,12 @@ void s57chart::GetChartNameFromTXT(const wxString &FullPath, wxString &Name) {
   name.Clear();
 
   for (unsigned int j = 0; j < FileList.GetCount(); j++) {
-    wxFileName file(FileList[j]);
-    if (((file.GetExt()).MakeUpper()) == "TXT") {
+    QFileInfo file(wxString_to_QString(FileList[j]));
+    if (file.suffix().toUpper() == "TXT") {
       //  Look for the line beginning with the name of the .000 file
-      wxTextFile text_file(file.GetFullPath());
+      // wxTextFile retained: convenient text-file reader that auto-detects
+      // encoding (wxConvISO8859_1 fallback). Stream interface, deferred.
+      wxTextFile text_file(QString_to_wxString(file.absoluteFilePath()));
 
       bool file_ok = true;
       //  Suppress log messages on bad file reads
@@ -3605,7 +3634,7 @@ void s57chart::GetChartNameFromTXT(const wxString &FullPath, wxString &Name) {
         }
       } else {
         wxString msg("   Error Reading ENC .TXT file: ");
-        msg.Append(file.GetFullPath());
+        msg.Append(QString_to_wxString(file.absoluteFilePath()));
         wxLogMessage(msg);
       }
 
@@ -3633,10 +3662,10 @@ const char *s57chart::getName(OGRFeature *feature) {
 }
 
 static int ExtensionCompare(const wxString &first, const wxString &second) {
-  wxFileName fn1(first);
-  wxFileName fn2(second);
-  wxString ext1(fn1.GetExt());
-  wxString ext2(fn2.GetExt());
+  QFileInfo fn1(wxString_to_QString(first));
+  QFileInfo fn2(wxString_to_QString(second));
+  wxString ext1 = QString_to_wxString(fn1.suffix());
+  wxString ext2 = QString_to_wxString(fn2.suffix());
 
   return ext1.Cmp(ext2);
 }
@@ -3644,35 +3673,39 @@ static int ExtensionCompare(const wxString &first, const wxString &second) {
 int s57chart::GetUpdateFileArray(const wxFileName file000,
                                  wxArrayString *UpFiles, QDateTime date000,
                                  wxString edtn000) {
+  // file000 is part of the public API of this method; keep it as wxFileName
+  // for the boundary and pull out only the strings we need internally.
   wxString DirName000 =
       file000.GetPath((int)(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME));
-  wxDir dir(DirName000);
-  if (!dir.IsOpened()) {
-    DirName000.Prepend(wxFileName::GetPathSeparator());
+  if (!QDir(wxString_to_QString(DirName000)).exists()) {
+    DirName000.Prepend(QDir::separator().toLatin1());
     DirName000.Prepend(".");
-    dir.Open(DirName000);
-    if (!dir.IsOpened()) {
+    if (!QDir(wxString_to_QString(DirName000)).exists()) {
       return 0;
     }
   }
 
-  int flags = wxDIR_DEFAULT;
+  // wxDIR_DEFAULT == wxDIR_FILES; "with subdirs" is set later if needed.
+  bool recurse = false;
+  (void)recurse;  // default off
+  bool list_dirs = false;
 
   // Check dir structure
   //  We look to see if the directory one level above where the .000 file is
   //  located happens to be "perfectly numeric" in name. If so, the dataset is
   //  presumed to be organized with each update in its own directory. So, we
   //  search for updates from this level, recursing into subdirs.
-  wxFileName fnDir(DirName000);
-  fnDir.RemoveLastDir();
-  wxString sdir = fnDir.GetPath();
-  wxFileName fnTest(sdir);
-  wxString sname = fnTest.GetName();
+  // Compute one level above.
+  QString qDir000 = wxString_to_QString(DirName000);
+  QDir dirUp(qDir000);
+  dirUp.cdUp();
+  QString sdir = dirUp.absolutePath();
+  // The name of the parent directory.
+  wxString sname = QString_to_wxString(QFileInfo(sdir).fileName());
   long tmps;
   if (sname.ToLong(&tmps)) {
-    dir.Open(sdir);
-    DirName000 = sdir;
-    flags |= wxDIR_DIRS;
+    DirName000 = QString_to_wxString(sdir);
+    list_dirs = true;
   }
 
   wxString ext;
@@ -3684,19 +3717,31 @@ int s57chart::GetUpdateFileArray(const wxFileName file000,
   else
     dummy_array = UpFiles;
 
+  // Recursive (matches wxDir::GetAllFiles default).
   wxArrayString possibleFiles;
-  wxDir::GetAllFiles(DirName000, &possibleFiles, "", flags);
+  {
+    QDir::Filters filters = QDir::Files | QDir::NoDotAndDotDot;
+    if (list_dirs) filters |= QDir::Dirs;
+    QDirIterator it(wxString_to_QString(DirName000), QStringList{}, filters,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      QString p = it.next();
+      if (QFileInfo(p).isFile())
+        possibleFiles.Add(QString_to_wxString(p));
+    }
+  }
 
   for (unsigned int i = 0; i < possibleFiles.GetCount(); i++) {
     wxString filename(possibleFiles[i]);
 
-    wxFileName file(filename);
-    ext = file.GetExt();
+    QFileInfo file(wxString_to_QString(filename));
+    ext = QString_to_wxString(file.suffix());
 
     long tmp;
     //  Files of interest have the same base name is the target .000 cell,
     //  and have numeric extension
-    if (ext.ToLong(&tmp) && (file.GetName() == file000.GetName())) {
+    if (ext.ToLong(&tmp) &&
+        (QString_to_wxString(file.completeBaseName()) == file000.GetName())) {
       wxString FileToAdd = filename;
 
       wxCharBuffer buffer =
@@ -3789,8 +3834,8 @@ int s57chart::GetUpdateFileArray(const wxFileName file000,
   //      Get the update number of the last in the list
   if (dummy_array->GetCount()) {
     wxString Last = dummy_array->Last();
-    wxFileName fnl(Last);
-    ext = fnl.GetExt();
+    QFileInfo fnl(wxString_to_QString(Last));
+    ext = QString_to_wxString(fnl.suffix());
     wxCharBuffer buffer = ext.ToUTF8();
     if (buffer.data()) retval = atoi(buffer.data());
   }
@@ -3832,37 +3877,49 @@ int s57chart::ValidateAndCountUpdates(const wxFileName file000,
           new wxArrayString;  // save a list of created files for later erase
 
       for (int iff = 0; iff < retval + 1; iff++) {
-        wxFileName ufile(m_TempFilePath);
+        // Build a path with the .000-derived base name and extension iff,
+        // i.e. ufile = <dir(m_TempFilePath)>/<base(m_TempFilePath)>.<iff>
+        QFileInfo ufileBase(wxString_to_QString(m_TempFilePath));
         wxString sext;
         sext.Printf("%03d", iff);
-        ufile.SetExt(sext);
+        QString ufileFile = ufileBase.completeBaseName() + "." +
+                            wxString_to_QString(sext);
+        QString ufileAbs =
+            ufileBase.absolutePath().isEmpty()
+                ? ufileFile
+                : ufileBase.absolutePath() + QDir::separator() + ufileFile;
+        QFileInfo ufile(ufileAbs);
 
         //      Create the target update file name
         wxString cp_ufile = CopyDir;
-        if (cp_ufile.Last() != ufile.GetPathSeparator())
-          cp_ufile.Append(ufile.GetPathSeparator());
+        if (cp_ufile.Last() != QDir::separator().toLatin1())
+          cp_ufile.Append(QDir::separator().toLatin1());
 
-        cp_ufile.Append(ufile.GetFullName());
+        cp_ufile.Append(QString_to_wxString(ufile.fileName()));
 
         //      Explicit check for a short update file, possibly left over from
         //      a crash...
         int flen = 0;
-        if (ufile.FileExists()) {
-          wxFile uf(ufile.GetFullPath());
-          if (uf.IsOpened()) {
-            flen = uf.Length();
-            uf.Close();
+        if (ufile.isFile()) {
+          QFile uf(ufile.absoluteFilePath());
+          if (uf.open(QIODevice::ReadOnly)) {
+            flen = static_cast<int>(uf.size());
+            uf.close();
           }
         }
 
-        if (ufile.FileExists() &&
+        if (ufile.isFile() &&
             (flen > 25))  // a valid update file or base file
         {
           //      Copy the valid file to the SENC directory
-          bool cpok = wxCopyFile(ufile.GetFullPath(), cp_ufile);
+          // wxCopyFile defaults to overwrite=true; QFile::copy refuses, so
+          // remove the destination first.
+          QFile::remove(wxString_to_QString(cp_ufile));
+          bool cpok = QFile::copy(ufile.absoluteFilePath(),
+                                  wxString_to_QString(cp_ufile));
           if (!cpok) {
             wxString msg("   Cannot copy temporary working ENC file ");
-            msg.Append(ufile.GetFullPath());
+            msg.Append(QString_to_wxString(ufile.absoluteFilePath()));
             msg.Append(" to ");
             msg.Append(cp_ufile);
             wxLogMessage(msg);
@@ -3887,7 +3944,7 @@ int s57chart::ValidateAndCountUpdates(const wxFileName file000,
           wxString msg(
               "WARNING---ENC Update chain incomplete. Substituting NULL "
               "update file: ");
-          msg += ufile.GetFullName();
+          msg += QString_to_wxString(ufile.fileName());
           wxLogMessage(msg);
           wxLogMessage("   Subsequent ENC updates may produce errors.");
           wxLogMessage(
@@ -3914,10 +3971,16 @@ int s57chart::ValidateAndCountUpdates(const wxFileName file000,
     //      Extract the date field from the last of the update files
     //      which is by definition a valid, present update file....
 
-    wxFileName lastfile(m_TempFilePath);
+    QFileInfo lastfileBase(wxString_to_QString(m_TempFilePath));
     wxString last_sext;
     last_sext.Printf("%03d", retval);
-    lastfile.SetExt(last_sext);
+    QString lastfilePath =
+        lastfileBase.absolutePath().isEmpty()
+            ? lastfileBase.completeBaseName() + "." +
+                  wxString_to_QString(last_sext)
+            : lastfileBase.absolutePath() + QDir::separator() +
+                  lastfileBase.completeBaseName() + "." +
+                  wxString_to_QString(last_sext);
 
     bool bSuccess;
     DDFModule oUpdateModule;
@@ -3925,7 +3988,8 @@ int s57chart::ValidateAndCountUpdates(const wxFileName file000,
     //            bSuccess = !(oUpdateModule.Open(
     //            m_tmpup_array->Last().mb_str(), TRUE ) == 0);
     bSuccess =
-        !(oUpdateModule.Open(lastfile.GetFullPath().mb_str(), TRUE) == 0);
+        !(oUpdateModule.Open(
+              QString_to_wxString(lastfilePath).mb_str(), TRUE) == 0);
 
     if (bSuccess) {
       //      Get publish/update date
@@ -3961,7 +4025,7 @@ wxString s57chart::GetISDT() {
 }
 
 bool s57chart::GetBaseFileAttr(const wxString &file000) {
-  if (!wxFileName::FileExists(file000)) return false;
+  if (!QFile::exists(wxString_to_QString(file000))) return false;
 
   wxString FullPath000 = file000;
   DDFModule *poModule = new DDFModule();
@@ -5031,7 +5095,7 @@ wxString s57chart::GetAttributeDecode(wxString &att, int ival) {
   wxString file(g_csv_locn);
   file.Append("/s57attributes.csv");
 
-  if (!wxFileName::FileExists(file)) {
+  if (!QFile::exists(wxString_to_QString(file))) {
     wxString msg("   Could not open ");
     msg.Append(file);
     wxLogMessage(msg);
@@ -5050,7 +5114,7 @@ wxString s57chart::GetAttributeDecode(wxString &att, int ival) {
   wxString ei_file(g_csv_locn);
   ei_file.Append("/s57expectedinput.csv");
 
-  if (!wxFileName::FileExists(ei_file)) {
+  if (!QFile::exists(wxString_to_QString(ei_file))) {
     wxString msg("   Could not open ");
     msg.Append(ei_file);
     wxLogMessage(msg);
@@ -5616,7 +5680,10 @@ wxString s57chart::CreateObjDescriptions(ListOfObjRazRules *rule_list) {
   wxString positionString;
   std::vector<S57Light *> lights;
   S57Light *curLight = nullptr;
-  wxFileName file;
+  // Tracks an associated file referenced by a PICREP/TXTDSC/NTXTDS attribute
+  // (resolved relative to the chart's directory). Kept here to mirror the
+  // original loop semantics where the variable is shared across iterations.
+  QFileInfo file;
 
   for (ListOfObjRazRules::Node *node = rule_list->GetLast(); node;
        node = node->GetPrevious()) {
@@ -5781,29 +5848,37 @@ wxString s57chart::CreateObjDescriptions(ListOfObjRazRules *rule_list) {
                                      // as value
         if (AttrNamesFiles.Find(curAttrName) != wxNOT_FOUND)
           if (value.Find(".XML") == wxNOT_FOUND) {  // Don't show xml files
-            file.Assign(GetFullPath());
-            file.Assign(file.GetPath(), value);
-            file.Normalize();
-            // Make the filecheck case-unsensitive (linux)
-            if (file.IsCaseSensitive()) {
-              wxDir dir(file.GetPath());
-              wxString filename;
-              bool cont = dir.GetFirst(&filename, "", wxDIR_FILES);
-              while (cont) {
-                if (filename.IsSameAs(value, false)) {
-                  value = filename;
-                  file.Assign(file.GetPath(), value);
+            // Resolve `value` (a basename from the chart attribute) against
+            // the chart's directory.
+            QFileInfo chartFi(wxString_to_QString(GetFullPath()));
+            QDir chartDir(chartFi.absolutePath());
+            file = QFileInfo(chartDir.absoluteFilePath(wxString_to_QString(value)));
+            // QFileInfo::canonicalFilePath() resolves "." / ".." like
+            // wxFileName::Normalize(); fall back to absoluteFilePath().
+            QString canon = file.canonicalFilePath();
+            if (canon.isEmpty()) canon = file.absoluteFilePath();
+            file = QFileInfo(canon);
+            // Make the filecheck case-insensitive (linux) by iterating siblings.
+            // We always do this; on case-insensitive filesystems it is a no-op.
+            {
+              QDir dir(file.absolutePath());
+              QStringList sibs = dir.entryList(QDir::Files);
+              for (const QString &qfn : sibs) {
+                if (wxString_to_QString(value)
+                        .compare(qfn, Qt::CaseInsensitive) == 0) {
+                  value = QString_to_wxString(qfn);
+                  file = QFileInfo(dir.absoluteFilePath(qfn));
                   break;
                 }
-                cont = dir.GetNext(&filename);
               }
             }
 
-            if (file.IsOk()) {
-              if (file.Exists())
-                value =
-                    wxString::Format("<a href=\"%s\">%s</a>",
-                                     file.GetFullPath(), file.GetFullName());
+            if (!file.absoluteFilePath().isEmpty()) {
+              if (file.exists())
+                value = wxString::Format(
+                    "<a href=\"%s\">%s</a>",
+                    QString_to_wxString(file.absoluteFilePath()),
+                    QString_to_wxString(file.fileName()));
               else
                 value = value + "&nbsp;&nbsp;<font color=\"red\">[ " +
                         _("this file is not available") + " ]</font>";

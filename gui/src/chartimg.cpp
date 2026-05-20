@@ -31,11 +31,13 @@
 #endif
 
 //  Why are these not in wx/prec.h?
-#include <wx/dir.h>
+#include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
+
 #include <wx/stream.h>
 #include <wx/wfstream.h>
 #include <wx/tokenzr.h>
-#include <wx/filename.h>
 #include <wx/image.h>
 
 #include "model/chartdata_input_stream.h"
@@ -171,7 +173,7 @@ ChartBase::~ChartBase() {
 
 wxString ChartBase::GetHashKey() const {
   wxString key = GetFullPath();
-  wxChar separator = wxFileName::GetPathSeparator();
+  wxChar separator = QDir::separator().toLatin1();
   for (unsigned int pos = 0; pos < key.size(); pos = key.find(separator, pos))
     key.replace(pos, 1, "!");
   return key;
@@ -287,7 +289,8 @@ InitReturn ChartGEO::Init(const wxString &name, ChartInitFlag init_flags) {
   ifs_hdr =
       new wxFFileInputStream(name);  // open the file as a read-only stream
 
-  m_filesize = wxFileName::GetSize(name);
+  m_filesize = static_cast<wxULongLong>(
+      QFileInfo(wxString_to_QString(name)).size());
 
   if (!ifs_hdr->IsOk()) return INIT_FAIL_REMOVE;
 
@@ -297,10 +300,13 @@ InitReturn ChartGEO::Init(const wxString &name, ChartInitFlag init_flags) {
   m_FullPath = name;
   m_Description = m_FullPath;
 
-  wxFileName GEOFile(m_FullPath);
+  QFileInfo GEOFile(wxString_to_QString(m_FullPath));
 
-  wxString Path;
-  Path = GEOFile.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
+  // wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME requested a path string with a
+  // trailing separator; QFileInfo::absolutePath() omits it, so append one.
+  wxString Path = QString_to_wxString(GEOFile.absolutePath());
+  if (!Path.empty() && Path.Last() != QDir::separator().toLatin1())
+    Path.Append(QDir::separator().toLatin1());
 
   //    Read the GEO file, extracting useful information
 
@@ -474,77 +480,74 @@ InitReturn ChartGEO::Init(const wxString &name, ChartInitFlag init_flags) {
 
   wxString NOS_Name(*pBitmapFilePath);  // take a copy
 
-  wxDir target_dir(Path);
+  // Recursive file list of the chart's directory (matches the
+  // previous wxDir::GetAllFiles() default behaviour).
   wxArrayString file_array;
-  int nfiles = wxDir::GetAllFiles(Path, &file_array);
+  {
+    QDirIterator it(wxString_to_QString(Path), QStringList{},
+                    QDir::Files | QDir::NoDotAndDotDot,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      file_array.Add(QString_to_wxString(it.next()));
+    }
+  }
+  int nfiles = static_cast<int>(file_array.GetCount());
   int ifile;
 
   pBitmapFilePath->Prepend(Path);
 
-  wxFileName NOS_filename(*pBitmapFilePath);
-  if (!NOS_filename.FileExists()) {
+  // Track the bitmap filename as a QFileInfo so we can vary its base/ext.
+  QFileInfo NOS_filename(wxString_to_QString(*pBitmapFilePath));
+  if (!NOS_filename.isFile()) {
     //    File as fetched verbatim from the .geo file doesn't exist.
     //    Try all possible upper/lower cases
     //    Extract the filename and extension
-    wxString fname(NOS_filename.GetName());
-    wxString fext(NOS_filename.GetExt());
+    QString qDir = NOS_filename.absolutePath();
+    QString qName = NOS_filename.completeBaseName();
+    QString qExt = NOS_filename.suffix();
 
-    //    Try all four combinations, the hard way
-    // case 1
-    fname.MakeLower();
-    fext.MakeLower();
-    NOS_filename.SetName(fname);
-    NOS_filename.SetExt(fext);
+    auto try_case = [&](const QString &n, const QString &e) -> bool {
+      QString candidate = qDir + QDir::separator() + n;
+      if (!e.isEmpty()) candidate += "." + e;
+      QFileInfo cand(candidate);
+      if (cand.isFile()) {
+        NOS_filename = cand;
+        return true;
+      }
+      return false;
+    };
 
-    if (NOS_filename.FileExists()) goto found_uclc_file;
+    bool found = false;
+    if (!found && try_case(qName.toLower(), qExt.toLower())) found = true;
+    if (!found && try_case(qName.toLower(), qExt.toUpper())) found = true;
+    if (!found && try_case(qName.toUpper(), qExt.toLower())) found = true;
+    if (!found && try_case(qName.toUpper(), qExt.toUpper())) found = true;
 
-    // case 2
-    fname.MakeLower();
-    fext.MakeUpper();
-    NOS_filename.SetName(fname);
-    NOS_filename.SetExt(fext);
+    if (!found) {
+      //      Search harder
+      for (ifile = 0; ifile < nfiles; ifile++) {
+        wxString file_up = file_array[ifile];
+        file_up.MakeUpper();
 
-    if (NOS_filename.FileExists()) goto found_uclc_file;
+        wxString target_up = *pBitmapFilePath;
+        target_up.MakeUpper();
 
-    // case 3
-    fname.MakeUpper();
-    fext.MakeLower();
-    NOS_filename.SetName(fname);
-    NOS_filename.SetExt(fext);
-
-    if (NOS_filename.FileExists()) goto found_uclc_file;
-
-    // case 4
-    fname.MakeUpper();
-    fext.MakeUpper();
-    NOS_filename.SetName(fname);
-    NOS_filename.SetExt(fext);
-
-    if (NOS_filename.FileExists()) goto found_uclc_file;
-
-    //      Search harder
-
-    for (ifile = 0; ifile < nfiles; ifile++) {
-      wxString file_up = file_array[ifile];
-      file_up.MakeUpper();
-
-      wxString target_up = *pBitmapFilePath;
-      target_up.MakeUpper();
-
-      if (file_up.IsSameAs(target_up)) {
-        NOS_filename.Clear();
-        NOS_filename.Assign(file_array[ifile]);
-        goto found_uclc_file;
+        if (file_up.IsSameAs(target_up)) {
+          NOS_filename = QFileInfo(wxString_to_QString(file_array[ifile]));
+          found = true;
+          break;
+        }
       }
     }
 
-    free(pPlyTable);
-    return INIT_FAIL_REMOVE;  // not found at all
-
-  found_uclc_file:
+    if (!found) {
+      free(pPlyTable);
+      return INIT_FAIL_REMOVE;  // not found at all
+    }
 
     delete pBitmapFilePath;  // fix up the member element
-    pBitmapFilePath = new wxString(NOS_filename.GetFullPath());
+    pBitmapFilePath =
+        new wxString(QString_to_wxString(NOS_filename.absoluteFilePath()));
   }
   ifss_bitmap =
       new wxFFileInputStream(*pBitmapFilePath);  // open the bitmap file
@@ -1489,7 +1492,9 @@ InitReturn ChartKAP::Init(const wxString &name, ChartInitFlag init_flags) {
 #ifdef OCPN_USE_LZMA
   tempfile = stream->TempFileName();
 #endif
-  m_filesize = wxFileName::GetSize(tempfile.empty() ? name : tempfile);
+  m_filesize = static_cast<wxULongLong>(
+      QFileInfo(wxString_to_QString(tempfile.empty() ? name : tempfile))
+          .size());
 
   ifss_bitmap = stream;
   ifs_bitmap = new wxBufferedInputStream(*ifss_bitmap);
@@ -1843,7 +1848,8 @@ InitReturn ChartBaseBSB::PostInit() {
 
   wxULongLong bitmap_filesize = m_filesize;
   if ((m_ChartType == CHART_TYPE_GEO) && pBitmapFilePath)
-    bitmap_filesize = wxFileName::GetSize(*pBitmapFilePath);
+    bitmap_filesize = static_cast<wxULongLong>(
+        QFileInfo(wxString_to_QString(*pBitmapFilePath)).size());
 
   //  look logically at the line offset table
   for (int iplt = 0; iplt < Size_Y - 1; iplt++) {

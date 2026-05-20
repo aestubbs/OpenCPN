@@ -30,13 +30,17 @@
 #include <wx/wx.h>
 #endif
 
+#include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
+
 #include <wx/arrimpl.cpp>
-#include <wx/dir.h>
 #include <wx/encconv.h>
 #include <wx/progdlg.h>
 #include <wx/regex.h>
 #include <wx/tokenzr.h>
 #include <wx/evtloop.h>
+#include <wx/wfstream.h>
 
 #include "model/gui_events.h"
 #include "model/wx_qt_string.h"
@@ -183,12 +187,12 @@ ChartTableEntry::ChartTableEntry(ChartBase &theChart, wxString &utf8Path) {
   if (theChart.GetEditionDate().isValid())
     edition_date = theChart.GetEditionDate().toSecsSinceEpoch();
 
-  wxFileName fn(theChart.GetFullPath());
-  if (fn.GetModificationTime().IsValid())
-    file_date = fn.GetModificationTime().GetTicks();
+  QFileInfo fn(wxString_to_QString(theChart.GetFullPath()));
+  if (fn.lastModified().isValid())
+    file_date = fn.lastModified().toSecsSinceEpoch();
 
   m_pfilename = new wxString;  // create and populate helper members
-  *m_pfilename = fn.GetFullName();
+  *m_pfilename = QString_to_wxString(fn.fileName());
   m_psFullPath = new wxString;
   *m_psFullPath = utf8Path;
   m_fullSystemPath = utf8Path;
@@ -491,8 +495,8 @@ bool ChartTableEntry::Read(const ChartDatabase *pDb, wxInputStream &is) {
     //  Create and populate the helper members
     m_pfilename = new wxString;
     wxString fullfilename(pFullPath, wxConvUTF8);
-    wxFileName fn(fullfilename);
-    *m_pfilename = fn.GetFullName();
+    QFileInfo fn(wxString_to_QString(fullfilename));
+    *m_pfilename = QString_to_wxString(fn.fileName());
     m_psFullPath = new wxString;
     *m_psFullPath = fullfilename;
     m_fullSystemPath = fullfilename;
@@ -574,8 +578,8 @@ bool ChartTableEntry::Read(const ChartDatabase *pDb, wxInputStream &is) {
     //  Create and populate the helper members
     m_pfilename = new wxString;
     wxString fullfilename(pFullPath, wxConvUTF8);
-    wxFileName fn(fullfilename);
-    *m_pfilename = fn.GetFullName();
+    QFileInfo fn(wxString_to_QString(fullfilename));
+    *m_pfilename = QString_to_wxString(fn.fileName());
     m_psFullPath = new wxString;
     *m_psFullPath = fullfilename;
     m_FullPath = std::string(pFullPath);
@@ -653,8 +657,8 @@ bool ChartTableEntry::Read(const ChartDatabase *pDb, wxInputStream &is) {
     //  Create and populate the helper members
     m_pfilename = new wxString;
     wxString fullfilename(pFullPath, wxConvUTF8);
-    wxFileName fn(fullfilename);
-    *m_pfilename = fn.GetFullName();
+    QFileInfo fn(wxString_to_QString(fullfilename));
+    *m_pfilename = QString_to_wxString(fn.fileName());
     m_psFullPath = new wxString;
     *m_psFullPath = fullfilename;
     m_FullPath = std::string(pFullPath);
@@ -911,8 +915,8 @@ void ChartTableEntry::ReEnable() {
   }
 }
 bool ChartTableEntry::IsBasemap() const {
-  wxFileName fn(GetFullPath());
-  return (fn.GetPath().Lower().Contains("basemap"));
+  QFileInfo fn(QString::fromStdString(GetFullPath()));
+  return fn.absolutePath().toLower().contains("basemap");
 }
 
 std::vector<float> ChartTableEntry::GetReducedPlyPoints() {
@@ -1195,11 +1199,12 @@ void ChartDatabase::OnEvtThread(OCPN_ChartTableEntryThreadEvent &event) {
   if (!ticket->m_ticket_type) {  // TICKET_TYPE_NORMAL
     bool collision_found = false;
     if (ticket->b_thread_safe) {
-      wxFileName fn(ticket->m_ChartPath);
+      QFileInfo fn(wxString_to_QString(ticket->m_ChartPath));
+      wxString fnFullName = QString_to_wxString(fn.fileName());
       ChartCollisionsHashMap::iterator it;
       for (it = m_full_collision_map.begin(); it != m_full_collision_map.end();
            ++it) {
-        if (it->first.IsSameAs(fn.GetFullName())) {
+        if (it->first.IsSameAs(fnFullName)) {
           // Two files found with identical file name
           // For now, just drop this ticket
           // TODO Make an (expensive) test on file modification times
@@ -1208,7 +1213,7 @@ void ChartDatabase::OnEvtThread(OCPN_ChartTableEntryThreadEvent &event) {
         }
       }
       if (!collision_found) {
-        m_full_collision_map[fn.GetFullName()] = 1;
+        m_full_collision_map[fnFullName] = 1;
       }
       //  Consider TODO #1 here:  Looking for more duolicates acress directories
     }
@@ -1440,11 +1445,13 @@ bool ChartDatabase::Read(const wxString &filePath) {
 
   bValid = false;
 
-  wxFileName file(filePath);
-  if (!file.FileExists()) return false;
+  if (!QFile::exists(wxString_to_QString(filePath))) return false;
 
   m_DBFileName = filePath;
 
+  // wxFFileInputStream is retained here: the chart-DB binary format is
+  // consumed by ChartTableHeader::Read / ChartTableEntry::Read via the
+  // wxInputStream interface (P1.10 defers stream-class refactor).
   wxFFileInputStream ifs(filePath);
   if (!ifs.Ok()) return false;
 
@@ -1509,12 +1516,14 @@ read_error:
 ///////////////////////////////////////////////////////////////////////
 
 bool ChartDatabase::Write(const wxString &filePath) {
-  wxFileName file(filePath);
-  wxFileName dir(
-      file.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME, wxPATH_NATIVE));
+  QFileInfo file(wxString_to_QString(filePath));
+  QString dirPath = file.absolutePath();
 
-  if (!dir.DirExists() && !dir.Mkdir()) return false;
+  if (!QDir(dirPath).exists() && !QDir().mkpath(dirPath)) return false;
 
+  // wxFFileOutputStream is retained here: ChartTableHeader::Write /
+  // ChartTableEntry::Write consume the wxOutputStream interface for the
+  // chart-DB binary format (P1.10 defers stream-class refactor).
   wxFFileOutputStream ofs(filePath);
   if (!ofs.Ok()) return false;
 
@@ -1736,44 +1745,29 @@ bool ChartDatabase::Create(ArrayOfCDI &dir_array,
 }
 
 /*
- * Traverse a directory recursively and find the GSHHG directory
- * that contains GSHHG data files.
- */
-class GshhsTraverser : public wxDirTraverser {
-public:
-  GshhsTraverser() {}
-  virtual wxDirTraverseResult OnFile(const wxString &filename) override {
-    wxFileName fn(filename);
-    wxFileName dir(fn.GetPath());
-    if (fn.GetFullName().Matches("poly-*-1.dat") &&
-        dir.GetFullName().IsSameAs("GSHHG", false)) {
-      parent_dir = fn.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
-      return wxDIR_STOP;
-    }
-    return wxDIR_CONTINUE;
-  }
-  virtual wxDirTraverseResult OnDir(const wxString &dirname) override {
-    // Always recurse into directories.
-    return wxDIR_CONTINUE;
-  }
-  wxString GetGshhsDir() const { return parent_dir; }
-
-private:
-  wxString parent_dir;
-};
-
-/*
  * Find and return the full path a of directory containing GSHHG data files.
  * Search recursively starting from directory.
  */
 wxString findGshhgDirectory(const wxString &directory) {
-  wxDir dir(directory);
-  if (!dir.IsOpened()) {
-    return wxEmptyString;
+  QString qDir = wxString_to_QString(directory);
+  if (!QDir(qDir).exists()) return wxEmptyString;
+
+  // Find any file matching poly-*-1.dat whose immediate parent dir is "GSHHG"
+  // (case-insensitive). Returns the parent path with a trailing separator,
+  // matching the old wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR contract.
+  QDirIterator it(qDir, QStringList{"poly-*-1.dat"}, QDir::Files,
+                  QDirIterator::Subdirectories);
+  while (it.hasNext()) {
+    it.next();
+    QFileInfo fi = it.fileInfo();
+    QFileInfo parent(fi.absolutePath());
+    if (parent.fileName().compare("GSHHG", Qt::CaseInsensitive) == 0) {
+      QString result = fi.absolutePath();
+      if (!result.endsWith(QDir::separator())) result += QDir::separator();
+      return QString_to_wxString(result);
+    }
   }
-  GshhsTraverser traverser;
-  dir.Traverse(traverser, wxEmptyString, wxDIR_FILES | wxDIR_DIRS);
-  return traverser.GetGshhsDir();
+  return wxEmptyString;
 }
 
 bool ChartDatabase::UpdateChartDatabaseInplace(ArrayOfCDI &DirArray,
@@ -1862,10 +1856,13 @@ bool ChartDatabase::Update(ArrayOfCDI &dir_array, bool bForce,
     // If the user has added a directory containig an extended OSMSHP basemap
     // then capture the location, and reset the basemap render amchine.
     if (dir_info.fullpath.Find("OSMSHP") != wxNOT_FOUND) {
-      if (!wxDir::FindFirst(dir_info.fullpath, "basemap_*.shp").empty()) {
+      QStringList shpHits =
+          QDir(wxString_to_QString(dir_info.fullpath))
+              .entryList(QStringList{"basemap_*.shp"}, QDir::Files);
+      if (!shpHits.isEmpty()) {
         wxLogMessage("Updating OSMSHP directory: %s", dir_info.fullpath);
         gWorldShapefileLocation =
-            dir_info.fullpath + wxFileName::GetPathSeparator();
+            dir_info.fullpath + QDir::separator().toLatin1();
         gShapeBasemap.Reset();
       }
     }
@@ -1976,7 +1973,7 @@ int ChartDatabase::TraverseDirAndAddCharts(ChartDirInfo &dir_info,
   bool b_dirchange = false;
 
   // Does this directory actually exist?
-  if (!wxDir::Exists(dir_path)) return 0;
+  if (!QDir(wxString_to_QString(dir_path)).exists()) return 0;
 
   // Check to see if this is a cm93 directory root
   // If so, skip the DetectDirChange since it may be very slow
@@ -2002,8 +1999,11 @@ int ChartDatabase::TraverseDirAndAddCharts(ChartDirInfo &dir_info,
     //    Traverse the database, and mark as valid all charts coming from this
     //    dir, or anywhere in its tree
 
-    wxFileName fn_dir(dir_path, "stuff");
-    unsigned int dir_path_count = fn_dir.GetDirCount();
+    // Walk every chart's directory ancestry; if any ancestor matches dir_path,
+    // mark the chart valid. Old wx logic compared GetDirCount(); using
+    // QDir::cleanPath + prefix walking is equivalent for normal cases.
+    QString qDirPath = QDir::cleanPath(wxString_to_QString(dir_path));
+    int dir_path_segments = qDirPath.count(QDir::separator());
 
     if (pprog) pprog->SetTitle(_("OpenCPN Chart Scan...."));
 
@@ -2011,19 +2011,18 @@ int ChartDatabase::TraverseDirAndAddCharts(ChartDirInfo &dir_info,
 
     for (int ic = 0; ic < nEntries; ic++) {
       auto &cte = GetChartTableEntry(ic);
-      wxFileName fn(cte.GetFullSystemPath());
-
-      while (fn.GetDirCount() >= dir_path_count) {
-        if (fn.GetPath() == dir_path) {
+      QString qChart = QDir::cleanPath(
+          wxString_to_QString(cte.GetFullSystemPath()));
+      QString cur = QFileInfo(qChart).absolutePath();
+      while (cur.count(QDir::separator()) >= dir_path_segments) {
+        if (cur == qDirPath) {
           auto &cte_a = GetChartTableEntry(ic);
           cte_a.SetValid(true);
-          //                             if(pprog)
-          //                                  pprog->Update((ic * 100)
-          //                                  /nEntries, fn.GetFullPath());
-
           break;
         }
-        fn.RemoveLastDir();
+        QString parent = QFileInfo(cur).absolutePath();
+        if (parent == cur) break;  // reached filesystem root
+        cur = parent;
       }
     }
 
@@ -2054,10 +2053,18 @@ bool ChartDatabase::DetectDirChange(const wxString &dir_path,
 
   magic.ToULongLong(&nmagic, 10);
 
-  //    Get an arraystring of all files
+  //    Get an arraystring of all files (recursive, like wxDir::GetAllFiles
+  //    default)
   wxArrayString FileList;
-  wxDir dir(dir_path);
-  int n_files = dir.GetAllFiles(dir_path, &FileList);
+  {
+    QDirIterator it(wxString_to_QString(dir_path), QStringList{},
+                    QDir::Files | QDir::NoDotAndDotDot,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      FileList.Add(QString_to_wxString(it.next()));
+    }
+  }
+  int n_files = static_cast<int>(FileList.GetCount());
   FileList.Sort();  // Ensure persistent order of items being hashed.
 
   FlexHash hash(sizeof nacc);
@@ -2068,26 +2075,24 @@ bool ChartDatabase::DetectDirChange(const wxString &dir_path,
   // Traverse the list of files, getting their interesting stuff to add to
   // accumulator
   for (int ifile = 0; ifile < n_files; ifile++) {
-    wxFileName file(FileList[ifile]);
+    QFileInfo file(wxString_to_QString(FileList[ifile]));
 
     // NOTE. Do not ever try to optimize this code by combining `wxString`
     // calls. Otherwise `fileNameUTF8` will point to a stale buffer overwritten
     // by garbage.
-    wxString fileNameNative = file.GetFullPath();
+    wxString fileNameNative = QString_to_wxString(file.absoluteFilePath());
     wxScopedCharBuffer fileNameUTF8 = fileNameNative.ToUTF8();
     hash.Update(fileNameUTF8.data(), fileNameUTF8.length());
 
     //    File Size;
-    wxULongLong size = file.GetSize();
-    wxULongLong fileSize = ((size != wxInvalidSize) ? size : 0);
+    qint64 qsize = file.size();
+    wxULongLong fileSize = static_cast<wxULongLong>(qsize >= 0 ? qsize : 0);
     hash.Update(&fileSize, (sizeof fileSize));
 
-    //    Mod time, in ticks
-    // wxFileName::GetModificationTime() still returns wxDateTime; convert at
-    // the boundary (wxFileName itself is deferred to P1.10).
-    QDateTime t = QDateTime::fromSecsSinceEpoch(
-        file.GetModificationTime().GetTicks());
-    wxULongLong fileTime = t.toSecsSinceEpoch();
+    //    Mod time, in seconds since epoch
+    QDateTime t = file.lastModified();
+    wxULongLong fileTime =
+        static_cast<wxULongLong>(t.isValid() ? t.toSecsSinceEpoch() : 0);
     hash.Update(&fileTime, (sizeof fileTime));
   }
 
@@ -2106,7 +2111,7 @@ bool ChartDatabase::DetectDirChange(const wxString &dir_path,
 
 bool ChartDatabase::IsChartDirUsed(const wxString &theDir) {
   wxString dir(theDir);
-  if (dir.Last() == '/' || dir.Last() == wxFileName::GetPathSeparator())
+  if (dir.Last() == '/' || dir.Last() == QDir::separator().toLatin1())
     dir.RemoveLast();
 
   dir.Append("*");
@@ -2122,63 +2127,61 @@ bool ChartDatabase::IsChartDirUsed(const wxString &theDir) {
 // If it appears to be a cm93 database, then return true
 //-----------------------------------------------------------------------------
 bool ChartDatabase::Check_CM93_Structure(wxString dir_name) {
-  wxString filespec;
-
   wxRegEx test("[0-9]+");
 
-  wxDir dirt(dir_name);
-  wxString candidate;
-
-  if (dirt.IsOpened())
-    wxLogMessage("check_cm93 opened dir OK:  " + dir_name);
-  else {
+  QDir dirt(wxString_to_QString(dir_name));
+  if (!dirt.exists()) {
     wxLogMessage("check_cm93 NOT OPENED OK:  " + dir_name);
     wxLogMessage("check_cm93 returns false." + dir_name);
     return false;
   }
+  wxLogMessage("check_cm93 opened dir OK:  " + dir_name);
+
+  QStringList entries =
+      dirt.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
 
   bool b_maybe_found_cm93 = false;
-  bool b_cont = dirt.GetFirst(&candidate);
-
-  while (b_cont) {
-    if (test.Matches(candidate) && (candidate.Len() == 8)) {
+  wxString candidate;
+  for (const QString &entry : entries) {
+    wxString cand = QString_to_wxString(entry);
+    if (test.Matches(cand) && (cand.Len() == 8)) {
+      candidate = cand;
       b_maybe_found_cm93 = true;
       break;
     }
-
-    b_cont = dirt.GetNext(&candidate);
   }
 
   if (b_maybe_found_cm93) {
     wxString dir_next = dir_name;
     dir_next += "/";
     dir_next += candidate;
-    if (wxDir::Exists(dir_next)) {
-      wxDir dir_n(dir_next);
-      if (dirt.IsOpened()) {
-        wxString candidate_n;
+    QString qDirNext = wxString_to_QString(dir_next);
+    if (QDir(qDirNext).exists()) {
+      QDir dir_n(qDirNext);
+      QStringList sub_entries =
+          dir_n.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
 
-        wxRegEx test_n("^[A-Ga-g]");
-        bool b_probably_found_cm93 = false;
-        bool b_cont_n = dir_n.IsOpened() && dir_n.GetFirst(&candidate_n);
-        while (b_cont_n) {
-          if (test_n.Matches(candidate_n) && (candidate_n.Len() == 1)) {
-            b_probably_found_cm93 = true;
-            break;
-          }
-          b_cont_n = dir_n.GetNext(&candidate_n);
+      wxRegEx test_n("^[A-Ga-g]");
+      bool b_probably_found_cm93 = false;
+      wxString candidate_n;
+      for (const QString &sub_entry : sub_entries) {
+        wxString cand_n = QString_to_wxString(sub_entry);
+        if (test_n.Matches(cand_n) && (cand_n.Len() == 1)) {
+          candidate_n = cand_n;
+          b_probably_found_cm93 = true;
+          break;
         }
+      }
 
-        if (b_probably_found_cm93)  // found a directory that looks
-                                    // like {dir_name}/12345678/A
-                                    // probably cm93
-        {
-          // make sure the dir exists
-          wxString dir_luk = dir_next;
-          dir_luk += "/";
-          dir_luk += candidate_n;
-          if (wxDir::Exists(dir_luk)) return true;
-        }
+      if (b_probably_found_cm93)  // found a directory that looks
+                                  // like {dir_name}/12345678/A
+                                  // probably cm93
+      {
+        // make sure the dir exists
+        wxString dir_luk = dir_next;
+        dir_luk += "/";
+        dir_luk += candidate_n;
+        if (QDir(wxString_to_QString(dir_luk)).exists()) return true;
       }
     }
   }
@@ -2305,7 +2308,7 @@ int ChartDatabase::SearchDirAndAddCharts(wxString &dir_name_base,
   dir_name = wxString(dir_name_base.mb_str(wxConvUTF8));  // android
 #endif
 
-  if (!wxDir::Exists(dir_name)) return 0;
+  if (!QDir(wxString_to_QString(dir_name)).exists()) return 0;
 
   wxString filespec = chart_desc.m_search_mask.Upper();
   wxString lowerFileSpec = chart_desc.m_search_mask.Lower();
@@ -2334,8 +2337,18 @@ int ChartDatabase::SearchDirAndAddCharts(wxString &dir_name_base,
   }
 
   if (!b_found_cm93) {
-    wxDir dir(dir_name);
-    dir.GetAllFiles(dir_name, &FileList, filespec, gaf_flags);
+    QString qDirName = wxString_to_QString(dir_name);
+
+    // Lambda: recursive collect matching files (wxDIR_DEFAULT == recurse).
+    auto collect = [&](const wxString &pattern) {
+      QDirIterator it(qDirName, QStringList{wxString_to_QString(pattern)},
+                      QDir::Files | QDir::NoDotAndDotDot,
+                      QDirIterator::Subdirectories);
+      while (it.hasNext()) {
+        FileList.Add(QString_to_wxString(it.next()));
+      }
+    };
+    collect(filespec);
 
 #ifdef __ANDROID__
     if (!FileList.GetCount()) {
@@ -2350,7 +2363,15 @@ int ChartDatabase::SearchDirAndAddCharts(wxString &dir_name_base,
     if (filespec != lowerFileSpec) {
       // add lowercase filespec files too
       wxArrayString lowerFileList;
-      dir.GetAllFiles(dir_name, &lowerFileList, lowerFileSpec, gaf_flags);
+      {
+        QDirIterator it(
+            qDirName, QStringList{wxString_to_QString(lowerFileSpec)},
+            QDir::Files | QDir::NoDotAndDotDot,
+            QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+          lowerFileList.Add(QString_to_wxString(it.next()));
+        }
+      }
 
 #ifdef __ANDROID__
       if (!lowerFileList.GetCount()) {
@@ -2369,15 +2390,15 @@ int ChartDatabase::SearchDirAndAddCharts(wxString &dir_name_base,
 
 #ifdef OCPN_USE_LZMA
     // add xz compressed files;
-    dir.GetAllFiles(dir_name, &FileList, filespecXZ, gaf_flags);
-    dir.GetAllFiles(dir_name, &FileList, lowerFileSpecXZ, gaf_flags);
+    collect(filespecXZ);
+    collect(lowerFileSpecXZ);
 #endif
 
     FileList.Sort();  // Sorted processing order makes the progress bar more
                       // meaningful to the user.
   } else {            // This is a cm93 dataset, specified as yada/yada/cm93
     wxString dir_plus = dir_name;
-    dir_plus += wxFileName::GetPathSeparator();
+    dir_plus += QDir::separator().toLatin1();
     FileList.Add(dir_plus);
   }
 
@@ -2408,9 +2429,9 @@ int ChartDatabase::SearchDirAndAddCharts(wxString &dir_name_base,
   std::vector<std::shared_ptr<ChartTableEntryJobTicket>> ticket_vector;
 
   for (int ifile = 0; ifile < nFile; ifile++) {
-    wxFileName file(FileList[ifile]);
-    wxString full_path = file.GetFullPath();
-    wxString file_name = file.GetFullName();
+    QFileInfo file(wxString_to_QString(FileList[ifile]));
+    wxString full_path = QString_to_wxString(file.absoluteFilePath());
+    wxString file_name = QString_to_wxString(file.fileName());
     wxString utf8_path = full_path;
 
 #ifdef __ANDROID__
@@ -2419,18 +2440,17 @@ int ChartDatabase::SearchDirAndAddCharts(wxString &dir_name_base,
     // reconstruct a full path spec in UTF-8 encoding for later use in string
     // displays. This utf-8 string will be used to construct the chart database
     // entry if required.
-    wxFileName fnbase(dir_name_base);
-    int nDirs = fnbase.GetDirCount();
-
-    wxFileName file_target(FileList[ifile]);
-
-    for (int i = 0; i < nDirs + 1;
-         i++)  // strip off the erroneous intial directories
-      file_target.RemoveDir(0);
-
-    wxString leftover_path = file_target.GetFullPath();
-    utf8_path =
-        dir_name_base + leftover_path;  // reconstruct a fully utf-8 version
+    // Original code stripped (GetDirCount(dir_name_base) + 1) leading dir
+    // components from FileList[ifile] and reconstructed
+    // dir_name_base + leftover. Implement using QString token splits.
+    QString qBase = QDir::cleanPath(wxString_to_QString(dir_name_base));
+    QString qFile = QDir::cleanPath(wxString_to_QString(FileList[ifile]));
+    int nDirs = qBase.split(QDir::separator(), Qt::SkipEmptyParts).size();
+    QStringList parts = qFile.split(QDir::separator(), Qt::SkipEmptyParts);
+    int drop = qMin(static_cast<int>(parts.size()), nDirs + 1);
+    parts = parts.mid(drop);
+    QString leftover = parts.join(QDir::separator());
+    utf8_path = dir_name_base + QString_to_wxString(leftover);
 #endif
 
     //    Validate the file name again, considering MSW's semi-random treatment
@@ -2555,9 +2575,9 @@ bool ChartDatabase::AddChart(wxString &chartfilename,
                              wxGenericProgressDialog *pprog, int isearch,
                              bool bthis_dir_in_dB) {
   bool rv = false;
-  wxFileName file(chartfilename);
-  wxString full_name = file.GetFullPath();
-  wxString file_name = file.GetFullName();
+  QFileInfo file(wxString_to_QString(chartfilename));
+  wxString full_name = QString_to_wxString(file.absoluteFilePath());
+  wxString file_name = QString_to_wxString(file.fileName());
 
   //    Validate the file name again, considering MSW's semi-random treatment of
   //    case....
@@ -2597,7 +2617,10 @@ bool ChartDatabase::AddChart(wxString &chartfilename,
         //    Check the file modification time
         auto &cte_search = GetChartTableEntry(isearch);
         time_t t_oldFile = cte_search.GetFileTime();
-        time_t t_newFile = file.GetModificationTime().GetTicks();
+        time_t t_newFile =
+            file.lastModified().isValid()
+                ? static_cast<time_t>(file.lastModified().toSecsSinceEpoch())
+                : 0;
 
         if (t_newFile <= t_oldFile) {
           bAddFinal = false;
@@ -2616,9 +2639,9 @@ bool ChartDatabase::AddChart(wxString &chartfilename,
       //  Look at the chart file name (without directory prefix) for a further
       //  check for duplicates This catches the case in which the "same" chart
       //  is in different locations, and one may be newer than the other.
-      wxFileName table_file(*ptable_file_name);
+      QFileInfo table_file(wxString_to_QString(*ptable_file_name));
 
-      if (table_file.GetFullName() == file_name) {
+      if (QString_to_wxString(table_file.fileName()) == file_name) {
         b_add_msg++;
 
         // TODO fix this...
@@ -2682,12 +2705,12 @@ bool ChartDatabase::AddChart(wxString &chartfilename,
 bool ChartDatabase::AddSingleChart(wxString &ChartFullPath,
                                    bool b_force_full_search) {
   //  Find a relevant chart class descriptor
-  wxFileName fn(ChartFullPath);
-  wxString ext = fn.GetExt();
+  QFileInfo fn(wxString_to_QString(ChartFullPath));
+  wxString ext = QString_to_wxString(fn.suffix());
   ext.Prepend("*.");
   wxString ext_upper = ext.MakeUpper();
   wxString ext_lower = ext.MakeLower();
-  wxString dir_name = fn.GetPath();
+  wxString dir_name = QString_to_wxString(fn.absolutePath());
 
   //    Search the array of chart class descriptors to find a match
   //    between the search mask and the chart file extension
@@ -2798,8 +2821,8 @@ bool ChartDatabase::RemoveSingleChart(wxString &ChartFullPath) {
   }
 
   //  Check and update the dir array
-  wxFileName fn(ChartFullPath);
-  wxString fd = fn.GetPath();
+  QFileInfo fn(wxString_to_QString(ChartFullPath));
+  wxString fd = QString_to_wxString(fn.absolutePath());
   if (!IsChartDirUsed(fd)) {
     //      Clone a new array, removing the unused directory,
     ArrayOfCDI NewChartDirArray;
@@ -3074,8 +3097,8 @@ bool ChartDatabase::IsChartAvailable(int dbIndex) {
     if (cte.GetChartType() != CHART_TYPE_PLUGIN) return true;
 
     wxString *path = cte.GetpsFullPath();
-    wxFileName fn(*path);
-    wxString ext = fn.GetExt();
+    QFileInfo fn(wxString_to_QString(*path));
+    wxString ext = QString_to_wxString(fn.suffix());
     ext.Prepend("*.");
     wxString ext_upper = ext.MakeUpper();
     wxString ext_lower = ext.MakeLower();
@@ -3104,7 +3127,7 @@ bool ChartDatabase::IsChartAvailable(int dbIndex) {
 }
 
 void ChartDatabase::ApplyGroupArray(ChartGroupArray *pGroupArray) {
-  wxString separator(wxFileName::GetPathSeparator());
+  wxString separator(QDir::separator().toLatin1());
 
   for (unsigned int ic = 0; ic < active_chartTable.size(); ic++) {
     auto &cte = GetChartTableEntry(ic);
@@ -3137,7 +3160,8 @@ void ChartDatabase::ApplyGroupArray(ChartGroupArray *pGroupArray) {
                 b_add = false;
                 break;
               } else {
-                if (wxDir::Exists(missing_item))  // missing item is a dir
+                if (QDir(wxString_to_QString(missing_item))
+                        .exists())  // missing item is a dir
                 {
                   b_add = false;
                   break;

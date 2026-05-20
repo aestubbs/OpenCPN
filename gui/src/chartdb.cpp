@@ -33,7 +33,9 @@
 #include <wx/wx.h>
 #endif
 
-#include <wx/dir.h>
+#include <QDir>
+#include <QFileInfo>
+
 #include <wx/progdlg.h>
 #include <wx/regex.h>
 #include <wx/stopwatch.h>
@@ -405,24 +407,25 @@ void ChartDB::PurgeCacheUnusedCharts(double factor) {
 
 ChartBase *ChartDB::GetChart(const wxChar *theFilePath,
                              ChartClassDescriptor &chart_desc) const {
-  wxFileName fn(theFilePath);
+  QString qPath = wxString_to_QString(wxString(theFilePath));
+  QFileInfo fn(qPath);
 
-  if (!fn.FileExists()) {
+  if (!fn.isFile()) {
     //    Might be a directory
-    if (!wxDir::Exists(theFilePath)) {
+    if (!QDir(qPath).exists()) {
       wxLogMessage("   ...file does not exist: %s", theFilePath);
       return NULL;
     }
   }
   ChartBase *pch = NULL;
 
-  wxString chartExt = fn.GetExt().Upper();
+  wxString chartExt = QString_to_wxString(fn.suffix().toUpper());
 
   if (chartExt == "XZ") {
     wxString npath = theFilePath;
     npath = npath.Left(npath.length() - 3);
-    wxFileName fn(npath);
-    chartExt = fn.GetExt().Upper();
+    QFileInfo fn2(wxString_to_QString(npath));
+    chartExt = QString_to_wxString(fn2.suffix().toUpper());
   }
 
   if (chartExt == "KAP") {
@@ -443,11 +446,12 @@ ChartBase *ChartDB::GetChart(const wxChar *theFilePath,
   else {
     wxRegEx rxName("[0-9]+");
     wxRegEx rxExt("[A-G]");
-    if (rxName.Matches(fn.GetName()) && rxExt.Matches(chartExt))
+    if (rxName.Matches(QString_to_wxString(fn.completeBaseName())) &&
+        rxExt.Matches(chartExt))
       pch = new cm93compchart;
     else {
       //    Might be a directory
-      if (wxDir::Exists(theFilePath)) pch = new cm93compchart;
+      if (QDir(qPath).exists()) pch = new cm93compchart;
     }
   }
 
@@ -507,8 +511,9 @@ int ChartDB::BuildChartStack(ChartStack *cstk, float lat, float lon,
     //  On android, SDK > 29, we require that the directory of charts be
     //  "writable" as determined by Android Java file system
 #ifdef __ANDROID__
-    wxFileName fn(cte.GetFullSystemPath());
-    if (!androidIsDirWritable(fn.GetPath())) b_writable_add = false;
+    QFileInfo fn(wxString_to_QString(cte.GetFullSystemPath()));
+    if (!androidIsDirWritable(QString_to_wxString(fn.absolutePath())))
+      b_writable_add = false;
 #endif
 
     bool b_pos_add = false;
@@ -1035,8 +1040,8 @@ CacheEntry *ChartDB::FindOldestDeleteCandidate(bool blog) {
           // Protect basemap MBTiles from cache eviction
           ChartBase *pChart = (ChartBase *)(pce->pChart);
           if (pChart && pChart->GetChartType() == CHART_TYPE_MBTILES) {
-            wxFileName fn(pChart->GetFullPath());
-            if (fn.GetPath().Lower().Contains("basemap")) continue;
+            QFileInfo fn(wxString_to_QString(pChart->GetFullPath()));
+            if (fn.absolutePath().toLower().contains("basemap")) continue;
           }
           LRUTime = pce->RecentTime;
           iOldest = i;
@@ -1255,8 +1260,8 @@ ChartBase *ChartDB::OpenChartUsingCache(int dbindex, ChartInitFlag init_flag) {
     }
 
     else if (chart_type == CHART_TYPE_PLUGIN) {
-      wxFileName fn(ChartFullPath);
-      wxString ext = fn.GetExt();
+      QFileInfo fn(wxString_to_QString(ChartFullPath));
+      wxString ext = QString_to_wxString(fn.suffix());
       ext.Prepend("*.");
       wxString ext_upper = ext.MakeUpper();
       wxString ext_lower = ext.MakeLower();
@@ -1348,17 +1353,18 @@ ChartBase *ChartDB::OpenChartUsingCache(int dbindex, ChartInitFlag init_flag) {
         //   then allow immediate opening.  Otherwise, add this chart to the
         //   "no-show" array for each chart.
         if (chart_type == CHART_TYPE_MBTILES) {
-          wxFileName tileFile(ChartFullPath);
+          QFileInfo tileFile(wxString_to_QString(ChartFullPath));
           // Size test for 5 GByte
-          wxULongLong tileSizeMB = tileFile.GetSize() >> 20;
+          qint64 tileSizeMB = tileFile.size() >> 20;
 
           // Auto-show MBTiles in basemap directories
-          bool isBasemap = tileFile.GetPath().Lower().Contains("basemap");
+          bool isBasemap =
+              tileFile.absolutePath().toLower().contains("basemap");
 
           auto &config_array = ConfigMgr::Get().GetCanvasConfigArray();
 
           if (!isBasemap && (!CheckAnyCanvasExclusiveTileGroup() ||
-                             (tileSizeMB.GetLo() > 5000))) {
+                             (tileSizeMB > 5000))) {
             // Check to see if the tile has been "clicked" in either canvas.
             // If so, do not add to no-show array again.
             bool b_clicked = false;
@@ -1582,10 +1588,11 @@ wxXmlDocument ChartDB::GetXMLDescription(int dbIndex, bool b_getGeom) {
     tnode = new wxXmlNode(wxXML_TEXT_NODE, "", path);
     node->AddChild(tnode);
 
-    wxFileName name(path);
+    QFileInfo name(wxString_to_QString(path));
     node = new wxXmlNode(wxXML_ELEMENT_NODE, "name");
     pcell_node->AddChild(node);
-    tnode = new wxXmlNode(wxXML_TEXT_NODE, "", name.GetName());
+    tnode = new wxXmlNode(wxXML_TEXT_NODE, "",
+                          QString_to_wxString(name.completeBaseName()));
     node->AddChild(tnode);
 
     if (pc) {
@@ -1650,10 +1657,11 @@ wxXmlDocument ChartDB::GetXMLDescription(int dbIndex, bool b_getGeom) {
     tnode = new wxXmlNode(wxXML_TEXT_NODE, "", path);
     node->AddChild(tnode);
 
-    wxFileName name(path);
+    QFileInfo name(wxString_to_QString(path));
     node = new wxXmlNode(wxXML_ELEMENT_NODE, "name");
     pcell_node->AddChild(node);
-    tnode = new wxXmlNode(wxXML_TEXT_NODE, "", name.GetName());
+    tnode = new wxXmlNode(wxXML_TEXT_NODE, "",
+                          QString_to_wxString(name.completeBaseName()));
     node->AddChild(tnode);
 
     wxString scale;

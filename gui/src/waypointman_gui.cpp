@@ -24,10 +24,12 @@
 
 #include "gl_headers.h"
 
+#include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
+
 #include <wx/arrstr.h>
 #include <wx/bitmap.h>
-#include <wx/dir.h>
-#include <wx/filename.h>
 #include <wx/gdicmn.h>
 #include <wx/log.h>
 #include <wx/string.h>
@@ -58,42 +60,49 @@ void WayPointmanGui::ProcessUserIcons(ocpnStyle::Style *style,
   wxLogMessage(msg);
 
   wxString UserIconPath = g_BasePlatform->GetPrivateDataDir();
-  wxChar sep = wxFileName::GetPathSeparator();
-  if (UserIconPath.Last() != sep) UserIconPath.Append(sep);
+  QChar sep = QDir::separator();
+  if (UserIconPath.Last() != sep.toLatin1()) UserIconPath.Append(sep.toLatin1());
   UserIconPath.Append("UserIcons/");
 
   wxLogMessage("Looking for UserIcons at " + UserIconPath);
 
-  if (wxDir::Exists(UserIconPath)) {
+  QString qUserIconPath = wxString_to_QString(UserIconPath);
+  if (QDir(qUserIconPath).exists()) {
     wxLogMessage("Loading UserIcons from " + UserIconPath);
     wxArrayString FileList;
 
     wxBitmap default_bm = wxBitmap(1, 1);  // empty
 
-    int n_files = wxDir::GetAllFiles(UserIconPath, &FileList, "", wxDIR_FILES);
+    // Non-recursive: list files in top-level directory only.
+    QDir dir(qUserIconPath);
+    QStringList qFiles = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+    for (const QString &qName : qFiles) {
+      FileList.Add(QString_to_wxString(dir.absoluteFilePath(qName)));
+    }
+    int n_files = static_cast<int>(FileList.GetCount());
 
     for (int ifile = 0; ifile < n_files; ifile++) {
       wxString name =
           g_bUserIconsFirst ? FileList[n_files - ifile - 1] : FileList[ifile];
 
-      wxFileName fn(name);
-      wxString iconname = fn.GetName();
+      QFileInfo fi(wxString_to_QString(name));
+      wxString iconname = QString_to_wxString(fi.completeBaseName());
       wxBitmap icon1;
-      if (fn.GetExt().Lower() == "xpm") {
+      if (fi.suffix().toLower() == "xpm") {
         if (icon1.LoadFile(name, wxBITMAP_TYPE_XPM)) {
           wxLogMessage("Adding icon: " + iconname);
           wxImage image = icon1.ConvertToImage();
           ProcessIcon(image, iconname, iconname, g_bUserIconsFirst);
         }
       }
-      if (fn.GetExt().Lower() == "png") {
+      if (fi.suffix().toLower() == "png") {
         if (icon1.LoadFile(name, wxBITMAP_TYPE_PNG)) {
           wxLogMessage("Adding icon: " + iconname);
           wxImage image = icon1.ConvertToImage();
           ProcessIcon(image, iconname, iconname, g_bUserIconsFirst);
         }
       }
-      if (fn.GetExt().Lower() == "svg") {
+      if (fi.suffix().toLower() == "svg") {
         // This is to be a mark icon
         // If needed size is adjusted to something between 3mm and 20mm
         unsigned int w, h;
@@ -405,18 +414,27 @@ void WayPointmanGui::ProcessDefaultIcons(double displayDPmm) {
   bm_size /= OCPN_GetWinDIPScaleFactor();
   bm_size *= g_MarkScaleFactorExp;
 
-  int n_files = wxDir::GetAllFiles(iconDir, &FileList);
+  // Recursive listing matches wxDir::GetAllFiles() default behaviour.
+  {
+    QDirIterator it(wxString_to_QString(iconDir), QStringList{},
+                    QDir::Files | QDir::NoDotAndDotDot,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      FileList.Add(QString_to_wxString(it.next()));
+    }
+  }
+  int n_files = static_cast<int>(FileList.GetCount());
 
   g_BasePlatform->ShowBusySpinner();
 
   for (int ifile = 0; ifile < n_files; ifile++) {
     wxString name = FileList[ifile];
 
-    wxFileName fn(name);
-    wxString iconname = fn.GetName();
+    QFileInfo fn_fi(wxString_to_QString(name));
+    wxString iconname = QString_to_wxString(fn_fi.completeBaseName());
     wxBitmap icon1;
 
-    if (fn.GetExt().Lower() == "svg") {
+    if (fn_fi.suffix().toLower() == "svg") {
       unsigned int w, h;
 
       SVGDocumentPixelSize(name, w, h);
