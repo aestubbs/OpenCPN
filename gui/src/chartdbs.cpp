@@ -3129,8 +3129,9 @@ void ChartDatabase::ApplyGroupArray(ChartGroupArray *pGroupArray) {
               separator);  // Prevent comingling similar looking path names
         if (chart_full_path->StartsWith(element_root)) {
           bool b_add = true;
-          for (unsigned int k = 0; k < elem.m_missing_name_array.size(); k++) {
-            const wxString &missing_item = elem.m_missing_name_array[k];
+          for (int k = 0; k < elem.m_missing_name_array.size(); k++) {
+            wxString missing_item =
+                QString_to_wxString(elem.m_missing_name_array.at(k));
             if (chart_full_path->StartsWith(missing_item)) {
               if (chart_full_path->IsSameAs(
                       missing_item))  // missing item is full chart name

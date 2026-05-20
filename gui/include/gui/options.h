@@ -33,6 +33,9 @@
 #include <memory>
 #include <vector>
 
+#include <QList>
+#include <QStringList>
+
 #include <wx/arrimpl.cpp>
 #include <wx/choice.h>
 #include <wx/clrpicker.h>
@@ -392,7 +395,7 @@ public:
     m_bForceNewToolbaronCancel = val;
   }
 
-  wxArrayString *GetSerialArray() { return m_pSerialArray; }
+  QStringList *GetSerialArray() { return m_pSerialArray; }
   void OptionsFinalizeChartDBUpdate();
 
   // Should we show tooltips?
@@ -513,7 +516,7 @@ public:
   wxBoxSizer *cmdButtonSizer;
   wxStaticBox *loadedBox;
   std::vector<OCPNChartDirPanel *> panelVector;
-  wxArrayString activeChartList;
+  QStringList activeChartList;
 
   // For the "Charts->Display Options" page
   wxScrolledWindow *m_ChartDisplayPage;
@@ -614,9 +617,9 @@ public:
   wxChoice *pSoundDeviceIndex;
   wxStaticText *stSoundDeviceIndex;
 
-  wxArrayPtrVoid OBJLBoxArray;
+  QList<void *> OBJLBoxArray;
   wxString m_init_chart_dir;
-  wxArrayString *m_pSerialArray;
+  QStringList *m_pSerialArray;
 
   ArrayOfCDI m_CurrentDirList, *m_pWorkDirList;
   MyConfig *m_pConfig;
@@ -703,7 +706,7 @@ private:
   bool m_bcompact;
   int m_fontHeight, m_scrollRate;
   bool m_bfontChanged;
-  wxArrayString m_font_element_array;
+  QStringList m_font_element_array;
 
   bool m_bVectorInit;
 
@@ -757,7 +760,7 @@ public:
   void SetInitialSettings(void);
   void CompleteInitialSettings(void);
   void PopulateTrees(void);
-  void PopulateTreeCtrl(wxTreeCtrl *ptc, const wxArrayString &dir_array,
+  void PopulateTreeCtrl(wxTreeCtrl *ptc, const QStringList &dir_array,
                         const wxColour &col, wxFont *pFont = NULL);
   void BuildNotebookPages(ChartGroupArray *pGroupArray);
   void EmptyChartGroupArray(ChartGroupArray *s);

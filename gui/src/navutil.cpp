@@ -59,6 +59,7 @@
 #include <wx/tokenzr.h>
 
 #include <QDateTime>
+#include <QStringList>
 
 #include "o_sound/o_sound.h"
 
@@ -132,9 +133,9 @@ static const long long lNaN = 0xfff8000000000000;
 
 namespace navutil {
 
-wxArrayString *pMessageOnceArray;
+QStringList *pMessageOnceArray;
 
-void InitGlobals() { pMessageOnceArray = new wxArrayString(); }
+void InitGlobals() { pMessageOnceArray = new QStringList(); }
 
 void DeinitGlobals() {
   delete pMessageOnceArray;
@@ -929,9 +930,10 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
     wxString connectionconfigs;
     Read("DataConnections", &connectionconfigs);
     if (!connectionconfigs.IsEmpty()) {
-      wxArrayString confs = wxStringTokenize(connectionconfigs, "|");
-      for (size_t i = 0; i < confs.Count(); i++) {
-        ConnectionParams *prm = new ConnectionParams(confs[i]);
+      QStringList confs = wxString_to_QString(connectionconfigs)
+                              .split(QChar('|'), Qt::SkipEmptyParts);
+      for (const QString &conf : confs) {
+        ConnectionParams *prm = new ConnectionParams(QString_to_wxString(conf));
         if (!prm->Valid) {
           wxLogMessage("Skipped invalid DataStream config");
           delete prm;
@@ -1042,7 +1044,7 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
   wxString str;
   long dummy;
   wxString pval;
-  wxArrayString deleteList;
+  QStringList deleteList;
 
   bool bCont = GetFirstEntry(str, dummy);
   while (bCont) {
@@ -1051,23 +1053,23 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
     if (str.StartsWith("Font")) {
       // Convert pre 3.1 setting. Can't delete old entries from inside the
       // GetNextEntry() loop, so we need to save those and delete outside.
-      deleteList.Add(str);
+      deleteList.append(wxString_to_QString(str));
       wxString oldKey = pval.BeforeFirst(_T(':'));
       str = FontMgr::GetFontConfigKey(oldKey);
     }
 
     if (pval.IsEmpty() || pval.StartsWith(":")) {
-      deleteList.Add(str);
+      deleteList.append(wxString_to_QString(str));
     } else
       FontMgr::Get().LoadFontNative(&str, &pval);
 
     bCont = GetNextEntry(str, dummy);
   }
 
-  for (unsigned int i = 0; i < deleteList.Count(); i++) {
-    DeleteEntry(deleteList[i]);
+  for (const QString &s : deleteList) {
+    DeleteEntry(QString_to_wxString(s));
   }
-  deleteList.Clear();
+  deleteList.clear();
 
   //  Tide/Current Data Sources
   SetPath("/TideCurrentDataSources");
@@ -1544,10 +1546,10 @@ void MyConfig::CreateConfigGroups(ChartGroupArray *pGroupArray) {
       Write("IncludeItem", pGroup->m_element_array[j].m_element_name);
 
       wxString t;
-      wxArrayString u = pGroup->m_element_array[j].m_missing_name_array;
-      if (u.GetCount()) {
-        for (unsigned int k = 0; k < u.GetCount(); k++) {
-          t += u[k];
+      const QStringList& u = pGroup->m_element_array[j].m_missing_name_array;
+      if (!u.isEmpty()) {
+        for (const QString& s : u) {
+          t += QString_to_wxString(s);
           t += ";";
         }
         Write("ExcludeItems", t);
@@ -1591,10 +1593,10 @@ void MyConfig::LoadConfigGroups(ChartGroupArray *pGroupArray) {
       wxString u;
       if (Read("ExcludeItems", &u)) {
         if (!u.IsEmpty()) {
-          wxStringTokenizer tk(u, ";");
-          while (tk.HasMoreTokens()) {
-            wxString token = tk.GetNextToken();
-            pelement.m_missing_name_array.Add(token);
+          QStringList tokens = wxString_to_QString(u).split(
+              QChar(';'), Qt::SkipEmptyParts);
+          for (const QString& token : tokens) {
+            pelement.m_missing_name_array.append(token);
           }
         }
       }
@@ -2923,13 +2925,11 @@ wxString FormatGPXDateTime(QDateTime dt) {
 
 bool LogMessageOnce(const wxString &msg) {
   //    Search the array for a match
-
-  for (unsigned int i = 0; i < navutil::pMessageOnceArray->GetCount(); i++) {
-    if (msg.IsSameAs(navutil::pMessageOnceArray->Item(i))) return false;
-  }
+  QString qmsg = wxString_to_QString(msg);
+  if (navutil::pMessageOnceArray->contains(qmsg)) return false;
 
   // Not found, so add to the array
-  navutil::pMessageOnceArray->Add(msg);
+  navutil::pMessageOnceArray->append(qmsg);
 
   //    And print it
   wxLogMessage(msg);

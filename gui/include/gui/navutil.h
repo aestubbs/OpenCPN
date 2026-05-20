@@ -28,6 +28,7 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QStringList>
 
 #include <wx/colour.h>
 #include <wx/config.h>
@@ -80,7 +81,7 @@ wxString GetLayerName(int id);
 
 namespace navutil {
 
-extern wxArrayString *pMessageOnceArray;
+extern QStringList *pMessageOnceArray;
 
 void InitGlobals();
 

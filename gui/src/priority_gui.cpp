@@ -41,6 +41,9 @@
 #include <wx/sizer.h>
 #include <wx/tokenzr.h>
 
+#include <QStringList>
+
+#include "model/wx_qt_string.h"
 #include "priority_gui.h"
 
 #include "model/comm_bridge.h"
@@ -182,11 +185,11 @@ void PriorityDlg::AddLeaves(const std::vector<std::string>& map_list,
   PriorityContainer pc =
       CommBridge::GetInstance().GetPriorityContainer(map_name);
 
-  wxString priority_string(map_list[map_index].c_str());
-  wxStringTokenizer tk(priority_string, "|");
+  QString priority_string = QString::fromStdString(map_list[map_index]);
+  QStringList prio_tokens = priority_string.split('|', Qt::SkipEmptyParts);
   size_t index = 0;
-  while (tk.HasMoreTokens()) {
-    wxString item_string = tk.GetNextToken();
+  for (const QString& token : prio_tokens) {
+    wxString item_string = QString_to_wxString(token);
 
     wxScreenDC dc;
     int char_width, char_height;
@@ -312,15 +315,16 @@ void PriorityDlg::ProcessMove(wxTreeItemId id, int dir) {
   if (pe->m_category > 4) return;
 
   // Get the selected category string from the map
-  wxString priority_string = wxString(m_map[pe->m_category].c_str());
+  QString priority_string = QString::fromStdString(m_map[pe->m_category]);
 
   // Build an array
-  wxString prio_array[16];  // enough, plus
+  QString prio_array[16];  // enough, plus
 
-  wxStringTokenizer tk(priority_string, "|");
+  QStringList tokens = priority_string.split('|', Qt::SkipEmptyParts);
   int index = 0;
-  while (tk.HasMoreTokens() && index < 16) {
-    prio_array[index] = tk.GetNextToken();
+  for (const QString& token : tokens) {
+    if (index >= 16) break;
+    prio_array[index] = token;
     index++;
   }
   int max_index = index;
@@ -329,8 +333,8 @@ void PriorityDlg::ProcessMove(wxTreeItemId id, int dir) {
   if (dir == -1) {  // Move UP
     if (pe->m_index > 0) {
       // swap entries in array
-      wxString s_above = prio_array[pe->m_index - 1];
-      wxString s_move = prio_array[pe->m_index];
+      QString s_above = prio_array[pe->m_index - 1];
+      QString s_move = prio_array[pe->m_index];
       prio_array[pe->m_index - 1] = s_move;
       prio_array[pe->m_index] = s_above;
       m_selIndex--;
@@ -338,8 +342,8 @@ void PriorityDlg::ProcessMove(wxTreeItemId id, int dir) {
   } else {  // Move DOWN
     if (pe->m_index < max_index) {
       // swap entries in array
-      wxString s_below = prio_array[pe->m_index + 1];
-      wxString s_move = prio_array[pe->m_index];
+      QString s_below = prio_array[pe->m_index + 1];
+      QString s_move = prio_array[pe->m_index];
       prio_array[pe->m_index + 1] = s_move;
       prio_array[pe->m_index] = s_below;
       m_selIndex++;
@@ -347,17 +351,16 @@ void PriorityDlg::ProcessMove(wxTreeItemId id, int dir) {
   }
 
   // create the new string
-  wxString prio_mod;
+  QString prio_mod;
   for (int i = 0; i < 16; i++) {
-    if (prio_array[i].Length()) {
+    if (prio_array[i].length()) {
       prio_mod += prio_array[i];
-      prio_mod += wxString("|");
+      prio_mod += QStringLiteral("|");
     }
   }
 
   // update the string in the map
-  std::string s_upd(prio_mod.c_str());
-  m_map[pe->m_category] = s_upd;
+  m_map[pe->m_category] = prio_mod.toStdString();
 
   // Auto-adjust Sat and COG/SOG priorities if POS has been moved up/down
   if (pe->m_category == 0) {
@@ -398,31 +401,23 @@ void PriorityDlg::OnClearClick(wxCommandEvent& event) {
 
 void PriorityDlg::AdjustSatPriority() {
   // Get an array of available sat sources
-  std::string sat_prio = m_map[4];
-  wxArrayString sat_sources;
-  wxString sat_priority_string(sat_prio.c_str());
-  wxStringTokenizer tks(sat_priority_string, "|");
-  while (tks.HasMoreTokens()) {
-    wxString item_string = tks.GetNextToken();
-    sat_sources.Add(item_string);
-  }
+  QStringList sat_sources =
+      QString::fromStdString(m_map[4]).split('|', Qt::SkipEmptyParts);
 
   // Step thru the POS priority map
-  std::string pos_prio = m_map[0];
-  wxString pos_priority_string(pos_prio.c_str());
-  wxStringTokenizer tk(pos_priority_string, "|");
-  wxArrayString new_sat_prio;
-  while (tk.HasMoreTokens()) {
-    wxString item_string = tk.GetNextToken();
-    wxString pos_channel = item_string.BeforeFirst(';');
+  QStringList pos_tokens =
+      QString::fromStdString(m_map[0]).split('|', Qt::SkipEmptyParts);
+  QStringList new_sat_prio;
+  for (const QString& item_string : pos_tokens) {
+    QString pos_channel = item_string.section(';', 0, 0);
 
     // search the sat sources array for a match
     // if found, add to proposed new priority array
-    for (size_t i = 0; i < sat_sources.GetCount(); i++) {
-      if (pos_channel.IsSameAs(sat_sources[i].BeforeFirst(';'))) {
-        new_sat_prio.Add(sat_sources[i]);
+    for (int i = 0; i < sat_sources.size(); i++) {
+      if (pos_channel == sat_sources[i].section(';', 0, 0)) {
+        new_sat_prio.append(sat_sources[i]);
         // Mark this source as "used"
-        sat_sources[i] = "USED";
+        sat_sources[i] = QStringLiteral("USED");
         break;
       } else {  // no match, what to do? //FIXME (dave)
         int yyp = 4;
@@ -430,43 +425,35 @@ void PriorityDlg::AdjustSatPriority() {
     }
   }
   //  Create a new sat priority string from new_sat_prio array
-  wxString proposed_sat_prio;
-  for (size_t i = 0; i < new_sat_prio.GetCount(); i++) {
-    proposed_sat_prio += new_sat_prio[i];
-    proposed_sat_prio += wxString("|");
+  QString proposed_sat_prio;
+  for (const QString& s : new_sat_prio) {
+    proposed_sat_prio += s;
+    proposed_sat_prio += QStringLiteral("|");
   }
 
   // Update the maps with the new sat priority string
-  m_map[4] = proposed_sat_prio.ToStdString();
+  m_map[4] = proposed_sat_prio.toStdString();
 }
 
 void PriorityDlg::AdjustCOGSOGPriority() {
   // Get an array of available COG/SOG sources
-  std::string cogsog_prio = m_map[1];
-  wxArrayString cogsog_sources;
-  wxString cogsog_priority_string(cogsog_prio.c_str());
-  wxStringTokenizer tks(cogsog_priority_string, "|");
-  while (tks.HasMoreTokens()) {
-    wxString item_string = tks.GetNextToken();
-    cogsog_sources.Add(item_string);
-  }
+  QStringList cogsog_sources =
+      QString::fromStdString(m_map[1]).split('|', Qt::SkipEmptyParts);
 
   // Step thru the POS priority map
-  std::string pos_prio = m_map[0];
-  wxString pos_priority_string(pos_prio.c_str());
-  wxStringTokenizer tk(pos_priority_string, "|");
-  wxArrayString new_cogsog_prio;
-  while (tk.HasMoreTokens()) {
-    wxString item_string = tk.GetNextToken();
-    wxString pos_channel = item_string.BeforeFirst(';');
+  QStringList pos_tokens =
+      QString::fromStdString(m_map[0]).split('|', Qt::SkipEmptyParts);
+  QStringList new_cogsog_prio;
+  for (const QString& item_string : pos_tokens) {
+    QString pos_channel = item_string.section(';', 0, 0);
 
     // search the cogsog sources array for a match
     // if found, add to proposed new priority array
-    for (size_t i = 0; i < cogsog_sources.GetCount(); i++) {
-      if (pos_channel.IsSameAs(cogsog_sources[i].BeforeFirst(';'))) {
-        new_cogsog_prio.Add(cogsog_sources[i]);
+    for (int i = 0; i < cogsog_sources.size(); i++) {
+      if (pos_channel == cogsog_sources[i].section(';', 0, 0)) {
+        new_cogsog_prio.append(cogsog_sources[i]);
         // Mark this source as "used"
-        cogsog_sources[i] = "USED";
+        cogsog_sources[i] = QStringLiteral("USED");
         break;
       } else {  // no match, what to do? //FIXME (dave)
         int yyp = 4;
@@ -474,12 +461,12 @@ void PriorityDlg::AdjustCOGSOGPriority() {
     }
   }
   //  Create a new cog/sog priority string from new_cogsog_prio array
-  wxString proposed_cogsog_prio;
-  for (size_t i = 0; i < new_cogsog_prio.GetCount(); i++) {
-    proposed_cogsog_prio += new_cogsog_prio[i];
-    proposed_cogsog_prio += wxString("|");
+  QString proposed_cogsog_prio;
+  for (const QString& s : new_cogsog_prio) {
+    proposed_cogsog_prio += s;
+    proposed_cogsog_prio += QStringLiteral("|");
   }
 
   // Update the maps with the new cog/sog priority string
-  m_map[1] = proposed_cogsog_prio.ToStdString();
+  m_map[1] = proposed_cogsog_prio.toStdString();
 }

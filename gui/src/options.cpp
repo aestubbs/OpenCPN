@@ -6242,7 +6242,7 @@ void options::SetInitialSettings() {
 
   m_returnChanges = 0;  // reset the flags
   m_bfontChanged = false;
-  m_font_element_array.Clear();
+  m_font_element_array.clear();
 
   b_oldhaveWMM = b_haveWMM;
   auto loader = PluginLoader::GetInstance();
@@ -6620,13 +6620,7 @@ void options::SetInitialSettings() {
   //  Serial ports
 
   delete m_pSerialArray;
-  m_pSerialArray = NULL;
-  // EnumerateSerialPorts() returns QStringList*; bridge to wxArrayString
-  // for the wx-typed member.
-  std::unique_ptr<QStringList> qs_ports(EnumerateSerialPorts());
-  m_pSerialArray = new wxArrayString;
-  for (const QString& p : *qs_ports)
-    m_pSerialArray->Add(QString_to_wxString(p));
+  m_pSerialArray = EnumerateSerialPorts();
   m_bForceNewToolbaronCancel = false;
 }
 
@@ -7239,7 +7233,7 @@ void options::ApplyChanges(wxCommandEvent& event) {
 
     // If the font element changed was not "Dialog", then we don't need a full
     // reload
-    if (m_font_element_array.Index("Dialog") == wxNOT_FOUND)
+    if (m_font_element_array.indexOf("Dialog") == -1)
       m_returnChanges |= FONT_CHANGED_SAFE;
   }
 
@@ -7298,13 +7292,13 @@ void options::ApplyChanges(wxCommandEvent& event) {
 
   g_bShowChartBar = pShowChartBar->GetValue();
 
-  wxString screenmm = pScreenMM->GetValue();
-  wxStringTokenizer tkz(screenmm, ",");
+  QString screenmm = wxString_to_QString(pScreenMM->GetValue());
+  QStringList screenmm_tokens = screenmm.split(QChar(','), Qt::SkipEmptyParts);
   g_config_display_size_mm.clear();
-  while (tkz.HasMoreTokens()) {
-    wxString token = tkz.GetNextToken();
-    long mm = -1;
-    if (token.ToLong(&mm) && mm > 0) {
+  for (const QString& token : screenmm_tokens) {
+    bool ok = false;
+    qlonglong mm = token.toLongLong(&ok);
+    if (ok && mm > 0) {
       g_config_display_size_mm.push_back(mm);
     } else {
       g_config_display_size_mm.push_back(0);
@@ -8399,7 +8393,7 @@ void options::OnClose(wxCloseEvent& event) {
 
 void options::OnFontChoice(wxCommandEvent& event) {
   wxString sel_text_element = m_itemFontElementListBox->GetStringSelection();
-  m_font_element_array.Add(sel_text_element);
+  m_font_element_array.append(wxString_to_QString(sel_text_element));
 
   wxFont* pif = FontMgr::Get().GetFont(sel_text_element);
   wxColour init_color = FontMgr::Get().GetFontColor(sel_text_element);
@@ -8416,7 +8410,7 @@ void options::OnChooseFont(wxCommandEvent& event) {
 #endif
 
   wxString sel_text_element = m_itemFontElementListBox->GetStringSelection();
-  m_font_element_array.Add(sel_text_element);
+  m_font_element_array.append(wxString_to_QString(sel_text_element));
   wxFontData font_data;
 
   wxFont* pif = FontMgr::Get().GetFont(sel_text_element);
@@ -8499,7 +8493,7 @@ void options::OnChooseFont(wxCommandEvent& event) {
 #if defined(__WXGTK__) || defined(__WXQT__)
 void options::OnChooseFontColor(wxCommandEvent& event) {
   wxString sel_text_element = m_itemFontElementListBox->GetStringSelection();
-  m_font_element_array.Add(sel_text_element);
+  m_font_element_array.append(wxString_to_QString(sel_text_element));
 
   wxColourData colour_data;
 
@@ -9051,11 +9045,11 @@ void ChartGroupsUI::SetInitialSettings() {
 void ChartGroupsUI::PopulateTrees() {
   //    Fill in the "Active chart" tree control
   //    from the options dialog "Active Chart Directories" list
-  wxArrayString dir_array;
+  QStringList dir_array;
   int nDir = m_db_dirs.GetCount();
   for (int i = 0; i < nDir; i++) {
     wxString dirname = m_db_dirs[i].fullpath;
-    if (!dirname.IsEmpty()) dir_array.Add(dirname);
+    if (!dirname.IsEmpty()) dir_array.append(wxString_to_QString(dirname));
   }
 
   PopulateTreeCtrl(allAvailableCtl->GetTreeCtrl(), dir_array,
@@ -9065,11 +9059,11 @@ void ChartGroupsUI::PopulateTrees() {
 
   //    Fill in the Page 0 tree control
   //    from the options dialog "Active Chart Directories" list
-  wxArrayString dir_array0;
+  QStringList dir_array0;
   int nDir0 = m_db_dirs.GetCount();
   for (int i = 0; i < nDir0; i++) {
     wxString dirname = m_db_dirs[i].fullpath;
-    if (!dirname.IsEmpty()) dir_array0.Add(dirname);
+    if (!dirname.IsEmpty()) dir_array0.append(wxString_to_QString(dirname));
   }
   PopulateTreeCtrl(defaultAllCtl->GetTreeCtrl(), dir_array0,
                    wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT), iFont);
@@ -9087,7 +9081,7 @@ void ChartGroupsUI::CompleteInitialSettings() {
 }
 
 void ChartGroupsUI::PopulateTreeCtrl(wxTreeCtrl* ptc,
-                                     const wxArrayString& dir_array,
+                                     const QStringList& dir_array,
                                      const wxColour& col, wxFont* pFont) {
   ptc->DeleteAllItems();
 
@@ -9098,9 +9092,9 @@ void ChartGroupsUI::PopulateTreeCtrl(wxTreeCtrl* ptc,
   ptc->SetItemHasChildren(m_rootId);
 
   wxString dirname;
-  int nDir = dir_array.GetCount();
+  int nDir = dir_array.size();
   for (int i = 0; i < nDir; i++) {
-    wxString dirname = dir_array[i];
+    wxString dirname = QString_to_wxString(dir_array.at(i));
     if (!dirname.IsEmpty()) {
       wxDirItemData* dir_item = new wxDirItemData(dirname, dirname, TRUE);
       wxTreeItemId id = ptc->AppendItem(m_rootId, dirname, 0, -1, dir_item);
@@ -9179,15 +9173,15 @@ void ChartGroupsUI::OnRemoveChartItem(wxCommandEvent& event) {
             ChartGroupElement& pelement =
                 pGroup->m_element_array[group_item_index];
             bool b_duplicate = FALSE;
-            for (unsigned int k = 0; k < pelement.m_missing_name_array.size();
-                 k++) {
-              if (pelement.m_missing_name_array[k] == sel_item) {
+            QString qsel_item = wxString_to_QString(sel_item);
+            for (int k = 0; k < pelement.m_missing_name_array.size(); k++) {
+              if (pelement.m_missing_name_array.at(k) == qsel_item) {
                 b_duplicate = TRUE;
                 break;
               }
             }
             if (!b_duplicate) {
-              pelement.m_missing_name_array.Add(sel_item);
+              pelement.m_missing_name_array.append(qsel_item);
             }
 
             //    Special case...
@@ -9367,7 +9361,7 @@ void ChartGroupsUI::OnNodeExpanded(wxTreeEvent& event) {
 
   // Walk the children of the expanded node, marking any items which appear in
   // the "missing" list
-  if (!target_element.m_missing_name_array.GetCount()) return;
+  if (target_element.m_missing_name_array.isEmpty()) return;
   wxString full_root = branch_name;
   full_root += branch_adder;
   full_root += wxString(wxFILE_SEP_PATH);
@@ -9377,10 +9371,10 @@ void ChartGroupsUI::OnNodeExpanded(wxTreeEvent& event) {
   while (child.IsOk()) {
     wxString target_string = full_root;
     target_string += ptree->GetItemText(child);
+    QString qtarget = wxString_to_QString(target_string);
 
-    for (unsigned int k = 0; k < target_element.m_missing_name_array.GetCount();
-         k++) {
-      if (target_element.m_missing_name_array[k] == target_string) {
+    for (int k = 0; k < target_element.m_missing_name_array.size(); k++) {
+      if (target_element.m_missing_name_array.at(k) == qtarget) {
         ptree->SetItemTextColour(child, wxColour(128, 128, 128));
         break;
       }

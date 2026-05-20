@@ -31,6 +31,8 @@
 
 #include "config.h"
 
+#include <QStringList>
+
 #include <wx/wx.h>
 #include <wx/bmpcbox.h>
 #include <wx/choice.h>
@@ -329,7 +331,7 @@ private:
   int m_plugin_menu_item_id_next;
   wxBitmap m_cached_overlay_bm;
 
-  wxArrayString m_plugin_order;
+  QStringList m_plugin_order;
   void SetPluginOrder(wxString serialized_names);
   wxString GetPluginOrder();
 

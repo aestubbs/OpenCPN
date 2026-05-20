@@ -1248,11 +1248,8 @@ void PlugInManager::FinalizePluginLoadall() {
 }
 
 void PlugInManager::SetPluginOrder(wxString serialized_names) {
-  m_plugin_order.Empty();
-  wxStringTokenizer tokenizer(serialized_names, ";");
-  while (tokenizer.HasMoreTokens()) {
-    m_plugin_order.Add(tokenizer.GetNextToken());
-  }
+  m_plugin_order = wxString_to_QString(serialized_names)
+                       .split(QChar(';'), Qt::SkipEmptyParts);
 }
 
 wxString PlugInManager::GetPluginOrder() {

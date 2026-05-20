@@ -30,6 +30,8 @@
 #include <vector>
 #include <atomic>
 
+#include <QStringList>
+
 #include <wx/progdlg.h>
 #include <wx/thread.h>
 
@@ -478,12 +480,9 @@ WX_DEFINE_ARRAY_PTR(ChartGroup *, ChartGroupArray);
  * supposed to be part of this element but are currently missing or unavailable.
  */
 class ChartGroupElement {
-  // ChartGroupElements need nothing special to delete since
-  // m_missing_name_array is a wxArrayString which manages
-  // memory for the strings cleanly without need for a .Clear.
 public:
   wxString m_element_name;
-  wxArrayString m_missing_name_array;
+  QStringList m_missing_name_array;
 };
 
 /**
