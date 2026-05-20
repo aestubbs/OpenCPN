@@ -7,19 +7,21 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6–P1.9 done — the model's
-`wxString`, `wxDateTime`/`wxTimeSpan`, wx-container, and
-`wxConfig`/`wxFileConfig` sweeps are all complete. `QStringList`,
-`QList<T*>`, `QHash`/`QSet` are the container vocabulary;
+SignalK/SocketCAN parked (P1.5m). P1.6–P1.10 done — the model's
+`wxString`, `wxDateTime`/`wxTimeSpan`, wx-container, `wxConfig`/
+`wxFileConfig`, and file-I/O sweeps are all complete. `QStringList` /
+`QList<T*>` / `QHash` / `QSet` are the container vocabulary;
 `model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string conversions;
 `QDateTime`/`qint64`-seconds is the time/duration vocabulary; `OcpnConfig`
-(wraps `QSettings`, pure Qt API: `value`/`setValue`/`beginGroup`/…) is the
-settings store. Remaining wx-typed references are deliberate boundaries —
-the frozen plugin ABI, `wxDir`/`wxFileName` callers (P1.10), wx-widget
-plumbing, deferred-ownership container types, external library
-boundaries, and the `ocpn_cfg::Cfg*` config-call-site helpers (a
-post-P1.9 cleanup target). Next: P1.10 (file I/O — `wxFileName`/`wxDir`/
-`chartdata_input_stream` → `QFile`/`QDir`).
+(wraps `QSettings`) is the settings store; `QFile`/`QDir`/`QFileInfo`/
+`QStandardPaths` is the file-I/O vocabulary. Remaining wx-typed
+references are deliberate boundaries — the frozen plugin ABI, the
+chart-reader `wxInputStream`/`wxOutputStream` streams (a separate chart-
+reader refactor), `wxStandardPaths` on macOS bundle paths (where Qt
+resolves to different dirs), wx-widget plumbing, deferred-ownership
+container types, external library boundaries, and the post-P1.9 config
+call-site helpers. Next: P1.11 (`wxThread`/`wxMutex`/`wxSemaphore` →
+Qt threading / `std::thread`).
 **Last updated:** 2026-05-20.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -388,7 +390,37 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         idiom translates to `endAllGroups(); beginGroup("X");` —
         structurally robust against early-returns in long load/save
         functions.
-- [ ] **P1.10** Replace file I/O (`wxFileName`/`wxDir`/`chartdata_input_stream`) with `QFile`/`QDir`.
+- [x] **P1.10** Replace file I/O (`wxFileName`/`wxDir`/`wxFile`/`wxFFile`/
+      `wxTextFile`/`wxStandardPaths`) with `QFile`/`QDir`/`QFileInfo`/
+      `QStandardPaths`/`QTextStream`. Done in 3 steps. Path/file/dir
+      manipulation is Qt throughout; the chart-reader `wxInputStream`/
+      `wxOutputStream` streams (chartimg/chartdbs/cm93/o_senc/s57chart binary
+      formats) are deliberately deferred — that's a chart-reader stream
+      refactor that ripples into the binary parsers and is out of P1.10 scope.
+      Inside `chartdata_input_stream` the internal `wxFFile *` is
+      `QFile *`, but the `wxInputStream` base stays. macOS deployment target
+      bumped from 10.13 → 10.15 (per-target on `_model_src` and the top-level
+      OpenCPN target) because Qt 6's file-I/O headers expose
+      `std::filesystem::path` overloads guarded by libc++ 10.15+ attributes.
+      `wxStandardPaths` calls in `base_platform` that resolve to macOS
+      bundle paths stay wx — Qt's `QStandardPaths::ConfigLocation` resolves
+      to `~/Library/Application Support` on macOS where wx uses
+      `~/Library/Preferences`, so existing user configs would move.
+  - [x] **P1.10-1** Model layer: base_platform / plugin_handler /
+        plugin_cache / plugin_loader / navobj_db / notification_manager /
+        svg_utils / chartdata_input_stream internals.
+  - [x] **P1.10-2** Chart subsystem: s57chart / cm93 / chartdbs /
+        chartimg / o_senc / chartdb / quilt / gl_tex_cache /
+        waypointman_gui. wxInputStream/wxOutputStream consumer interfaces
+        deliberately preserved.
+  - [x] **P1.10-3** GUI shell + final audit: navutil / ocpn_platform /
+        styles / options / pluginmanager / ocpn_app / ocpn_frame /
+        notification_manager_gui / routemanagerdialog / s57 dialogs /
+        update_mgr / initwiz / etc. wxTempFile + Commit() atomic-replace
+        → QFile write to *.tmp + remove(orig) + rename(tmp, orig).
+        wxFileName::CreateTempFileName(prefix) → unique path under
+        QStandardPaths::TempLocation. Plugin-ABI shims keep wxString
+        returns, Qt-typed internally.
 - [ ] **P1.11** Replace threading primitives (`wxThread`/`wxMutex`/`wxSemaphore`).
 - [ ] **P1.12** Delete `libs/wxJSON`; move JSON use to `QJsonDocument`.
 - [ ] **P1.13** Delete `libs/wxcurl`; move networking to `QNetworkAccessManager`.
@@ -758,3 +790,30 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   `ConfigVar<T>` was moved out of `libs/observable/src` into
   `model/src` so its `OcpnConfig` instantiation stays in the right
   layer.
+- 2026-05-20 — P1.10 done: path / dir / file I/O is Qt-typed throughout
+  (`QFile` / `QDir` / `QFileInfo` / `QStandardPaths` / `QTextStream` /
+  `QDirIterator`). The wx file-I/O API in the model and most of the GUI
+  is gone. macOS deployment target moved 10.13 → 10.15 on the
+  `_model_src` and top-level `OpenCPN` targets because Qt 6's file-I/O
+  headers expose `std::filesystem::path` overloads guarded by libc++
+  10.15+ availability attributes; Qt 6 itself already needs 10.15+ to
+  link, so this is consistent. Two deliberate boundary buckets remain:
+  (a) the chart-reader `wxInputStream`/`wxOutputStream` interfaces and
+  their consumers (chartimg / chartdbs / cm93 / o_senc / s57chart and
+  the `chartdata_input_stream` wrappers), which feed raw-byte parsers
+  for the on-disk chart binary formats — a chart-reader stream refactor
+  separate from "path/file/dir manipulation"; (b) `wxStandardPaths` in
+  `base_platform.cpp` for macOS bundle paths, where Qt's
+  `QStandardPaths::ConfigLocation` resolves to a different directory
+  (`~/Library/Application Support` vs wx's `~/Library/Preferences`),
+  so existing user configs would move — left wx-typed with a code
+  comment. The wxString-typed `wxStandardPaths& GetStdPaths()` plugin-
+  ABI accessor stays in the same bucket. `wxFileName::CreateTempFile
+  Name` (no Qt equivalent that returns a path) was replaced everywhere
+  with a `QStandardPaths::TempLocation` + pid + msec-since-epoch
+  uniquification helper. `wxTempFile + Commit()` (atomic replace)
+  became `QFile`-to-tmp + `QFile::remove(orig)` + `QFile::rename(tmp,
+  orig)`. `wxTextFile` line-by-line readers became `QFile + QTextStream
+  ::readLine` loops. Plugin-ABI shims (`GetWritableDocumentsDir`,
+  `GetExePath`, `GetRoutepointGPX`, etc.) keep their `wxString` returns
+  but are Qt-typed internally.
