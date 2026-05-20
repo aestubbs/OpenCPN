@@ -7,12 +7,15 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6 done — the comms pipeline,
-decode layer, AIS target data, route/waypoint/track model, route/waypoint
-management, and nav-object DB persistence all run Qt-typed end to end. The
-shared `model/wx_qt_string.h` helpers centralize the remaining wx⇄Qt
-conversions (explicit UTF-8). Next: P1.7 (`wxDateTime` → `QDateTime`).
-**Last updated:** 2026-05-19.
+SignalK/SocketCAN parked (P1.5m). P1.6 and P1.7 done — the model layer's
+`wxString` sweep and the `wxDateTime`/`wxTimeSpan` sweep are both complete.
+The shared `model/wx_qt_string.h` helpers centralize wx⇄Qt string
+conversions; `QDateTime`/`qint64`-seconds is the time/duration vocabulary
+throughout. Remaining wx datetime references are deliberate boundaries:
+the frozen plugin ABI (`PlugIn_*` types), `wxDateTime`-typed wx pickers
+(swept in P1.10), and `wxFileName::GetModificationTime()` callers (P1.10).
+Next: P1.8 (`wxArrayString` / wx containers → Qt/STL).
+**Last updated:** 2026-05-20.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
 Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
@@ -275,7 +278,39 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
           to `nav_object_database.cpp` are deleted; everything now routes
           through `model/wx_qt_string.h`. `wxFileName` / `wxFileExists` /
           `wxRenameFile` stay for P1.10.
-- [ ] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`QTimeSpan` equivalents.
+- [x] **P1.7** Sweep `wxDateTime`/`wxTimeSpan` → `QDateTime`/`qint64`-seconds.
+      `wxTimeSpan` has no Qt equivalent; durations are `qint64` (seconds or
+      milliseconds, commented where ambiguous). Done in 6 steps:
+  - [x] **P1.7-1** Foundation: `datetime` (`getUsrDateTimeFormat`,
+        `toUsrDateTimeFormat`) and `navutil_base` (`ParseGPXDateTime`, the
+        three `formatTimeDelta` overloads collapsed to one). New
+        `StrftimeToQtFormat` bridges strftime codes to Qt's; `QLocale`
+        replaces `wxUILocale`.
+  - [x] **P1.7-2** AIS path: `ais_target_data` (`Ais8_001_22::start/expiry_time`,
+        `m_ack_time`), `ais_decoder` (~36 sites), `comm_ais`, AIS GUI
+        dialogs. Drops wx's `+1` month adjustment (Qt is 1-based).
+  - [x] **P1.7-3** Route/waypoint/track family: `RoutePoint` (`m_seg_etd/eta`
+        `QDateTime`, `m_seg_ete` `qint64`-seconds, ETD parser), `Route`
+        (`m_PlannedDeparture`), `Track`/`TrackPoint` (closes the
+        `AddNewPoint(...,wxDateTime)` boundary the AIS step left).
+        Persistence formats preserved (SQLite Unix seconds, GPX ISO 8601 +
+        `Z`, KML same). Plugin ABI `PlugIn_*::m_CreateTime`/`m_ETD`/
+        `m_PlannedDeparture` stays `wxDateTime`; bridged with
+        `QDateTimeToWxDateTimeUtc`/`WxDateTimeToQDateTimeUtc` helpers.
+  - [x] **P1.7-4** Misc model + comms: `comm_can_util`, `autopilot_output`,
+        `garmin_protocol_mgr`, `comm_drv_n2k_net`, `gui_vars`
+        (`g_loglast_time`/`g_start_time`/`gTimeSource` → `QDateTime`),
+        `notification_manager`(`_gui`).
+  - [x] **P1.7-5** GUI shell: `ocpn_frame` (+ header), `ocpn_app`, `chcanv`
+        (+ header), `concanv`, `navutil`, `pluginmanager`, `ocpn_plugin_gui`,
+        `route_prop_dlg_impl` leftovers.
+  - [x] **P1.7-6** Tides/charts + final mop-up: `tc_win`/`tcmgr` (dropped
+        the wx 3.0.2 ToGMT-with-DST workaround; Qt's `offsetFromUtc()` /
+        `isDaylightTime()` are correct), `chartdbs`/`chartdb`/`chartimg`/
+        `cm93`/`s57chart`/`o_senc` (chart edition / last-modified dates,
+        `ChartBase::m_EdDate` → `QDateTime`), `time_textbox` kept hybrid
+        (wxTimePickerCtrl-compat shim — pickers go in P1.10), wx file-time
+        boundary call sites adapted.
 - [ ] **P1.8** Replace wx containers (`wxArrayString` etc.) with Qt/STL.
 - [ ] **P1.9** Replace `wxConfig`/`wxFileConfig` with `QSettings`; abstract `config_vars`.
 - [ ] **P1.10** Replace file I/O (`wxFileName`/`wxDir`/`chartdata_input_stream`) with `QFile`/`QDir`.
@@ -590,3 +625,18 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   `wxDateTime`/`wxTimer`/`wxBitmap`/`wxFileName`/`wxJSONValue`/`_()` etc.
   remain for their dedicated phases (P1.7 / P1.11 / P1.14 / P1.10 / P1.12 /
   P3.10).
+- 2026-05-20 — P1.7 done: the model `wxDateTime`/`wxTimeSpan` sweep is
+  closed in 6 steps. `QDateTime` is the time vocabulary; durations are
+  `qint64` (seconds unless commented). The strftime↔Qt format-code gap is
+  bridged by a `StrftimeToQtFormat` helper in `model/datetime.cpp`; ISO 8601
+  uses `Qt::ISODate`; locale-dependent formats go via `QLocale::system()`.
+  Wire/on-disk formats preserved (SQLite Unix seconds, GPX/KML ISO 8601 +
+  `Z`). The wx 3.0.2 `ToGMT()`-with-DST workaround in tides is dropped —
+  Qt's `offsetFromUtc()` / `isDaylightTime()` are correct. Remaining
+  `wxDateTime`/`wxTimeSpan`/`wxLongLong` references are all in deliberate
+  boundary buckets: the frozen plugin ABI (`PlugIn_*` types, the
+  `pluginmanager` and `api_121` / `ocpn_plugin_gui` bridges,
+  `toUsrDateTimeFormat_Plugin`), `wxDatePickerCtrl`/`wxTimePickerCtrl`
+  pickers (swept with the GUI pickers in P1.10), `wxFileName::Get*Time()`
+  callers (P1.10), and the `time_textbox.h` `wxTimePickerCtrl`-compat shim
+  (also P1.10).
