@@ -24,6 +24,11 @@
 #include <fstream>
 #include <sstream>
 
+#include <QFile>
+#include <QTextStream>
+
+#include "model/wx_qt_string.h"
+
 #include <wx/wxprec.h>
 
 #ifndef WX_PRECOMP
@@ -441,14 +446,17 @@ void About::OnNBPageChange(wxNotebookEvent& event) {
 
     pLicenseHTMLCtl->SetFonts(face, face, sizes);
 
-    wxTextFile license_filea(m_DataLocn + "license.txt");
-    if (license_filea.Open()) {
-      for (wxString str = license_filea.GetFirstLine(); !license_filea.Eof();
-           str = license_filea.GetNextLine())
-        licenseText.Append(str + "<br>");
-      license_filea.Close();
-    } else {
-      wxLogMessage("Could not open License file: " + m_DataLocn);
+    {
+      QFile license_filea(wxString_to_QString(m_DataLocn + "license.txt"));
+      if (license_filea.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&license_filea);
+        while (!in.atEnd()) {
+          licenseText.Append(QString_to_wxString(in.readLine()) + "<br>");
+        }
+        license_filea.close();
+      } else {
+        wxLogMessage("Could not open License file: " + m_DataLocn);
+      }
     }
 
     wxString suppLicense = g_BasePlatform->GetSupplementalLicenseString();
@@ -491,21 +499,21 @@ void About::OnCopyClick(wxCommandEvent& event) {
                           ? g_BasePlatform->GetLogFileName()
                           : g_BasePlatform->GetConfigFileName();
 
-  wxFFile file(filename);
+  QFile file(wxString_to_QString(filename));
 
-  if (!file.IsOpened()) {
+  if (!file.open(QIODevice::ReadOnly)) {
     wxLogMessage("Failed to open file for Copy to Clipboard.");
     return;
   }
 
   wxString fileContent;
-  char buf[1024];
-  while (!file.Eof()) {
-    int c = file.Read(&buf, 1024);
-    if (c) fileContent += wxString(buf, wxConvUTF8, c);
+  while (!file.atEnd()) {
+    QByteArray chunk = file.read(1024);
+    if (!chunk.isEmpty())
+      fileContent += wxString(chunk.constData(), wxConvUTF8, chunk.size());
   }
 
-  file.Close();
+  file.close();
   int length = fileContent.Length();
 
   if (event.GetId() == ID_COPYLOG) {

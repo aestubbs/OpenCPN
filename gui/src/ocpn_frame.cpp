@@ -86,6 +86,8 @@
 #include "model/nav_object_database.h"
 #include "model/navutil_base.h"
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QLocale>
 
 #include "model/notification_manager.h"
@@ -279,14 +281,14 @@ static void LaunchLocalHelp() {
 
   wxString help_try = help_locn + def_lang_canonical + ".html";
 
-  if (!::wxFileExists(help_try)) {
+  if (!QFile::exists(wxString_to_QString(help_try))) {
     help_try = help_locn + "en_US" + ".html";
 
-    if (!::wxFileExists(help_try)) {
+    if (!QFile::exists(wxString_to_QString(help_try))) {
       help_try = help_locn + "web" + ".html";
     }
 
-    if (!::wxFileExists(help_try)) return;
+    if (!QFile::exists(wxString_to_QString(help_try))) return;
   }
 
   wxLaunchDefaultBrowser(wxString("file:///") + help_try);
@@ -4678,7 +4680,7 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
       if (!g_params.empty()) {
         for (size_t n = 0; n < g_params.size(); n++) {
           wxString path = g_params[n];
-          if (::wxFileExists(path)) {
+          if (QFile::exists(wxString_to_QString(path))) {
             NavObjectCollection1 *pSet = new NavObjectCollection1;
             pSet->load_file(path.fn_str());
             int wpt_dups;
@@ -4745,7 +4747,7 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
       appendOSDirSlash(&layerdir);
       layerdir.Append("layers");
 
-      if (wxDir::Exists(layerdir)) {
+      if (QDir(wxString_to_QString(layerdir)).exists()) {
         wxString laymsg;
         laymsg.Printf("Getting .gpx layer files from: %s", layerdir.c_str());
         wxLogMessage(laymsg);

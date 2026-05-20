@@ -34,7 +34,14 @@
 #include <typeinfo>
 #include <unordered_map>
 
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QTextStream>
 
 #include "model/wx_qt_string.h"
 #include "config_compat_helpers.h"
@@ -440,7 +447,8 @@ static SemanticVersion metadata_version(const PluginMetadata pm) {
 SemanticVersion getInstalledVersion(const std::string name) {
   std::string installed;
   std::string path = PluginHandler::VersionPath(name);
-  if (path == "" || !wxFileName::IsFileReadable(path)) {
+  if (path == "" ||
+      !QFileInfo(QString::fromStdString(path)).isReadable()) {
     return SemanticVersion(-1, -1);
   }
   std::ifstream stream;
@@ -570,8 +578,8 @@ static void run_update_dialog(PluginListPanel* parent, const PlugInData* pic,
     if (bOK) {
       wxLogMessage("Installation of %s successful", update.name.c_str());
       wxURI uri(wxString(update.tarball_url.c_str()));
-      wxFileName fn(uri.GetPath());
-      std::string basename = fn.GetFullName().ToStdString();
+      QFileInfo fn(wxString_to_QString(uri.GetPath()));
+      std::string basename = fn.fileName().toStdString();
 
       if (ocpn::store_tarball(tempTarballPath.c_str(), basename.c_str())) {
         wxLogDebug("Copied %s to local cache at %s", tempTarballPath.c_str(),
@@ -592,12 +600,13 @@ static void run_update_dialog(PluginListPanel* parent, const PlugInData* pic,
 #endif
 
   std::string manifestPath = PluginHandler::FileListPath(update.name);
-  wxTextFile manifest_file(manifestPath);
+  QFile manifest_file(QString::fromStdString(manifestPath));
   wxString pluginFile;
-  if (manifest_file.Open()) {
+  if (manifest_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
     wxString val;
-    for (wxString str = manifest_file.GetFirstLine(); !manifest_file.Eof();
-         str = manifest_file.GetNextLine()) {
+    QTextStream manifest_stream(&manifest_file);
+    while (!manifest_stream.atEnd()) {
+      wxString str = QString_to_wxString(manifest_stream.readLine());
       if (str.Contains(pispec)) {
         if (getenv("OCPN_KEEP_PLUGINS")) {
           // Undocumented debug hook
@@ -622,8 +631,8 @@ static void run_update_dialog(PluginListPanel* parent, const PlugInData* pic,
 
   if (b_forceEnable && pluginFile.Length()) {
     wxString config_section = (_T ( "/PlugIns/" ));
-    wxFileName fn(pluginFile);
-    config_section += fn.GetFullName();
+    QFileInfo fn(wxString_to_QString(pluginFile));
+    config_section += QString_to_wxString(fn.fileName());
     pConfig->endAllGroups();
     {
       QString section = wxString_to_QString(config_section);
@@ -2313,7 +2322,11 @@ void CatalogMgrPanel::OnUpdateButton(wxCommandEvent& event) {
   }
   // Download to a temp file
   std::string filePath =
-      wxFileName::CreateTempFileName("ocpn_dl").ToStdString();
+      (QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+       QDir::separator() + "ocpn_dl_" +
+       QString::number(QCoreApplication::applicationPid()) + "_" +
+       QString::number(QDateTime::currentMSecsSinceEpoch()))
+          .toStdString();
 
   auto catalogHdlr = CatalogHandler::GetInstance();
 
@@ -2331,22 +2344,26 @@ void CatalogMgrPanel::OnUpdateButton(wxCommandEvent& event) {
 
   // TODO Validate xml using xsd here....
 #ifdef __ANDROID__
-  if (!AndroidSecureCopyFile(wxString(filePath.c_str()),
-                             g_Platform->GetPrivateDataDir() +
-                                 wxFileName::GetPathSeparator() +
-                                 "ocpn-plugins.xml")) {
+  if (!AndroidSecureCopyFile(
+          wxString(filePath.c_str()),
+          g_Platform->GetPrivateDataDir() +
+              QChar(QDir::separator()).toLatin1() + "ocpn-plugins.xml")) {
     OCPNMessageBox(this, _("Unable to copy catalog file"),
                    _("OpenCPN Catalog update"), wxICON_ERROR | wxOK);
     return;
   }
 #else
   // Copy the downloaded file to proper local location
-  if (!wxCopyFile(wxString(filePath.c_str()),
-                  g_Platform->GetPrivateDataDir() +
-                      wxFileName::GetPathSeparator() + "ocpn-plugins.xml")) {
-    OCPNMessageBox(this, _("Unable to copy catalog file"),
-                   _("OpenCPN Catalog update"), wxICON_ERROR | wxOK);
-    return;
+  {
+    QString src = QString::fromStdString(filePath);
+    QString dest = wxString_to_QString(g_Platform->GetPrivateDataDir()) +
+                   QDir::separator() + "ocpn-plugins.xml";
+    QFile::remove(dest);
+    if (!QFile::copy(src, dest)) {
+      OCPNMessageBox(this, _("Unable to copy catalog file"),
+                     _("OpenCPN Catalog update"), wxICON_ERROR | wxOK);
+      return;
+    }
   }
 #endif
 
@@ -2498,7 +2515,7 @@ wxString CatalogMgrPanel::GetImportInitDir() {
           ? QString_to_wxString(
                 pConfig->value("LatestImportDir").toString())
           : g_Platform->GetWritableDocumentsDir();
-  if (wxDirExists(lastImportDir)) {
+  if (QDir(wxString_to_QString(lastImportDir)).exists()) {
     return lastImportDir;
   }
   return (g_Platform->GetWritableDocumentsDir());
@@ -2885,10 +2902,13 @@ PluginPanel::PluginPanel(wxPanel* parent, wxWindowID id, const wxPoint& pos,
   }
   wxBitmap bitmap;
   if (m_plugin.m_status == PluginStatus::ManagedInstallAvailable) {
-    wxFileName path(g_Platform->GetSharedDataDir(), "packageBox.svg");
-    path.AppendDir("uidata");
-    path.AppendDir("traditional");  //  FIXME(leamas) cache it.
-    bitmap = LoadSVG(path.GetFullPath(), icon_scale, icon_scale);
+    QString sharedDir = wxString_to_QString(g_Platform->GetSharedDataDir());
+    if (!sharedDir.endsWith(QDir::separator()))
+      sharedDir += QDir::separator();
+    QString fullPath =
+        sharedDir + "uidata" + QDir::separator() + "traditional" +
+        QDir::separator() + "packageBox.svg";  //  FIXME(leamas) cache it.
+    bitmap = LoadSVG(QString_to_wxString(fullPath), icon_scale, icon_scale);
   } else if (plugin_icon.IsOk()) {
     int nowSize = plugin_icon.GetWidth();
     plugin_icon.Rescale(icon_scale, icon_scale, wxIMAGE_QUALITY_HIGH);
@@ -3065,19 +3085,21 @@ PluginPanel::PluginPanel(wxPanel* parent, wxWindowID id, const wxPoint& pos,
         icon_by_status.at(PluginStatus::ManagedInstalledUpdateAvailable);
   }
 
-  wxFileName path(g_Platform->GetSharedDataDir(), icon_name);
-  path.AppendDir("uidata");
-  path.AppendDir("traditional");
+  QString sharedDir = wxString_to_QString(g_Platform->GetSharedDataDir());
+  if (!sharedDir.endsWith(QDir::separator())) sharedDir += QDir::separator();
+  QString pathFull = sharedDir + "uidata" + QDir::separator() + "traditional" +
+                     QDir::separator() + wxString_to_QString(icon_name);
+  QFileInfo path(pathFull);
   bool ok = false;
   int bmsize = GetCharWidth() * 3 * dpi_mult;
-  if (path.IsFileReadable()) {
-    statusBitmap = LoadSVG(path.GetFullPath(), bmsize, bmsize);
+  if (path.isReadable()) {
+    statusBitmap = LoadSVG(QString_to_wxString(pathFull), bmsize, bmsize);
     ok = statusBitmap.IsOk();
   }
   if (!ok) {
     auto style = g_StyleManager->GetCurrentStyle();
     statusBitmap = wxBitmap(style->GetIcon("default_pi", bmsize, bmsize));
-    wxLogMessage("Icon: %s not found.", path.GetFullPath());
+    wxLogMessage("Icon: %s not found.", QString_to_wxString(pathFull));
   }
 
   m_itemStatusIconBitmap = new wxStaticBitmap(this, wxID_ANY, statusBitmap);
@@ -5329,8 +5351,13 @@ _OCPN_DLStatus OCPN_downloadFile(const wxString& url,
   }
 
 #elif defined(OCPN_USE_CURL)
-  wxFileName tfn = wxFileName::CreateTempFileName(outputFile);
-  wxFileOutputStream output(tfn.GetFullPath());
+  QString tfnPath =
+      QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+      QDir::separator() + QFileInfo(wxString_to_QString(outputFile)).fileName() +
+      "_" + QString::number(QCoreApplication::applicationPid()) + "_" +
+      QString::number(QDateTime::currentMSecsSinceEpoch());
+  wxString tfnFull = QString_to_wxString(tfnPath);
+  wxFileOutputStream output(tfnFull);
 
   wxCurlDownloadDialog ddlg(url, &output, title, message + url, bitmap, parent,
                             style);
@@ -5341,7 +5368,8 @@ _OCPN_DLStatus OCPN_downloadFile(const wxString& url,
 
   switch (ret) {
     case wxCDRF_SUCCESS: {
-      if (wxCopyFile(tfn.GetFullPath(), outputFile))
+      QFile::remove(wxString_to_QString(outputFile));
+      if (QFile::copy(tfnPath, wxString_to_QString(outputFile)))
         result = OCPN_DL_NO_ERROR;
       else
         result = OCPN_DL_FAILED;
@@ -5359,7 +5387,7 @@ _OCPN_DLStatus OCPN_downloadFile(const wxString& url,
       wxASSERT(false);  // This should never happen because we handle all
                         // possible cases of ret
   }
-  if (wxFileExists(tfn.GetFullPath())) wxRemoveFile(tfn.GetFullPath());
+  if (QFile::exists(tfnPath)) QFile::remove(tfnPath);
   return result;
 
 #else

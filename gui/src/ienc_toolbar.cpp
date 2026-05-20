@@ -23,6 +23,12 @@
 
 #include "config.h"
 
+#include <QDir>
+#include <QFile>
+#include <QString>
+
+#include "model/wx_qt_string.h"
+
 #include <wx/wxprec.h>
 
 #ifndef WX_PRECOMP
@@ -110,12 +116,12 @@ void iENCToolbar::SetColorScheme(ColorScheme cs) {
 
 void iENCToolbar::LoadToolBitmaps() {
   wxString svgDir = g_Platform->GetSharedDataDir() + "uidata" +
-                    wxFileName::GetPathSeparator();
+                    QChar(QDir::separator()).toLatin1();
 
   int w = 96;
   int h = 32;
 
-  if (::wxFileExists(svgDir + "iENC_All.svg")) {
+  if (QFile::exists(wxString_to_QString(svgDir + "iENC_All.svg"))) {
     m_bmAll = LoadSVG(svgDir + "iENC_All.svg", w, h);
     m_bmMinimum = LoadSVG(svgDir + "iENC_Minimum.svg", w, h);
     m_bmStandard = LoadSVG(svgDir + "iENC_Standard.svg", w, h);

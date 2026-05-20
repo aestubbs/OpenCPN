@@ -168,6 +168,11 @@ static inline wxString ttCoordFormat() {
 #include <QtWidgets/QScroller>
 #endif
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
 #include <QString>
 #include <QStringList>
 
@@ -318,7 +323,7 @@ public:
     textMod.Replace(" ", "^");
 
     // Replace all path separators with spaces
-    wxString sep = wxFileName::GetPathSeparator();
+    wxString sep = QChar(QDir::separator()).toLatin1();
     textMod.Replace(sep, " ");
 
     Wrap(win, textMod, widthMax);
@@ -7050,16 +7055,17 @@ void options::OnButtonaddClick(wxCommandEvent& event) {
 }
 
 void options::AddChartDir(const wxString& dir) {
-  wxFileName dirname = wxFileName(dir);
+  QFileInfo dirname(wxString_to_QString(dir));
   pInit_Chart_Dir->Empty();
 
   wxString dirAdd;
   if (g_bportable) {
-    wxFileName f(dir);
-    f.MakeRelativeTo(g_Platform->GetHomeDir());
-    dirAdd = f.GetFullPath();
+    QDir home(wxString_to_QString(g_Platform->GetHomeDir()));
+    dirAdd = QString_to_wxString(
+        home.relativeFilePath(QFileInfo(wxString_to_QString(dir))
+                                  .absoluteFilePath()));
   } else {
-    pInit_Chart_Dir->Append(dirname.GetPath());
+    pInit_Chart_Dir->Append(QString_to_wxString(dirname.absolutePath()));
     dirAdd = dir;
   }
 
@@ -8203,7 +8209,7 @@ void options::OnButtonmigrateClick(wxCommandEvent& event) {
 void options::OnButtonEcdisHelp(wxCommandEvent& event) {
   wxString testFile = "/doc/iECDIS/index.html";
 
-  if (!::wxFileExists(testFile)) {
+  if (!QFile::exists(wxString_to_QString(testFile))) {
     wxString msg = _("The Inland ECDIS Manual is not available locally.");
     msg += "\n";
     msg +=
@@ -8276,12 +8282,14 @@ They can be decompressed again using unxz or 7 zip programs."),
            (dirname.Last() == wxChar(_T('\r'))))
       dirname.RemoveLast();
 
-    if (!wxDir::Exists(dirname)) continue;
+    if (!QDir(wxString_to_QString(dirname)).exists()) continue;
 
-    wxDir dir(dirname);
     wxArrayString FileList;
     for (unsigned int j = 0; j < filespecs.GetCount(); j++) {
-      dir.GetAllFiles(dirname, &FileList, filespecs[j]);
+      QDirIterator it(wxString_to_QString(dirname),
+                      {wxString_to_QString(filespecs[j])}, QDir::Files,
+                      QDirIterator::Subdirectories);
+      while (it.hasNext()) FileList.Add(QString_to_wxString(it.next()));
       bool skip = false;
       prog1.Update(i * filespecs.GetCount() + j, dirname + filespecs[j], &skip);
       if (skip) return;
@@ -8313,9 +8321,10 @@ They can be decompressed again using unxz or 7 zip programs."),
 
     wxString compchart = charts[i] + ".xz";
     if (CompressChart(charts[i], compchart)) {
-      total_size += wxFileName::GetSize(charts[i]).ToULong();
-      total_compressed_size += wxFileName::GetSize(compchart).ToULong();
-      wxRemoveFile(charts[i]);
+      total_size += QFileInfo(wxString_to_QString(charts[i])).size();
+      total_compressed_size +=
+          QFileInfo(wxString_to_QString(compchart)).size();
+      QFile::remove(wxString_to_QString(charts[i]));
       count++;
     }
   }
@@ -8684,7 +8693,7 @@ void options::DoOnPageChange(size_t page) {
 
           //  Look explicitely to see if .mo is available
           wxString test_dir = lang_dir + lang_suffix;
-          if (!wxDir::Exists(test_dir)) continue;
+          if (!QDir(wxString_to_QString(test_dir)).exists()) continue;
 
           m_itemLangListBox->Append(loc_lang_name);
         }
@@ -8702,8 +8711,14 @@ void options::DoOnPageChange(size_t page) {
           wxLocale ltest(lang_list[it], 0);
 #if wxCHECK_VERSION(2, 9, 0)
 #ifdef __WXGTK__
-          ltest.AddCatalogLookupPathPrefix(
-              wxStandardPaths::Get().GetInstallPrefix() + "/share/locale");
+          {
+            // Use install prefix derived from the executable directory:
+            // .../prefix/bin/opencpn -> prefix
+            QDir appDir(QCoreApplication::applicationDirPath());
+            appDir.cdUp();
+            ltest.AddCatalogLookupPathPrefix(
+                QString_to_wxString(appDir.absolutePath()) + "/share/locale");
+          }
 #endif
 #endif
           ltest.AddCatalog("opencpn");
@@ -9139,7 +9154,8 @@ void ChartGroupsUI::OnInsertChartItem(wxCommandEvent& event) {
               new wxDirItemData(insert_candidate, insert_candidate, TRUE);
           wxTreeItemId id =
               ptree->AppendItem(root_Id, insert_candidate, 0, -1, dir_item);
-          if (wxDir::Exists(insert_candidate)) ptree->SetItemHasChildren(id);
+          if (QDir(wxString_to_QString(insert_candidate)).exists())
+            ptree->SetItemHasChildren(id);
         }
 
         pGroup->m_element_array.push_back({insert_candidate});
@@ -9403,7 +9419,8 @@ void ChartGroupsUI::BuildNotebookPages(ChartGroupArray* pGroupArray) {
         wxTreeItemId id =
             ptc->AppendItem(ptc->GetRootItem(), itemname, 0, -1, dir_item);
 
-        if (wxDir::Exists(itemname)) ptc->SetItemHasChildren(id);
+        if (QDir(wxString_to_QString(itemname)).exists())
+          ptc->SetItemHasChildren(id);
       }
     }
   }
@@ -9469,8 +9486,8 @@ void options::OnInsertTideDataLocation(wxCommandEvent& event) {
     tcDataSelected->SetItem(id, 0, g_Platform->NormalizePath(sel_file));
 
     //    Record the currently selected directory for later use
-    wxFileName fn(sel_file);
-    wxString data_dir = fn.GetPath();
+    QFileInfo fn(wxString_to_QString(sel_file));
+    wxString data_dir = QString_to_wxString(fn.absolutePath());
     g_TCData_Dir = g_Platform->NormalizePath(data_dir);
   }
 }
@@ -9679,11 +9696,10 @@ void OpenGLOptionsDlg::OnButtonClear(wxCommandEvent& event) {
     appendOSDirSlash(&path);
     path.append("raster_texture_cache");
 
-    if (::wxDirExists(path)) {
-      wxArrayString files;
-      size_t nfiles = wxDir::GetAllFiles(path, &files);
-      for (unsigned int i = 0; i < files.GetCount(); i++)
-        ::wxRemoveFile(files[i]);
+    if (QDir(wxString_to_QString(path)).exists()) {
+      QDirIterator it(wxString_to_QString(path), QDir::Files,
+                      QDirIterator::Subdirectories);
+      while (it.hasNext()) QFile::remove(it.next());
     }
 
     m_cacheSize->SetLabel(_("Size: ") + GetTextureCacheSize());
@@ -9697,11 +9713,10 @@ wxString OpenGLOptionsDlg::GetTextureCacheSize() {
   path.append("raster_texture_cache");
   long long total = 0;
 
-  if (::wxDirExists(path)) {
-    wxArrayString files;
-    size_t nfiles = wxDir::GetAllFiles(path, &files);
-    for (unsigned int i = 0; i < files.GetCount(); i++)
-      total += wxFile(files[i]).Length();
+  if (QDir(wxString_to_QString(path)).exists()) {
+    QDirIterator it(wxString_to_QString(path), QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) total += QFileInfo(it.next()).size();
   }
   double mb = total / (1024.0 * 1024.0);
   if (mb < 10000.0) return wxString::Format("%.1f MB", mb);

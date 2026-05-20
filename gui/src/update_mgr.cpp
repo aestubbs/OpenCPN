@@ -27,6 +27,12 @@
 #include <set>
 #include <sstream>
 
+#include <QDir>
+#include <QFileInfo>
+#include <QString>
+
+#include "model/wx_qt_string.h"
+
 #include <wx/bitmap.h>
 #include <wx/button.h>
 #include <wx/debug.h>
@@ -139,20 +145,23 @@ protected:
   const std::string m_plugin_name;
 
   void LoadIcon(const char* plugin_name, wxBitmap& bitmap, int size = 32) {
-    wxFileName path(g_Platform->GetSharedDataDir(), plugin_name);
-    path.AppendDir("uidata");
-    path.AppendDir("traditional");
+    QString sharedDir = wxString_to_QString(g_Platform->GetSharedDataDir());
+    if (!sharedDir.endsWith(QDir::separator())) sharedDir += QDir::separator();
+    QString fullPath = sharedDir + "uidata" + QDir::separator() + "traditional" +
+                       QDir::separator() + plugin_name;
+    QFileInfo path(fullPath);
     bool ok = false;
 
-    if (path.IsFileReadable()) {
-      bitmap = LoadSVG(path.GetFullPath(), size, size);
+    if (path.isReadable()) {
+      bitmap = LoadSVG(QString_to_wxString(fullPath), size, size);
       ok = bitmap.IsOk();
     }
 
     if (!ok) {
       auto style = g_StyleManager->GetCurrentStyle();
       bitmap = wxBitmap(style->GetIcon("default_pi", size, size));
-      wxLogMessage("Icon: %s not found.", path.GetFullPath());
+      wxLogMessage("Icon: %s not found.",
+                   QString_to_wxString(path.absoluteFilePath()));
     }
   }
 };

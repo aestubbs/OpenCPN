@@ -29,6 +29,10 @@
 #include <list>
 #include <vector>
 
+#include <QFileInfo>
+
+#include "model/wx_qt_string.h"
+
 #include <wx/wxprec.h>
 
 #ifndef WX_PRECOMP
@@ -1238,8 +1242,11 @@ wxString GshhsReader::getFileName_rivers(int quality) {
 
 //-----------------------------------------------------------------------
 bool GshhsReader::gshhsFilesExists(int quality) {
-  if (!wxFile::Access(GshhsReader::getFileName_Land(quality), wxFile::read))
-    return false;
+  {
+    QFileInfo landFi(
+        wxString_to_QString(GshhsReader::getFileName_Land(quality)));
+    if (!landFi.exists() || !landFi.isReadable()) return false;
+  }
   // Borders disabled anyway since the perf optimizations if( ! wxFile::Access(
   // GshhsReader::getFileName_boundaries( quality ), wxFile::read ) ) return
   // false; Rivers disabled anyway since the perf optimizations if( !

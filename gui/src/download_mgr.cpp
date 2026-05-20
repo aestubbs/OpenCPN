@@ -30,6 +30,11 @@
 #include <set>
 #include <sstream>
 
+#include <QFileInfo>
+#include <QString>
+
+#include "model/wx_qt_string.h"
+
 #include <wx/bitmap.h>
 #include <wx/button.h>
 #include <wx/debug.h>
@@ -171,8 +176,8 @@ std::string GuiDownloader::run(wxWindow* parent, bool remove_current) {
   if (downloaded) {
     // Cache the tarball from the tmp location to the plugin cache.
     wxURI uri(wxString(m_plugin.tarball_url.c_str()));
-    wxFileName fn(uri.GetPath());
-    auto basename = fn.GetFullName().ToStdString();
+    QFileInfo fn(wxString_to_QString(uri.GetPath()));
+    auto basename = fn.fileName().toStdString();
     if (ocpn::store_tarball(path.c_str(), basename.c_str())) {
       wxLogMessage("Copied %s to local cache at %s", path.c_str(),
                    basename.c_str());

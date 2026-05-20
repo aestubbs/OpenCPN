@@ -24,6 +24,8 @@
 
 #include "gl_headers.h"
 
+#include <QDir>
+
 #include <wx/colour.h>
 #include <wx/gdicmn.h>
 #include <wx/pen.h>
@@ -790,7 +792,7 @@ void RoutePointGui::EnableDragHandle(bool bEnable) {
 
       // What icon?
       wxString UserIconPath = g_Platform->GetSharedDataDir() + "uidata" +
-                              wxFileName::GetPathSeparator();
+                              QChar(QDir::separator()).toLatin1();
 
       m_point.m_dragIcon = LoadSVG(UserIconPath + "DragHandle.svg", bm_size,
                                    bm_size, m_point.m_pbmIcon);

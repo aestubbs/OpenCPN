@@ -33,9 +33,11 @@
 #endif
 
 #include <QDateTime>
+#include <QFile>
 #include <QRegularExpression>
 #include <QString>
 #include <QStringList>
+#include <QTextStream>
 #include <QtGlobal>  // qInfo / qWarning
 
 #include <wx/wxprec.h>
@@ -43,11 +45,9 @@
 #include <wx/wx.h>
 #endif
 
-#include <wx/event.h>     // wxEvtHandler / wxTimer -- P1.11
-#include <wx/string.h>    // wxString -- MmsiProperties + name-file boundary
-#include <wx/textfile.h>  // wxTextFile -- P1.10
-#include <wx/timer.h>     // wxTimer -- P1.11
-#include <wx/filename.h>  // wxFileName -- P1.10
+#include <wx/event.h>   // wxEvtHandler / wxTimer -- P1.11
+#include <wx/string.h>  // wxString -- MmsiProperties + name-file boundary
+#include <wx/timer.h>   // wxTimer -- P1.11
 
 // Be sure to include these before ais_decoder.h
 // to avoid a conflict with rapidjson/fwd.h
@@ -1240,33 +1240,30 @@ AisDecoder::AisDecoder(const AisDecoderCallbacks &callbacks)
   AISTargetNamesNC = new AIS_Target_Name_Hash;
 
   if (g_benableAISNameCache) {
-    if (wxFileName::FileExists(AISTargetNameFileName)) {
-      wxTextFile infile;
-      if (infile.Open(AISTargetNameFileName)) {
+    QString aisFile = wxString_to_QString(AISTargetNameFileName);
+    if (QFile::exists(aisFile)) {
+      QFile infile(aisFile);
+      if (infile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         AIS_Target_Name_Hash *HashFile = AISTargetNamesNC;
-        wxString line = infile.GetFirstLine();
-        while (!infile.Eof()) {
-          if (line.IsSameAs("+++==Confirmed Entry's==+++"))
+        QTextStream in(&infile);
+        while (!in.atEnd()) {
+          QString line = in.readLine();
+          if (line == QStringLiteral("+++==Confirmed Entry's==+++"))
             HashFile = AISTargetNamesC;
+          else if (line == QStringLiteral("+++==Non Confirmed Entry's==+++"))
+            HashFile = AISTargetNamesNC;
           else {
-            if (line.IsSameAs("+++==Non Confirmed Entry's==+++"))
-              HashFile = AISTargetNamesNC;
-            else {
-              // line is wxString (wxTextFile); split via QString locally
-              QStringList parts = QString::fromStdString(line.ToStdString())
-                                      .split(',', Qt::KeepEmptyParts);
-              int mmsi = parts.size() > 0 ? parts[0].toInt() : 0;
-              wxString name =
-                  parts.size() > 1
-                      ? wxString::FromUTF8(parts[1].trimmed().toStdString())
-                      : wxString();
-              (*HashFile)[mmsi] = name;
-            }
+            QStringList parts = line.split(',', Qt::KeepEmptyParts);
+            int mmsi = parts.size() > 0 ? parts[0].toInt() : 0;
+            wxString name =
+                parts.size() > 1
+                    ? wxString::FromUTF8(parts[1].trimmed().toStdString())
+                    : wxString();
+            (*HashFile)[mmsi] = name;
           }
-          line = infile.GetNextLine();
         }
+        infile.close();
       }
-      infile.Close();
     }
   }
 
@@ -1300,25 +1297,26 @@ AisDecoder::~AisDecoder() {
   //     delete td;
   //   }
 
-  // Write mmsi-shipsname to file in a safe way
-  wxTempFile outfile;
-  if (outfile.Open(AISTargetNameFileName)) {
-    wxString content = "+++==Confirmed Entry's==+++";
+  // Write mmsi-shipsname to file in a safe way (atomic temp + rename)
+  QString aisFile = wxString_to_QString(AISTargetNameFileName);
+  QString tmpFile = aisFile + ".tmp";
+  QFile outfile(tmpFile);
+  if (outfile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    QTextStream out(&outfile);
+    out << "+++==Confirmed Entry's==+++";
     AIS_Target_Name_Hash::iterator it;
     for (it = AISTargetNamesC->begin(); it != AISTargetNamesC->end(); ++it) {
-      content.append("\r\n");
-      content.append(wxString::Format("%i", it.key()));
-      content.append(",").append(it.value());
+      out << "\r\n" << it.key() << "," << wxString_to_QString(it.value());
     }
-    content.append("\r\n");
-    content.append("+++==Non Confirmed Entry's==+++");
+    out << "\r\n";
+    out << "+++==Non Confirmed Entry's==+++";
     for (it = AISTargetNamesNC->begin(); it != AISTargetNamesNC->end(); ++it) {
-      content.append("\r\n");
-      content.append(wxString::Format("%i", it.key()));
-      content.append(",").append(it.value());
+      out << "\r\n" << it.key() << "," << wxString_to_QString(it.value());
     }
-    outfile.Write(content);
-    outfile.Commit();
+    out.flush();
+    outfile.close();
+    QFile::remove(aisFile);
+    QFile::rename(tmpFile, aisFile);
   }
 
   AISTargetNamesC->clear();

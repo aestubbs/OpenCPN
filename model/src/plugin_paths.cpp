@@ -29,9 +29,14 @@
 
 #include <sstream>
 
-#include <wx/filename.h>
+#include <QDir>
+#include <QFileInfo>
+#include <QString>
+
 #include <wx/platinfo.h>
 #include <wx/string.h>
+
+#include "model/wx_qt_string.h"
 
 #include "config.h"
 
@@ -52,9 +57,10 @@ static std::vector<std::string> split(const std::string& s, char delimiter) {
 }
 
 static std::string expand(const std::string& s) {
-  wxFileName fn(s);
-  fn.Normalize();
-  return fn.GetFullPath().ToStdString();
+  QFileInfo fi(QString::fromStdString(s));
+  QString canon = fi.canonicalFilePath();
+  if (canon.isEmpty()) canon = fi.absoluteFilePath();
+  return canon.toStdString();
 }
 
 PluginPaths* PluginPaths::GetInstance() {
@@ -143,8 +149,8 @@ void PluginPaths::InitLinuxPaths() {
   ssize_t len = readlink("/proc/self/exe", exe_buf, 99);
   if (len > 0) {
     exe_buf[len] = '\0';
-    wxFileName fn(exe_buf);
-    std::string path = fn.GetPath().ToStdString();
+    QFileInfo fn(QString::fromUtf8(exe_buf));
+    std::string path = fn.absolutePath().toStdString();
     base_plugin_paths.push_back(expand(path + "/../lib/opencpn"));
     if (g_BasePlatform->GetOSDetail()->osd_arch.find("64") != string::npos) {
       base_plugin_paths.push_back(expand(path + "/../lib64/opencpn"));
@@ -199,11 +205,14 @@ void PluginPaths::InitApplePaths() {
   m_user_datadir = mac_home + "/Contents";
 
   m_libdirs.push_back(m_userLibdir);
-  wxFileName fn_exe(g_BasePlatform->GetExePath());
-  fn_exe.RemoveLastDir();
-  string exeLibDir =
-      fn_exe.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR).ToStdString() +
-      "PlugIns";
+  // exePath = .../OpenCPN.app/Contents/MacOS/OpenCPN
+  // Take the exe's directory (.../MacOS), then go up one level to Contents/,
+  // then append PlugIns -- mirrors the legacy wxFileName::RemoveLastDir +
+  // GetPath() sequence.
+  QFileInfo fn_exe(wxString_to_QString(g_BasePlatform->GetExePath()));
+  QDir exeDir = fn_exe.absoluteDir();  // .../MacOS
+  exeDir.cdUp();                       // .../Contents
+  string exeLibDir = exeDir.absolutePath().toStdString() + "/PlugIns";
   m_libdirs.push_back(exeLibDir);
   // m_libdirs.push_back("/Applications/OpenCPN.app/Contents/Plugins");
   m_bindirs = m_libdirs;

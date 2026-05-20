@@ -52,7 +52,12 @@
 #include "model/multiplexer.h"
 #include "model/notification_manager.h"
 #include "model/nav_object_database.h"
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QStringList>
 
 #include "model/navobj_db.h"
 #include "model/navutil_base.h"
@@ -10541,11 +10546,11 @@ void ChartCanvas::LostMouseCapture(wxMouseCaptureLostEvent &event) {
 void ChartCanvas::ShowObjectQueryWindow(int x, int y, float zlat, float zlon) {
   ChartPlugInWrapper *target_plugin_chart = NULL;
   s57chart *Chs57 = NULL;
-  wxFileName file;
+  QFileInfo file;
 
   ChartBase *target_chart = GetChartAtCursor();
   if (target_chart) {
-    file.Assign(target_chart->GetFullPath());
+    file.setFile(wxString_to_QString(target_chart->GetFullPath()));
     if ((target_chart->GetChartType() == CHART_TYPE_PLUGIN) &&
         (target_chart->GetChartFamily() == CHART_FAMILY_VECTOR))
       target_plugin_chart = dynamic_cast<ChartPlugInWrapper *>(target_chart);
@@ -10569,7 +10574,8 @@ void ChartCanvas::ShowObjectQueryWindow(int x, int y, float zlat, float zlon) {
                 scale) {
               scale =
                   ChartData->GetChartTableEntry(stackIndexArray[is]).GetScale();
-              file.Assign(ChartData->GetDBChartFileName(stackIndexArray[is]));
+              file.setFile(wxString_to_QString(
+                  ChartData->GetDBChartFileName(stackIndexArray[is])));
             }
           }
         }
@@ -10657,7 +10663,7 @@ void ChartCanvas::ShowObjectQueryWindow(int x, int y, float zlat, float zlon) {
     }
   }
 
-  if (target_chart || !area_notices.empty() || file.HasName()) {
+  if (target_chart || !area_notices.empty() || !file.fileName().isEmpty()) {
     // Go get the array of all objects at the cursor lat/lon
     int sel_rad_pix = 5;
     float SelectRadius = sel_rad_pix / (GetVP().view_scale_ppm * 1852 * 60);
@@ -10765,19 +10771,21 @@ void ChartCanvas::ShowObjectQueryWindow(int x, int y, float zlat, float zlon) {
           "<font "
           "size=-2>%s</font><br><table border=0 cellspacing=0 "
           "cellpadding=3>",
-          file.GetFullName());
-      file.Normalize();
-      file.Assign(file.GetPath(), "");
-      wxDir dir(file.GetFullPath());
-      wxString filename;
-      bool cont = dir.GetFirst(&filename, "", wxDIR_FILES);
-      while (cont) {
-        file.Assign(dir.GetNameWithSep().append(filename));
+          QString_to_wxString(file.fileName()));
+      // Walk the chart's directory and link every additional info file.
+      QString canon = file.canonicalFilePath();
+      if (canon.isEmpty()) canon = file.absoluteFilePath();
+      QDir dir(QFileInfo(canon).absolutePath());
+      const QStringList entries =
+          dir.entryList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
+      for (const QString &entry : entries) {
+        file.setFile(dir.absoluteFilePath(entry));
         wxString FormatString =
             "<td valign=top><font size=-2><a "
             "href=\"%s\">%s</a></font></td>";
-        if (g_ObjQFileExt.Find(file.GetExt().Lower()) != wxNOT_FOUND) {
-          filenameOK = file.GetFullPath();  // remember last valid name
+        if (g_ObjQFileExt.Find(QString_to_wxString(file.suffix().toLower())) !=
+            wxNOT_FOUND) {
+          filenameOK = QString_to_wxString(file.absoluteFilePath());
           // we are making a 3 columns table. New row only every third file
           if (3 * ((int)filecount / 3) == filecount)
             FormatString.Prepend("<tr>");  // new row
@@ -10786,11 +10794,11 @@ void ChartCanvas::ShowObjectQueryWindow(int x, int y, float zlat, float zlon) {
                 "<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp</td>");  // an empty
                                                             // spacer column
 
-          AddFiles << wxString::Format(FormatString, file.GetFullPath(),
-                                       file.GetFullName());
+          AddFiles << wxString::Format(
+              FormatString, QString_to_wxString(file.absoluteFilePath()),
+              QString_to_wxString(file.fileName()));
           filecount++;
         }
-        cont = dir.GetNext(&filename);
       }
       objText << AddFiles << "</table>";
     }
@@ -15343,7 +15351,11 @@ int SetScreenBrightness(int brightness) {
   if (!g_brightness_init) {
     last_brightness = 100;
     g_brightness_init = true;
-    temp_file_name = wxFileName::CreateTempFileName("");
+    temp_file_name = QString_to_wxString(
+        QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+        QDir::separator() + "ocpn_" +
+        QString::number(QCoreApplication::applicationPid()) + "_" +
+        QString::number(QDateTime::currentMSecsSinceEpoch()));
     InitScreenBrightness();
   }
 

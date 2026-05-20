@@ -28,7 +28,12 @@
 #include <fstream>
 #include <sstream>
 
-#include <wx/filename.h>
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QStandardPaths>
+#include <QString>
+
 #include <wx/jsonreader.h>
 #include <wx/log.h>
 
@@ -139,9 +144,17 @@ catalog_status CatalogHandler::DownloadCatalog(std::ostream* stream,
   return ServerStatus::CURL_ERROR;
 }
 
+static std::string MakeTempDownloadPath(const QString& prefix) {
+  return (QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+          QDir::separator() + prefix + "_" +
+          QString::number(QCoreApplication::applicationPid()) + "_" +
+          QString::number(QDateTime::currentMSecsSinceEpoch()))
+      .toStdString();
+}
+
 catalog_status CatalogHandler::DownloadCatalog(std::string& filePath) {
   if (filePath == "") {
-    filePath = wxFileName::CreateTempFileName("ocpn_dl").ToStdString();
+    filePath = MakeTempDownloadPath("ocpn_dl");
   }
   std::ofstream stream;
   stream.open(filePath.c_str(), std::ios::out | std::ios::trunc);
@@ -158,7 +171,7 @@ catalog_status CatalogHandler::DownloadCatalog(std::string& filePath) {
 catalog_status CatalogHandler::DownloadCatalog(std::string& filePath,
                                                std::string url) {
   if (filePath == "") {
-    filePath = wxFileName::CreateTempFileName("ocpn_dl").ToStdString();
+    filePath = MakeTempDownloadPath("ocpn_dl");
   }
   std::ofstream stream;
   stream.open(filePath.c_str(), std::ios::out | std::ios::trunc);

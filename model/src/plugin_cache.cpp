@@ -59,7 +59,8 @@ static bool copy_file(const char* src_path, const char* dest_path) {
 #ifdef __ANDROID__
   return AndroidSecureCopyFile(src_path, dest_path);
 #else
-  // wxCopyFile semantics overwrites destination -- match that.
+  // QFile::copy refuses to overwrite, so unlink first to match legacy
+  // overwrite-on-copy semantics.
   QString src = QString::fromUtf8(src_path);
   QString dst = QString::fromUtf8(dest_path);
   if (QFile::exists(dst)) QFile::remove(dst);

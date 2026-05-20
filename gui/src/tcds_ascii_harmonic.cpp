@@ -24,8 +24,13 @@
 
 #include <math.h>
 
-#include <wx/filename.h>
 #include <wx/tokenzr.h>
+
+#include <QDir>
+#include <QFileInfo>
+#include <QString>
+
+#include "model/wx_qt_string.h"
 
 #include "tcds_ascii_harmonic.h"
 
@@ -84,9 +89,10 @@ TC_Error_Code TCDS_Ascii_Harmonic::LoadData(const wxString &data_file_path) {
   TC_Error_Code error_return = init_index_file();
   if (error_return != TC_NO_ERROR) return error_return;
 
-  wxFileName f(data_file_path);
-  m_harmfile_name = f.GetPath(wxPATH_GET_SEPARATOR | wxPATH_GET_VOLUME);
-  m_harmfile_name += f.GetName();
+  QFileInfo f(wxString_to_QString(data_file_path));
+  m_harmfile_name = QString_to_wxString(f.absolutePath());
+  m_harmfile_name += static_cast<char>(QDir::separator().toLatin1());
+  m_harmfile_name += QString_to_wxString(f.completeBaseName());
   error_return = LoadHarmonicConstants(m_harmfile_name);
 
   //  Mark the index entries individually with invariant harmonic constants

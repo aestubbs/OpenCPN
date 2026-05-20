@@ -33,6 +33,8 @@
 
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
+#include <QDir>
+
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
 #include <wx/wx.h>
@@ -70,8 +72,8 @@ FirstUseWizImpl::FirstUseWizImpl(wxWindow* parent, MyConfig* pConfig,
   m_pConfig = pConfig;
 
   wxString svgDir = g_Platform->GetSharedDataDir() + _T("uidata") +
-                    wxFileName::GetPathSeparator() + "MUI_flat" +
-                    wxFileName::GetPathSeparator();
+                    QChar(QDir::separator()).toLatin1() + "MUI_flat" +
+                    QChar(QDir::separator()).toLatin1();
   auto settings_icon = LoadSVG(svgDir + "MUI_settings.svg", 32, 32);
 
   // Units
@@ -698,8 +700,8 @@ void FirstUseWizImpl::EnumerateDatasources() {
     m_clSources->Check(m_clSources->GetCount() - 1, true);
   }
   wxString svgDir = g_Platform->GetSharedDataDir() + _T("uidata") +
-                    wxFileName::GetPathSeparator() + "MUI_flat" +
-                    wxFileName::GetPathSeparator();
+                    QChar(QDir::separator()).toLatin1() + "MUI_flat" +
+                    QChar(QDir::separator()).toLatin1();
   auto settings_icon = LoadSVG(svgDir + "MUI_settings.svg", 32, 32);
   m_rtConnectionInfo->Clear();
   m_rtConnectionInfo->WriteText(

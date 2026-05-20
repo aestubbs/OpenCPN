@@ -16,6 +16,7 @@
  **************************************************************************/
 
 #include <QDateTime>
+#include <QFile>
 #include <QString>
 
 #include "model/navobj_db.h"
@@ -1398,16 +1399,14 @@ bool NavObjectCollection1::IsOpenCPN() {
 
 bool NavObjectCollection1::SaveFile(const QString filename) {
   // pugixml's save_file takes a path string (UTF-8 on POSIX, the native
-  // ANSI path on Windows). For the rename/exists checks we still rely on
-  // wxFileExists / wxRemoveFile / wxRenameFile since the wx file path
-  // helpers are deferred to phase P1.10. Convert with the shared helper.
-  wxString wx_filename = QString_to_wxString(filename);
-  wxString tmp_filename = wx_filename + ".tmp";
-  if (wxFileExists(tmp_filename)) {
-    wxRemoveFile(tmp_filename);
+  // ANSI path on Windows). Use Qt for the rename/exists checks.
+  QString tmp_filename = filename + ".tmp";
+  if (QFile::exists(tmp_filename)) {
+    QFile::remove(tmp_filename);
   }
-  save_file(tmp_filename.fn_str(), "  ");
-  wxRenameFile(tmp_filename.fn_str(), wx_filename.fn_str(), true);
+  save_file(tmp_filename.toLocal8Bit().constData(), "  ");
+  QFile::remove(filename);
+  QFile::rename(tmp_filename, filename);
   return true;
 }
 

@@ -19,7 +19,10 @@
 
 #include <sstream>
 
-#include <wx/filename.h>
+#include <QDir>
+#include <QString>
+
+#include "model/wx_qt_string.h"
 
 #include "model/ipc_api.h"
 #include "model/base_platform.h"
@@ -30,9 +33,10 @@ IpcServer* IpcConnection::s_instance = nullptr;
 
 // FIXME (leamas) Bad name
 std::string GetSocketPath() {
-  auto const static sep = static_cast<char>(wxFileName::GetPathSeparator());
+  auto const static sep = QChar(QDir::separator()).toLatin1();
   auto dirpath = g_BasePlatform->GetPrivateDataDir();
-  if (!wxFileName::DirExists(dirpath)) wxFileName::Mkdir(dirpath);
+  QString qDirPath = wxString_to_QString(dirpath);
+  if (!QDir(qDirPath).exists()) QDir().mkpath(qDirPath);
   return dirpath.ToStdString() + sep + "opencpn-ipc";
 }
 

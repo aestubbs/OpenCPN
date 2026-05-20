@@ -24,7 +24,13 @@
 
 #include <stdlib.h>
 
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+
 #include "config.h"
+#include "model/wx_qt_string.h"
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
 #include <wx/wxprec.h>
@@ -264,8 +270,8 @@ wxBitmap Style::GetIcon(const wxString& name, int width, int height,
   wxBitmap bm;
 #ifdef ocpnUSE_SVG
   wxString fullFilePath = myConfigFileDir + this->sysname +
-                          wxFileName::GetPathSeparator() + name + ".svg";
-  if (wxFileExists(fullFilePath))
+                          QChar(QDir::separator()).toLatin1() + name + ".svg";
+  if (QFile::exists(wxString_to_QString(fullFilePath)))
     bm = LoadSVG(fullFilePath, retSize.x, retSize.y);
   else {
 ///        wxLogMessage( "Can't find SVG icon: " + fullFilePath );
@@ -331,15 +337,15 @@ wxBitmap Style::GetToolIcon(const wxString& toolname, int iconType,
       wxString fullFilePath;
       if (rollover) {
         fullFilePath = myConfigFileDir + this->sysname +
-                       wxFileName::GetPathSeparator() + toolname +
+                       QChar(QDir::separator()).toLatin1() + toolname +
                        "_rollover.svg";
-        if (!wxFileExists(fullFilePath))
+        if (!QFile::exists(wxString_to_QString(fullFilePath)))
           fullFilePath = myConfigFileDir + this->sysname +
-                         wxFileName::GetPathSeparator() + toolname + ".svg";
+                         QChar(QDir::separator()).toLatin1() + toolname + ".svg";
       } else
         fullFilePath = myConfigFileDir + this->sysname +
-                       wxFileName::GetPathSeparator() + toolname + ".svg";
-      if (wxFileExists(fullFilePath))
+                       QChar(QDir::separator()).toLatin1() + toolname + ".svg";
+      if (QFile::exists(wxString_to_QString(fullFilePath)))
         bm = LoadSVG(fullFilePath, retSize.x, retSize.y);
       else {
         /// wxLogMessage( "Can't find SVG: " + fullFilePath );
@@ -408,25 +414,25 @@ wxBitmap Style::GetToolIcon(const wxString& toolname, int iconType,
       wxString fullFilePath;
       if (rollover)
         fullFilePath = myConfigFileDir + this->sysname +
-                       wxFileName::GetPathSeparator() + toolname +
+                       QChar(QDir::separator()).toLatin1() + toolname +
                        "_rollover_toggled.svg";
       else
         fullFilePath = myConfigFileDir + this->sysname +
-                       wxFileName::GetPathSeparator() + toolname +
+                       QChar(QDir::separator()).toLatin1() + toolname +
                        "_toggled.svg";
-      if (wxFileExists(fullFilePath))
+      if (QFile::exists(wxString_to_QString(fullFilePath)))
         bm = LoadSVG(fullFilePath, retSize.x, retSize.y);
       else {
         // Could not find a toggled SVG, so try to make one
         if (rollover)
           fullFilePath = myConfigFileDir + this->sysname +
-                         wxFileName::GetPathSeparator() + toolname +
+                         QChar(QDir::separator()).toLatin1() + toolname +
                          "_rollover.svg";
         else
           fullFilePath = myConfigFileDir + this->sysname +
-                         wxFileName::GetPathSeparator() + toolname + ".svg";
+                         QChar(QDir::separator()).toLatin1() + toolname + ".svg";
 
-        if (wxFileExists(fullFilePath)) {
+        if (QFile::exists(wxString_to_QString(fullFilePath))) {
           bm = LoadSVG(fullFilePath, retSize.x, retSize.y);
 
           wxBitmap bmBack = GetToggledBG();
@@ -469,9 +475,9 @@ wxBitmap Style::GetToolIcon(const wxString& toolname, int iconType,
       wxBitmap bm;
 #ifdef ocpnUSE_SVG
       wxString fullFilePath = myConfigFileDir + this->sysname +
-                              wxFileName::GetPathSeparator() + toolname +
+                              QChar(QDir::separator()).toLatin1() + toolname +
                               "_disabled.svg";
-      if (wxFileExists(fullFilePath))
+      if (QFile::exists(wxString_to_QString(fullFilePath)))
         bm = LoadSVG(fullFilePath, retSize.x, retSize.y);
       else {
         /// wxLogMessage( "Can't find SVG: " + fullFilePath );
@@ -771,9 +777,9 @@ StyleManager::StyleManager() {
   isOK = false;
   currentStyle = NULL;
   Init(g_Platform->GetSharedDataDir() + "uidata" +
-       wxFileName::GetPathSeparator());
+       QChar(QDir::separator()).toLatin1());
   Init(g_Platform->GetHomeDir());
-  Init(g_Platform->GetHomeDir() + ".opencpn" + wxFileName::GetPathSeparator());
+  Init(g_Platform->GetHomeDir() + ".opencpn" + QChar(QDir::separator()).toLatin1());
   SetStyle("");
 #ifdef ocpnUSE_SVG
   wxLogMessage("Using SVG Icons");
@@ -799,37 +805,29 @@ StyleManager::~StyleManager() {
 void StyleManager::Init(const wxString& fromPath) {
   TiXmlDocument doc;
 
-  if (!wxDir::Exists(fromPath)) {
+  QDir dir(wxString_to_QString(fromPath));
+  if (!dir.exists()) {
     wxString msg = "No styles found at: ";
     msg << fromPath;
     wxLogMessage(msg);
     return;
   }
-
-  wxDir dir(fromPath);
-  if (!dir.IsOpened()) return;
-
-  wxString filename;
 
   // We allow any number of styles to load from files called
   // style<something>.xml
+  const QStringList entries =
+      dir.entryList({"style*.xml"}, QDir::Files, QDir::Name);
 
-  bool more = dir.GetFirst(&filename, "style*.xml", wxDIR_FILES);
-
-  if (!more) {
+  if (entries.isEmpty()) {
     wxString msg = "No styles found at: ";
     msg << fromPath;
     wxLogMessage(msg);
     return;
   }
 
-  bool firstFile = true;
-  while (more) {
+  for (const QString& qfilename : entries) {
+    wxString filename = QString_to_wxString(qfilename);
     wxString name, extension;
-
-    if (!firstFile) more = dir.GetNext(&filename);
-    if (!more) break;
-    firstFile = false;
 
     wxString fullFilePath = fromPath + filename;
 
@@ -1164,10 +1162,10 @@ void StyleManager::SetStyle(wxString name) {
       }
 
       wxString fullFilePath = style->myConfigFileDir +
-                              wxFileName::GetPathSeparator() +
+                              QChar(QDir::separator()).toLatin1() +
                               style->graphicsFile;
 
-      if (!wxFileName::FileExists(fullFilePath)) {
+      if (!QFile::exists(wxString_to_QString(fullFilePath))) {
         wxString msg("Styles Graphics File not found: ");
         msg += fullFilePath;
         wxLogMessage(msg);

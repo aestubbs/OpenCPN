@@ -25,6 +25,12 @@
 #include <string>
 #include <vector>
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+
 #ifndef __WXMSW__
 #include <signal.h>
 #include <setjmp.h>
@@ -72,6 +78,7 @@
 #include "model/plugin_cache.h"
 #include "model/plugin_paths.h"
 #include "model/select.h"
+#include "model/wx_qt_string.h"
 
 #include "about_frame_impl.h"
 #include "about.h"
@@ -305,20 +312,20 @@ void OCPNPlatform::Initialize_1() {
   info.uPriorities[CR_SMAPI] =
       CR_NEGATIVE_PRIORITY;  // Third try send report over Simple MAPI
 
-  wxStandardPaths &crash_std_path = g_Platform->GetStdPaths();
-
-  wxString crash_rpt_save_locn = crash_std_path.GetConfigDir();
+  wxString crash_rpt_save_locn = QString_to_wxString(
+      QStandardPaths::writableLocation(QStandardPaths::ConfigLocation));
   if (g_bportable) {
-    wxFileName exec_path_crash(crash_std_path.GetExecutablePath());
+    QFileInfo exec_path_crash(QCoreApplication::applicationFilePath());
     crash_rpt_save_locn =
-        exec_path_crash.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+        QString_to_wxString(exec_path_crash.absolutePath()) + "\\";
   }
 
   wxString locn = crash_rpt_save_locn + "\\CrashReports";
 
-  if (!wxDirExists(locn)) wxMkdir(locn);
+  QString qlocn = wxString_to_QString(locn);
+  if (!QDir(qlocn).exists()) QDir().mkpath(qlocn);
 
-  if (wxDirExists(locn)) {
+  if (QDir(qlocn).exists()) {
     wxCharBuffer buf = locn.ToUTF8();
     wchar_t wlocn[256];
     if (buf && (locn.Length() < sizeof(wlocn))) {
@@ -328,9 +335,9 @@ void OCPNPlatform::Initialize_1() {
   }
 
   // Provide privacy policy URL
-  wxFileName exec_path_crash(crash_std_path.GetExecutablePath());
+  QFileInfo exec_path_crash2(QCoreApplication::applicationFilePath());
   wxString policy_file =
-      exec_path_crash.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+      QString_to_wxString(exec_path_crash2.absolutePath()) + "\\";
   policy_file += "PrivacyPolicy.txt";
   policy_file.Prepend("file:");
 
@@ -353,10 +360,11 @@ void OCPNPlatform::Initialize_1() {
     crAddScreenshot2(CR_AS_PROCESS_WINDOWS | CR_AS_USE_JPEG_FORMAT, 95);
 
     //  Mark some files to add to the crash report
-    wxString home_data_crash = crash_std_path.GetConfigDir();
+    wxString home_data_crash = QString_to_wxString(
+        QStandardPaths::writableLocation(QStandardPaths::ConfigLocation));
     if (g_bportable) {
-      wxFileName f(crash_std_path.GetExecutablePath());
-      home_data_crash = f.GetPath();
+      QFileInfo f(QCoreApplication::applicationFilePath());
+      home_data_crash = QString_to_wxString(f.absolutePath());
     }
     appendOSDirSlash(&home_data_crash);
 
@@ -479,27 +487,31 @@ void OCPNPlatform::Initialize_2() {
 
   // Create some directories in App private directory
   // Mainly required for Android 11+, but useable on all versions.
-  wxChar sep = wxFileName::GetPathSeparator();
+  QChar sep = QDir::separator();
+  wxChar wsep = sep.unicode();
 
   wxString ChartDir = GetPrivateDataDir();
-  if (ChartDir.Last() != sep) ChartDir.Append(sep);
+  if (ChartDir.Last() != wsep) ChartDir.Append(wsep);
   ChartDir.Append("Charts");
-  if (!::wxDirExists(ChartDir)) {
-    ::wxMkdir(ChartDir);
+  QString qChartDir = wxString_to_QString(ChartDir);
+  if (!QDir(qChartDir).exists()) {
+    QDir().mkpath(qChartDir);
   }
 
   wxString GRIBDir = GetPrivateDataDir();
-  if (GRIBDir.Last() != sep) GRIBDir.Append(sep);
+  if (GRIBDir.Last() != wsep) GRIBDir.Append(wsep);
   GRIBDir.Append("GRIBS");
-  if (!::wxDirExists(GRIBDir)) {
-    ::wxMkdir(GRIBDir);
+  QString qGRIBDir = wxString_to_QString(GRIBDir);
+  if (!QDir(qGRIBDir).exists()) {
+    QDir().mkpath(qGRIBDir);
   }
 
   wxString VDRDir = GetPrivateDataDir();
-  if (VDRDir.Last() != sep) VDRDir.Append(sep);
+  if (VDRDir.Last() != wsep) VDRDir.Append(wsep);
   VDRDir.Append("VDR");
-  if (!::wxDirExists(VDRDir)) {
-    ::wxMkdir(VDRDir);
+  QString qVDRDir = wxString_to_QString(VDRDir);
+  if (!QDir(qVDRDir).exists()) {
+    QDir().mkpath(qVDRDir);
   }
 
   // Set the default Import/Export directory for A11+
@@ -513,11 +525,11 @@ void OCPNPlatform::Initialize_2() {
 
   //  Set a global toolbar scale factor
   g_toolbar_scalefactor = GetToolbarScaleFactor(g_GUIScaleFactor);
-  auto configdir = wxFileName(GetPrivateDataDir());
-  if (!configdir.DirExists()) {
-    if (!configdir.Mkdir()) {
+  QString configdir = wxString_to_QString(GetPrivateDataDir());
+  if (!QDir(configdir).exists()) {
+    if (!QDir().mkpath(configdir)) {
       auto msg = std::string("Cannot create config directory: ");
-      wxLogWarning(msg + configdir.GetFullPath());
+      wxLogWarning("%s", (msg + configdir.toStdString()).c_str());
     }
   }
 }
@@ -898,9 +910,11 @@ void OCPNPlatform::SetLocaleSearchPrefixes() {
   wxLogMessage(imsg);
 
   // Managed plugin location
-  wxFileName usrShare(GetWinPluginBaseDir() + wxFileName::GetPathSeparator());
-  usrShare.RemoveLastDir();
-  locale_location = usrShare.GetFullPath() + ("share\\locale");
+  QDir usrShare(wxString_to_QString(GetWinPluginBaseDir()));
+  usrShare.cdUp();
+  locale_location =
+      QString_to_wxString(usrShare.absolutePath()) + QDir::separator() +
+      ("share\\locale");
   wxLocale::AddCatalogLookupPathPrefix(locale_location);
   imsg = "Adding catalog lookup path:  ";
   imsg += locale_location;
@@ -925,11 +939,14 @@ void OCPNPlatform::SetLocaleSearchPrefixes() {
     locale_location = g_Platform->GetHomeDir();
   }
 
-  wxFileName location;
-  location.AssignDir(locale_location);
-  location.AppendDir("share");
-  location.SetName("locale");
-  locale_location = location.GetFullPath();
+  {
+    QString loc = wxString_to_QString(locale_location);
+    if (!loc.endsWith(QDir::separator())) loc += QDir::separator();
+    loc += "share";
+    loc += QDir::separator();
+    loc += "locale";
+    locale_location = QString_to_wxString(loc);
+  }
   wxLocale::AddCatalogLookupPathPrefix(locale_location);
 
   // And then for managed plugins
@@ -1442,12 +1459,13 @@ void OCPNPlatform::SetUpgradeOptions(wxString vNew, wxString vOld) {
 
     // UserIcons
     wxString UserIconPath = GetPrivateDataDir();
-    wxChar sep = wxFileName::GetPathSeparator();
+    wxChar sep = QDir::separator().unicode();
     if (UserIconPath.Last() != sep) UserIconPath.Append(sep);
     UserIconPath.Append("UserIcons");
 
-    if (!::wxDirExists(UserIconPath)) {
-      ::wxMkdir(UserIconPath);
+    QString qUserIconPath = wxString_to_QString(UserIconPath);
+    if (!QDir(qUserIconPath).exists()) {
+      QDir().mkpath(qUserIconPath);
     }
 
     // layers
@@ -1455,8 +1473,9 @@ void OCPNPlatform::SetUpgradeOptions(wxString vNew, wxString vOld) {
     if (LayersPath.Last() != sep) LayersPath.Append(sep);
     LayersPath.Append("layers");
 
-    if (!::wxDirExists(LayersPath)) {
-      ::wxMkdir(LayersPath);
+    QString qLayersPath = wxString_to_QString(LayersPath);
+    if (!QDir(qLayersPath).exists()) {
+      QDir().mkpath(qLayersPath);
     }
 
     // Force a generally useable sound command, overriding any previous user's
@@ -1485,8 +1504,9 @@ void OCPNPlatform::SetUpgradeOptions(wxString vNew, wxString vOld) {
     TideCurrentDataSet.clear();
     for (unsigned int i = 0; i < TCDS_temp.size(); i++) {
       wxString tide = TCDS_temp[i];
-      wxFileName ft(tide);
-      if (ft.FileExists()) TideCurrentDataSet.push_back(TCDS_temp[i]);
+      QFileInfo ft(wxString_to_QString(tide));
+      if (ft.exists() && ft.isFile())
+        TideCurrentDataSet.push_back(TCDS_temp[i]);
     }
 
     //  Force default (baked-in) values for CompatOS
@@ -2160,7 +2180,7 @@ void OCPNPlatform::setChartTypeMaskSel(int mask, wxString &indicator) {
 QString g_qtStyleSheet;
 
 bool LoadQtStyleSheet(wxString &sheet_file) {
-  if (wxFileExists(sheet_file)) {
+  if (QFile::exists(wxString_to_QString(sheet_file))) {
     //        QApplication qApp = getqApp();
     if (qApp) {
       QString file(sheet_file.c_str());

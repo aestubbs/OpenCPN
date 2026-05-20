@@ -70,9 +70,11 @@
 #include <wx/stdpaths.h>
 #include <wx/tokenzr.h>
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QStandardPaths>
 #include <QStringList>
 #include <QTextStream>
 
@@ -208,10 +210,17 @@ wxString AbstractPlatform::NormalizePath(const wxString& full_path) {
 
 wxString& AbstractPlatform::GetHomeDir() {
   if (m_homeDir.IsEmpty()) {
-    //      Establish a "home" location
+    //      Establish a "home" location.
+    //
+    // NB: This historically used wxStandardPaths.  On macOS bundles wx's
+    // GetUserConfigDir returns "~/Library/Preferences" whereas Qt's
+    // QStandardPaths::ConfigLocation maps to "~/Library/Application
+    // Support" -- the legacy install location matters for users with
+    // existing configurations, so we keep wxStandardPaths here pending
+    // a coordinated migration. GetStdPaths() is itself a plugin-ABI
+    // shim (frozen wxStandardPaths& return) deferred to the broader
+    // platform refactor.
     wxStandardPaths& std_path = GetStdPaths();
-    // TODO  Why is the following preferred?  Will not compile with gcc...
-    //    wxStandardPaths& std_path = wxApp::GetTraits()->GetStandardPaths();
 
 #ifdef __unix__
     std_path.SetInstallPrefix(wxString(PREFIX, wxConvUTF8));
@@ -247,8 +256,7 @@ wxString& AbstractPlatform::GetHomeDir() {
 
 wxString& AbstractPlatform::GetExePath() {
   if (m_exePath.IsEmpty()) {
-    wxStandardPaths& std_path = GetStdPaths();
-    m_exePath = std_path.GetExecutablePath();
+    m_exePath = QString_to_wxString(QCoreApplication::applicationFilePath());
   }
 
   return m_exePath;
@@ -502,8 +510,8 @@ wxString AbstractPlatform::GetWritableDocumentsDir() {
 #ifdef __ANDROID__
   dir = androidGetExtStorageDir();  // Used for Chart storage, typically
 #else
-  wxStandardPaths& std_path = GetStdPaths();
-  dir = std_path.GetDocumentsDir();
+  dir = QString_to_wxString(
+      QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
 #endif
   return dir;
 }

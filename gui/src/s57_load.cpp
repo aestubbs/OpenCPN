@@ -17,7 +17,13 @@
 
 #include <wx/app.h>
 
+#include <QDir>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QString>
+
 #include "model/cmdline.h"
+#include "model/wx_qt_string.h"
 #include "model/gui_vars.h"
 
 #include "chart_ctx_factory.h"
@@ -60,9 +66,13 @@ void LoadS57() {
   }
 
   if (g_bportable) {
-    wxFileName f(g_SENCPrefix);
-    if (f.MakeRelativeTo(g_Platform->GetPrivateDataDir()))
-      g_SENCPrefix = f.GetFullPath();
+    QDir base(wxString_to_QString(g_Platform->GetPrivateDataDir()));
+    QString relPath = base.relativeFilePath(wxString_to_QString(g_SENCPrefix));
+    QFileInfo relFi(relPath);
+    // QDir::relativeFilePath returns the original path if no relation; fall
+    // back to "SENC" if the result is still absolute (different volume etc.).
+    if (relFi.isRelative())
+      g_SENCPrefix = QString_to_wxString(relPath);
     else
       g_SENCPrefix = "SENC";
   }
@@ -99,10 +109,13 @@ void LoadS57() {
   if (!ps52plib->m_bOK) {
     delete ps52plib;
 
-    wxStandardPaths &std_path = g_Platform->GetStdPaths();
-
+    // wx's GetUserDataDir maps to a platform-specific user data folder
+    // (e.g. ~/.appname on Unix, ~/Library/Application Support/appname on
+    // macOS).  Qt's AppDataLocation has matching semantics on those
+    // platforms.
     wxString look_data_dir;
-    look_data_dir.Append(std_path.GetUserDataDir());
+    look_data_dir.Append(QString_to_wxString(
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
     appendOSDirSlash(&look_data_dir);
     wxString tentative_SData_Locn = look_data_dir;
     look_data_dir.Append("s57data");

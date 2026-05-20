@@ -23,7 +23,11 @@
  */
 
 #include <wx/log.h>
-#include <wx/filename.h>
+
+#include <QFileInfo>
+#include <QString>
+
+#include "model/wx_qt_string.h"
 
 #include "tc_data_source.h"
 #include "tcds_ascii_harmonic.h"
@@ -51,15 +55,16 @@ TC_Error_Code TCDataSource::LoadData(const wxString &data_file_path) {
   wxLogMessage("Loading Tide/Current data source: %s",
                m_data_source_path.c_str());
 
-  wxFileName fname(data_file_path);
+  QFileInfo fname(wxString_to_QString(data_file_path));
 
-  if (!fname.FileExists()) return TC_FILE_NOT_FOUND;
+  if (!fname.exists() || !fname.isFile()) return TC_FILE_NOT_FOUND;
 
-  if (fname.GetExt() == "IDX" || fname.GetExt() == "idx") {
+  QString ext = fname.suffix();
+  if (ext == "IDX" || ext == "idx") {
     TCDS_Ascii_Harmonic *pdata = new TCDS_Ascii_Harmonic;
     m_pfactory = dynamic_cast<TCDataFactory *>(pdata);
     pTCDS_Ascii_Harmonic = pdata;
-  } else if (fname.GetExt() == "tcd" || fname.GetExt() == "TCD") {
+  } else if (ext == "tcd" || ext == "TCD") {
     TCDS_Binary_Harmonic *pdata = new TCDS_Binary_Harmonic;
     m_pfactory = dynamic_cast<TCDataFactory *>(pdata);
     pTCDS_Binary_Harmonic = pdata;

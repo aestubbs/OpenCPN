@@ -59,6 +59,11 @@
 #include <wx/tokenzr.h>
 
 #include <QDateTime>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include <QStringList>
 
 #include "o_sound/o_sound.h"
@@ -765,7 +770,7 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
   // Set reasonable defaults
   wxString sound_dir = g_Platform->GetSharedDataDir();
   sound_dir.Append("sounds");
-  sound_dir.Append(wxFileName::GetPathSeparator());
+  sound_dir.Append(QString_to_wxString(QString(QDir::separator())));
 
   g_AIS_sound_file = sound_dir + "beep_ssl.wav";
   g_DSC_sound_file = sound_dir + "phonering1.wav";
@@ -1344,26 +1349,25 @@ void MyConfig::LoadS57Config() {
 
 bool MyConfig::LoadLayers(wxString &path) {
   wxArrayString file_array;
-  wxDir dir;
   Layer *l;
-  dir.Open(path);
-  if (dir.IsOpened()) {
-    wxString filename;
-    bool cont = dir.GetFirst(&filename);
-    while (cont) {
+  QDir dir(wxString_to_QString(path));
+  if (dir.exists()) {
+    const QStringList entries = dir.entryList(
+        QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QString &entry : entries) {
       file_array.Clear();
-      filename.Prepend(wxFileName::GetPathSeparator());
-      filename.Prepend(path);
-      wxFileName f(filename);
-      size_t nfiles = 0;
-      if (f.GetExt().IsSameAs("gpx"))
+      QString full = dir.absoluteFilePath(entry);
+      wxString filename = QString_to_wxString(full);
+      QFileInfo f(full);
+      if (f.suffix().compare("gpx", Qt::CaseInsensitive) == 0) {
         file_array.Add(filename);  // single-gpx-file layer
-      else {
-        if (wxDir::Exists(filename)) {
-          wxDir dir(filename);
-          if (dir.IsOpened()) {
-            nfiles = dir.GetAllFiles(filename, &file_array,
-                                     "*.gpx");  // layers subdirectory set
+      } else {
+        QDir subdir(full);
+        if (subdir.exists()) {
+          QDirIterator it(full, {"*.gpx"}, QDir::Files,
+                          QDirIterator::Subdirectories);
+          while (it.hasNext()) {
+            file_array.Add(QString_to_wxString(it.next()));
           }
         }
       }
@@ -1373,11 +1377,11 @@ bool MyConfig::LoadLayers(wxString &path) {
         l->m_LayerID = ++g_LayerIdx;
         l->m_LayerFileName = file_array[0];
         if (file_array.GetCount() <= 1)
-          wxFileName::SplitPath(file_array[0], NULL, NULL, &(l->m_LayerName),
-                                NULL, NULL);
+          l->m_LayerName = QString_to_wxString(
+              QFileInfo(wxString_to_QString(file_array[0])).completeBaseName());
         else
-          wxFileName::SplitPath(filename, NULL, NULL, &(l->m_LayerName), NULL,
-                                NULL);
+          l->m_LayerName =
+              QString_to_wxString(QFileInfo(full).completeBaseName());
 
         bool bLayerViz = g_bShowLayers;
 
@@ -1403,7 +1407,7 @@ bool MyConfig::LoadLayers(wxString &path) {
         for (unsigned int i = 0; i < file_array.GetCount(); i++) {
           wxString file_path = file_array[i];
 
-          if (::wxFileExists(file_path)) {
+          if (QFile::exists(wxString_to_QString(file_path))) {
             NavObjectCollection1 *pSet = new NavObjectCollection1;
             pugi::xml_parse_result result = pSet->load_file(file_path.fn_str());
             if (!result) {
@@ -1429,8 +1433,6 @@ bool MyConfig::LoadLayers(wxString &path) {
           }
         }
       }
-
-      cont = dir.GetNext(&filename);
     }
   }
   g_bLayersLoaded = true;
@@ -2460,38 +2462,45 @@ void MyConfig::UpdateSettings() {
 #endif
 }
 
-static wxFileName exportFileName(wxWindow *parent,
-                                 const wxString suggestedName) {
-  wxFileName ret;
+static QString exportFileName(wxWindow *parent,
+                              const wxString suggestedName) {
   wxString path;
   wxString valid_name = SanitizeFileName(suggestedName);
 
 #ifdef __ANDROID__
   if (!valid_name.EndsWith(".gpx")) {
-    wxFileName fn(valid_name);
-    fn.ClearExt();
-    fn.SetExt("gpx");
-    valid_name = fn.GetFullName();
+    QFileInfo fi(wxString_to_QString(valid_name));
+    valid_name =
+        QString_to_wxString(fi.completeBaseName() + QStringLiteral(".gpx"));
   }
 #endif
   int response = g_Platform->DoFileSelectorDialog(
       parent, &path, _("Export GPX file"), g_gpx_path, valid_name, "*.gpx");
 
   if (response == wxID_OK) {
-    wxFileName fn(path);
-    g_gpx_path = fn.GetPath();
-    if (!fn.GetExt().StartsWith("gpx")) fn.SetExt("gpx");
+    QFileInfo fi(wxString_to_QString(path));
+    g_gpx_path = QString_to_wxString(fi.absolutePath());
+    QString full = fi.absoluteFilePath();
+    if (fi.suffix().left(3).compare("gpx", Qt::CaseInsensitive) != 0) {
+      // Append .gpx if missing
+      if (!fi.suffix().isEmpty()) {
+        full = fi.absolutePath() + QDir::separator() + fi.completeBaseName() +
+               ".gpx";
+      } else {
+        full += ".gpx";
+      }
+    }
 
 #if defined(__WXMSW__) || defined(__WXGTK__)
-    if (wxFileExists(fn.GetFullPath())) {
+    if (QFile::exists(full)) {
       int answer = OCPNMessageBox(NULL, _("Overwrite existing file?"),
                                   "Confirm", wxICON_QUESTION | wxYES_NO);
-      if (answer != wxID_YES) return ret;
+      if (answer != wxID_YES) return QString();
     }
 #endif
-    ret = fn;
+    return full;
   }
-  return ret;
+  return QString();
 }
 
 int BackupDatabase(wxWindow *parent) {
@@ -2502,13 +2511,15 @@ int BackupDatabase(wxWindow *parent) {
   wxString acceptedName;
 
   if (wxID_OK ==
-      g_Platform->DoFileSelectorDialog(parent, &acceptedName, _("Backup"),
-                                       wxStandardPaths::Get().GetDocumentsDir(),
-                                       proposedName, "*.bkp")) {
-    wxFileName fileName(acceptedName);
-    if (fileName.IsOk()) {
+      g_Platform->DoFileSelectorDialog(
+          parent, &acceptedName, _("Backup"),
+          QString_to_wxString(QStandardPaths::writableLocation(
+              QStandardPaths::DocumentsLocation)),
+          proposedName, "*.bkp")) {
+    QFileInfo fileName(wxString_to_QString(acceptedName));
+    if (!fileName.filePath().isEmpty()) {
 #if defined(__WXMSW__) || defined(__WXGTK__)
-      if (fileName.FileExists()) {
+      if (fileName.exists() && fileName.isFile()) {
         if (wxID_YES != OCPNMessageBox(NULL, _("Overwrite existing file?"),
                                        "Confirm", wxICON_QUESTION | wxYES_NO)) {
           return wxID_ABORT;  // We've decided not to overwrite a file, aborting
@@ -2517,15 +2528,14 @@ int BackupDatabase(wxWindow *parent) {
 #endif
 
 #ifdef __ANDROID__
-      wxString secureFileName = androidGetCacheDir() +
-                                wxFileName::GetPathSeparator() +
-                                fileName.GetFullName();
-      backupResult = NavObj_dB::GetInstance().Backup(
-          wxString_to_QString(secureFileName));
-      AndroidSecureCopyFile(secureFileName, fileName.GetFullPath());
+      QString secureFileName = wxString_to_QString(androidGetCacheDir()) +
+                               QDir::separator() + fileName.fileName();
+      backupResult = NavObj_dB::GetInstance().Backup(secureFileName);
+      AndroidSecureCopyFile(QString_to_wxString(secureFileName),
+                            QString_to_wxString(fileName.absoluteFilePath()));
 #else
-      backupResult = NavObj_dB::GetInstance().Backup(
-          wxString_to_QString(fileName.GetFullPath()));
+      backupResult =
+          NavObj_dB::GetInstance().Backup(fileName.absoluteFilePath());
 #endif
     }
     return backupResult ? wxID_YES : wxID_NO;
@@ -2536,21 +2546,21 @@ int BackupDatabase(wxWindow *parent) {
 bool ExportGPXRoutes(wxWindow *parent, RouteList *pRoutes,
                      const wxString suggestedName) {
 #ifndef __ANDROID__
-  wxFileName fn = exportFileName(parent, suggestedName);
-  if (fn.IsOk()) {
+  QString fn = exportFileName(parent, suggestedName);
+  if (!fn.isEmpty()) {
     NavObjectCollection1 *pgpx = new NavObjectCollection1;
     pgpx->AddGPXRoutesList(pRoutes);
-    pgpx->SaveFile(wxString_to_QString(fn.GetFullPath()));
+    pgpx->SaveFile(fn);
     delete pgpx;
     return true;
   }
 #else
   // Create the .GPX file, saving it in the OCPN Android cache directory
-  wxString fns = androidGetCacheDir() + wxFileName::GetPathSeparator() +
-                 suggestedName + ".gpx";
+  QString fns = wxString_to_QString(androidGetCacheDir()) + QDir::separator() +
+                wxString_to_QString(suggestedName) + ".gpx";
   NavObjectCollection1 *pgpx = new NavObjectCollection1;
   pgpx->AddGPXRoutesList(pRoutes);
-  pgpx->SaveFile(wxString_to_QString(fns));
+  pgpx->SaveFile(fns);
   delete pgpx;
 
   // Kick off the Android file chooser activity
@@ -2562,7 +2572,9 @@ bool ExportGPXRoutes(wxWindow *parent, RouteList *pRoutes,
   if (path.IsEmpty())  // relocation handled by SAF logic in Java
     return true;
 
-  wxCopyFile(fns, path);  // known to be safe paths, since SAF is not involved.
+  QString dest = wxString_to_QString(path);
+  QFile::remove(dest);
+  QFile::copy(fns, dest);  // known to be safe paths, since SAF is not involved.
   return true;
 
 #endif
@@ -2573,21 +2585,21 @@ bool ExportGPXRoutes(wxWindow *parent, RouteList *pRoutes,
 bool ExportGPXTracks(wxWindow *parent, std::vector<Track *> *pTracks,
                      const wxString suggestedName) {
 #ifndef __ANDROID__
-  wxFileName fn = exportFileName(parent, suggestedName);
-  if (fn.IsOk()) {
+  QString fn = exportFileName(parent, suggestedName);
+  if (!fn.isEmpty()) {
     NavObjectCollection1 *pgpx = new NavObjectCollection1;
     pgpx->AddGPXTracksList(pTracks);
-    pgpx->SaveFile(wxString_to_QString(fn.GetFullPath()));
+    pgpx->SaveFile(fn);
     delete pgpx;
     return true;
   }
 #else
   // Create the .GPX file, saving it in the OCPN Android cache directory
-  wxString fns = androidGetCacheDir() + wxFileName::GetPathSeparator() +
-                 suggestedName + ".gpx";
+  QString fns = wxString_to_QString(androidGetCacheDir()) + QDir::separator() +
+                wxString_to_QString(suggestedName) + ".gpx";
   NavObjectCollection1 *pgpx = new NavObjectCollection1;
   pgpx->AddGPXTracksList(pTracks);
-  pgpx->SaveFile(wxString_to_QString(fns));
+  pgpx->SaveFile(fns);
   delete pgpx;
 
   // Kick off the Android file chooser activity
@@ -2599,7 +2611,9 @@ bool ExportGPXTracks(wxWindow *parent, std::vector<Track *> *pTracks,
   if (path.IsEmpty())  // relocation handled by SAF logic in Java
     return true;
 
-  wxCopyFile(fns, path);  // known to be safe paths, since SAF is not involved.
+  QString dest = wxString_to_QString(path);
+  QFile::remove(dest);
+  QFile::copy(fns, dest);  // known to be safe paths, since SAF is not involved.
   return true;
 #endif
 
@@ -2609,21 +2623,21 @@ bool ExportGPXTracks(wxWindow *parent, std::vector<Track *> *pTracks,
 bool ExportGPXWaypoints(wxWindow *parent, RoutePointList *pRoutePoints,
                         const wxString suggestedName) {
 #ifndef __ANDROID__
-  wxFileName fn = exportFileName(parent, suggestedName);
-  if (fn.IsOk()) {
+  QString fn = exportFileName(parent, suggestedName);
+  if (!fn.isEmpty()) {
     NavObjectCollection1 *pgpx = new NavObjectCollection1;
     pgpx->AddGPXPointsList(pRoutePoints);
-    pgpx->SaveFile(wxString_to_QString(fn.GetFullPath()));
+    pgpx->SaveFile(fn);
     delete pgpx;
     return true;
   }
 #else
   // Create the .GPX file, saving it in the OCPN Android cache directory
-  wxString fns = androidGetCacheDir() + wxFileName::GetPathSeparator() +
-                 suggestedName + ".gpx";
+  QString fns = wxString_to_QString(androidGetCacheDir()) + QDir::separator() +
+                wxString_to_QString(suggestedName) + ".gpx";
   NavObjectCollection1 *pgpx = new NavObjectCollection1;
   pgpx->AddGPXPointsList(pRoutePoints);
-  pgpx->SaveFile(wxString_to_QString(fns));
+  pgpx->SaveFile(fns);
   delete pgpx;
 
   // Kick off the Android file chooser activity
@@ -2635,7 +2649,9 @@ bool ExportGPXWaypoints(wxWindow *parent, RoutePointList *pRoutePoints,
   if (path.IsEmpty())  // relocation handled by SAF logic in Java
     return true;
 
-  wxCopyFile(fns, path);  // known to be safe paths, since SAF is not involved.
+  QString dest = wxString_to_QString(path);
+  QFile::remove(dest);
+  QFile::copy(fns, dest);  // known to be safe paths, since SAF is not involved.
   return true;
 
 #endif
@@ -2645,16 +2661,15 @@ bool ExportGPXWaypoints(wxWindow *parent, RoutePointList *pRoutePoints,
 
 void ExportGPX(wxWindow *parent, bool bviz_only, bool blayer) {
   NavObjectCollection1 *pgpx = new NavObjectCollection1;
-  wxString fns;
+  QString fns;
 
 #ifndef __ANDROID__
-  wxFileName fn = exportFileName(parent, "userobjects.gpx");
-  if (!fn.IsOk()) return;
-  fns = fn.GetFullPath();
+  fns = exportFileName(parent, "userobjects.gpx");
+  if (fns.isEmpty()) return;
 #else
   // Create the .GPX file, saving it in the OCPN Android cache directory
-  fns =
-      androidGetCacheDir() + wxFileName::GetPathSeparator() + "userobjects.gpx";
+  fns = wxString_to_QString(androidGetCacheDir()) + QDir::separator() +
+        "userobjects.gpx";
 
 #endif
   ::wxBeginBusyCursor();
@@ -2709,7 +2724,7 @@ void ExportGPX(wxWindow *parent, bool bviz_only, bool blayer) {
     if (b_add) pgpx->AddGPXTrack(pTrack);
   }
 
-  pgpx->SaveFile(wxString_to_QString(fns));
+  pgpx->SaveFile(fns);
 
 #ifdef __ANDROID__
   // Kick off the Android file chooser activity
@@ -2720,7 +2735,9 @@ void ExportGPX(wxWindow *parent, bool bviz_only, bool blayer) {
   if (path.IsEmpty())  // relocation handled by SAF logic in Java
     return;
 
-  wxCopyFile(fns, path);  // known to be safe paths, since SAF is not involved.
+  QString dest = wxString_to_QString(path);
+  QFile::remove(dest);
+  QFile::copy(fns, dest);  // known to be safe paths, since SAF is not involved.
   return;
 #endif
   delete pgpx;
@@ -2763,8 +2780,8 @@ void UI_ImportGPX(wxWindow *parent, bool islayer, wxString dirpath,
 
       //    Record the currently selected directory for later use
       if (file_array.GetCount()) {
-        wxFileName fn(file_array[0]);
-        g_gpx_path = fn.GetPath();
+        QFileInfo fn(wxString_to_QString(file_array[0]));
+        g_gpx_path = QString_to_wxString(fn.absolutePath());
       }
     }
     delete popenDialog;
@@ -2773,8 +2790,8 @@ void UI_ImportGPX(wxWindow *parent, bool islayer, wxString dirpath,
     response = g_Platform->DoFileSelectorDialog(
         NULL, &path, _("Import GPX file"), g_gpx_path, "", "*.gpx");
 
-    wxFileName fn(path);
-    g_gpx_path = fn.GetPath();
+    QFileInfo fn(wxString_to_QString(path));
+    g_gpx_path = QString_to_wxString(fn.absolutePath());
     if (path.IsEmpty()) {  // Return from SAF processing, expecting callback
       PrepareImportAndroid(islayer, isPersistent);
       return;
@@ -2784,7 +2801,12 @@ void UI_ImportGPX(wxWindow *parent, bool islayer, wxString dirpath,
 #endif
   } else {
     if (isdirectory) {
-      if (wxDir::GetAllFiles(dirpath, &file_array, "*.gpx")) response = wxID_OK;
+      QDirIterator it(wxString_to_QString(dirpath), {"*.gpx"}, QDir::Files,
+                      QDirIterator::Subdirectories);
+      while (it.hasNext()) {
+        file_array.Add(QString_to_wxString(it.next()));
+      }
+      if (file_array.GetCount()) response = wxID_OK;
     } else {
       file_array.Add(dirpath);
       response = wxID_OK;
@@ -2805,15 +2827,15 @@ void ImportFileArray(const wxArrayString &file_array, bool islayer,
     l->m_LayerID = ++g_LayerIdx;
     l->m_LayerFileName = file_array[0];
     if (file_array.GetCount() <= 1)
-      wxFileName::SplitPath(file_array[0], NULL, NULL, &(l->m_LayerName), NULL,
-                            NULL);
+      l->m_LayerName = QString_to_wxString(
+          QFileInfo(wxString_to_QString(file_array[0])).completeBaseName());
     else {
       if (dirpath.IsSameAs(""))
-        wxFileName::SplitPath(g_gpx_path, NULL, NULL, &(l->m_LayerName), NULL,
-                              NULL);
+        l->m_LayerName = QString_to_wxString(
+            QFileInfo(wxString_to_QString(g_gpx_path)).completeBaseName());
       else
-        wxFileName::SplitPath(dirpath, NULL, NULL, &(l->m_LayerName), NULL,
-                              NULL);
+        l->m_LayerName = QString_to_wxString(
+            QFileInfo(wxString_to_QString(dirpath)).completeBaseName());
     }
 
     bool bLayerViz = g_bShowLayers;
@@ -2834,7 +2856,7 @@ void ImportFileArray(const wxArrayString &file_array, bool islayer,
   for (unsigned int i = 0; i < file_array.GetCount(); i++) {
     wxString path = file_array[i];
 
-    if (::wxFileExists(path)) {
+    if (QFile::exists(wxString_to_QString(path))) {
       NavObjectCollection1 *pSet = new NavObjectCollection1;
       pugi::xml_parse_result result = pSet->load_file(path.fn_str());
       if (!result) {
@@ -2858,19 +2880,24 @@ void ImportFileArray(const wxArrayString &file_array, bool islayer,
           // dir /layers
           wxString destf, f, name, ext;
           f = l->m_LayerFileName;
-          wxFileName::SplitPath(f, NULL, NULL, &name, &ext);
+          QFileInfo fi(wxString_to_QString(f));
+          name = QString_to_wxString(fi.completeBaseName());
+          ext = QString_to_wxString(fi.suffix());
           destf = g_Platform->GetPrivateDataDir();
           appendOSDirSlash(&destf);
           destf.Append("layers");
           appendOSDirSlash(&destf);
-          if (!wxDirExists(destf)) {
-            if (!wxMkdir(destf, wxS_DIR_DEFAULT))
+          QString destDir = wxString_to_QString(destf);
+          if (!QDir(destDir).exists()) {
+            if (!QDir().mkpath(destDir))
               wxLogMessage("Error creating layer directory");
           }
 
           destf << name << "." << ext;
           wxString msg;
-          if (wxCopyFile(f, destf, true))
+          QString destPath = wxString_to_QString(destf);
+          QFile::remove(destPath);
+          if (QFile::copy(wxString_to_QString(f), destPath))
             msg.Printf("File: %s.%s also added to persistent layers", name,
                        ext);
           else

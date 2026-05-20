@@ -25,7 +25,12 @@
 
 #include <curl/curl.h>
 
-#include <wx/filename.h>
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QStandardPaths>
+#include <QString>
+
 #include <wx/log.h>
 
 #include "config.h"
@@ -93,7 +98,12 @@ bool Downloader::download(std::ostream* stream) {
 
 bool Downloader::download(std::string& path) {
   if (path == "") {
-    path = wxFileName::CreateTempFileName("ocpn_dl").ToStdString();
+    path =
+        (QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+         QDir::separator() + "ocpn_dl_" +
+         QString::number(QCoreApplication::applicationPid()) + "_" +
+         QString::number(QDateTime::currentMSecsSinceEpoch()))
+            .toStdString();
   }
   std::ofstream stream;
   stream.open(path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);

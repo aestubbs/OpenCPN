@@ -29,8 +29,8 @@
 #include <string>
 
 #include <QDateTime>
+#include <QDir>
 
-#include <wx/filename.h>
 
 #include "model/logger.h"
 
@@ -46,7 +46,8 @@ const static std::map<wxLogLevel, const char*> name_by_level = {
 static std::map<std::string, wxLogLevel> level_by_name;
 
 static std::string basename(const std::string path) {
-  size_t pos = path.rfind(wxFileName::GetPathSeparator(), path.length());
+  size_t pos =
+      path.rfind(QChar(QDir::separator()).toLatin1(), path.length());
   return pos == std::string::npos ? path : path.substr(pos + 1);
 }
 

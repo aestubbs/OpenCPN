@@ -36,6 +36,10 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QFileInfo>
+#include <QString>
+
+#include "model/wx_qt_string.h"
 
 #include <wx/brush.h>
 #include <wx/colour.h>
@@ -4574,12 +4578,14 @@ void glChartCanvas::RenderSingleMBTileOverlay(const int dbIndex, bool bOverlay,
   // Render, or not, depending on passed flag.
   if (bOverlay && pcmbt->GetTileType() != MbTilesType::OVERLAY) return;
 
-  wxFileName tileFile(chart->GetFullPath());
+  QFileInfo tileFile(wxString_to_QString(chart->GetFullPath()));
   // Size test for 5 GByte
-  wxULongLong tileSizeMB = tileFile.GetSize() >> 20;
+  wxULongLong tileSizeMB = wxULongLong(tileFile.size()) >> 20;
 
   // Auto-show MBTiles in basemap directories
-  bool isBasemap = tileFile.GetPath().Lower().Contains("basemap");
+  bool isBasemap = QString_to_wxString(tileFile.absolutePath())
+                       .Lower()
+                       .Contains("basemap");
 
   // For basemap MBTiles, stop rendering when zoomed in past their max detail
   // to allow S57 vector charts to show through

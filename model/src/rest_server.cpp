@@ -28,8 +28,13 @@
 #include <utility>
 #include <vector>
 
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QStandardPaths>
+#include <QString>
+
 #include <wx/event.h>
-#include <wx/filename.h>
 #include <wx/log.h>
 #include <wx/string.h>
 
@@ -534,7 +539,12 @@ void RestServer::HandleServerMessage(ObservedEvt& event) {
   switch (event.GetId()) {
     case ORS_START_OF_SESSION:
       // Prepare a temp file to catch chuncks that might follow
-      m_upload_path = wxFileName::CreateTempFileName("ocpn_tul").ToStdString();
+      m_upload_path =
+          (QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+           QDir::separator() + "ocpn_tul_" +
+           QString::number(QCoreApplication::applicationPid()) + "_" +
+           QString::number(QDateTime::currentMSecsSinceEpoch()))
+              .toStdString();
 
       m_ul_stream.open(m_upload_path.c_str(), std::ios::out | std::ios::trunc);
       if (!m_ul_stream.is_open()) {

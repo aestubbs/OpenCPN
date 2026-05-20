@@ -24,7 +24,12 @@
  */
 #include <vector>
 
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include <QString>
 
 #include "dychart.h"  // Must be ahead due to buggy GL includes handling
@@ -467,8 +472,8 @@ wxArrayString GetChartDBDirArrayString() {
 
 int AddChartToDBInPlace(wxString& full_path, bool b_RefreshCanvas) {
   // extract the path from the chart name
-  wxFileName fn(full_path);
-  wxString fdir = fn.GetPath();
+  QFileInfo fn(wxString_to_QString(full_path));
+  wxString fdir = QString_to_wxString(fn.absolutePath());
 
   bool bret = false;
   if (ChartData) {
@@ -619,21 +624,25 @@ bool GetRoutepointGPX(RoutePoint* pRoutePoint, char* buffer,
 
   NavObjectCollection1* pgpx = new NavObjectCollection1;
   pgpx->AddGPXWaypoint(pRoutePoint);
-  wxString gpxfilename = wxFileName::CreateTempFileName("gpx");
-  pgpx->SaveFile(wxString_to_QString(gpxfilename));
+  QString gpxFilename =
+      QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+      QDir::separator() + "gpx_" +
+      QString::number(QCoreApplication::applicationPid()) + "_" +
+      QString::number(QDateTime::currentMSecsSinceEpoch());
+  pgpx->SaveFile(gpxFilename);
   delete pgpx;
 
-  wxFFile gpxfile(gpxfilename);
-  wxString s;
-  if (gpxfile.ReadAll(&s)) {
-    if (s.Length() < buffer_length) {
-      strncpy(buffer, (const char*)s.mb_str(wxConvUTF8), buffer_length - 1);
+  QFile gpxfile(gpxFilename);
+  if (gpxfile.open(QIODevice::ReadOnly)) {
+    QByteArray data = gpxfile.readAll();
+    if (static_cast<unsigned int>(data.size()) < buffer_length) {
+      memcpy(buffer, data.constData(), data.size());
+      buffer[data.size()] = '\0';
       ret = true;
     }
+    gpxfile.close();
   }
-
-  gpxfile.Close();
-  ::wxRemoveFile(gpxfilename);
+  QFile::remove(gpxFilename);
 
   return ret;
 }

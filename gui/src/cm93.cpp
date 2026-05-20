@@ -37,6 +37,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <QStringList>
+#include <QTextStream>
 
 #include <wx/arrstr.h>
 #include <wx/listctrl.h>
@@ -584,10 +586,15 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
     if (!QFile::exists(wxString_to_QString(sf))) return false;
   }
 
-  wxTextFile file;
-  if (!file.Open(sf)) return false;
+  QStringList qlines;
+  {
+    QFile cfile(wxString_to_QString(sf));
+    if (!cfile.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    QTextStream in(&cfile);
+    while (!in.atEnd()) qlines << in.readLine();
+  }
 
-  nline = file.GetLineCount();
+  nline = qlines.size();
 
   if (!nline) return false;
 
@@ -595,7 +602,7 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
   int iclass_max = 0;
 
   for (i = 0; i < nline; i++) {
-    line = file.GetLine(i);
+    line = QString_to_wxString(qlines[i]);
 
     wxStringTokenizer tkz(line, "|");
     //            while ( tkz.HasMoreTokens() )
@@ -627,7 +634,7 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
 
   //    Iterate over the file, filling in the values
   for (i = 0; i < nline; i++) {
-    line = file.GetLine(i);
+    line = QString_to_wxString(qlines[i]);
 
     wxStringTokenizer tkz(line, "|");
     //           while ( tkz.HasMoreTokens() )
@@ -664,7 +671,6 @@ bool cm93_dictionary::LoadDictionary(const wxString &dictionary_dir) {
       m_GeomTypeArray[iclass] = igeom_type;
     }
   }
-  file.Close();
 
   //    Build some array strings for Attribute decoding
 

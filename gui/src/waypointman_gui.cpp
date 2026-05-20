@@ -371,41 +371,9 @@ void WayPointmanGui::ProcessDefaultIcons(double displayDPmm) {
   }
 
 #if 0
-    wxArrayString FileList;
-    double bm_size = -1;
-
-    int n_files = wxDir::GetAllFiles( iconDir, &FileList );
-
-    // If the scale factor is not unity, measure the first icon in the list
-    //  So that we may apply the scale factor exactly to all
-    if( fabs(g_ChartScaleFactorExp - 1.0) > 0.1){
-
-        for( int ifile = 0; ifile < n_files; ifile++ ) {
-            wxString name = FileList[ifile];
-
-            wxFileName fn( name );
-
-            if( fn.GetExt().Lower() == "svg" ) {
-                wxBitmap bmt = LoadSVG(name, -1, -1 );
-                bm_size = bmt.GetWidth() * g_ChartScaleFactorExp;
-                break;
-            }
-        }
-    }
-
-    for( int ifile = 0; ifile < n_files; ifile++ ) {
-        wxString name = FileList[ifile];
-
-        wxFileName fn( name );
-        wxString iconname = fn.GetName();
-        wxBitmap icon1;
-        if( fn.GetExt().Lower() == "svg" ) {
-            wxImage iconSVG = LoadSVG( name, (int)bm_size, (int)bm_size );
-            MarkIcon * pmi = ProcessExtendedIcon( iconSVG, iconname, iconname );
-            if(pmi)
-                pmi->preScaled = true;
-        }
-    }
+    // Historical wx-based icon-discovery code; replaced by the QDirIterator
+    // implementation below.  Left here for reference only and intentionally
+    // not maintained / not compiled.
 #else
 
   wxArrayString FileList;

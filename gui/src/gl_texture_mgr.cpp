@@ -27,7 +27,11 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
 #include <QList>
+
+#include "model/wx_qt_string.h"
 
 #include <wx/wxprec.h>
 #include <wx/progdlg.h>
@@ -100,7 +104,7 @@ wxString CompressedCachePath(wxString path) {
 #endif
 
   /* replace path separators with ! */
-  wxChar separator = wxFileName::GetPathSeparator();
+  wxChar separator = QDir::separator().unicode();
   for (unsigned int pos = 0; pos < path.size(); pos = path.find(separator, pos))
     path.replace(pos, 1, "!");
 
@@ -812,8 +816,8 @@ void glTextureManager::OnEvtThread(OCPN_CompressionThreadEvent &event) {
           msgy.Printf("  [%3d/%3d]  ", event.nstat + 1, event.nstat_max);
           msgx += msgy;
 
-          wxFileName fn(ticket->m_ChartPath);
-          msgx += fn.GetFullName();
+          QFileInfo fn(wxString_to_QString(ticket->m_ChartPath));
+          msgx += QString_to_wxString(fn.fileName());
         }
       } else
         msgx.Printf("\n %3d/%3d", event.nstat + 1, event.nstat_max);
@@ -1328,8 +1332,8 @@ void glTextureManager::BuildCompressedCache() {
 
     wxString CompressedCacheFilePath =
         CompressedCachePath(ChartData->GetDBChartFileName(i));
-    wxFileName fn(CompressedCacheFilePath);
-    //        if(fn.FileExists()) /* skip if file exists */
+    //        if(QFile::exists(wxString_to_QString(CompressedCacheFilePath)))
+    //          /* skip if file exists */
     //            continue;
 
     idx_sorted_by_distance.Add(i);

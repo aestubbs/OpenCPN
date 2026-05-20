@@ -103,6 +103,11 @@
 #include "model/ais_state_vars.h"
 #include "model/certificates.h"
 #include "model/wx_qt_string.h"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include "model/cmdline.h"
 #include "model/comm_bridge.h"
 #include "model/comm_drv_factory.h"
@@ -324,8 +329,8 @@ wxString newPrivateFileName(wxString, const char *name,
   wxString filePathAndName;
 
   filePathAndName = g_Platform->GetPrivateDataDir();
-  if (filePathAndName.Last() != wxFileName::GetPathSeparator())
-    filePathAndName.Append(wxFileName::GetPathSeparator());
+  if (filePathAndName.Last() != QChar(QDir::separator()).toLatin1())
+    filePathAndName.Append(QChar(QDir::separator()).toLatin1());
 
 #ifdef __WXMSW__
   wxString fwname = wxString::FromUTF8(windowsName);
@@ -751,7 +756,8 @@ bool MyApp::OnInit() {
   g_BasePlatform = g_Platform;
 #ifndef __ANDROID__
   //  We allow only one instance unless the portable option is used
-  if (!g_bportable && wxDirExists(g_Platform->GetPrivateDataDir())) {
+  if (!g_bportable &&
+      QDir(wxString_to_QString(g_Platform->GetPrivateDataDir())).exists()) {
     m_checker.WaitUntilValid();
     if (m_checker.IsMainInstance()) {
       // Server is created on first call to GetInstance()
@@ -991,8 +997,9 @@ bool MyApp::OnInit() {
 
   bool b_initial_load = false;
 
-  wxFileName config_test_file_name(g_Platform->GetConfigFileName());
-  if (config_test_file_name.FileExists())
+  QFileInfo config_test_file_name(
+      wxString_to_QString(g_Platform->GetConfigFileName()));
+  if (config_test_file_name.exists() && config_test_file_name.isFile())
     wxLogMessage("Using existing Config_File: " +
                  g_Platform->GetConfigFileName());
   else {
@@ -1002,9 +1009,9 @@ bool MyApp::OnInit() {
 
       b_initial_load = true;
 
-      if (true !=
-          config_test_file_name.DirExists(config_test_file_name.GetPath()))
-        if (!config_test_file_name.Mkdir(config_test_file_name.GetPath()))
+      QString cfgDir = config_test_file_name.absolutePath();
+      if (!QDir(cfgDir).exists())
+        if (!QDir().mkpath(cfgDir))
           wxLogMessage("Cannot create config file directory for " +
                        g_Platform->GetConfigFileName());
     }
@@ -1197,11 +1204,10 @@ bool MyApp::OnInit() {
 
   //      Establish guessed location of chart tree
   if (pInit_Chart_Dir->IsEmpty()) {
-    wxStandardPaths &std_path = g_Platform->GetStdPaths();
-
     if (!g_bportable)
 #ifndef __ANDROID__
-      pInit_Chart_Dir->Append(std_path.GetDocumentsDir());
+      pInit_Chart_Dir->Append(QString_to_wxString(
+          QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)));
 #else
       pInit_Chart_Dir->Append(androidGetExtStorageDir());
 #endif
@@ -1212,7 +1218,7 @@ bool MyApp::OnInit() {
   //      Establish the GSHHS Dataset location
   gDefaultWorldMapLocation = "gshhs";
   gDefaultWorldMapLocation.Prepend(g_Platform->GetSharedDataDir());
-  gDefaultWorldMapLocation.Append(wxFileName::GetPathSeparator());
+  gDefaultWorldMapLocation.Append(QChar(QDir::separator()).toLatin1());
   if (gWorldMapLocation == wxEmptyString) {
     gWorldMapLocation = gDefaultWorldMapLocation;
   }
@@ -1221,13 +1227,13 @@ bool MyApp::OnInit() {
   //  If empty, preset default (US + ROW) data sources
   wxString default_tcdata0 =
       (g_Platform->GetSharedDataDir() + "tcdata" +
-       wxFileName::GetPathSeparator() + "harmonics-dwf-20210110-free.tcd");
+       QChar(QDir::separator()).toLatin1() + "harmonics-dwf-20210110-free.tcd");
   wxString default_tcdata1 =
       (g_Platform->GetSharedDataDir() + "tcdata" +
-       wxFileName::GetPathSeparator() + "HARMONICS_NO_US.IDX");
+       QChar(QDir::separator()).toLatin1() + "HARMONICS_NO_US.IDX");
   wxString default_tcdata2 =
       (g_Platform->GetSharedDataDir() + "tcdata" +
-       wxFileName::GetPathSeparator() + "ticon-europe-global.tcd");
+       QChar(QDir::separator()).toLatin1() + "ticon-europe-global.tcd");
 
   if (TideCurrentDataSet.empty()) {
     TideCurrentDataSet.push_back(
@@ -1242,7 +1248,7 @@ bool MyApp::OnInit() {
   //  If empty, preset default
   if (g_sAIS_Alert_Sound_File.IsEmpty()) {
     wxString default_sound = (g_Platform->GetSharedDataDir() + "sounds" +
-                              wxFileName::GetPathSeparator() + "2bells.wav");
+                              QChar(QDir::separator()).toLatin1() + "2bells.wav");
     g_sAIS_Alert_Sound_File = g_Platform->NormalizePath(default_sound);
   }
 
@@ -1315,8 +1321,8 @@ bool MyApp::OnInit() {
     std::string ipAddr = ipv4_addrs[0];
 
     wxString data_dir = g_Platform->GetPrivateDataDir();
-    if (data_dir.Last() != wxFileName::GetPathSeparator())
-      data_dir.Append(wxFileName::GetPathSeparator());
+    if (data_dir.Last() != QChar(QDir::separator()).toLatin1())
+      data_dir.Append(QChar(QDir::separator()).toLatin1());
 
     make_certificate(ipAddr, data_dir.ToStdString());
 
@@ -1734,8 +1740,10 @@ void MyApp::LoadChartDatabase() {
   //    TODO  There is a possibility of recreating the dir list from the
   //    database itself......
 
-  if (!ChartDirArray.size())
-    if (::wxFileExists(ChartListFileName)) ::wxRemoveFile(ChartListFileName);
+  if (!ChartDirArray.size()) {
+    QString qChartListFileName = wxString_to_QString(ChartListFileName);
+    if (QFile::exists(qChartListFileName)) QFile::remove(qChartListFileName);
+  }
 
   //      Try to load the current chart list Data file
   ChartData = new ChartDB();

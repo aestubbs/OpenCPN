@@ -35,6 +35,8 @@
 
 #include <time.h>
 
+#include <QDir>
+#include <QFile>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
@@ -294,8 +296,11 @@ void ConfigMgr::Init() {
   appendOSDirSlash(&m_configDir);
   m_configDir.append("Configs");
   appendOSDirSlash(&m_configDir);
-  if (!wxFileName::DirExists(m_configDir)) {
-    wxFileName::Mkdir(m_configDir);
+  {
+    QString qConfigDir = wxString_to_QString(m_configDir);
+    if (!QDir(qConfigDir).exists()) {
+      QDir().mkpath(qConfigDir);
+    }
   }
 
   m_configCatalogName = g_Platform->GetPrivateDataDir();
@@ -305,7 +310,7 @@ void ConfigMgr::Init() {
   m_configCatalogName.append("configs.xml");
 
   // Create the catalog, if necessary
-  if (!wxFileExists(m_configCatalogName)) {
+  if (!QFile::exists(wxString_to_QString(m_configCatalogName))) {
     wxLogMessage("Creating new Configs catalog: " + m_configCatalogName);
 
     OCPNConfigCatalog *cat = new OCPNConfigCatalog();
@@ -437,7 +442,10 @@ bool ConfigMgr::DeleteConfig(wxString GUID) {
 
   // Find and delete the template file
   wxString templateFullFileName = GetConfigDir() + cfg->templateFileName;
-  if (wxFileExists(templateFullFileName)) wxRemoveFile(templateFullFileName);
+  {
+    QString qTplPath = wxString_to_QString(templateFullFileName);
+    if (QFile::exists(qTplPath)) QFile::remove(qTplPath);
+  }
 
   // Remove the config from the catalog
   bool rv = m_configCatalog->RemoveConfig(GUID);

@@ -25,6 +25,10 @@
 #include <sstream>
 #include <string>
 
+#include <QFile>
+
+#include "model/wx_qt_string.h"
+
 #include "model/base_platform.h"
 
 #include "about_frame_impl.h"
@@ -77,7 +81,7 @@ AboutFrameImpl::AboutFrameImpl(wxWindow* parent, wxWindowID id,
   wxString target = wxString::Format(
       "%sdoc/local/toc_flat.html", g_BasePlatform->GetSharedDataDir().c_str());
 
-  if (!::wxFileExists(target))
+  if (!QFile::exists(wxString_to_QString(target)))
     target = wxString::Format("%sdoc/help_web.html",
                               g_BasePlatform->GetSharedDataDir().c_str());
 
@@ -105,7 +109,7 @@ void AboutFrameImpl::OnLinkHelp(wxHyperlinkEvent& event) {
 #ifdef __WXGTK__
   wxString testFile = wxString::Format(
       "/%s/doc/help_web.html", g_BasePlatform->GetSharedDataDir().c_str());
-  if (!::wxFileExists(testFile)) {
+  if (!QFile::exists(wxString_to_QString(testFile))) {
     wxString msg = _("OpenCPN Help documentation is not available locally.");
     msg += "\n";
     msg +=

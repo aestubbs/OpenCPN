@@ -29,7 +29,13 @@
 #include <wx/textwrapper.h>
 #include <wx/wxhtml.h>
 
+#include <QFile>
+#include <QFileInfo>
+#include <QString>
+#include <QTextStream>
+
 #include "model/config_vars.h"
+#include "model/wx_qt_string.h"
 #include "s57_query_dlg.h"
 #include "navutil.h"
 #include "gui_lib.h"
@@ -218,16 +224,17 @@ void S57QueryDialog::OnHtmlLinkClicked(wxHtmlLinkEvent& event) {
       wxSize(g_S57_extradialog_sx, g_S57_extradialog_sy));
 
   // Check te kind of file, load text files serial and pictures direct
-  wxFileName filen(event.GetLinkInfo().GetHref());
+  QFileInfo filen(wxString_to_QString(event.GetLinkInfo().GetHref()));
   wxString Extensions = wxString("txt,html,rtf");
+  QString extLower = filen.suffix().toLower();
 
-  if (Extensions.Find(filen.GetExt().Lower()) == wxNOT_FOUND)
+  if (Extensions.Find(QString_to_wxString(extLower)) == wxNOT_FOUND)
     ExtraObjInfoDlg->m_phtml->LoadPage(event.GetLinkInfo().GetHref());
   else {
-    wxTextFile txf(filen.GetFullPath());
-    if (txf.Open()) {
+    QFile txf(filen.absoluteFilePath());
+    if (txf.open(QIODevice::ReadOnly | QIODevice::Text)) {
       wxString contents;
-      if (filen.GetExt().Lower() == "txt") {
+      if (extLower == "txt") {
         contents +=
             "<font color="
             "" +
@@ -235,17 +242,15 @@ void S57QueryDialog::OnHtmlLinkClicked(wxHtmlLinkEvent& event) {
             ""
             ">";
       }
-      wxString str;
-      str = txf.GetFirstLine();
-      do {
+      QTextStream in(&txf);
+      while (!in.atEnd()) {
+        wxString str = QString_to_wxString(in.readLine());
         MessageHardBreakWrapper wrapper(ExtraObjInfoDlg->m_phtml, str,
                                         m_phtml->GetSize().x * 9 / 10);
         contents += wrapper.GetWrapped();
         contents += "<br>";
-
-        str = txf.GetNextLine();
-      } while (!txf.Eof());
-      if (filen.GetExt().Lower() == "txt") {
+      }
+      if (extLower == "txt") {
         contents += "</font>";
       }
 

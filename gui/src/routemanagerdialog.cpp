@@ -60,6 +60,10 @@
 #include "model/route.h"
 #include "model/routeman.h"
 #include "model/wx_qt_string.h"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include "model/select.h"
 #include "model/track.h"
 
@@ -1016,7 +1020,7 @@ void RouteManagerDialog::Create() {
 
   // Load eye icons
   wxString UserIconPath = g_Platform->GetSharedDataDir() + "uidata" +
-                          wxFileName::GetPathSeparator();
+                          QChar(QDir::separator()).toLatin1();
   wxImage iconSVG =
       LoadSVG(UserIconPath + "eye.svg", imageRefSize, imageRefSize)
           .ConvertToImage();
@@ -3025,7 +3029,11 @@ void RouteManagerDialog::OnLayDeleteClick(wxCommandEvent &event) {
   bool ispers = false;
   wxString destf, f, name, ext;
   f = layer->m_LayerFileName;
-  wxFileName::SplitPath(f, NULL, NULL, &name, &ext);
+  {
+    QFileInfo fi(wxString_to_QString(f));
+    name = QString_to_wxString(fi.completeBaseName());
+    ext = QString_to_wxString(fi.suffix());
+  }
   destf = g_Platform->GetPrivateDataDir();
   appendOSDirSlash(&destf);
   destf.Append("layers");
@@ -3034,7 +3042,7 @@ void RouteManagerDialog::OnLayDeleteClick(wxCommandEvent &event) {
 
   wxString prompt = _(
       "Are you sure you want to delete this layer and <ALL> of its contents?");
-  if (wxFileExists(destf)) {
+  if (QFile::exists(wxString_to_QString(destf))) {
     prompt.Append("\n");
     prompt.Append(
         _("The file will also be deleted from OpenCPN's layer directory."));
@@ -3048,7 +3056,7 @@ void RouteManagerDialog::OnLayDeleteClick(wxCommandEvent &event) {
   // Delete a persistent layer file if present
   if (ispers) {
     wxString remMSG;
-    if (wxRemoveFile(destf))
+    if (QFile::remove(wxString_to_QString(destf)))
       remMSG.sprintf("Layer file: %s is deleted", destf);
     else
       remMSG.sprintf("Error deleting Layer file: %s", destf);

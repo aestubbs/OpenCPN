@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QDir>
 
 #include "model/wx_qt_string.h"
 
@@ -115,20 +116,19 @@ NotificationPanel::NotificationPanel(
   wxImage notification_icon;
   ocpnStyle::Style* style = g_StyleManager->GetCurrentStyle();
   wxBitmap bitmap;
-  wxFileName path;
+  QString iconLeaf;
   if (notification->GetSeverity() == NotificationSeverity::kInformational) {
-    path =
-        wxFileName(g_Platform->GetSharedDataDir(), "notification-info-2.svg");
+    iconLeaf = "notification-info-2.svg";
   } else if (notification->GetSeverity() == NotificationSeverity::kWarning) {
-    path = wxFileName(g_Platform->GetSharedDataDir(),
-                      "notification-warning-2.svg");
+    iconLeaf = "notification-warning-2.svg";
   } else {
-    path = wxFileName(g_Platform->GetSharedDataDir(),
-                      "notification-critical-2.svg");
+    iconLeaf = "notification-critical-2.svg";
   }
-  path.AppendDir("uidata");
-  path.AppendDir("MUI_flat");
-  bitmap = LoadSVG(path.GetFullPath(), icon_scale, icon_scale);
+  QString sharedDir = wxString_to_QString(g_Platform->GetSharedDataDir());
+  if (!sharedDir.endsWith(QDir::separator())) sharedDir += QDir::separator();
+  QString fullPath = sharedDir + "uidata" + QDir::separator() + "MUI_flat" +
+                     QDir::separator() + iconLeaf;
+  bitmap = LoadSVG(QString_to_wxString(fullPath), icon_scale, icon_scale);
   m_itemStaticBitmap = new wxStaticBitmap(this, wxID_ANY, bitmap);
 
   itemBoxSizer01->Add(m_itemStaticBitmap, 0, wxEXPAND | wxALL, 10);
@@ -691,12 +691,13 @@ void NotificationButton::CreateBmp(bool newColorScheme) {
   offset.x = ((m_StatBmp.GetWidth() - swidth) / 2);
   offset.y = ((m_StatBmp.GetHeight() - sheight) / 2);
 
-  wxFileName icon_path;
   wxString file_name = m_NoteIconName + ".svg";
-  icon_path = wxFileName(g_Platform->GetSharedDataDir(), file_name);
-  icon_path.AppendDir("uidata");
-  icon_path.AppendDir("MUI_flat");
-  wxBitmap gicon = LoadSVG(icon_path.GetFullPath(), swidth, sheight);
+  QString sharedDir = wxString_to_QString(g_Platform->GetSharedDataDir());
+  if (!sharedDir.endsWith(QDir::separator())) sharedDir += QDir::separator();
+  QString iconFullPath = sharedDir + "uidata" + QDir::separator() + "MUI_flat" +
+                         QDir::separator() + wxString_to_QString(file_name);
+  wxBitmap gicon =
+      LoadSVG(QString_to_wxString(iconFullPath), swidth, sheight);
 
   wxBitmap iconBm;
   iconBm = gicon;
