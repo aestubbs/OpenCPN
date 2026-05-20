@@ -54,8 +54,12 @@
 #include <wx/stdpaths.h>
 #include <wx/tokenzr.h>
 #include <wx/display.h>
-#include <wx/jsonreader.h>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
 #include <QList>
 
 #include "o_sound/o_sound.h"
@@ -2715,14 +2719,16 @@ void MyFrame::OnToolLeftClick(wxCommandEvent &event) {
     case ID_CMD_POST_JSON_TO_PLUGINS: {
       // Extract the Message ID which is embedded in the JSON string passed in
       // the event
-      wxJSONValue root;
-      wxJSONReader reader;
-
-      int numErrors = reader.Parse(event.GetString(), &root);
-      if (numErrors == 0) {
-        if (root["MessageID"].IsString()) {
-          wxString MsgID = root["MessageID"].AsString();
-          SendPluginMessage(MsgID, event.GetString());  // Send to all PlugIns
+      const wxString payload = event.GetString();
+      QJsonParseError err;
+      QJsonDocument doc =
+          QJsonDocument::fromJson(QByteArray(payload.utf8_str()), &err);
+      if (err.error == QJsonParseError::NoError && doc.isObject()) {
+        const QJsonObject root = doc.object();
+        const QJsonValue id = root.value("MessageID");
+        if (id.isString()) {
+          wxString MsgID = QString_to_wxString(id.toString());
+          SendPluginMessage(MsgID, payload);  // Send to all PlugIns
         }
       }
 
@@ -3094,10 +3100,9 @@ void MyFrame::ActivateMOB() {
     if (g_pRouteMan->GetpActiveRoute()) g_pRouteMan->DeactivateRoute();
     g_pRouteMan->ActivateRoute(temp_route, pWP_MOB);
 
-    wxJSONValue v;
-    v["GUID"] = QString_to_wxString(temp_route->m_GUID);
-    wxString msg_id("OCPN_MAN_OVERBOARD");
-    SendJSONMessageToAllPlugins(msg_id, v);
+    QJsonObject v;
+    v["GUID"] = temp_route->m_GUID;
+    SendJSONMessageToAllPlugins(QStringLiteral("OCPN_MAN_OVERBOARD"), v);
   }
 
   if (RouteManagerDialog::getInstanceFlag()) {
@@ -3145,22 +3150,20 @@ void MyFrame::TrackOn() {
     }
   }
 
-  wxJSONValue v;
-  wxString name = QString_to_wxString(g_pActiveTrack->GetName());
-  if (name.IsEmpty()) {
+  QJsonObject v;
+  QString name = g_pActiveTrack->GetName();
+  if (name.isEmpty()) {
     TrackPoint *tp = g_pActiveTrack->GetPoint(0);
     if (tp->GetCreateTime().isValid()) {
       // ISO 8601 with a space between date and time, matching the legacy
       // wxDateTime FormatISODate + " " + FormatISOTime pattern.
-      name = QString_to_wxString(
-          tp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss"));
+      name = tp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss");
     } else
-      name = _("(Unnamed Track)");
+      name = wxString_to_QString(_("(Unnamed Track)"));
   }
   v["Name"] = name;
-  v["GUID"] = QString_to_wxString(g_pActiveTrack->m_GUID);
-  wxString msg_id("OCPN_TRK_ACTIVATED");
-  SendJSONMessageToAllPlugins(msg_id, v);
+  v["GUID"] = g_pActiveTrack->m_GUID;
+  SendJSONMessageToAllPlugins(QStringLiteral("OCPN_TRK_ACTIVATED"), v);
   g_FlushNavobjChangesTimeout =
       30;  // Every thirty seconds, consider flushing navob changes
 }
@@ -3169,10 +3172,9 @@ Track *MyFrame::TrackOff(bool do_add_point) {
   Track *return_val = g_pActiveTrack;
 
   if (g_pActiveTrack) {
-    wxJSONValue v;
-    wxString msg_id("OCPN_TRK_DEACTIVATED");
-    v["GUID"] = QString_to_wxString(g_pActiveTrack->m_GUID);
-    SendJSONMessageToAllPlugins(msg_id, v);
+    QJsonObject v;
+    v["GUID"] = g_pActiveTrack->m_GUID;
+    SendJSONMessageToAllPlugins(QStringLiteral("OCPN_TRK_DEACTIVATED"), v);
 
     g_pActiveTrack->Stop(do_add_point);
 
@@ -5843,7 +5845,7 @@ double MyFrame::GetMag(double a, double lat, double lon) {
 bool MyFrame::SendJSON_WMM_Var_Request(double lat, double lon,
                                        QDateTime date) {
   if (g_pi_manager) {
-    wxJSONValue v;
+    QJsonObject v;
     v["Lat"] = lat;
     v["Lon"] = lon;
     v["Year"] = date.date().year();
@@ -5852,7 +5854,7 @@ bool MyFrame::SendJSON_WMM_Var_Request(double lat, double lon,
     v["Month"] = date.date().month() - 1;
     v["Day"] = date.date().day();
 
-    SendJSONMessageToAllPlugins("WMM_VARIATION_REQUEST", v);
+    SendJSONMessageToAllPlugins(QStringLiteral("WMM_VARIATION_REQUEST"), v);
     return true;
   } else
     return false;
@@ -6181,21 +6183,17 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
   //  present, active, and we have no other source of Variation
   if (!g_bVAR_Rx) {
     if (message_ID == "WMM_VARIATION_BOAT") {
-      // construct the JSON root object
-      wxJSONValue root;
-      // construct a JSON parser
-      wxJSONReader reader;
-
-      // now read the JSON text and store it in the 'root' structure
-      // check for errors before retreiving values...
-      int numErrors = reader.Parse(message_JSONText, &root);
-      if (numErrors > 0) {
-        //              const wxArrayString& errors = reader.GetErrors();
+      // Parse the JSON text into a Qt JSON object.  Bail on parse errors.
+      QJsonParseError err;
+      QJsonDocument doc = QJsonDocument::fromJson(
+          QByteArray(message_JSONText.utf8_str()), &err);
+      if (err.error != QJsonParseError::NoError || !doc.isObject()) {
         return;
       }
+      const QJsonObject root = doc.object();
 
       // get the DECL value from the JSON message
-      wxString decl = root["Decl"].AsString();
+      wxString decl = QString_to_wxString(root.value("Decl").toString());
       double decl_val;
       decl.ToDouble(&decl_val);
 
@@ -6204,21 +6202,17 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
   }
 
   if (message_ID == "WMM_VARIATION") {
-    // construct the JSON root object
-    wxJSONValue root;
-    // construct a JSON parser
-    wxJSONReader reader;
-
-    // now read the JSON text and store it in the 'root' structure
-    // check for errors before retreiving values...
-    int numErrors = reader.Parse(message_JSONText, &root);
-    if (numErrors > 0) {
-      //              const wxArrayString& errors = reader.GetErrors();
+    // Parse the JSON text into a Qt JSON object.  Bail on parse errors.
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(
+        QByteArray(message_JSONText.utf8_str()), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
       return;
     }
+    const QJsonObject root = doc.object();
 
     // get the DECL value from the JSON message
-    wxString decl = root["Decl"].AsString();
+    wxString decl = QString_to_wxString(root.value("Decl").toString());
     double decl_val;
     decl.ToDouble(&decl_val);
 
@@ -6226,27 +6220,30 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
   }
 
   if (message_ID == "GRIB_TIMELINE") {
-    wxJSONReader r;
-    wxJSONValue v;
-    int numErrors = r.Parse(message_JSONText, &v);
-
-    if (numErrors > 0) {
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(
+        QByteArray(message_JSONText.utf8_str()), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
       wxLogMessage("GRIB_TIMELINE: JSON parse error");
       return;
     }
+    const QJsonObject v = doc.object();
 
     // Store old time source for comparison
     QDateTime oldTimeSource = gTimeSource;
 
-    if (v["Day"].AsInt() == -1) {
+    if (v.value("Day").toInt() == -1) {
       gTimeSource = QDateTime();
       wxLogMessage("GRIB_TIMELINE: Reset to system time");
     } else {
       // Qt months are 1-based, matching wxDateTime::Month + 1.
       // wxDateTime::Month is 0-based (January = 0).
-      gTimeSource = QDateTime(
-          QDate(v["Year"].AsInt(), v["Month"].AsInt() + 1, v["Day"].AsInt()),
-          QTime(v["Hour"].AsInt(), v["Minute"].AsInt(), v["Second"].AsInt()));
+      gTimeSource = QDateTime(QDate(v.value("Year").toInt(),
+                                    v.value("Month").toInt() + 1,
+                                    v.value("Day").toInt()),
+                              QTime(v.value("Hour").toInt(),
+                                    v.value("Minute").toInt(),
+                                    v.value("Second").toInt()));
     }
 
     // Refresh tide displays if time source changed
@@ -6266,28 +6263,26 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
     }
   }
   if (message_ID == "OCPN_TRACK_REQUEST") {
-    wxJSONValue root;
-    wxJSONReader reader;
-    wxString trk_id = wxEmptyString;
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(
+        QByteArray(message_JSONText.utf8_str()), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
+    const QJsonObject root = doc.object();
+    QString trk_id;
+    if (root.contains("Track_ID")) trk_id = root.value("Track_ID").toString();
 
-    int numErrors = reader.Parse(message_JSONText, &root);
-    if (numErrors > 0) return;
-
-    if (root.HasMember("Track_ID")) trk_id = root["Track_ID"].AsString();
-
-    wxJSONValue v;
+    QJsonObject v;
     v["Track_ID"] = trk_id;
     for (Track *ptrack : g_TrackList) {
-      wxString name = wxEmptyString;
-      if (ptrack->m_GUID == wxString_to_QString(trk_id)) {
-        name = QString_to_wxString(ptrack->GetName());
-        if (name.IsEmpty()) {
+      QString name;
+      if (ptrack->m_GUID == trk_id) {
+        name = ptrack->GetName();
+        if (name.isEmpty()) {
           TrackPoint *rp = ptrack->GetPoint(0);
           if (rp && rp->GetCreateTime().isValid())
-            name = QString_to_wxString(
-                rp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss"));
+            name = rp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss");
           else
-            name = _("(Unnamed Track)");
+            name = wxString_to_QString(_("(Unnamed Track)"));
         }
 
         /*                To avoid memory problems send a single trackpoint.
@@ -6301,146 +6296,150 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
           v["lon"] = tp->m_lon;
           v["NodeNr"] = i;
           i++;
-          wxString msg_id("OCPN_TRACKPOINTS_COORDS");
-          SendJSONMessageToAllPlugins(msg_id, v);
+          SendJSONMessageToAllPlugins(
+              QStringLiteral("OCPN_TRACKPOINTS_COORDS"), v);
         }
         return;
       }
       v["error"] = true;
 
-      wxString msg_id("OCPN_TRACKPOINTS_COORDS");
-      SendJSONMessageToAllPlugins(msg_id, v);
+      SendJSONMessageToAllPlugins(QStringLiteral("OCPN_TRACKPOINTS_COORDS"), v);
     }
   } else if (message_ID == "OCPN_ROUTE_REQUEST") {
-    wxJSONValue root;
-    wxJSONReader reader;
-    wxString guid = wxEmptyString;
-
-    int numErrors = reader.Parse(message_JSONText, &root);
-    if (numErrors > 0) {
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(
+        QByteArray(message_JSONText.utf8_str()), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
       return;
     }
+    const QJsonObject root = doc.object();
+    QString guid;
+    if (root.contains("GUID")) guid = root.value("GUID").toString();
 
-    if (root.HasMember("GUID")) guid = root["GUID"].AsString();
-
-    wxJSONValue v;
+    QJsonObject v;
     v["GUID"] = guid;
     for (auto it = pRouteList->begin(); it != pRouteList->end(); ++it) {
-      wxString name = wxEmptyString;
-
-      if (QString_to_wxString((*it)->m_GUID) == guid) {
-        name = QString_to_wxString((*it)->m_RouteNameString);
-        if (name.IsEmpty()) name = _("(Unnamed Route)");
+      QString name;
+      if ((*it)->m_GUID == guid) {
+        name = (*it)->m_RouteNameString;
+        if (name.isEmpty()) name = wxString_to_QString(_("(Unnamed Route)"));
 
         v["Name"] = name;
         v["error"] = false;
-        wxJSONValue w;
-        int i = 0;
+        QJsonArray w;
         for (RoutePointList::iterator itp = (*it)->pRoutePointList->begin();
              itp != (*it)->pRoutePointList->end(); itp++) {
-          w[i]["lat"] = (*itp)->m_lat;
-          w[i]["lon"] = (*itp)->m_lon;
-          w[i]["Name"] = QString_to_wxString((*itp)->GetName());
-          w[i]["Description"] =
-              QString_to_wxString((*itp)->GetDescription());
-          w[i]["GUID"] = QString_to_wxString((*itp)->m_GUID);
-          w[i]["ArrivalRadius"] = (*itp)->GetWaypointArrivalRadius();
+          QJsonObject wp;
+          wp["lat"] = (*itp)->m_lat;
+          wp["lon"] = (*itp)->m_lon;
+          wp["Name"] = (*itp)->GetName();
+          wp["Description"] = (*itp)->GetDescription();
+          wp["GUID"] = (*itp)->m_GUID;
+          wp["ArrivalRadius"] = (*itp)->GetWaypointArrivalRadius();
 
           auto node = (*itp)->m_HyperlinkList->begin();
           if (node != (*itp)->m_HyperlinkList->end()) {
             int n = 1;
             while (node != (*itp)->m_HyperlinkList->end()) {
               Hyperlink *httpLink = *node;
-              v[i]["WPLink" + wxString::Format("%d", n)] = httpLink->Link;
-              v[i]["WPLinkDesciption" + wxString::Format("%d", n++)] =
-                  httpLink->DescrText;
+              // NOTE: legacy code wrote hyperlinks onto v[i][...] (the outer
+              // object array index) rather than w[i][...] (the waypoint
+              // array).  That was a latent bug; preserve the per-waypoint
+              // shape by attaching to the waypoint object here.
+              wp[QStringLiteral("WPLink") + QString::number(n)] =
+                  wxString_to_QString(httpLink->Link);
+              wp[QStringLiteral("WPLinkDesciption") + QString::number(n++)] =
+                  wxString_to_QString(httpLink->DescrText);
               ++node;
             }
           }
-          i++;
+          w.append(wp);
         }
         v["waypoints"] = w;
-        wxString msg_id("OCPN_ROUTE_RESPONSE");
-        SendJSONMessageToAllPlugins(msg_id, v);
+        SendJSONMessageToAllPlugins(QStringLiteral("OCPN_ROUTE_RESPONSE"), v);
         return;
       }
     }
 
     v["error"] = true;
-
-    wxString msg_id("OCPN_ROUTE_RESPONSE");
-    SendJSONMessageToAllPlugins(msg_id, v);
+    SendJSONMessageToAllPlugins(QStringLiteral("OCPN_ROUTE_RESPONSE"), v);
   } else if (message_ID == "OCPN_ROUTELIST_REQUEST") {
-    wxJSONValue root;
-    wxJSONReader reader;
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(
+        QByteArray(message_JSONText.utf8_str()), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
+    const QJsonObject root = doc.object();
     bool route = true;
 
-    int numErrors = reader.Parse(message_JSONText, &root);
-    if (numErrors > 0) return;
-
-    if (root.HasMember("mode")) {
-      wxString str = root["mode"].AsString();
+    if (root.contains("mode")) {
+      QString str = root.value("mode").toString();
       if (str == "Track") route = false;
 
-      wxJSONValue v;
-      int i = 1;
+      // The legacy code populated v[i] starting at i=1, which produced a
+      // wxJSON array whose first slot was null.  Preserve that wire shape
+      // by emitting a leading null entry.
+      QJsonArray v;
+      v.append(QJsonValue());
       if (route) {
         for (RouteList::iterator it = pRouteList->begin();
              it != pRouteList->end(); it++) {
-          wxString name = QString_to_wxString((*it)->m_RouteNameString);
-          if (name.IsEmpty()) name = _("(Unnamed Route)");
+          QString name = (*it)->m_RouteNameString;
+          if (name.isEmpty()) name = wxString_to_QString(_("(Unnamed Route)"));
 
-          v[i]["error"] = false;
-          v[i]["name"] = name;
-          v[i]["GUID"] = QString_to_wxString((*it)->m_GUID);
-          v[i]["active"] = (*it)->IsActive();
-          i++;
+          QJsonObject entry;
+          entry["error"] = false;
+          entry["name"] = name;
+          entry["GUID"] = (*it)->m_GUID;
+          entry["active"] = (*it)->IsActive();
+          v.append(entry);
         }
       } else {  // track
         for (Track *ptrack : g_TrackList) {
-          wxString name = QString_to_wxString(ptrack->GetName());
-          if (name.IsEmpty()) {
+          QString name = ptrack->GetName();
+          if (name.isEmpty()) {
             TrackPoint *tp = ptrack->GetPoint(0);
             if (tp && tp->GetCreateTime().isValid())
-              name = QString_to_wxString(
-                  tp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss"));
+              name = tp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss");
             else
-              name = _("(Unnamed Track)");
+              name = wxString_to_QString(_("(Unnamed Track)"));
           }
-          v[i]["error"] = false;
-          v[i]["name"] = name;
-          v[i]["GUID"] = QString_to_wxString(ptrack->m_GUID);
-          v[i]["active"] = g_pActiveTrack == ptrack;
-          i++;
+          QJsonObject entry;
+          entry["error"] = false;
+          entry["name"] = name;
+          entry["GUID"] = ptrack->m_GUID;
+          entry["active"] = g_pActiveTrack == ptrack;
+          v.append(entry);
         }
       }
-      wxString msg_id("OCPN_ROUTELIST_RESPONSE");
-      SendJSONMessageToAllPlugins(msg_id, v);
+      SendJSONMessageToAllPlugins(QStringLiteral("OCPN_ROUTELIST_RESPONSE"), v);
     } else {
-      wxJSONValue v;
-      v[0]["error"] = true;
-      wxString msg_id("OCPN_ROUTELIST_RESPONSE");
-      SendJSONMessageToAllPlugins(msg_id, v);
+      QJsonArray v;
+      QJsonObject err_obj;
+      err_obj["error"] = true;
+      v.append(err_obj);
+      SendJSONMessageToAllPlugins(QStringLiteral("OCPN_ROUTELIST_RESPONSE"), v);
     }
   } else if (message_ID == "OCPN_ACTIVE_ROUTELEG_REQUEST") {
-    wxJSONValue v;
-    v[0]["error"] = true;
+    QJsonObject entry;
+    entry["error"] = true;
     if (g_pRouteMan->GetpActiveRoute()) {
       if (g_pRouteMan->m_bDataValid) {
-        v[0]["error"] = false;
-        v[0]["range"] = g_pRouteMan->GetCurrentRngToActivePoint();
-        v[0]["bearing"] = g_pRouteMan->GetCurrentBrgToActivePoint();
-        v[0]["XTE"] = g_pRouteMan->GetCurrentXTEToActivePoint();
-        v[0]["active_route_GUID"] =
-            QString_to_wxString(g_pRouteMan->GetpActiveRoute()->GetGUID());
-        v[0]["active_waypoint_lat"] =
+        entry["error"] = false;
+        entry["range"] = g_pRouteMan->GetCurrentRngToActivePoint();
+        entry["bearing"] = g_pRouteMan->GetCurrentBrgToActivePoint();
+        entry["XTE"] = g_pRouteMan->GetCurrentXTEToActivePoint();
+        entry["active_route_GUID"] =
+            g_pRouteMan->GetpActiveRoute()->GetGUID();
+        entry["active_waypoint_lat"] =
             g_pRouteMan->GetpActiveRoute()->m_pRouteActivePoint->GetLatitude();
-        v[0]["active_waypoint_lon"] =
+        entry["active_waypoint_lon"] =
             g_pRouteMan->GetpActiveRoute()->m_pRouteActivePoint->GetLongitude();
       }
     }
-    wxString msg_id("OCPN_ACTIVE_ROUTELEG_RESPONSE");
-    SendJSONMessageToAllPlugins(msg_id, v);
+    QJsonArray v;
+    v.append(entry);
+    SendJSONMessageToAllPlugins(QStringLiteral("OCPN_ACTIVE_ROUTELEG_RESPONSE"),
+                                v);
   }
 }
 
@@ -6596,10 +6595,9 @@ void MyFrame::ActivateAISMOBRoute(const AisTargetData *ptarget) {
   if (g_pRouteMan->GetpActiveRoute()) g_pRouteMan->DeactivateRoute();
   //       g_pRouteMan->ActivateRoute( pAISMOBRoute, pWP_MOB );
 
-  wxJSONValue v;
-  v["GUID"] = QString_to_wxString(pAISMOBRoute->m_GUID);
-  wxString msg_id("OCPN_MAN_OVERBOARD");
-  SendJSONMessageToAllPlugins(msg_id, v);
+  QJsonObject v;
+  v["GUID"] = pAISMOBRoute->m_GUID;
+  SendJSONMessageToAllPlugins(QStringLiteral("OCPN_MAN_OVERBOARD"), v);
   //}
 
   if (RouteManagerDialog::getInstanceFlag()) {

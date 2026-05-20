@@ -41,7 +41,11 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
 #include <QMutexLocker>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -87,8 +91,6 @@
 #include <wx/filename.h>
 #include <wx/hashmap.h>
 #include <wx/hashset.h>
-#include <wx/jsonreader.h>
-#include <wx/jsonval.h>
 #include <wx/listimpl.cpp>
 #include <wx/platinfo.h>
 #include <wx/popupwin.h>
@@ -214,36 +216,34 @@ static void SendAisJsonMessage(std::shared_ptr<const AisTargetData> pTarget) {
   if (!GetJSONMessageTargetCount()) return;
 
   // Do JSON message to all Plugin to inform of target
-  wxJSONValue jMsg;
+  QJsonObject jMsg;
 
   qint64 t = QDateTime::currentMSecsSinceEpoch();  // ms
 
-  jMsg[wxS("Source")] = wxS("AisDecoder");
-  jMsg["Type"] = "Information";
-  jMsg["Msg"] = wxS("AIS Target");
-  jMsg["MsgId"] = static_cast<long long>(t);
-  jMsg[wxS("lat")] = pTarget->Lat;
-  jMsg[wxS("lon")] = pTarget->Lon;
-  jMsg[wxS("sog")] = pTarget->SOG;
-  jMsg[wxS("cog")] = pTarget->COG;
-  jMsg[wxS("hdg")] = pTarget->HDG;
-  jMsg[wxS("mmsi")] = pTarget->MMSI;
-  jMsg[wxS("class")] = pTarget->Class;
-  jMsg[wxS("ownship")] = pTarget->b_OwnShip;
-  jMsg[wxS("active")] = pTarget->b_active;
-  jMsg[wxS("lost")] = pTarget->b_lost;
-  wxString l_ShipName = wxString::FromUTF8(pTarget->ShipName);
-  for (size_t i = 0; i < l_ShipName.Len(); i++) {
-    if (l_ShipName.GetChar(i) == '@') l_ShipName.SetChar(i, '\n');
-  }
-  jMsg[wxS("shipname")] = l_ShipName;
-  wxString l_CallSign = wxString::FromUTF8(pTarget->CallSign);
-  for (size_t i = 0; i < l_CallSign.Len(); i++) {
-    if (l_CallSign.GetChar(i) == '@') l_CallSign.SetChar(i, '\n');
-  }
-  jMsg[wxS("callsign")] = l_CallSign;
-  jMsg[wxS("removed")] = pTarget->b_removed;
-  SendJSONMessageToAllPlugins("AIS", jMsg);
+  jMsg["Source"] = QStringLiteral("AisDecoder");
+  jMsg["Type"] = QStringLiteral("Information");
+  jMsg["Msg"] = QStringLiteral("AIS Target");
+  // qint64 -> double inside QJsonValue; current-epoch ms fits in 2^53 until
+  // year 287396, so no precision loss for our lifetime.
+  jMsg["MsgId"] = t;
+  jMsg["lat"] = pTarget->Lat;
+  jMsg["lon"] = pTarget->Lon;
+  jMsg["sog"] = pTarget->SOG;
+  jMsg["cog"] = pTarget->COG;
+  jMsg["hdg"] = pTarget->HDG;
+  jMsg["mmsi"] = pTarget->MMSI;
+  jMsg["class"] = static_cast<int>(pTarget->Class);
+  jMsg["ownship"] = pTarget->b_OwnShip;
+  jMsg["active"] = pTarget->b_active;
+  jMsg["lost"] = pTarget->b_lost;
+  QString l_ShipName = QString::fromUtf8(pTarget->ShipName);
+  l_ShipName.replace(QChar('@'), QChar('\n'));
+  jMsg["shipname"] = l_ShipName;
+  QString l_CallSign = QString::fromUtf8(pTarget->CallSign);
+  l_CallSign.replace(QChar('@'), QChar('\n'));
+  jMsg["callsign"] = l_CallSign;
+  jMsg["removed"] = pTarget->b_removed;
+  SendJSONMessageToAllPlugins(QStringLiteral("AIS"), jMsg);
 }
 
 static bool ReloadLocale() {
@@ -1016,14 +1016,16 @@ void PlugInManager::HandleN0183(std::shared_ptr<const Nmea0183Msg> n0183_msg) {
 void PlugInManager::HandleSignalK(std::shared_ptr<const SignalkMsg> sK_msg) {
   g_ownshipMMSI_SK = sK_msg->context_self;
 
-  wxJSONReader jsonReader;
-  wxJSONValue root;
-
-  std::string msgTerminated = sK_msg->raw_message;
-  ;
-
-  int errors = jsonReader.Parse(msgTerminated, &root);
-  if (errors == 0) SendJSONMessageToAllPlugins("OCPN_CORE_SIGNALK", root);
+  const std::string& msgTerminated = sK_msg->raw_message;
+  QJsonParseError err;
+  QJsonDocument doc = QJsonDocument::fromJson(
+      QByteArray(msgTerminated.data(),
+                 static_cast<int>(msgTerminated.size())),
+      &err);
+  if (err.error == QJsonParseError::NoError && doc.isObject()) {
+    SendJSONMessageToAllPlugins(QStringLiteral("OCPN_CORE_SIGNALK"),
+                                doc.object());
+  }
 }
 
 /**
@@ -1760,22 +1762,21 @@ void PlugInManager::PrepareAllPluginContextMenus() {
 
 void PlugInManager::SendSKConfigToAllPlugIns() {
   // Send the current ownship MMSI, encoded as sK,  to all PlugIns
-  wxJSONValue v;
-  v["self"] = g_ownshipMMSI_SK;
-  wxJSONWriter w;
-  wxString out;
-  w.Write(v, out);
+  QJsonObject v;
+  v["self"] = wxString_to_QString(g_ownshipMMSI_SK);
+  const QByteArray utf8 = QJsonDocument(v).toJson(QJsonDocument::Compact);
+  const wxString out = wxString::FromUTF8(utf8.constData(), utf8.size());
   SendMessageToAllPlugins(wxString("OCPN_CORE_SIGNALK"), out);
 }
 
 void PlugInManager::SendBaseConfigToAllPlugIns() {
   // Send the current run-time configuration to all PlugIns
-  wxJSONValue v;
+  QJsonObject v;
   v["OpenCPN Version Major"] = VERSION_MAJOR;
   v["OpenCPN Version Minor"] = VERSION_MINOR;
   v["OpenCPN Version Patch"] = VERSION_PATCH;
-  v["OpenCPN Version Date"] = VERSION_DATE;
-  v["OpenCPN Version Full"] = VERSION_FULL;
+  v["OpenCPN Version Date"] = QString::fromUtf8(VERSION_DATE);
+  v["OpenCPN Version Full"] = QString::fromUtf8(VERSION_FULL);
 
   // Some useful display metrics
   if (g_MainToolbar) {
@@ -1794,20 +1795,19 @@ void PlugInManager::SendBaseConfigToAllPlugIns() {
   v["OpenCPN Content Scale Factor"] = OCPN_GetDisplayContentScaleFactor();
   v["OpenCPN Display DIP Scale Factor"] = OCPN_GetWinDIPScaleFactor();
 
-  wxJSONWriter w;
-  wxString out;
-  w.Write(v, out);
+  const QByteArray utf8 = QJsonDocument(v).toJson(QJsonDocument::Compact);
+  const wxString out = wxString::FromUTF8(utf8.constData(), utf8.size());
   SendMessageToAllPlugins(wxString("OpenCPN Config"), out);
 }
 
 void PlugInManager::SendS52ConfigToAllPlugIns(bool bReconfig) {
   // Send the current run-time configuration to all PlugIns
-  wxJSONValue v;
+  QJsonObject v;
   v["OpenCPN Version Major"] = VERSION_MAJOR;
   v["OpenCPN Version Minor"] = VERSION_MINOR;
   v["OpenCPN Version Patch"] = VERSION_PATCH;
-  v["OpenCPN Version Date"] = VERSION_DATE;
-  v["OpenCPN Version Full"] = VERSION_FULL;
+  v["OpenCPN Version Date"] = QString::fromUtf8(VERSION_DATE);
+  v["OpenCPN Version Full"] = QString::fromUtf8(VERSION_FULL);
 
   //  S52PLIB state
   if (ps52plib) {
@@ -1842,9 +1842,8 @@ void PlugInManager::SendS52ConfigToAllPlugIns(bool bReconfig) {
   // Notify plugins that S52PLIB may have reconfigured global options
   v["OpenCPN S52PLIB GlobalReconfig"] = bReconfig;
 
-  wxJSONWriter w;
-  wxString out;
-  w.Write(v, out);
+  const QByteArray utf8 = QJsonDocument(v).toJson(QJsonDocument::Compact);
+  const wxString out = wxString::FromUTF8(utf8.constData(), utf8.size());
   SendMessageToAllPlugins(wxString("OpenCPN Config"), out);
 }
 

@@ -24,13 +24,11 @@
 
 #include <setjmp.h>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
 #include <wx/event.h>
-#include <wx/jsonval.h>
-#include <wx/jsonreader.h>
-#include <wx/jsonwriter.h>
 
 #include "model/wx_qt_string.h"
 
@@ -164,20 +162,18 @@ void SendJSONMessageToAllPlugins(const QString& message_id,
   LogMessage(msg, "Json message ");
 }
 
-// Transitional shim -- accepts a wxJSONValue from callers still on wxJSON
-// (ocpn_frame.cpp, pluginmanager.cpp, track_prop_dlg.cpp) and converts to
-// QJsonObject by serializing through JSON text.  Removed in step 2 of P1.12.
-void SendJSONMessageToAllPlugins(const wxString& message_id, wxJSONValue v) {
-  wxJSONWriter w(wxJSONWRITER_NO_LINEFEEDS | wxJSONWRITER_STYLED);
-  wxString out;
-  w.Write(v, out);
-  QJsonParseError err;
-  QJsonDocument doc =
-      QJsonDocument::fromJson(QByteArray(out.utf8_str()), &err);
-  // The plugin-message JSON we emit is always an object at top level; if not,
-  // wrap into an empty object so the API contract holds.
-  QJsonObject obj = doc.isObject() ? doc.object() : QJsonObject();
-  SendJSONMessageToAllPlugins(wxString_to_QString(message_id), obj);
+void SendJSONMessageToAllPlugins(const QString& message_id,
+                                 const QJsonArray& v) {
+  const QJsonDocument doc(v);
+  const QByteArray utf8 = doc.toJson(QJsonDocument::Compact);
+  const wxString id = QString_to_wxString(message_id);
+  const wxString out = wxString::FromUTF8(utf8.constData(), utf8.size());
+  auto msg =
+      std::make_shared<PluginMsg>(id.ToStdString(), out.ToStdString());
+  SendMessageToAllPlugins(id, out);
+  wxLogDebug(id);
+  wxLogDebug(out);
+  LogMessage(msg, "Json message ");
 }
 
 void SendAISSentenceToAllPlugIns(const wxString& sentence) {

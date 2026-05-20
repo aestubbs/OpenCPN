@@ -40,8 +40,6 @@
 #include <wx/dynarray.h>
 #include <wx/dynlib.h>
 #include <wx/hyperlink.h>
-#include <wx/json_defs.h>
-#include <wx/jsonwriter.h>
 #include <wx/tglbtn.h>
 
 #ifndef __ANDROID__

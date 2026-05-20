@@ -24,6 +24,7 @@
 #ifndef PLUGIN_COMM_H
 #define PLUGIN_COMM_H
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
 
@@ -31,11 +32,6 @@
 #include <wx/string.h>
 
 #include "model/ocpn_types.h"
-
-// Forward declaration kept for the transitional wxJSONValue overload of
-// SendJSONMessageToAllPlugins() below.  Step 2 of the P1.12 migration will
-// remove that overload along with this declaration.
-class wxJSONValue;
 
 void SendMessageToAllPlugins(const wxString& message_id,
                              const wxString& message_body);
@@ -49,10 +45,15 @@ void SendMessageToAllPlugins(const wxString& message_id,
 void SendJSONMessageToAllPlugins(const QString& message_id,
                                  const QJsonObject& v);
 
-// Transitional wxJSONValue overload -- to be removed in step 2 of P1.12 once
-// the remaining wxJSON callers (ocpn_frame.cpp, pluginmanager.cpp,
-// track_prop_dlg.cpp) have been converted.
-void SendJSONMessageToAllPlugins(const wxString& message_id, wxJSONValue v);
+/** Send a JSON message whose top-level value is an array.
+ *
+ *  A handful of legacy plugin messages (OCPN_ROUTELIST_RESPONSE,
+ *  OCPN_ACTIVE_ROUTELEG_RESPONSE, OCPN_TRACKPOINTS_COORDS list mode) emit a
+ *  JSON array at the root rather than an object.  This overload preserves
+ *  that wire format under the QJson-based API.
+ */
+void SendJSONMessageToAllPlugins(const QString& message_id,
+                                 const QJsonArray& v);
 
 void SendAISSentenceToAllPlugIns(const wxString& sentence);
 
