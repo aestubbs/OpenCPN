@@ -38,7 +38,6 @@
 #include <wx/tokenzr.h>
 #include <wx/filename.h>
 #include <wx/image.h>
-#include <wx/fileconf.h>
 #include <wx/mstream.h>
 #include <sys/stat.h>
 
@@ -166,7 +165,7 @@ ChartMbTiles::ChartMbTiles() {
   m_lat_max = LAT_UNDEF;
 
 #ifdef OCPN_USE_CONFIG
-  wxFileConfig* pfc = (wxFileConfig*)pConfig;
+  OcpnConfig* pfc = pConfig;
   pfc->SetPath("/Settings");
   pfc->Read("DebugMBTiles", &m_b_cdebug, 0);
 #endif

@@ -30,14 +30,14 @@
 #include <memory>
 #include <string>
 
-#include <wx/config.h>
-
 #include "observable.h"
 
+class OcpnConfig;
+
 /**
- *  Wrapper for configuration variables which lives in a wxBaseConfig
- *  object. Supports int, bool, double, std::string and wxString. Besides
- *  basic set()/get() also provides notification events when value changes.
+ *  Wrapper for configuration variables which live in an OcpnConfig object.
+ *  Supports int, bool, double, std::string and wxString. Besides basic
+ *  set()/get() also provides notification events when value changes.
  *
  *  Client usage when reading, setting a value and notifying listeners:
  *  \code
@@ -46,30 +46,12 @@
  *    bool old_value = expert.Get(false);
  *    expert.Set(false);
  *  \endcode
- *
- *  Client usage, listening to value changes.
- *  \code
- *
- *    class Foo: public wxEventHandler {
- *    public:
- *      Foo(...) {
- *        ConfigVar<bool> expert("/PlugIns", "CatalogExpert", &g_pConfig);
- *        auto action = [](wxCommandEvent&) { cout << "value has changed"; });
- *        expert_listener.Init(expert, action);
- *        ...
- *      }
- *    private:
- *      ObsListener expert_listener;
- *      ...
- *    }
- *
- *  \endcode
  */
 template <typename T = std::string>
 class ConfigVar : public Observable {
 public:
   ConfigVar(const std::string& section_, const std::string& key_,
-            wxConfigBase* cb);
+            OcpnConfig* cb);
   ConfigVar() = delete;
 
   void Set(const T& arg);
@@ -80,7 +62,7 @@ private:
 
   const std::string section;
   const std::string key;
-  wxConfigBase* const config;
+  OcpnConfig* const config;
 };
 
 #endif  // OBSERVABLE_CONFVAR_H

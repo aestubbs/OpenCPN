@@ -217,6 +217,8 @@ set(SRC
   ${MODEL_SRC_DIR}/navutil_base.cpp
   ${MODEL_SRC_DIR}/notification.cpp
   ${MODEL_SRC_DIR}/notification_manager.cpp
+  ${MODEL_SRC_DIR}/observable_confvar.cpp
+  ${MODEL_SRC_DIR}/ocpn_config.cpp
   ${MODEL_SRC_DIR}/ocpn_plugin.cpp
   ${MODEL_SRC_DIR}/ocpn_utils.cpp
   ${MODEL_SRC_DIR}/own_ship.cpp

@@ -3,7 +3,6 @@
 #include <chrono>
 
 #include <wx/app.h>
-#include <wx/fileconf.h>
 #include <wx/event.h>
 #include <wx/evtloop.h>
 

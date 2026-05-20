@@ -72,7 +72,7 @@ void canvasConfig::Reset() {
   bEnableBasemapTile = true;
 }
 
-void canvasConfig::LoadFromLegacyConfig(wxConfigBase *conf) {
+void canvasConfig::LoadFromLegacyConfig(OcpnConfig *conf) {
   if (!conf) return;
 
   bFollow = false;

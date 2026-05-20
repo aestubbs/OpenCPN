@@ -14,7 +14,6 @@
 #include <wx/app.h>
 #include <wx/event.h>
 #include <wx/evtloop.h>
-#include <wx/fileconf.h>
 #include <wx/jsonval.h>
 #include <wx/timer.h>
 

@@ -16,7 +16,8 @@ set(SRC
   include/observable_globvar.h
   include/observable_qt.h
   include/observable.h
-  src/observable_confvar.cpp
+  # NOTE: src/observable_confvar.cpp moved to model/src/observable_confvar.cpp
+  # because ConfigVar<T> now depends on OcpnConfig (which lives in model).
   src/observable.cpp
   src/observable_qt.cpp
   src/observable_qt_p.h

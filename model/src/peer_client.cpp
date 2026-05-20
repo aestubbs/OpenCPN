@@ -29,13 +29,13 @@
 
 #include <curl/curl.h>
 
-#include <wx/fileconf.h>
 #include <wx/json_defs.h>
 #include <wx/jsonreader.h>
 #include <wx/log.h>
 #include <wx/string.h>
 
 #include "model/config_vars.h"
+#include "model/ocpn_config.h"
 #include "model/nav_object_database.h"
 #include "model/peer_client.h"
 #include "model/ocpn_utils.h"

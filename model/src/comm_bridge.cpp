@@ -33,7 +33,6 @@
 
 #include <wx/window.h>    // wxWindow -- GUI boundary, see GetDataMonitor()
 #include <wx/string.h>    // wxString -- config boundary (Load/SaveConfig)
-#include <wx/confbase.h>  // wxConfigBase -- config boundary (Load/SaveConfig)
 
 #include "model/comm_ais.h"
 #include "model/comm_appmsg_bus.h"
@@ -42,6 +41,7 @@
 #include "model/comm_navmsg_bus.h"
 #include "model/comm_vars.h"
 #include "model/config_vars.h"
+#include "model/ocpn_config.h"
 #include "model/cutil.h"
 #include "model/gui.h"
 #include "model/idents.h"

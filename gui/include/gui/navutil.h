@@ -31,19 +31,12 @@
 #include <QStringList>
 
 #include <wx/colour.h>
-#include <wx/config.h>
-#include <wx/confbase.h>
 #include <wx/datetime.h>
-#include <wx/fileconf.h>
 #include <wx/progdlg.h>
 #include <wx/sound.h>
 #include <wx/string.h>
 
-#ifdef __WXMSW__
-#include <wx/msw/regconf.h>
-#include <wx/msw/iniconf.h>
-#endif
-
+#include "model/ocpn_config.h"
 #include "model/navutil_base.h"
 #include "model/nav_object_database.h"
 #include "model/select_item.h"
@@ -169,7 +162,7 @@ public:
 //----------------------------------------------------------------------------
 //    Config
 //----------------------------------------------------------------------------
-class MyConfig : public wxFileConfig {
+class MyConfig : public OcpnConfig {
 public:
   MyConfig(const wxString &LocalFileName);
   ~MyConfig();

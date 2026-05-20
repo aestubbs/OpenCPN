@@ -36,6 +36,7 @@
 #include "config.h"
 
 #include "model/config_vars.h"
+#include "model/ocpn_config.h"
 #include "model/comm_navmsg_bus.h"
 #include "model/gui_events.h"
 #include "model/logger.h"

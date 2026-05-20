@@ -30,8 +30,9 @@
 
 #include <QList>
 
-#include "wx/config.h"
 #include "wx/wxprec.h"
+
+#include "model/ocpn_config.h"
 
 #include "chcanv.h"
 
@@ -55,7 +56,7 @@ public:
    * settings.
    */
   void Reset();
-  void LoadFromLegacyConfig(wxConfigBase *conf);
+  void LoadFromLegacyConfig(OcpnConfig *conf);
 
   int configIndex;
   ChartCanvas *canvas;  //!< Pointer to associated chart canvas.

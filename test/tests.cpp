@@ -14,7 +14,6 @@
 #include <wx/app.h>
 #include <wx/event.h>
 #include <wx/evtloop.h>
-#include <wx/fileconf.h>
 #include <wx/jsonval.h>
 #include <wx/jsonreader.h>
 
@@ -22,6 +21,8 @@
 
 #include <gtest/gtest.h>
 
+#include "model/ocpn_config.h"
+#include "model/wx_qt_string.h"
 #include "model/ais_decoder.h"
 #include "model/ais_defs.h"
 #include "model/ais_state_vars.h"
@@ -107,7 +108,8 @@ static void ConfigSetup() {
   const auto config_path = fs::path(CMAKE_BINARY_DIR) / "opencpn.conf";
   std::remove(config_path.string().c_str());
   fs::copy(config_orig, config_path);
-  InitBaseConfig(new wxFileConfig("", "", config_path.string()));
+  InitBaseConfig(new OcpnConfig(
+      QString::fromStdString(config_path.string())));
   g_BasePlatform = new BasePlatform();
   pSelectAIS = new Select();
   pSelect = new Select();
@@ -162,7 +164,8 @@ public:
     wxLog::FlushActive();
     std::remove(config_path.string().c_str());
     fs::copy(config_orig, config_path);
-    InitBaseConfig(new wxFileConfig("", "", config_path.string()));
+    InitBaseConfig(new OcpnConfig(
+        QString::fromStdString(config_path.string())));
     g_BasePlatform = new BasePlatform();
     pSelectAIS = new Select();
     pSelect = new Select();

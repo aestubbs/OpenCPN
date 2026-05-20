@@ -34,8 +34,9 @@
 #include <string>
 #include <vector>
 
-#include <wx/config.h>
 #include <wx/string.h>
+
+class OcpnConfig;
 
 #undef max  // get rid of windows define blocking ::max
 
@@ -313,8 +314,8 @@ extern wxString gWorldShapefileLocation;
 /** Size of pysical screen in millimeters. */
 extern std::vector<size_t> g_config_display_size_mm;
 
-wxConfigBase* TheBaseConfig();
-void InitBaseConfig(wxConfigBase* cfg);
+OcpnConfig* TheBaseConfig();
+void InitBaseConfig(OcpnConfig* cfg);
 
 /**
  * \var g_iHeightFormat

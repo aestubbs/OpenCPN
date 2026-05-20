@@ -216,11 +216,14 @@ int AddCanvasContextMenuItemExt(wxMenuItem* pitem, opencpn_plugin* pplugin,
 
 /*  Utility functions  */
 wxFileConfig* GetOCPNConfigObject() {
-  if (s_ppim)
-    return reinterpret_cast<wxFileConfig*>(
-        pConfig);  // return the global application config object
-  else
-    return NULL;
+  // TODO P1.9: plugin ABI returns wxFileConfig*. With the wxConfig backend
+  // removed (replaced by OcpnConfig/QSettings) we no longer have a real
+  // wxFileConfig to hand out. Until we either:
+  //   (a) build a wxFileConfig wrapper that delegates to OcpnConfig, or
+  //   (b) declare this ABI dead and update plugins to use a new accessor,
+  // return nullptr. Internal callers were already converted to use
+  // TheBaseConfig() / OcpnConfig directly.
+  return nullptr;
 }
 
 wxWindow* GetOCPNCanvasWindow() {

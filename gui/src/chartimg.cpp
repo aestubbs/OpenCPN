@@ -37,7 +37,6 @@
 #include <wx/tokenzr.h>
 #include <wx/filename.h>
 #include <wx/image.h>
-#include <wx/fileconf.h>
 
 #include "model/chartdata_input_stream.h"
 #include "model/wx_qt_string.h"
@@ -1567,7 +1566,7 @@ ChartBaseBSB::ChartBaseBSB() {
   m_b_cdebug = 0;
 
 #ifdef OCPN_USE_CONFIG
-  wxFileConfig *pfc = (wxFileConfig *)pConfig;
+  OcpnConfig *pfc = pConfig;
   pfc->SetPath("/Settings");
   pfc->Read("DebugBSBImg", &m_b_cdebug, 0);
 #endif

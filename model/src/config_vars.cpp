@@ -24,7 +24,10 @@
 
 #include <vector>
 
+#include <wx/log.h>
+
 #include "model/config_vars.h"
+#include "model/ocpn_config.h"
 #include "config.h"
 
 bool g_allow_arb_system_plugin = false;
@@ -292,10 +295,10 @@ wxString gWorldShapefileLocation;
 
 std::vector<size_t> g_config_display_size_mm;
 
-static wxConfigBase* the_base_config = 0;
+static OcpnConfig* the_base_config = nullptr;
 
-wxConfigBase* TheBaseConfig() {
-  wxASSERT_MSG(the_base_config != 0, "Uninitialized the_base_config");
+OcpnConfig* TheBaseConfig() {
+  wxASSERT_MSG(the_base_config != nullptr, "Uninitialized the_base_config");
   return the_base_config;
 }
-void InitBaseConfig(wxConfigBase* cfg) { the_base_config = cfg; }
+void InitBaseConfig(OcpnConfig* cfg) { the_base_config = cfg; }

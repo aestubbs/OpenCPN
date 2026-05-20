@@ -167,7 +167,7 @@ void appendOSDirSlash(wxString *pString);
 //
 
 MyConfig::MyConfig(const wxString &LocalFileName)
-    : wxFileConfig("", "", LocalFileName, "", wxCONFIG_USE_LOCAL_FILE) {}
+    : OcpnConfig(wxString_to_QString(LocalFileName)) {}
 
 MyConfig::~MyConfig() {}
 

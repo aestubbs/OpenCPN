@@ -30,12 +30,13 @@
 #include <QStringList>
 
 #include <wx/event.h>
-#include <wx/fileconf.h>
 #include <wx/jsonval.h>
 #include <wx/jsonreader.h>
 #include <wx/tokenzr.h>
 
 #include "model/base_platform.h"
+#include "model/config_vars.h"
+#include "model/ocpn_config.h"
 #include "model/wx_qt_string.h"
 #include "model/comm_appmsg.h"
 #include "model/comm_drv_loopback.h"
@@ -284,7 +285,7 @@ void ReloadConfigConnections() {
   registry.CloseAllDrivers();
 
   // Reload config file connections parameters.
-  wxFileConfig* pConf = GetOCPNConfigObject();
+  OcpnConfig* pConf = TheBaseConfig();
   if (pConf) {
     TheConnectionParams().clear();
     pConf->SetPath("/Settings/NMEADataSource");

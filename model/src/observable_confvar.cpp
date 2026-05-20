@@ -1,7 +1,7 @@
 /*************************************************************************
  *
  * Project: OpenCPN
- * Purpose: Implement observable.h
+ * Purpose: Implement observable_confvar.h
  *
  * Copyright (C) 2022 Alec Leamas
  *
@@ -21,18 +21,29 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,  USA.
  **************************************************************************/
 
+/**
+ * \file
+ *
+ * Implementation of the ConfigVar<T> template wrapper. Lives in the
+ * `model` library (rather than `observable`) because it depends on
+ * OcpnConfig -- and OcpnConfig itself lives in model. Keeping the
+ * implementation here avoids an upward dependency from observable on
+ * model.
+ */
+
 #include <sstream>
 #include <string>
 
 #include <wx/log.h>
 #include <wx/string.h>
-#include <wx/config.h>
 
 #include "observable_confvar.h"
 
+#include "model/ocpn_config.h"
+
 /**
  * Add >> support for wxString, for some reason missing in wxWidgets 3.0,
- * required by ConfigVar::get()
+ * required by ConfigVar::Get().
  */
 std::istream& operator>>(std::istream& input, wxString& ws) {
   std::string s;
@@ -41,11 +52,9 @@ std::istream& operator>>(std::istream& input, wxString& ws) {
   return input;
 }
 
-/* ConfigVar implementation. */
-
 template <typename T>
 ConfigVar<T>::ConfigVar(const std::string& section_, const std::string& key_,
-                        wxConfigBase* cb)
+                        OcpnConfig* cb)
     : Observable(section_ + "/" + key_),
       section(section_),
       key(key_),
@@ -54,8 +63,8 @@ ConfigVar<T>::ConfigVar(const std::string& section_, const std::string& key_,
 template <typename T>
 const T ConfigVar<T>::Get(const T& default_val) {
   std::istringstream iss;
-  config->SetPath(section);
-  auto value = config->Read(key, "").ToStdString();
+  config->SetPath(wxString(section.c_str()));
+  auto value = config->Read(wxString(key.c_str()), wxString()).ToStdString();
   iss.str(value);
   T r;
   iss >> r;
@@ -71,8 +80,8 @@ void ConfigVar<T>::Set(const T& arg) {
                  key.c_str());
     return;
   }
-  config->SetPath(section);
-  if (!config->Write(key.c_str(), oss.str().c_str())) {
+  config->SetPath(wxString(section.c_str()));
+  if (!config->Write(wxString(key.c_str()), wxString(oss.str().c_str()))) {
     wxLogWarning("Error writing buffer to key %s:%s", section.c_str(),
                  key.c_str());
   }

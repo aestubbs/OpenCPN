@@ -36,7 +36,6 @@
 #include <time.h>
 
 #include <wx/colour.h>
-#include <wx/fileconf.h>
 #include <wx/filename.h>
 #include <wx/log.h>
 #include <wx/statline.h>
@@ -566,7 +565,7 @@ wxString ConfigMgr::GetUUID() {
 bool ConfigMgr::SaveTemplate(wxString fileName) {
   //  Assuming the file exists, and is empty....
 
-  //  Create a private wxFileConfig object
+  //  Create a private OcpnConfig object
   MyConfig *conf = new MyConfig(fileName);
 
 //  Write out all the elements of a config template....

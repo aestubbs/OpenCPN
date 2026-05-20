@@ -75,7 +75,7 @@
 #include "model/catalog_parser.h"
 #include "model/config_vars.h"
 #include "model/cmdline.h"
-#include "model/config_vars.h"
+#include "model/ocpn_config.h"
 #include "model/logger.h"
 #include "model/ocpn_utils.h"
 #include "model/plugin_blacklist.h"

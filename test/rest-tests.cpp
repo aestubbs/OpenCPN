@@ -18,7 +18,6 @@
 
 #include <wx/app.h>
 #include <wx/event.h>
-#include <wx/fileconf.h>
 #include <wx/jsonreader.h>
 #include <wx/log.h>
 
@@ -28,6 +27,7 @@
 #include "model/certificates.h"
 #include "model/cli_platform.h"
 #include "model/config_vars.h"
+#include "model/ocpn_config.h"
 #include "model/comm_navmsg.h"
 #include "model/mdns_query.h"
 #include "observable_confvar.h"
@@ -52,7 +52,8 @@ static void ConfigSetup() {
   const auto config_path = fs::path(CMAKE_BINARY_DIR) / "opencpn.conf";
   std::remove(config_path.string().c_str());
   fs::copy(config_orig, config_path);
-  InitBaseConfig(new wxFileConfig("", "", config_path.string()));
+  InitBaseConfig(new OcpnConfig(
+      QString::fromStdString(config_path.string())));
 }
 
 #ifdef _WIN32
