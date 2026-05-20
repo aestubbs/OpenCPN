@@ -34,6 +34,10 @@
 #include <typeinfo>
 #include <unordered_map>
 
+#include <QDateTime>
+
+#include "model/wx_qt_string.h"
+
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
 #ifdef _WIN32
@@ -5333,7 +5337,10 @@ _OCPN_DLStatus OCPN_downloadFile(const wxString& url,
 
 wxString toUsrDateTimeFormat_Plugin(const wxDateTime date_time,
                                     const DateTimeFormatOptions& options) {
-  return ocpn::toUsrDateTimeFormat(date_time, options);
+  // Bridge wx -> Qt: preserve the Unix epoch carried by the wxDateTime.
+  QDateTime qdt =
+      QDateTime::fromSecsSinceEpoch(date_time.GetTicks(), Qt::UTC);
+  return QString_to_wxString(ocpn::toUsrDateTimeFormat(qdt, options));
 }
 
 //  Non-Blocking download of single file

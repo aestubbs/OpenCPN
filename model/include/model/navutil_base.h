@@ -24,6 +24,9 @@
 #ifndef _NAVUTIL_BASE__
 #define _NAVUTIL_BASE__
 
+#include <QDateTime>
+#include <QString>
+#include <QtGlobal>
 #include <wx/datetime.h>
 #include <wx/string.h>
 #include <wx/utils.h>
@@ -117,10 +120,7 @@ extern double fromUsrHeight(double usr_height, int unit = -1);
 extern wxString getUsrHeightUnit(int unit = -1);
 
 /**
- * This function parses a string containing a GPX time representation
- * and returns a wxDateTime containing the UTC corresponding to the
- * input. The function return value is a pointer past the last valid
- * character parsed (if successful) or NULL (if the string is invalid).
+ * Parse a string containing a GPX time representation into a QDateTime.
  *
  * Valid GPX time strings are in ISO 8601 format as follows:
  *
@@ -128,12 +128,18 @@ extern wxString getUsrHeightUnit(int unit = -1);
  *
  * For example, 2010-10-30T14:34:56Z and 2010-10-30T14:34:56-04:00
  * are the same time. The first is UTC and the second is EDT.
+ *
+ * @param dt Output parameter — set to the parsed UTC datetime on success.
+ * @param datetime The input string.
+ * @return true on success, false if the string cannot be parsed.
  */
-const wxChar *ParseGPXDateTime(wxDateTime &dt, const wxChar *datetime);
+bool ParseGPXDateTime(QDateTime &dt, const QString &datetime);
 
-extern wxString formatTimeDelta(wxTimeSpan span);
-extern wxString formatTimeDelta(wxDateTime startTime, wxDateTime endTime);
-extern wxString formatTimeDelta(wxLongLong secs);
+/**
+ * Format an elapsed-time duration (in seconds) as a short human-readable
+ * string, e.g. "1d  2H  3M" or "12M 34S".
+ */
+extern QString formatTimeDelta(qint64 seconds);
 
 extern double fromDMM(wxString sdms);
 

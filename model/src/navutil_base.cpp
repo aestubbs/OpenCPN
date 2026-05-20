@@ -24,6 +24,8 @@
 #include <iomanip>
 #include <sstream>
 
+#include <QDateTime>
+#include <QString>
 #include <wx/datetime.h>
 #include <wx/math.h>
 #include <wx/string.h>
@@ -31,15 +33,8 @@
 
 #include "model/navutil_base.h"
 #include "model/own_ship.h"
+#include "model/wx_qt_string.h"
 #include "vector2D.h"
-
-/** Return a timespan with minutes rounded w r t seconds. */
-static wxTimeSpan RoundToMinutes(const wxTimeSpan &span) {
-  auto minutes = span.GetMinutes() % 60;
-  auto seconds = span.GetSeconds() % 60;
-  if (seconds > 30) minutes += 1;
-  return wxTimeSpan(span.GetHours(), minutes, 0);
-}
 
 wxString toSDMM(int NEflag, double a, bool hi_precision) {
   wxString s;
@@ -600,107 +595,68 @@ double vVectorMagnitude(pVector2D v0) {
   return (dMagnitude);
 }
 
-const wxChar *ParseGPXDateTime(wxDateTime &dt, const wxChar *datetime) {
-  long sign, hrs_west, mins_west;
-  const wxChar *end;
+bool ParseGPXDateTime(QDateTime &dt, const QString &datetime) {
+  if (datetime.isEmpty()) return false;
 
-  // Skip any leading whitespace
-  while (isspace(*datetime)) datetime++;
+  // Strip optional leading whitespace and an optional leading hyphen
+  // (legacy behavior preserved from the wxDateTime version).
+  int start = 0;
+  while (start < datetime.size() && datetime.at(start).isSpace()) ++start;
+  if (start < datetime.size() && datetime.at(start) == '-') ++start;
+  QString s = datetime.mid(start);
 
-  // Skip (and ignore) leading hyphen
-  if (*datetime == '-') datetime++;
-
-  // Parse and validate ISO 8601 date/time string
-  if ((end = dt.ParseFormat(datetime, "%Y-%m-%dT%T")) != NULL) {
-    // Invalid date/time
-    if (*end == 0) return NULL;
-
-    // ParseFormat outputs in UTC if the controlling
-    // wxDateTime class instance has not been initialized.
-
-    // Date/time followed by UTC time zone flag, so we are done
-    else if (*end == 'Z') {
-      end++;
-      return end;
-    }
-
-    // Date/time followed by given number of hrs/mins west of UTC
-    else if (*end == '+' || *end == '-') {
-      // Save direction from UTC
-      if (*end == '+')
-        sign = 1;
-      else
-        sign = -1;
-      end++;
-
-      // Parse hrs west of UTC
-      if (isdigit(*end) && isdigit(*(end + 1)) && *(end + 2) == ':') {
-        // Extract and validate hrs west of UTC
-        wxString(end).ToLong(&hrs_west);
-        if (hrs_west > 12) return NULL;
-        end += 3;
-
-        // Parse mins west of UTC
-        if (isdigit(*end) && isdigit(*(end + 1))) {
-          // Extract and validate mins west of UTC
-          wxChar mins[3];
-          mins[0] = *end;
-          mins[1] = *(end + 1);
-          mins[2] = 0;
-          wxString(mins).ToLong(&mins_west);
-          if (mins_west > 59) return NULL;
-
-          // Apply correction
-          dt -= sign * wxTimeSpan(hrs_west, mins_west, 0, 0);
-          return end + 2;
-        } else
-          // Missing mins digits
-          return NULL;
-      } else
-        // Missing hrs digits or colon
-        return NULL;
-    } else
-      // Unknown field after date/time (not UTC, not hrs/mins
-      //  west of UTC)
-      return NULL;
-  } else
-    // Invalid ISO 8601 date/time
-    return NULL;
+  // Try ISO 8601 combined first; that handles the `Z` and `+HH:MM` forms.
+  QDateTime parsed = QDateTime::fromString(s, Qt::ISODate);
+  if (!parsed.isValid()) {
+    // Fall back to a generic parse of just the "YYYY-MM-DDTHH:MM:SS" prefix.
+    QDateTime tail = QDateTime::fromString(s.left(19), "yyyy-MM-ddTHH:mm:ss");
+    if (!tail.isValid()) return false;
+    // No timezone indicator — assume UTC, matching wx's ParseFormat default
+    // when the wxDateTime is default-initialized.
+    tail.setTimeSpec(Qt::UTC);
+    parsed = tail;
+  }
+  dt = parsed.toUTC();
+  return true;
 }
 
-wxString formatTimeDelta(wxTimeSpan span) {
+namespace {
+/** Round a seconds-duration's minutes wrt residual seconds (>= 30 rounds
+ *  up).  Returns updated total seconds. */
+qint64 RoundSecondsToMinutes(qint64 seconds) {
+  qint64 hours = seconds / 3600;
+  qint64 mins = (seconds % 3600) / 60;
+  qint64 secs = seconds % 60;
+  if (secs > 30) mins += 1;
+  return hours * 3600 + mins * 60;
+}
+}  // namespace
+
+QString formatTimeDelta(qint64 seconds) {
   using namespace std;
-  // wxTimeSpan is returns complete span in different units.
   // FIXME: (leamas) Replace with sane std::chrono.
   stringstream ss;
   ss << setfill(' ');
-  if (span.GetHours() > 0) span = RoundToMinutes(span);
-  if (span.GetDays() > 0) ss << setw(2) << span.GetDays() << "d ";
-  if (span.GetHours() > 0) {
-    ss << setw(2) << span.GetHours() % 24 << _("H ");
-    ss << setw(2) << span.GetMinutes() % 60 << _("M");
-  } else {
-    ss << setw(2) << span.GetMinutes() % 60 << _("M ");
-    ss << setw(2) << span.GetSeconds() % 60 << _("S");
+  qint64 total = seconds;
+  qint64 days = total / 86400;
+  qint64 hours_total = total / 3600;
+  if (hours_total > 0) {
+    total = RoundSecondsToMinutes(total);
+    days = total / 86400;
+    hours_total = total / 3600;
   }
-  return ss.str();
-}
-
-wxString formatTimeDelta(wxDateTime startTime, wxDateTime endTime) {
-  wxString timeStr;
-  if (startTime.IsValid() && endTime.IsValid()) {
-    wxTimeSpan span = endTime - startTime;
-    return formatTimeDelta(span);
+  qint64 hours = hours_total % 24;
+  qint64 minutes = (total % 3600) / 60;
+  qint64 secs = total % 60;
+  if (days > 0) ss << setw(2) << days << "d ";
+  if (hours_total > 0) {
+    ss << setw(2) << hours << _("H ");
+    ss << setw(2) << minutes << _("M");
   } else {
-    return _("N/A");
+    ss << setw(2) << minutes << _("M ");
+    ss << setw(2) << secs << _("S");
   }
-}
-
-wxString formatTimeDelta(wxLongLong secs) {
-  wxString timeStr;
-
-  wxTimeSpan span(0, 0, secs);
-  return formatTimeDelta(span);
+  return QString::fromStdString(ss.str());
 }
 
 /****************************************************************************/

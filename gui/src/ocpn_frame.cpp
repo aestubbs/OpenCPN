@@ -82,6 +82,8 @@
 #include "model/navobj_db.h"
 #include "model/nav_object_database.h"
 #include "model/navutil_base.h"
+#include <QDateTime>
+
 #include "model/notification_manager.h"
 #include "model/own_ship.h"
 #include "model/ocpn_utils.h"
@@ -3035,9 +3037,10 @@ void MyFrame::ToggleFullScreen() {
 void MyFrame::ActivateMOB() {
   //    The MOB point
   wxDateTime mob_time = wxDateTime::Now();
+  QDateTime mob_time_q = QDateTime::currentDateTime();
   wxString mob_label(_("MAN OVERBOARD"));
   mob_label += _(" on ");
-  mob_label += ocpn::toUsrDateTimeFormat(mob_time);
+  mob_label += QString_to_wxString(ocpn::toUsrDateTimeFormat(mob_time_q));
 
   RoutePoint *pWP_MOB =
       new RoutePoint(gLat, gLon, "mob", wxString_to_QString(mob_label),
@@ -3100,7 +3103,7 @@ void MyFrame::ActivateMOB() {
 
   wxString mob_message(_("MAN OVERBOARD"));
   mob_message += _(" Time: ");
-  mob_message += ocpn::toUsrDateTimeFormat(mob_time);
+  mob_message += QString_to_wxString(ocpn::toUsrDateTimeFormat(mob_time_q));
   mob_message += _("  Position: ");
   mob_message += toSDMM(1, gLat);
   mob_message += "   ";
@@ -6526,9 +6529,10 @@ void MyFrame::ActivateAISMOBRoute(const AisTargetData *ptarget) {
 
   //    The MOB point
   wxDateTime mob_time = wxDateTime::Now();
+  QDateTime mob_time_q = QDateTime::currentDateTime();
   wxString mob_label(_("AIS MAN OVERBOARD"));
   mob_label += _(" on ");
-  mob_label += ocpn::toUsrDateTimeFormat(mob_time);
+  mob_label += QString_to_wxString(ocpn::toUsrDateTimeFormat(mob_time_q));
 
   RoutePoint *pWP_MOB =
       new RoutePoint(ptarget->Lat, ptarget->Lon, "mob",
@@ -6588,7 +6592,7 @@ void MyFrame::ActivateAISMOBRoute(const AisTargetData *ptarget) {
 
   wxString mob_message(_("AIS MAN OVERBOARD"));
   mob_message += _(" Time: ");
-  mob_message += ocpn::toUsrDateTimeFormat(mob_time);
+  mob_message += QString_to_wxString(ocpn::toUsrDateTimeFormat(mob_time_q));
   mob_message += _("  Ownship Position: ");
   mob_message += toSDMM(1, gLat);
   mob_message += "   ";
@@ -6625,11 +6629,11 @@ void MyFrame::UpdateAISMOBRoute(const AisTargetData *ptarget) {
   RefreshAllCanvas(false);
 
   if (ptarget) {
-    wxDateTime mob_time = wxDateTime::Now();
+    QDateTime mob_time_q = QDateTime::currentDateTime();
 
     wxString mob_message(_("AIS MAN OVERBOARD UPDATE"));
     mob_message += _(" Time: ");
-    mob_message += ocpn::toUsrDateTimeFormat(mob_time);
+    mob_message += QString_to_wxString(ocpn::toUsrDateTimeFormat(mob_time_q));
     mob_message += _("  Ownship Position: ");
     mob_message += toSDMM(1, gLat);
     mob_message += "   ";

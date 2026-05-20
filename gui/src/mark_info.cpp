@@ -1506,7 +1506,7 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
     }
     if (etd.IsValid()) {
       m_cbEtdPresent->SetValue(true);
-      wxString dtFormat = ocpn::getUsrDateTimeFormat();
+      wxString dtFormat = QString_to_wxString(ocpn::getUsrDateTimeFormat());
       if (dtFormat == "Local Time") {
         // The ETD is in UTC and needs to be converted to local time for display
         // purpose.
@@ -1528,8 +1528,9 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
       m_cbEtdPresent->SetValue(false);
     }
     // Inherit the date/time format from the user settings.
-    m_staticTextEtd->SetLabel(
-        wxString::Format("%s (%s)", _("ETD"), ocpn::getUsrDateTimeFormat()));
+    m_staticTextEtd->SetLabel(wxString::Format(
+        "%s (%s)", _("ETD"),
+        QString_to_wxString(ocpn::getUsrDateTimeFormat())));
 
     m_staticTextPlSpeed->Show(m_pRoutePoint->m_bIsInRoute);
     m_textCtrlPlSpeed->Show(m_pRoutePoint->m_bIsInRoute);
@@ -1728,7 +1729,7 @@ bool MarkInfoDlg::SaveChanges() {
         // in Options -> Date/Time format. The date/time format is either "Local
         // Time" or "UTC". If the date/time format is "Local Time", convert to
         // UTC. Otherwise, it is already in UTC.
-        wxString dtFormat = ocpn::getUsrDateTimeFormat();
+        wxString dtFormat = QString_to_wxString(ocpn::getUsrDateTimeFormat());
         if (dtFormat == "Local Time") {
           m_pRoutePoint->SetETD(dt.MakeUTC());
         } else if (dtFormat == "UTC") {

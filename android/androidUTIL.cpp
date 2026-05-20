@@ -4647,7 +4647,11 @@ int doAndroidPersistState() {
         }
       }
 
-      wxString name = ocpn::toUsrDateTimeFormat(now);
+      // Preserve `now`'s Unix epoch in a UTC QDateTime.
+      QDateTime now_q =
+          QDateTime::fromSecsSinceEpoch(now.GetTicks(), Qt::UTC);
+      wxString name =
+          QString_to_wxString(ocpn::toUsrDateTimeFormat(now_q));
       name.Prepend(_("Anchorage created "));
       RoutePoint *pWP =
           new RoutePoint(gLat, gLon, _T("anchorage"), name, _T(""));

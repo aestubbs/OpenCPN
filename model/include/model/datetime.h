@@ -24,10 +24,9 @@
 #ifndef DATETIME_API_H_
 #define DATETIME_API_H_
 
-#include <wx/wx.h>
-#if wxCHECK_VERSION(3, 1, 6)
-#include <wx/uilocale.h>
-#endif
+#include <QDateTime>
+#include <QLocale>
+#include <QString>
 
 #include "model/config_vars.h"
 #include "ocpn_plugin.h"
@@ -43,31 +42,30 @@ namespace ocpn {
  * - "Local Time": Format date/time using the operating system timezone
  *   configuration.
  */
-wxString getUsrDateTimeFormat();
+QString getUsrDateTimeFormat();
 
 /**
  * Format a date/time to a localized string representation, conforming to
  * the formatting options.
  *
- * @param date_time The date/time to format, must be local time.
+ * @param date_time The date/time to format. The QDateTime carries its own
+ *                  timezone information; the epoch (UTC instant) is the
+ *                  meaningful payload.
  * @param options The date/time format options.
- * @param locale The locale to use for formatting. If not provided, the
- *              current locale is used.
- * @return wxString The formatted date/time string with appropriate timezone
+ * @param locale The locale to use for formatting. Defaults to the system
+ *               locale.
+ * @return QString The formatted date/time string with appropriate timezone
  * indicator.
  *
- * @note This function should be used instead of wxDateTime.Format() to ensure
- * consistent date/time formatting across the entire application, including
- * plugins.
+ * @note This function should be used instead of QDateTime::toString() to
+ * ensure consistent date/time formatting across the entire application,
+ * including plugins.
  */
-wxString toUsrDateTimeFormat(
-    const wxDateTime date_time,
-    const ::DateTimeFormatOptions& options = ::DateTimeFormatOptions()
-#if wxCHECK_VERSION(3, 1, 6)
-        ,
-    const wxUILocale& locale = wxUILocale::GetCurrent()
-#endif
-);
+QString toUsrDateTimeFormat(
+    const QDateTime& date_time,
+    const ::DateTimeFormatOptions& options = ::DateTimeFormatOptions(),
+    const QLocale& locale = QLocale::system());
+
 }  // namespace ocpn
 
 #endif  // DATETIME_API_H_

@@ -32,6 +32,7 @@
 #include <windows.h>
 #endif
 
+#include <QDateTime>
 #include <QRegularExpression>
 #include <QString>
 #include <QStringList>
@@ -2369,16 +2370,17 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
       strncpy(pTargetData->Destination, destination.toUtf8().constData(),
               DESTINATION_LEN - 1);
     } else if (update_path == "navigation.destination.eta") {
-      // eta stays wxString -- feeds ParseGPXDateTime (wxChar*) -- P1.10
-      const wxString eta = item["value"].GetString();
-      if (eta.Len()) {
-        // Parse ISO 8601 date/time
-        wxDateTime tz;
-        ParseGPXDateTime(tz, eta);
-        pTargetData->ETA_Mo = tz.GetMonth() + 1;
-        pTargetData->ETA_Day = tz.GetDay();
-        pTargetData->ETA_Hr = tz.GetHour();
-        pTargetData->ETA_Min = tz.GetMinute();
+      const QString eta = item["value"].GetString();
+      if (!eta.isEmpty()) {
+        // Parse ISO 8601 date/time (UTC)
+        QDateTime tz;
+        if (ParseGPXDateTime(tz, eta)) {
+          // QDateTime month is 1-based; legacy field is 1-based, so no +1.
+          pTargetData->ETA_Mo = tz.date().month();
+          pTargetData->ETA_Day = tz.date().day();
+          pTargetData->ETA_Hr = tz.time().hour();
+          pTargetData->ETA_Min = tz.time().minute();
+        }
       }
     } else if (update_path == "navigation.specialManeuver") {
       if (strcmp("not available", item["value"].GetString()) != 0 &&
@@ -2405,15 +2407,15 @@ void AisDecoder::updateItem(const std::shared_ptr<AisTargetData> &pTargetData,
 
       // METEO Data
     } else if (update_path == "environment.date") {
-      // issued stays wxString -- feeds ParseGPXDateTime (wxChar*) -- P1.10
-      const wxString issued = item["value"].GetString();
-      if (issued.Len()) {
-        // Parse ISO 8601 date/time
-        wxDateTime tz;
-        ParseGPXDateTime(tz, issued);
-        pTargetData->met_data.day = tz.GetDay();
-        pTargetData->met_data.hour = tz.GetHour();
-        pTargetData->met_data.minute = tz.GetMinute();
+      const QString issued = item["value"].GetString();
+      if (!issued.isEmpty()) {
+        // Parse ISO 8601 date/time (UTC)
+        QDateTime tz;
+        if (ParseGPXDateTime(tz, issued)) {
+          pTargetData->met_data.day = tz.date().day();
+          pTargetData->met_data.hour = tz.time().hour();
+          pTargetData->met_data.minute = tz.time().minute();
+        }
       }
     } else if (update_path == "environment.wind.averageSpeed" &&
                item["value"].IsNumber()) {

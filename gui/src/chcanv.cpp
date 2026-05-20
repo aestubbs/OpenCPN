@@ -52,6 +52,8 @@
 #include "model/multiplexer.h"
 #include "model/notification_manager.h"
 #include "model/nav_object_database.h"
+#include <QDateTime>
+
 #include "model/navobj_db.h"
 #include "model/navutil_base.h"
 #include "model/ocpn_utils.h"
@@ -4253,10 +4255,14 @@ void ChartCanvas::OnRolloverPopupTimerEvent(wxTimerEvent &event) {
             wxString stamp = segShow_point_b->GetTimeString();
             wxDateTime timestamp = segShow_point_b->GetCreateTime();
             if (timestamp.IsValid()) {
-              // Format track rollover timestamp to OCPN global TZ setting
+              // Format track rollover timestamp to OCPN global TZ setting.
+              // timestamp carries the UTC instant; rebuild as a UTC QDateTime.
               DateTimeFormatOptions opts =
                   DateTimeFormatOptions().SetTimezone("");
-              stamp = ocpn::toUsrDateTimeFormat(timestamp.FromUTC(), opts);
+              QDateTime ts_q = QDateTime::fromSecsSinceEpoch(
+                  timestamp.GetTicks(), Qt::UTC);
+              stamp = QString_to_wxString(
+                  ocpn::toUsrDateTimeFormat(ts_q, opts));
             }
             s << "\n" << _("Segment Created: ") << stamp;
           }

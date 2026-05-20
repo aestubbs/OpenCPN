@@ -26,6 +26,8 @@
 
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
+#include <QDateTime>
+
 #include "model/georef.h"
 #include "model/gui_vars.h"
 #include "model/navobj_db.h"
@@ -1866,7 +1868,10 @@ wxString OCPNTrackListCtrl::OnGetItemText(long item, long column) const {
             DateTimeFormatOptions()
                 .SetTimezone(getDatetimeTimezoneSelector(m_tz_selection))
                 .SetLongitude(getStartPointLongitude());
-        ret = ocpn::toUsrDateTimeFormat(timestamp.FromUTC(), opts);
+        // timestamp carries the UTC instant.
+        QDateTime ts_q = QDateTime::fromSecsSinceEpoch(
+            timestamp.GetTicks(), Qt::UTC);
+        ret = QString_to_wxString(ocpn::toUsrDateTimeFormat(ts_q, opts));
       } else
         ret = "----";
     } break;

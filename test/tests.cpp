@@ -9,6 +9,8 @@
 #include <iostream>
 #include <thread>
 
+#include <QtGlobal>
+
 #include <wx/app.h>
 #include <wx/event.h>
 #include <wx/evtloop.h>
@@ -1271,20 +1273,19 @@ TEST(Plugin, Basic) { PluginMsgApp app; }
 #endif  // __unix__
 
 TEST(FormatTime, Basic) {
-  wxTimeSpan span(0, 0, 7200, 0);
-  auto s = formatTimeDelta(span).ToStdString();
+  // 7200 seconds == 2 hours.
+  auto s = formatTimeDelta(qint64(7200)).toStdString();
   EXPECT_EQ(s, " 2H  0M");
-  span = wxTimeSpan(1, 60, 0, 0);
-  span += wxTimeSpan(0, 0, 0, 10);
-  s = formatTimeDelta(span).ToStdString();
+  // 1 hour + 60 minutes + 10 milliseconds == 2 hours.
+  s = formatTimeDelta(qint64(3600 + 60 * 60)).toStdString();
   EXPECT_EQ(s, " 2H  0M");
-  s = formatTimeDelta(wxLongLong(7184));
+  s = formatTimeDelta(qint64(7184)).toStdString();
   EXPECT_EQ(s, " 2H  0M");
-  s = formatTimeDelta(wxLongLong(123));
+  s = formatTimeDelta(qint64(123)).toStdString();
   EXPECT_EQ(s, " 2M  3S");
-  s = formatTimeDelta(wxLongLong(120));
+  s = formatTimeDelta(qint64(120)).toStdString();
   EXPECT_EQ(s, " 2M  0S");
-  s = formatTimeDelta(wxLongLong(110));
+  s = formatTimeDelta(qint64(110)).toStdString();
   EXPECT_EQ(s, " 1M 50S");
 }
 

@@ -23,6 +23,10 @@
 
 #include <cmath>
 #include <fstream>
+
+#include <QDateTime>
+
+#include "model/wx_qt_string.h"
 #include <memory>
 #include <sstream>
 #include <vector>
@@ -100,10 +104,14 @@ void NotificationManager::PersistNotificationAsFile(
   file_name += ".txt";
 
   wxDateTime act_time = wxDateTime(_notification->GetActivateTime());
+  // Preserve the wxDateTime's Unix epoch in a UTC QDateTime.
+  QDateTime act_time_q =
+      QDateTime::fromSecsSinceEpoch(act_time.GetTicks(), Qt::UTC);
   wxString stime = wxString::Format(
-      "%s", ocpn::toUsrDateTimeFormat(
-                act_time, DateTimeFormatOptions().SetFormatString(
-                              "$short_date  $24_hour_minutes_seconds")));
+      "%s",
+      QString_to_wxString(ocpn::toUsrDateTimeFormat(
+          act_time_q, DateTimeFormatOptions().SetFormatString(
+                          "$short_date  $24_hour_minutes_seconds"))));
 
   std::stringstream ss;
   ss << stime.ToStdString() << std::endl;

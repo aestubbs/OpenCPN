@@ -23,6 +23,8 @@
 
 #include <wx/clipbrd.h>
 
+#include <QDateTime>
+
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
 #include "model/georef.h"
@@ -342,7 +344,8 @@ void RoutePropDlgImpl::UpdatePoints() {
   m_tcDistance->SetValue(
       wxString::Format("%5.1f " + getUsrDistanceUnit(),
                        toUsrDistance(m_pRoute->m_route_length)));
-  m_tcEnroute->SetValue(formatTimeDelta(wxLongLong(m_pRoute->m_route_time)));
+  m_tcEnroute->SetValue(QString_to_wxString(
+      formatTimeDelta(static_cast<qint64>(m_pRoute->m_route_time))));
   //  Iterate on Route Points, inserting blank fields starting with index 0
   int in = 0;
   wxString slen, eta, ete;
@@ -363,9 +366,13 @@ void RoutePropDlgImpl::UpdatePoints() {
             DateTimeFormatOptions()
                 .SetTimezone(getDatetimeTimezoneSelector(m_tz_selection))
                 .SetLongitude((*pnode)->m_lon);
+        // m_PlannedDeparture stores the UTC instant; rebuild as a UTC
+        // QDateTime preserving the same epoch.
+        QDateTime qdt = QDateTime::fromSecsSinceEpoch(
+            m_pRoute->m_PlannedDeparture.GetTicks(), Qt::UTC);
         eta = wxString::Format(
-            "Start: %s", ocpn::toUsrDateTimeFormat(
-                             m_pRoute->m_PlannedDeparture.FromUTC(), opts));
+            "Start: %s",
+            QString_to_wxString(ocpn::toUsrDateTimeFormat(qdt, opts)));
         eta.Append(wxString::Format(
             " (%s)", GetDaylightString(
                          getDaylightStatus((*pnode)->m_lat, (*pnode)->m_lon,
@@ -376,7 +383,8 @@ void RoutePropDlgImpl::UpdatePoints() {
         eta = _("N/A");
       }
       if (speed > .1) {
-        ete = formatTimeDelta(wxLongLong(3600. * distance / speed));
+        ete = QString_to_wxString(formatTimeDelta(
+            static_cast<qint64>(3600. * distance / speed)));
       } else {
         ete = _("N/A");
       }
@@ -388,7 +396,10 @@ void RoutePropDlgImpl::UpdatePoints() {
             DateTimeFormatOptions()
                 .SetTimezone(getDatetimeTimezoneSelector(m_tz_selection))
                 .SetLongitude((*pnode)->m_lon);
-        eta = ocpn::toUsrDateTimeFormat((*pnode)->GetETA().FromUTC(), opts);
+        // GetETA() returns wxDateTime carrying the UTC instant.
+        QDateTime qdt = QDateTime::fromSecsSinceEpoch(
+            (*pnode)->GetETA().GetTicks(), Qt::UTC);
+        eta = QString_to_wxString(ocpn::toUsrDateTimeFormat(qdt, opts));
         eta.Append(wxString::Format(
             " (%s)", GetDaylightString(getDaylightStatus((*pnode)->m_lat,
                                                          (*pnode)->m_lon,
@@ -414,7 +425,10 @@ void RoutePropDlgImpl::UpdatePoints() {
           DateTimeFormatOptions()
               .SetTimezone(getDatetimeTimezoneSelector(m_tz_selection))
               .SetLongitude(rt->m_lon);
-      etd = ocpn::toUsrDateTimeFormat(rt->GetManualETD().FromUTC(), opts);
+      // GetManualETD() returns wxDateTime carrying the UTC instant.
+      QDateTime etd_qdt = QDateTime::fromSecsSinceEpoch(
+          rt->GetManualETD().GetTicks(), Qt::UTC);
+      etd = QString_to_wxString(ocpn::toUsrDateTimeFormat(etd_qdt, opts));
       if (rt->GetManualETD().IsValid() && rt->GetETA().IsValid() &&
           rt->GetManualETD() < rt->GetETA()) {
         etd.Prepend("!! ");  // Manually entered ETD is before we arrive here!
@@ -1196,7 +1210,10 @@ wxString RoutePropDlgImpl::MakeTideInfo(wxString stationName, double lat,
       DateTimeFormatOptions()
           .SetTimezone(getDatetimeTimezoneSelector(m_tz_selection))
           .SetLongitude(lon);
-  wxString tideDateTime = ocpn::toUsrDateTimeFormat(dtm.FromUTC(), opts);
+  QDateTime tide_qdt =
+      QDateTime::fromSecsSinceEpoch(dtm.GetTicks(), Qt::UTC);
+  wxString tideDateTime =
+      QString_to_wxString(ocpn::toUsrDateTimeFormat(tide_qdt, opts));
   tide_form.Append(tideDateTime);
   dtm.Add(wxTimeSpan(0, offset, 0));
   // Write next tide event using station timezone, formatted with explicit HH:MM

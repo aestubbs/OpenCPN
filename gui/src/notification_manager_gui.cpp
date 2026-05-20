@@ -25,6 +25,10 @@
 #include <memory>
 #include <vector>
 
+#include <QDateTime>
+
+#include "model/wx_qt_string.h"
+
 #include <wx/arrstr.h>
 #include <wx/colour.h>
 #include <wx/datetime.h>
@@ -137,16 +141,21 @@ NotificationPanel::NotificationPanel(
 
   // Time
   wxDateTime act_time = wxDateTime(notification->GetActivateTime());
+  // Build a QDateTime carrying the same Unix epoch as act_time.
+  QDateTime act_time_q =
+      QDateTime::fromSecsSinceEpoch(act_time.GetTicks(), Qt::UTC);
   wxString stime = wxString::Format(
       "%s",
-      ocpn::toUsrDateTimeFormat(act_time, DateTimeFormatOptions()
-                                              .SetFormatString("$short_date")
-                                              .SetShowTimezone(false)));
+      QString_to_wxString(ocpn::toUsrDateTimeFormat(
+          act_time_q, DateTimeFormatOptions()
+                          .SetFormatString("$short_date")
+                          .SetShowTimezone(false))));
   stime = stime.BeforeFirst(' ');
   wxString stime1 = wxString::Format(
-      "%s", ocpn::toUsrDateTimeFormat(act_time,
-                                      DateTimeFormatOptions().SetFormatString(
-                                          "$24_hour_minutes_seconds")));
+      "%s",
+      QString_to_wxString(ocpn::toUsrDateTimeFormat(
+          act_time_q, DateTimeFormatOptions().SetFormatString(
+                          "$24_hour_minutes_seconds"))));
   stime += "\n";
   stime += stime1;
 

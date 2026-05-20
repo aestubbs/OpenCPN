@@ -21,6 +21,8 @@
  * Implement route_point.h -- waypoint or mark abstraction
  */
 
+#include <QDateTime>
+
 #include <wx/colour.h>
 #include <wx/datetime.h>
 #include <wx/dynarray.h>
@@ -271,8 +273,14 @@ RoutePoint::~RoutePoint() {
 
 wxDateTime RoutePoint::GetCreateTime() {
   if (!m_CreateTimeX.IsValid()) {
-    if (m_timestring.length())
-      ParseGPXDateTime(m_CreateTimeX, QString_to_wxString(m_timestring));
+    if (m_timestring.length()) {
+      QDateTime qdt;
+      if (ParseGPXDateTime(qdt, m_timestring)) {
+        // qdt is UTC; wxDateTime ctor from time_t stores the same Unix epoch.
+        // The m_CreateTimeX field holds the UTC instant by convention.
+        m_CreateTimeX = wxDateTime((time_t)qdt.toSecsSinceEpoch());
+      }
+    }
   }
   return m_CreateTimeX;
 }
@@ -527,7 +535,8 @@ wxDateTime RoutePoint::GetETA() {
 
 QString RoutePoint::GetETE() {
   if (m_seg_ete != 0) {
-    return wxString_to_QString(formatTimeDelta(m_seg_ete));
+    // m_seg_ete is a wxLongLong of seconds.
+    return formatTimeDelta(static_cast<qint64>(m_seg_ete.GetValue()));
   }
   return "";
 }

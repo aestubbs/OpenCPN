@@ -1,3 +1,6 @@
+#include <QDateTime>
+#include <QString>
+
 #include <gtest/gtest.h>
 
 #include "model/navutil_base.h"
@@ -90,64 +93,41 @@ TEST(NavUtils, toSDMM) {
 
 TEST(NavUtils, ParseGPXDateTime) {
   struct TestCase {
-    std::wstring dateString;
-    struct tm expected;
-    wxDateTime::TimeZone tz;
-    int charsConsumed = -1;  // -1 means we all chars should be consumed
+    QString dateString;
+    int expected_utc_year;
+    int expected_utc_month;  // 1-based
+    int expected_utc_day;
+    int expected_utc_hour;
+    int expected_utc_minute;
+    int expected_utc_second;
   };
+  // ParseGPXDateTime normalizes to UTC.
   std::vector<TestCase> test_cases = {
-      {L"2010-10-30T14:34:56Z",
-       {
-           56,
-           34,
-           14,
-           30,
-           10,
-           110,
-       },
-       wxDateTime::UTC},
-      {L"2010-10-30T14:34:56-04:00",
-       {
-           56,
-           34,
-           14,
-           30,
-           10,
-           110,
-       },
-       wxDateTime::GMT_4},
-      {L"2010-12-01T23:59:59+02:00",
-       {
-           59,
-           59,
-           23,
-           01,
-           12,
-           110,
-       },
-       wxDateTime::GMT2},
+      // 14:34:56 UTC
+      {"2010-10-30T14:34:56Z", 2010, 10, 30, 14, 34, 56},
+      // 14:34:56 -04:00 == 18:34:56 UTC
+      {"2010-10-30T14:34:56-04:00", 2010, 10, 30, 18, 34, 56},
+      // 23:59:59 +02:00 == 21:59:59 UTC
+      {"2010-12-01T23:59:59+02:00", 2010, 12, 1, 21, 59, 59},
   };
   for (const auto& test_case : test_cases) {
-    wxDateTime dateTime;
-    auto result = ParseGPXDateTime(dateTime, wxString(test_case.dateString));
+    QDateTime dateTime;
+    bool ok = ParseGPXDateTime(dateTime, test_case.dateString);
     std::stringstream msg;
-    msg << "Input: " << "dateString = " << test_case.dateString
-        << ", expected.tz = " << test_case.tz.GetOffset() / 3600;
-    EXPECT_TRUE(result != NULL) << msg.str();
-    if (result) {
-      dateTime.MakeFromTimezone(wxDateTime::UTC);
-      EXPECT_EQ(dateTime.GetYear(test_case.tz),
-                test_case.expected.tm_year + 1900)
+    msg << "Input: dateString = " << test_case.dateString.toStdString();
+    EXPECT_TRUE(ok) << msg.str();
+    if (ok) {
+      EXPECT_EQ(dateTime.timeSpec(), Qt::UTC) << msg.str();
+      EXPECT_EQ(dateTime.date().year(), test_case.expected_utc_year)
           << msg.str();
-      EXPECT_EQ(dateTime.GetMonth(test_case.tz), test_case.expected.tm_mon - 1)
+      EXPECT_EQ(dateTime.date().month(), test_case.expected_utc_month)
           << msg.str();
-      EXPECT_EQ(dateTime.GetDay(test_case.tz), test_case.expected.tm_mday)
+      EXPECT_EQ(dateTime.date().day(), test_case.expected_utc_day) << msg.str();
+      EXPECT_EQ(dateTime.time().hour(), test_case.expected_utc_hour)
           << msg.str();
-      EXPECT_EQ(dateTime.GetHour(test_case.tz), test_case.expected.tm_hour)
+      EXPECT_EQ(dateTime.time().minute(), test_case.expected_utc_minute)
           << msg.str();
-      EXPECT_EQ(dateTime.GetMinute(test_case.tz), test_case.expected.tm_min)
-          << msg.str();
-      EXPECT_EQ(dateTime.GetSecond(test_case.tz), test_case.expected.tm_sec)
+      EXPECT_EQ(dateTime.time().second(), test_case.expected_utc_second)
           << msg.str();
     }
   }

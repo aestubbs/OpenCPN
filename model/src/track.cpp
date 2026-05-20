@@ -72,6 +72,7 @@ millions of points.
 #include <string>
 #include <vector>
 
+#include <QDateTime>
 #include <QString>
 
 #include <wx/colour.h>
@@ -141,7 +142,11 @@ TrackPoint::~TrackPoint() {}
 
 wxDateTime TrackPoint::GetCreateTime() {
   wxDateTime CreateTimeX;
-  ParseGPXDateTime(CreateTimeX, wxString(m_stimestring.c_str()));
+  QDateTime qdt;
+  if (ParseGPXDateTime(qdt, QString::fromStdString(m_stimestring))) {
+    // qdt is UTC; wxDateTime ctor from time_t stores the same Unix epoch.
+    CreateTimeX = wxDateTime((time_t)qdt.toSecsSinceEpoch());
+  }
   return CreateTimeX;
 }
 
@@ -1012,10 +1017,13 @@ QString Track::GetDateTime(const QString &label_for_invalid_date) const {
   QString name;
   TrackPoint *rp = NULL;
   if ((int)TrackPoints.size() > 0) rp = TrackPoints[0];
-  if (rp && rp->GetCreateTime().IsValid())
-    name = wxString_to_QString(
-        ocpn::toUsrDateTimeFormat(rp->GetCreateTime().FromUTC()));
-  else
+  if (rp && rp->GetCreateTime().IsValid()) {
+    // GetCreateTime() stores UTC; build a UTC QDateTime carrying the same
+    // Unix epoch so toUsrDateTimeFormat sees the right instant.
+    QDateTime qdt = QDateTime::fromSecsSinceEpoch(
+        rp->GetCreateTime().GetTicks(), Qt::UTC);
+    name = ocpn::toUsrDateTimeFormat(qdt);
+  } else
     name = label_for_invalid_date;
   return name;
 }

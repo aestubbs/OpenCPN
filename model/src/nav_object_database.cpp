@@ -15,6 +15,7 @@
  *   along with this program; if not, see <https://www.gnu.org/licenses/>. *
  **************************************************************************/
 
+#include <QDateTime>
 #include <QString>
 
 #include "model/navobj_db.h"
@@ -500,9 +501,14 @@ Route *GPXLoadRoute1(pugi::xml_node &wpt_node, bool b_fullviz, bool b_layer,
           }
 
           else if (ext_name == "opencpn:planned_departure") {
-            ParseGPXDateTime(
-                pTentRoute->m_PlannedDeparture,
-                wxString::FromUTF8(ext_child.first_child().value()));
+            QDateTime qdt;
+            if (ParseGPXDateTime(
+                    qdt,
+                    QString::fromUtf8(ext_child.first_child().value()))) {
+              // m_PlannedDeparture is wxDateTime holding the UTC instant.
+              pTentRoute->m_PlannedDeparture =
+                  wxDateTime((time_t)qdt.toSecsSinceEpoch());
+            }
           }
 
           else if (ext_name == "opencpn:time_display") {
