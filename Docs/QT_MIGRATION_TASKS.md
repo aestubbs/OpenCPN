@@ -7,21 +7,24 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6–P1.10 done — the model's
-`wxString`, `wxDateTime`/`wxTimeSpan`, wx-container, `wxConfig`/
-`wxFileConfig`, and file-I/O sweeps are all complete. `QStringList` /
+SignalK/SocketCAN parked (P1.5m). P1.6–P1.11 done — the model's
+`wxString` / `wxDateTime` / wx-container / `wxConfig` / file-I/O /
+threading-and-timer sweeps are all complete. `QStringList` /
 `QList<T*>` / `QHash` / `QSet` are the container vocabulary;
 `model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string conversions;
-`QDateTime`/`qint64`-seconds is the time/duration vocabulary; `OcpnConfig`
-(wraps `QSettings`) is the settings store; `QFile`/`QDir`/`QFileInfo`/
-`QStandardPaths` is the file-I/O vocabulary. Remaining wx-typed
+`QDateTime` / `qint64`-seconds is the time/duration vocabulary;
+`OcpnConfig` (wraps `QSettings`) is the settings store; `QFile` /
+`QDir` / `QFileInfo` / `QStandardPaths` is the file-I/O vocabulary;
+`QThread` / `QMutex` / `QSemaphore` / `QTimer` / `QObject` with Qt
+signals/slots is the threading + event-loop vocabulary. Remaining wx
 references are deliberate boundaries — the frozen plugin ABI, the
-chart-reader `wxInputStream`/`wxOutputStream` streams (a separate chart-
-reader refactor), `wxStandardPaths` on macOS bundle paths (where Qt
-resolves to different dirs), wx-widget plumbing, deferred-ownership
-container types, external library boundaries, and the post-P1.9 config
-call-site helpers. Next: P1.11 (`wxThread`/`wxMutex`/`wxSemaphore` →
-Qt threading / `std::thread`).
+chart-reader `wxInputStream`/`wxOutputStream` streams, `wxStandardPaths`
+on macOS bundle paths, wx-widget plumbing (`wxTimer`/`wxEvtHandler` in
+`wxWindow`/`wxFrame`/`wxDialog` subclasses — Phase 3 territory),
+deferred-ownership container types, `libs/wxcurl` + `libs/wxservdisc`
+(P1.13 library replacement), and the post-P1.9 config call-site
+helpers. Next: P1.12 (delete `libs/wxJSON`; move JSON use to
+`QJsonDocument`).
 **Last updated:** 2026-05-20.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -421,7 +424,50 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         wxFileName::CreateTempFileName(prefix) → unique path under
         QStandardPaths::TempLocation. Plugin-ABI shims keep wxString
         returns, Qt-typed internally.
-- [ ] **P1.11** Replace threading primitives (`wxThread`/`wxMutex`/`wxSemaphore`).
+- [x] **P1.11** Replace threading primitives + the standalone (non-
+      `wxWindow`) `wxTimer`/`wxEvtHandler`/event-table use with Qt.
+      Strategy: Qt throughout — `QThread` / `QMutex` / `QSemaphore` /
+      `QWaitCondition` / `QTimer` / `QElapsedTimer` / `QObject` with
+      `Q_OBJECT` and `Q_SLOTS:` / `Q_SIGNALS:` / `Q_EMIT` (project uses
+      `QT_NO_KEYWORDS`). `wxStopWatch` → `QElapsedTimer`. Done in 4 sub-
+      steps. End state: every threading primitive and standalone event-
+      loop use in the model layer is Qt; in `gui/`, the remaining
+      `wxTimer`/`wxEvtHandler` is intrinsic to `wxWindow`/`wxFrame`/
+      `wxDialog` subclasses and is deferred to Phase 3 (the QtQuick
+      port). `libs/wxcurl` + `libs/wxservdisc` are deferred to P1.13
+      (whole-library replacement).
+  - [x] **P1.11-1** Model centerpiece: `AisDecoder` dropped its
+        `wxEvtHandler` base for `QObject` (Q_OBJECT) + 3 × `QTimer` with
+        slot connections; its 17 `ObservableListener`-via-event-table
+        listeners upgraded to `ObsListener::Init(KeyProvider, lambda)`
+        (the same pattern `comm_bridge` uses). Also: `GarminProtocol
+        Handler` (`wxThread` → `QThread`, event table → connect),
+        `RestServer` (`wxSemaphore` → `QSemaphore`; IO-thread → main
+        handoff via `Qt::DirectConnection` to avoid the deadlock that
+        `QueuedConnection` would cause with the CV-wait pattern),
+        `CommDriverN0183Net` (parked legacy), `comm_drv_n2k_socketcan`
+        (parked) all converted.
+  - [x] **P1.11-2** Chart subsystem: `gl_texture_mgr` (texture-compress
+        workers), `chartdb_thread` (`PoolWorkerThread` /
+        `ChartTableEntryPoolThread` `wxThread`→`QThread` with
+        `connect(&QThread::finished, &QObject::deleteLater)` to
+        replicate `wxTHREAD_DETACHED` self-cleanup), `chartdb`,
+        `chartimg`, `s57chart`'s GDAL critical section → `QMutex`.
+  - [x] **P1.11-3** Mop-up + `wxStopWatch` → `QElapsedTimer`:
+        `senc_manager` (`SENCBuildThread` → `QThread`),
+        `gl_texture_mgr.h` (`CompressionPoolThread` → `QThread`,
+        `OCPNStopWatch` rewrapped on `QElapsedTimer`),
+        `gshhs`/`ocpn_frame`/`ocpn_platform`/`o_senc`/the
+        `wxStopWatch` GUI sites.
+  - [x] **P1.11-3b** Model holdouts the step-3 audit found:
+        `NotificationManager` (added `QObject`+`Q_OBJECT`, `wxTimer` →
+        `QTimer`), `ActiveTrack` (dropped `wxEvtHandler`, became
+        `: public QObject, public Track` with `Q_OBJECT`, `wxTimer` →
+        `QTimer`), `CommDriverSignalKNet` (parked — dropped
+        `wxEvtHandler` + the custom `wxEvent` subclass; cross-thread
+        post replaced with `QMetaObject::invokeMethod(... Qt::Queued
+        Connection, Q_ARG(QString, ...))`), `DataMonitorSrc`
+        (`wxEvtHandler` base was vestigial — just dropped).
 - [ ] **P1.12** Delete `libs/wxJSON`; move JSON use to `QJsonDocument`.
 - [ ] **P1.13** Delete `libs/wxcurl`; move networking to `QNetworkAccessManager`.
 - [ ] **P1.14** Abstract route/mark UI types (`wxColour`/`wxPen`/`wxBitmap`) → `QColor`/`QPen`/`QImage`.
@@ -817,3 +863,27 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   ::readLine` loops. Plugin-ABI shims (`GetWritableDocumentsDir`,
   `GetExePath`, `GetRoutepointGPX`, etc.) keep their `wxString` returns
   but are Qt-typed internally.
+- 2026-05-20 — P1.11 done: threading primitives + standalone (non-
+  `wxWindow`) `wxTimer`/`wxEvtHandler`/event-table use is Qt throughout.
+  `QThread` / `QMutex` / `QSemaphore` / `QWaitCondition` / `QTimer` /
+  `QElapsedTimer` / `QObject` with `Q_OBJECT` + `Q_SLOTS:` /
+  `Q_SIGNALS:` / `Q_EMIT` is the threading + event-loop vocabulary.
+  `wxStopWatch` → `QElapsedTimer`. Notable patterns established:
+  `wxTHREAD_DETACHED` self-cleanup → `connect(this, &QThread::finished,
+  this, &QObject::deleteLater)` in the QThread subclass ctor;
+  cross-thread `wxPostEvent` / custom `wxEvent` subclass → either a Qt
+  signal with `Qt::QueuedConnection` or `QMetaObject::invokeMethod(...
+  Qt::QueuedConnection, Q_ARG(T, value))` for one-off worker→consumer
+  delivery; wxConfig-style `wxTimer::SetOwner` + `EVT_TIMER` event-
+  table → `connect(&timer, &QTimer::timeout, this, &Class::OnFoo)` in
+  the ctor; `RestServer`'s IO-thread → main thread CV-wait handoff
+  uses `Qt::DirectConnection` (the wx code ran the handler in-line on
+  the IO thread via `wxTheApp->ProcessPendingEvents()`; queued
+  delivery would deadlock the blocked main thread). All `Q_OBJECT`
+  classes pick up moc via the model target's existing `AUTOMOC ON`.
+  In `gui/` ~199 `wxTimer`/`wxEvtHandler` hits across 42 files remain
+  — all are members of `wxWindow`/`wxFrame`/`wxDialog`/`wxAuiManager`
+  subclasses or non-window wx event handlers
+  (`pluginUtilHandler`/`CanvasMenuHandler`/etc.); these migrate with
+  the QtQuick port in Phase 3. `libs/wxcurl` + `libs/wxservdisc` (21
+  hits) are deferred to P1.13.
