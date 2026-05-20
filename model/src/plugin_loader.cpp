@@ -61,14 +61,20 @@
 
 #include <wx/wx.h>  //  NOLINT
 #include <wx/bitmap.h>
-#include <wx/dir.h>
 #include <wx/event.h>
 #include <wx/hashset.h>
-#include <wx/filename.h>
 #include <wx/string.h>
 #include <wx/tokenzr.h>
 #include <wx/window.h>
 #include <wx/process.h>
+
+#include <QDateTime>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+
+#include "model/wx_qt_string.h"
 
 #include "model/base_platform.h"
 #include "model/catalog_handler.h"
@@ -127,7 +133,7 @@ static bool IsSystemPluginName(const std::string& name) {
 /** Return version string from installation or as fallback API data */
 static std::string GetInstalledVersion(const PlugInData& pd) {
   std::string path = PluginHandler::VersionPath(pd.m_common_name.ToStdString());
-  if (path == "" || !wxFileName::IsFileReadable(path)) {
+  if (path == "" || !QFileInfo(QString::fromStdString(path)).isReadable()) {
     auto loader = PluginLoader::GetInstance();
     auto pic = GetContainer(pd, *loader->GetPlugInArray());
     if (!pic || !pic->m_pplugin) {
@@ -478,7 +484,7 @@ void PluginLoader::SortPlugins(int (*cmp_func)(PlugInContainer**,
 bool PluginLoader::LoadAllPlugIns(bool load_enabled, bool keep_orphans) {
   using namespace std;
 
-  static const wxString sep = wxFileName::GetPathSeparator();
+  static const wxString sep = QString_to_wxString(QDir::separator());
   vector<string> dirs = PluginPaths::GetInstance()->Libdirs();
   wxLogMessage("PluginLoader: loading plugins from %s", ocpn::join(dirs, ';'));
   setLoadPath();
@@ -504,10 +510,11 @@ bool PluginLoader::LoadAllPlugIns(bool load_enabled, bool keep_orphans) {
 
 bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
                                        bool load_enabled) {
-  wxString plugin_file = wxFileName(file_name).GetFullName();
+  QFileInfo fi_cand(wxString_to_QString(file_name));
+  wxString plugin_file = QString_to_wxString(fi_cand.fileName());
   wxLogMessage("Checking plugin candidate: %s", file_name.mb_str().data());
 
-  wxString plugin_loadstamp = wxFileName(file_name).GetName();
+  wxString plugin_loadstamp = QString_to_wxString(fi_cand.completeBaseName());
   if (!IsSystemPluginPath(plugin_file.ToStdString())) {
     if (HasLoadStamp(plugin_loadstamp.ToStdString())) {
       MESSAGE_LOG << "Refusing to load " << file_name
@@ -516,10 +523,8 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
     }
     CreateLoadStamp(plugin_loadstamp.ToStdString());
   }
-  // wxFileName::GetModificationTime() returns wxDateTime; bridge to QDateTime
-  // via Unix epoch since wxFileName itself is deferred to P1.10.
-  QDateTime plugin_modification = QDateTime::fromSecsSinceEpoch(
-      wxFileName(file_name).GetModificationTime().GetTicks());
+  // QFileInfo::lastModified() returns QDateTime directly.
+  QDateTime plugin_modification = fi_cand.lastModified();
   wxLog::FlushActive();
 
 #ifdef __ANDROID__
@@ -568,12 +573,16 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
   }
 
   // Avoid loading/testing legacy plugins installed in base plugin path.
-  wxFileName fn_plugin_file(file_name);
-  wxString plugin_file_path =
-      fn_plugin_file.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+  QFileInfo fi_pfile(wxString_to_QString(file_name));
+  // absolutePath() preserves drive letter on Windows; ensure trailing
+  // separator to match the prior wxPATH_GET_SEPARATOR behavior.
+  QString plugin_path_q = fi_pfile.absolutePath();
+  if (!plugin_path_q.endsWith(QDir::separator()))
+    plugin_path_q += QDir::separator();
+  wxString plugin_file_path = QString_to_wxString(plugin_path_q);
   wxString base_plugin_path = g_BasePlatform->GetPluginDir();
-  if (!base_plugin_path.EndsWith(wxFileName::GetPathSeparator()))
-    base_plugin_path += wxFileName::GetPathSeparator();
+  wxString qsep = QString_to_wxString(QDir::separator());
+  if (!base_plugin_path.EndsWith(qsep)) base_plugin_path += qsep;
 
   // By hidden config file entry, allow loading arbitrary plugins from
   // "system" plugin directory, e.g. /usr/lib/opencpn on linux
@@ -745,7 +754,7 @@ bool PluginLoader::LoadPlugInDirectory(const wxString& plugin_dir,
   wxString pispec = "*_pi.so";
 #endif
 
-  if (!::wxDirExists(m_plugin_location)) {
+  if (!QDir(wxString_to_QString(m_plugin_location)).exists()) {
     msg = m_plugin_location;
     msg.Prepend("   Directory ");
     msg.Append(" does not exist.");
@@ -757,21 +766,29 @@ bool PluginLoader::LoadPlugInDirectory(const wxString& plugin_dir,
 
   wxArrayString file_list;
 
-  int get_flags = wxDIR_FILES | wxDIR_DIRS;
+  bool recurse = true;
 #ifdef __WXMSW__
 #ifdef _DEBUG
-  get_flags = wxDIR_FILES;
+  recurse = false;
 #endif
 #endif
 
 #ifdef __ANDROID__
-  get_flags = wxDIR_FILES;  // No subdirs, especially "/files" where PlugIns are
-                            // initially placed in APK
+  recurse = false;  // No subdirs, especially "/files" where PlugIns are
+                    // initially placed in APK
 #endif
 
   bool ret =
       false;  // return true if at least one new plugins gets loaded/unloaded
-  wxDir::GetAllFiles(m_plugin_location, &file_list, pispec, get_flags);
+  {
+    QDirIterator it(
+        wxString_to_QString(m_plugin_location),
+        QStringList{wxString_to_QString(pispec)}, QDir::Files,
+        recurse ? QDirIterator::Subdirectories : QDirIterator::NoIteratorFlags);
+    while (it.hasNext()) {
+      file_list.Add(QString_to_wxString(it.next()));
+    }
+  }
 
   wxLogMessage("Found %d candidates", (int)file_list.GetCount());
   for (auto& file_name : file_list) {
@@ -919,7 +936,7 @@ bool PluginLoader::UnLoadPlugIn(size_t ix) {
 static std::string VersionFromManifest(const std::string& plugin_name) {
   std::string version;
   std::string path = PluginHandler::VersionPath(plugin_name);
-  if (!path.empty() && wxFileName::IsFileReadable(path)) {
+  if (!path.empty() && QFileInfo(QString::fromStdString(path)).isReadable()) {
     std::ifstream stream;
     stream.open(path, std::ifstream::in);
     stream >> version;
@@ -1554,8 +1571,8 @@ PlugInContainer* PluginLoader::LoadPlugIn(const wxString& plugin_file,
   if (!pic->m_library.IsLoaded()) {
     //  Look in the Blacklist, try to match a filename, to give some kind of
     //  message extract the probable plugin name
-    wxFileName fn(plugin_file);
-    std::string name = fn.GetName().ToStdString();
+    QFileInfo fn(wxString_to_QString(plugin_file));
+    std::string name = fn.completeBaseName().toStdString();
     auto found = m_blacklist->get_library_data(name);
     if (m_blacklist->mark_unloadable(plugin_file.ToStdString())) {
       wxLogMessage("Ignoring blacklisted plugin %s", name.c_str());

@@ -25,9 +25,11 @@
 #ifndef CHARTDATA_INPUT_STREAM_H_
 #define CHARTDATA_INPUT_STREAM_H_
 
-#include <wx/ffile.h>
+#include <wx/stream.h>
 #include <wx/string.h>
-#include <wx/wfstream.h>
+#include <wx/wfstream.h>  // for wxFFileInputStream typedef fallback
+
+class QFile;
 
 #include "config.h"
 
@@ -42,9 +44,7 @@ public:
   wxCompressedFFileInputStream(const wxString &fileName);
   virtual ~wxCompressedFFileInputStream();
 
-  virtual bool IsOk() const {
-    return wxStreamBase::IsOk() && m_file->IsOpened();
-  }
+  virtual bool IsOk() const;
   bool IsSeekable() const { return false; }
 
 protected:
@@ -52,7 +52,7 @@ protected:
   wxFileOffset OnSysSeek(wxFileOffset pos, wxSeekMode mode);
   wxFileOffset OnSysTell() const;
 
-  wxFFile *m_file;
+  QFile *m_file;
   lzma_stream strm;
 
 private:

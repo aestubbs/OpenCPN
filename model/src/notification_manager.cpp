@@ -31,8 +31,10 @@
 #include <sstream>
 #include <vector>
 
-#include <wx/dir.h>
-#include <wx/filename.h>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
 
 #include "model/base_platform.h"
 #include "model/comm_appmsg_bus.h"
@@ -69,42 +71,40 @@ void NotificationManager::OnTimer(wxTimerEvent& event) {
 
 void NotificationManager::ScrubNotificationDirectory(int days_to_retain) {
   if (g_disableNotifications) return;
-  wxString note_directory = g_BasePlatform->GetPrivateDataDir() +
-                            wxFileName::GetPathSeparator() + "notifications" +
-                            wxFileName::GetPathSeparator();
-  if (!wxDirExists(note_directory)) return;
+  QString note_directory =
+      wxString_to_QString(g_BasePlatform->GetPrivateDataDir()) +
+      QDir::separator() + "notifications" + QDir::separator();
+  if (!QDir(note_directory).exists()) return;
 
   QDateTime now = QDateTime::currentDateTime();
-  wxArrayString file_list;
-  wxDir::GetAllFiles(note_directory, &file_list);
-  for (size_t i = 0; i < file_list.GetCount(); i++) {
-    wxFileName fn(file_list[i]);
-    QDateTime mtime =
-        QDateTime::fromSecsSinceEpoch(fn.GetModificationTime().GetTicks());
+  QDirIterator it(note_directory, QDir::Files, QDirIterator::Subdirectories);
+  while (it.hasNext()) {
+    QString path = it.next();
+    QFileInfo fi(path);
+    QDateTime mtime = fi.lastModified();
     qint64 age_secs = mtime.secsTo(now);  // seconds
     qint64 retain_secs = static_cast<qint64>(days_to_retain) * 24 * 3600;
     if (age_secs > retain_secs) {
-      wxRemoveFile(file_list[i]);
+      QFile::remove(path);
     }
   }
 }
 
 void NotificationManager::PersistNotificationAsFile(
     const std::shared_ptr<Notification> _notification) {
-  wxString note_directory = g_BasePlatform->GetPrivateDataDir() +
-                            wxFileName::GetPathSeparator() + "notifications" +
-                            wxFileName::GetPathSeparator();
-  if (!wxDirExists(note_directory)) wxMkdir(note_directory);
-  wxString severity_prefix = "Info_";
+  QString note_directory =
+      wxString_to_QString(g_BasePlatform->GetPrivateDataDir()) +
+      QDir::separator() + "notifications" + QDir::separator();
+  if (!QDir(note_directory).exists()) QDir().mkpath(note_directory);
+  QString severity_prefix = "Info_";
   NotificationSeverity severity = _notification->GetSeverity();
   if (severity == NotificationSeverity::kWarning)
     severity_prefix = "Warning_";
   else if (severity == NotificationSeverity::kCritical)
     severity_prefix = "Critical_";
-  wxString file_name = wxString(_notification.get()->GetGuid().c_str());
-  file_name.Prepend(severity_prefix);
-  file_name.Prepend(note_directory);
-  file_name += ".txt";
+  QString file_name = note_directory + severity_prefix +
+                      QString::fromStdString(_notification->GetGuid()) +
+                      ".txt";
 
   QDateTime act_time_q = QDateTime::fromSecsSinceEpoch(
       static_cast<qint64>(_notification->GetActivateTime()), Qt::UTC);
@@ -118,7 +118,7 @@ void NotificationManager::PersistNotificationAsFile(
   ss << stime.ToStdString() << std::endl;
   ss << _notification->GetMessage() << std::endl;
 
-  std::ofstream outputFile(file_name.ToStdString().c_str(), std::ios::out);
+  std::ofstream outputFile(file_name.toStdString().c_str(), std::ios::out);
   if (outputFile.is_open()) {
     outputFile << ss.str();
   }

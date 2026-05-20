@@ -23,63 +23,67 @@
 
 #include <fstream>
 
-#include <wx/dir.h>
-#include <wx/filename.h>
-#include <wx/filefn.h>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
 
 #include "model/base_platform.h"
 #include "model/ocpn_utils.h"
 #include "model/plugin_cache.h"
+#include "model/wx_qt_string.h"
 
 #ifdef __ANDROID__
 #include "androidUTIL.h"
 #endif
 
-static std::string cache_path() {
-  wxFileName path;
-  path.AssignDir(g_BasePlatform->GetPrivateDataDir());
-  path.AppendDir("plugins");
-  path.AppendDir("cache");
-  return path.GetFullPath().ToStdString();
+static QString cache_path() {
+  QString path = wxString_to_QString(g_BasePlatform->GetPrivateDataDir());
+  path += QDir::separator();
+  path += "plugins";
+  path += QDir::separator();
+  path += "cache";
+  return path;
 }
 
 static std::string tarball_path(const char* basename, bool create = false) {
-  wxFileName dirs(cache_path());
-  dirs.AppendDir("tarballs");
+  QString dir = cache_path() + QDir::separator() + "tarballs";
   if (create) {
-    dirs.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    QDir().mkpath(dir);
   }
-  static const auto kSeparator = wxFileName::GetPathSeparator();
-  wxFileName path(dirs.GetFullPath() + kSeparator + wxString(basename));
-  return path.GetFullPath().ToStdString();
+  QString path = dir + QDir::separator() + QString::fromUtf8(basename);
+  return path.toStdString();
 }
 
 static bool copy_file(const char* src_path, const char* dest_path) {
 #ifdef __ANDROID__
   return AndroidSecureCopyFile(src_path, dest_path);
 #else
-  return wxCopyFile(src_path, dest_path);
+  // wxCopyFile semantics overwrites destination -- match that.
+  QString src = QString::fromUtf8(src_path);
+  QString dst = QString::fromUtf8(dest_path);
+  if (QFile::exists(dst)) QFile::remove(dst);
+  return QFile::copy(src, dst);
 #endif
 }
 
 static std::string get_basename(const char* path) {
-  wxString sep(wxFileName::GetPathSeparator());
+  QString sep(QDir::separator());
   // To parse standard network url, use "/"
   if (ocpn::startswith(path, "http")) sep = "/";
-  auto parts = ocpn::split(path, sep.ToStdString());
+  auto parts = ocpn::split(path, sep.toStdString());
   return parts[parts.size() - 1];
 }
 
 namespace ocpn {
 
 static std::string metadata_path(const char* basename, bool create = false) {
-  wxFileName dirs(cache_path());
-  dirs.AppendDir("metadata");
+  QString dir = cache_path() + QDir::separator() + "metadata";
   if (create) {
-    dirs.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    QDir().mkpath(dir);
   }
-  wxFileName path(dirs.GetFullPath(), wxString(basename));
-  return path.GetFullPath().ToStdString();
+  QString path = dir + QDir::separator() + QString::fromUtf8(basename);
+  return path.toStdString();
 }
 
 bool store_metadata(const char* path) {
@@ -114,67 +118,45 @@ std::string lookup_tarball(const char* uri) {
 }
 
 unsigned cache_file_count() {
-  wxFileName dirs(cache_path());
-  dirs.AppendDir("tarballs");
-  if (!dirs.DirExists()) {
+  QString dir = cache_path() + QDir::separator() + "tarballs";
+  if (!QDir(dir).exists()) {
     return 0;
   }
-  wxDir dir(dirs.GetFullPath());
-  wxString file;
-  unsigned count = 0;
-  bool cont = dir.GetFirst(&file);
-  while (cont) {
-    count += 1;
-    cont = dir.GetNext(&file);
-  }
-  return count;
+  QDir d(dir);
+  return static_cast<unsigned>(
+      d.entryList(QDir::NoDotAndDotDot | QDir::AllEntries).size());
 }
 
 unsigned long cache_size() {
-  wxFileName dirs(cache_path());
-  dirs.AppendDir("tarballs");
-  if (!dirs.DirExists()) {
+  QString dir_path = cache_path() + QDir::separator() + "tarballs";
+  if (!QDir(dir_path).exists()) {
     return 0;
   }
-  wxDir dir(dirs.GetFullPath());
-  wxString file;
-  wxULongLong total = 0;
-  bool cont = dir.GetFirst(&file);
-  while (cont) {
-    dirs.SetFullName(file);
-    wxFileName fn(dirs.GetFullPath());
-    if (fn.FileExists()) {  // Consider only regular files.  Should be no
-                            // directories here, but one never knows...
-      auto size = fn.GetSize();
-      if (size == wxInvalidSize) {
-        wxLogMessage("Cannot stat file %s",
-                     dirs.GetFullPath().ToStdString().c_str());
-        continue;
-      }
-
-      total += size;
+  qint64 total = 0;
+  QDir d(dir_path);
+  const QStringList entries =
+      d.entryList(QDir::NoDotAndDotDot | QDir::AllEntries);
+  for (const QString& file : entries) {
+    QFileInfo fi(d.filePath(file));
+    if (fi.isFile()) {  // Consider only regular files
+      total += fi.size();
     }
-    cont = dir.GetNext(&file);
   }
   total /= (1024 * 1024);
-  return total.ToULong();
+  return static_cast<unsigned long>(total);
 }
 
 /* mock up definitions.*/
 void cache_clear() {
-  wxFileName dirs(cache_path());
-  dirs.AppendDir("tarballs");
-  if (!dirs.DirExists()) {
+  QString dir_path = cache_path() + QDir::separator() + "tarballs";
+  if (!QDir(dir_path).exists()) {
     return;
   }
-  wxDir dir(dirs.GetFullPath());
-  wxString file;
-  bool cont = dir.GetFirst(&file);
-  while (cont) {
-    dirs.SetFullName(file);
-    wxRemoveFile(dirs.GetFullPath());
-    ;
-    cont = dir.GetNext(&file);
+  QDir d(dir_path);
+  const QStringList entries =
+      d.entryList(QDir::NoDotAndDotDot | QDir::AllEntries);
+  for (const QString& file : entries) {
+    QFile::remove(d.filePath(file));
   }
 }
 

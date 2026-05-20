@@ -40,13 +40,17 @@
 #include "wx/wx.h"
 #endif
 
-#include <wx/dir.h>
-#include <wx/file.h>
-#include <wx/filename.h>
 #include <wx/string.h>
 #include <wx/tokenzr.h>
 #include <wx/window.h>
 #include <wx/uri.h>
+
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+
+#include "model/wx_qt_string.h"
 
 #include <archive.h>
 #include <archive_entry.h>
@@ -98,13 +102,13 @@ static std::vector<std::string> split(const std::string& s,
 }
 
 inline std::string basename(const std::string path) {
-  wxFileName wxFile(path);
-  return wxFile.GetFullName().ToStdString();
+  QFileInfo fi(QString::fromStdString(path));
+  return fi.fileName().toStdString();
 }
 
 bool isRegularFile(const char* path) {
-  wxFileName wxFile(path);
-  return wxFile.FileExists() && !wxFile.IsDir();
+  QFileInfo fi(QString::fromUtf8(path));
+  return fi.isFile();
 }
 
 static void mkdir(const std::string path) {
@@ -120,14 +124,14 @@ static void mkdir(const std::string path) {
 static std::vector<std::string> glob_dir(const std::string& dir_path,
                                          const std::string& pattern) {
   std::vector<std::string> found;
-  wxString s;
-  wxDir dir(dir_path);
-  auto match = dir.GetFirst(&s, pattern);
-  while (match) {
-    static const std::string SEP =
-        wxString(wxFileName::GetPathSeparator()).ToStdString();
-    found.push_back(dir_path + SEP + s.ToStdString());
-    match = dir.GetNext(&s);
+  QDir dir(QString::fromStdString(dir_path));
+  if (!dir.exists()) return found;
+  const QStringList entries =
+      dir.entryList(QStringList{QString::fromStdString(pattern)},
+                    QDir::Files | QDir::NoDotAndDotDot);
+  static const std::string SEP = QString(QDir::separator()).toStdString();
+  for (const QString& e : entries) {
+    found.push_back(dir_path + SEP + e.toStdString());
   }
   return found;
 }
@@ -544,10 +548,10 @@ static bool win_entry_set_install_path(struct archive_entry* entry,
     is_library = true;
   } else if (ocpn::startswith(path, "share")) {
     // The "share" directory should be a direct sibling of "plugins" directory
-    wxFileName fn(installPaths["share"].c_str(),
-                  "");   // should point to .../opencpn/plugins
-    fn.RemoveLastDir();  // should point to ".../opencpn
-    path = fn.GetFullPath().ToStdString() + path;
+    // share path should point to .../opencpn/plugins -- drop the last segment.
+    QDir share_dir(QString::fromStdString(installPaths["share"]));
+    share_dir.cdUp();  // up to .../opencpn
+    path = share_dir.absolutePath().toStdString() + "\\" + path;
   } else if (ocpn::startswith(path, "plugins")) {
     slashpos = path.find_first_of('/');
     // share path already ends in plugins/, drop prefix from archive entry.
@@ -561,8 +565,8 @@ static bool win_entry_set_install_path(struct archive_entry* entry,
     return false;
   }
   if (is_library) {
-    wxFileName nm(path);
-    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
+    QFileInfo fi(QString::fromStdString(path));
+    PluginLoader::MarkAsLoadable(fi.completeBaseName().toStdString());
   }
   wxString s(path);
   s.Replace("/", "\\");  // std::regex_replace FTBS on gcc 4.8.4
@@ -602,8 +606,8 @@ static bool flatpak_entry_set_install_path(struct archive_entry* entry,
 
   PluginPaths* paths = PluginPaths::GetInstance();
   if (dest.find(paths->UserLibdir()) != std::string::npos) {
-    wxFileName nm(path);
-    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
+    QFileInfo fi(QString::fromStdString(path));
+    PluginLoader::MarkAsLoadable(fi.completeBaseName().toStdString());
   }
 
   return true;
@@ -671,8 +675,8 @@ static bool linux_entry_set_install_path(struct archive_entry* entry,
   }
 
   if (is_library) {
-    wxFileName nm(suffix);
-    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
+    QFileInfo fi(QString::fromStdString(suffix));
+    PluginLoader::MarkAsLoadable(fi.completeBaseName().toStdString());
   }
 
   archive_entry_set_pathname(entry, dest.c_str());
@@ -721,8 +725,8 @@ static bool apple_entry_set_install_path(struct archive_entry* entry,
   }
   archive_entry_set_pathname(entry, dest.c_str());
   if (is_library) {
-    wxFileName nm(dest);
-    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
+    QFileInfo fi(QString::fromStdString(dest));
+    PluginLoader::MarkAsLoadable(fi.completeBaseName().toStdString());
   }
 
   return true;
@@ -780,8 +784,8 @@ static bool android_entry_set_install_path(struct archive_entry* entry,
 
   archive_entry_set_pathname(entry, dest.c_str());
   if (is_library) {
-    wxFileName nm(suffix);
-    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
+    QFileInfo fi(QString::fromStdString(suffix));
+    PluginLoader::MarkAsLoadable(fi.completeBaseName().toStdString());
   }
   return true;
 }
@@ -1074,20 +1078,22 @@ void PluginHandler::CleanupFiles(const std::string& manifestFile,
 
 /** Remove all empty dirs found from root containing string "opencpn". */
 static void PurgeEmptyDirs(const std::string& root) {
-  if (!wxFileName::IsDirWritable(root)) return;
+  QString qroot = QString::fromStdString(root);
+  QFileInfo root_info(qroot);
+  if (!root_info.isDir() || !root_info.isWritable()) return;
   if (ocpn::tolower(root).find("opencpn") == std::string::npos) return;
-  wxDir rootdir(root);
-  if (!rootdir.IsOpened()) return;
-  wxString dirname;
-  bool cont = rootdir.GetFirst(&dirname, "", wxDIR_DIRS);
-  while (cont) {
-    PurgeEmptyDirs((rootdir.GetNameWithSep() + dirname).ToStdString());
-    cont = rootdir.GetNext(&dirname);
+  QDir rootdir(qroot);
+  if (!rootdir.exists()) return;
+  const QStringList subdirs =
+      rootdir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+  for (const QString& name : subdirs) {
+    PurgeEmptyDirs(rootdir.filePath(name).toStdString());
   }
-  rootdir.Close();
-  rootdir.Open(root);
-  if (!(rootdir.HasFiles() || rootdir.HasSubDirs())) {
-    wxFileName::Rmdir(rootdir.GetName());
+  // Re-evaluate: if now empty, remove it
+  rootdir.refresh();
+  if (rootdir.isEmpty(QDir::AllEntries | QDir::NoDotAndDotDot |
+                      QDir::Hidden | QDir::System)) {
+    QDir().rmdir(rootdir.absolutePath());
   }
 }
 
@@ -1185,7 +1191,8 @@ const std::vector<PluginMetadata> PluginHandler::GetInstalled() {
     plugin.version = ss.str();
     plugin.readonly = !IsPluginWritable(plugin.name);
     string path = PluginHandler::VersionPath(plugin.name);
-    if (path != "" && wxFileName::IsFileReadable(path)) {
+    if (path != "" &&
+        QFileInfo(QString::fromStdString(path)).isReadable()) {
       std::ifstream stream;
       stream.open(path, ifstream::in);
       stream >> plugin.version;
@@ -1359,20 +1366,18 @@ static std::string FindMatchingDataDir(std::regex name_re) {
   wxStringTokenizer tokens(data_dirs, ";");
   while (tokens.HasMoreTokens()) {
     auto token = tokens.GetNextToken();
-    wxFileName path(token);
-    wxDir dir(path.GetFullPath());
-    if (dir.IsOpened()) {
-      wxString filename;
-      bool cont = dir.GetFirst(&filename, "", wxDIR_DIRS);
-      while (cont) {
+    QDir dir(wxString_to_QString(token));
+    if (dir.exists()) {
+      const QStringList entries =
+          dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+      for (const QString& filename : entries) {
         smatch sm;
-        string s(filename);
+        string s = filename.toStdString();
         if (regex_search(s, sm, name_re)) {
           stringstream ss;
           for (auto c : sm) ss << c;
           return ss.str();
         }
-        cont = dir.GetNext(&filename);
       }
     }
   }
@@ -1386,18 +1391,17 @@ static std::string FindMatchingDataDir(std::regex name_re) {
 static std::string FindMatchingLibFile(std::regex name_re) {
   using namespace std;
   for (const auto& lib : PluginPaths::GetInstance()->Libdirs()) {
-    wxDir dir(lib);
-    wxString filename;
-    bool cont = dir.GetFirst(&filename, "", wxDIR_FILES);
-    while (cont) {
+    QDir dir(QString::fromStdString(lib));
+    const QStringList entries =
+        dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+    for (const QString& filename : entries) {
       smatch sm;
-      string s(filename);
+      string s = filename.toStdString();
       if (regex_search(s, sm, name_re)) {
         stringstream ss;
         for (auto c : sm) ss << c;
         return ss.str();
       }
-      cont = dir.GetNext(&filename);
     }
   }
   return "";
@@ -1438,11 +1442,11 @@ static void LoadPluginMapFile(PluginMap& map, const std::string& path) {
   buf << f.rdbuf();
   auto filelist = ocpn::split(buf.str().c_str(), "\n");
   for (auto& file : filelist) {
-    file = wxFileName(file).GetFullName().ToStdString();
+    file = QFileInfo(QString::fromStdString(file)).fileName().toStdString();
   }
 
   // key is basename with removed .files suffix and correct case.
-  auto key = wxFileName(path).GetFullName().ToStdString();
+  auto key = QFileInfo(QString::fromStdString(path)).fileName().toStdString();
   key = ocpn::split(key.c_str(), ".")[0];
   key = PluginNameCase(key);
   map[key] = filelist;
@@ -1451,19 +1455,19 @@ static void LoadPluginMapFile(PluginMap& map, const std::string& path) {
 /** For each installed plugin: map[plugin name] = list of files. */
 static void LoadPluginMap(PluginMap& map) {
   map.clear();
-  wxDir root(PluginHandler::PluginsInstallDataPath());
-  if (!root.IsOpened()) return;
-  wxString filename;
-  bool cont = root.GetFirst(&filename, "*.files", wxDIR_FILES);
-  while (cont) {
-    auto path = root.GetNameWithSep() + filename;
-    LoadPluginMapFile(map, path.ToStdString());
-    cont = root.GetNext(&filename);
+  QDir root(QString::fromStdString(PluginHandler::PluginsInstallDataPath()));
+  if (!root.exists()) return;
+  const QStringList entries = root.entryList(
+      QStringList{QString("*.files")}, QDir::Files | QDir::NoDotAndDotDot);
+  for (const QString& filename : entries) {
+    QString path = root.filePath(filename);
+    LoadPluginMapFile(map, path.toStdString());
   }
 }
 
 std::string PluginHandler::GetPluginByLibrary(const std::string& filename) {
-  auto basename = wxFileName(filename).GetFullName().ToStdString();
+  auto basename =
+      QFileInfo(QString::fromStdString(filename)).fileName().toStdString();
   if (FilesByPlugin.size() == 0) LoadPluginMap(FilesByPlugin);
   for (const auto& it : FilesByPlugin) {
     auto found = std::find(it.second.begin(), it.second.end(), basename);
@@ -1475,8 +1479,8 @@ std::string PluginHandler::GetPluginByLibrary(const std::string& filename) {
 bool PluginHandler::InstallPluginFromCache(PluginMetadata plugin) {
   // Look for the desired file
   wxURI uri(wxString(plugin.tarball_url.c_str()));
-  wxFileName fn(uri.GetPath());
-  wxString tarballFile = fn.GetFullName();
+  QFileInfo fi(wxString_to_QString(uri.GetPath()));
+  wxString tarballFile = QString_to_wxString(fi.fileName());
   std::string cacheFile = ocpn::lookup_tarball(tarballFile);
 
 #ifdef __WXOSX__
@@ -1484,10 +1488,11 @@ bool PluginHandler::InstallPluginFromCache(PluginMetadata plugin) {
   // de-compress the tar.gz file, leaving a simple ".tar" file in its expected
   // place. Check for this case, and "do the right thing"
   if (cacheFile == "") {
-    fn.ClearExt();
-    wxFileName fn1(fn.GetFullName());
-    if (fn1.GetExt().IsSameAs("tar")) {
-      tarballFile = fn.GetFullName();
+    // Strip the extension by taking completeBaseName.
+    QString stripped = fi.completeBaseName();
+    QFileInfo fi1(stripped);
+    if (fi1.suffix().compare(QStringLiteral("tar"), Qt::CaseInsensitive) == 0) {
+      tarballFile = QString_to_wxString(stripped);
       cacheFile = ocpn::lookup_tarball(tarballFile);
     }
   }

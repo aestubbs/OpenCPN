@@ -63,12 +63,20 @@
 
 #include <wx/app.h>
 #include <wx/apptrait.h>
-#include <wx/dir.h>
-#include <wx/filename.h>
+#include <wx/filename.h>  // still needed for the public wxString API of
+                          // GetStdPaths()/SetInstallPrefix used here; the
+                          // local file-I/O sites now use QFile/QDir/QFileInfo.
 #include <wx/platinfo.h>
 #include <wx/stdpaths.h>
-#include <wx/textfile.h>
 #include <wx/tokenzr.h>
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStringList>
+#include <QTextStream>
+
+#include "model/wx_qt_string.h"
 
 #include "config.h"
 
@@ -143,9 +151,9 @@ static wxString ExpandPaths(wxString paths, AbstractPlatform* platform) {
   wxStringTokenizer tokens(paths, ';');
   wxString s = "";
   while (tokens.HasMoreTokens()) {
-    wxFileName filename(tokens.GetNextToken());
-    filename.Normalize();
-    s += platform->NormalizePath(filename.GetFullPath());
+    QFileInfo filename(wxString_to_QString(tokens.GetNextToken()));
+    s += platform->NormalizePath(
+        QString_to_wxString(filename.absoluteFilePath()));
     if (tokens.HasMoreTokens()) {
       s += ';';
     }
@@ -189,13 +197,12 @@ wxString AbstractPlatform::NormalizePath(const wxString& full_path) {
   if (!g_bportable) {
     return full_path;
   } else {
-    wxString path(full_path);
-    wxFileName f(path);
-    // If not on another voulme etc. make the portable relative path
-    if (f.MakeRelativeTo(GetPrivateDataDir())) {
-      path = f.GetFullPath();
-    }
-    return path;
+    // Build a path relative to GetPrivateDataDir() (the "portable" base).
+    // QDir::relativeFilePath returns the original absolute path if the
+    // target is on a different volume / cannot be expressed relatively.
+    QDir base(wxString_to_QString(GetPrivateDataDir()));
+    QString rel = base.relativeFilePath(wxString_to_QString(full_path));
+    return QString_to_wxString(rel);
   }
 }
 
@@ -223,8 +230,8 @@ wxString& AbstractPlatform::GetHomeDir() {
 #endif
 
     if (g_bportable) {
-      wxFileName path(GetExePath());
-      m_homeDir = path.GetPath();
+      QFileInfo path(wxString_to_QString(GetExePath()));
+      m_homeDir = QString_to_wxString(path.absolutePath());
     }
 
 #ifdef __WXOSX__
@@ -292,27 +299,27 @@ wxString AbstractPlatform::GetSupplementalLicenseString() {
 }
 
 wxString GetPluginDataDir(const char* plugin_name) {
-  static const wxString sep = wxFileName::GetPathSeparator();
+  static const wxString sep = QString_to_wxString(QDir::separator());
 
   wxString datadirs = g_BasePlatform->GetPluginDataPath();
   wxLogMessage("PlugInManager: Using data dirs from: " + datadirs);
   wxStringTokenizer dirs(datadirs, ";");
   while (dirs.HasMoreTokens()) {
     wxString dir = dirs.GetNextToken();
-    wxFileName tryDirName(dir);
-    wxDir tryDir;
-    if (!tryDir.Open(tryDirName.GetFullPath())) continue;
-    wxString next;
-    bool more = tryDir.GetFirst(&next);
-    while (more) {
-      if (next == plugin_name) {
-        next = next.Prepend(tryDirName.GetFullPath() + sep);
-        wxLogMessage("PlugInManager: using data dir: %s", next);
-        return next;
+    QFileInfo tryDirName(wxString_to_QString(dir));
+    QString tryDirPath = tryDirName.absoluteFilePath();
+    QDir tryDir(tryDirPath);
+    if (!tryDir.exists()) continue;
+    const QStringList entries =
+        tryDir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
+    for (const QString& next : entries) {
+      if (next.toStdString() == plugin_name) {
+        wxString result =
+            QString_to_wxString(tryDirPath) + sep + QString_to_wxString(next);
+        wxLogMessage("PlugInManager: using data dir: %s", result);
+        return result;
       }
-      more = tryDir.GetNext(&next);
     }
-    tryDir.Close();
   }
   wxLogMessage("Warning: no data directory found, using \"\"");
   return "";
@@ -323,7 +330,7 @@ wxString& AbstractPlatform::GetPrivateDataDir() {
     return m_PrivateDataDir;
   if (!g_configdir.empty()) {
     wxString path = g_configdir;
-    if (path.Last() == wxFileName::GetPathSeparator()) path.RemoveLast();
+    if (path.Last() == QDir::separator().unicode()) path.RemoveLast();
     m_default_private_datadir = path;
     return m_default_private_datadir;  // FIXME (leamas) normalize and trust
                                        // g_configdir
@@ -362,7 +369,7 @@ wxString& AbstractPlatform::DefaultPrivateDataDir() {
 #endif
 
     if (g_bportable) m_PrivateDataDir = GetHomeDir();
-    if (m_PrivateDataDir.Last() == wxFileName::GetPathSeparator())
+    if (m_PrivateDataDir.Last() == QDir::separator().unicode())
       m_PrivateDataDir.RemoveLast();
 
 #ifdef __ANDROID__
@@ -375,13 +382,12 @@ wxString& AbstractPlatform::DefaultPrivateDataDir() {
 wxString AbstractPlatform::GetWinPluginBaseDir() {
   if (g_winPluginDir != "") {
     wxLogMessage("winPluginDir: Using value from ini file.");
-    wxFileName fn(g_winPluginDir);
-    if (!fn.DirExists()) {
+    QFileInfo fn(wxString_to_QString(g_winPluginDir));
+    if (!fn.isDir()) {
       wxLogWarning("Plugin dir %s does not exist",
-                   fn.GetFullPath().mb_str().data());
+                   fn.absoluteFilePath().toStdString().c_str());
     }
-    fn.Normalize();
-    return fn.GetFullPath();
+    return QString_to_wxString(fn.absoluteFilePath());
   }
   wxString winPluginDir;
   // Portable case: plugins directory is in the .exe folder
@@ -424,9 +430,11 @@ wxString AbstractPlatform::GetWinPluginBaseDir() {
     // {Documents and Settings}\.. on W7, else \ProgramData
     winPluginDir = GetHomeDir();
   }
-  wxFileName path(winPluginDir);
-  path.Normalize();
-  winPluginDir = path.GetFullPath() + "\\opencpn\\plugins";
+  {
+    QFileInfo path(wxString_to_QString(winPluginDir));
+    winPluginDir =
+        QString_to_wxString(path.absoluteFilePath()) + "\\opencpn\\plugins";
+  }
   wxLogMessage("Using private plugin dir: %s", winPluginDir);
   return winPluginDir;
 }
@@ -448,9 +456,9 @@ wxString& AbstractPlatform::GetPluginDir() {
 
 #ifdef __ANDROID__
     // something like: data/data/org.opencpn.opencpn
-    wxFileName fdir = wxFileName::DirName(std_path.GetUserConfigDir());
-    fdir.RemoveLastDir();
-    m_PluginsDir = fdir.GetPath();
+    QDir fdir(wxString_to_QString(std_path.GetUserConfigDir()));
+    fdir.cdUp();
+    m_PluginsDir = QString_to_wxString(fdir.absolutePath());
 #endif
   }
   return m_PluginsDir;
@@ -484,7 +492,7 @@ bool AbstractPlatform::isPlatformCapable(int flag) {
 }
 
 void appendOSDirSlash(wxString* pString) {
-  wxChar sep = wxFileName::GetPathSeparator();
+  wxChar sep = QDir::separator().unicode();
   if (pString->Last() != sep) pString->Append(sep);
 }
 
@@ -509,54 +517,55 @@ bool AbstractPlatform::DetectOSDetail(OCPN_OSDetail* detail) {
 
   // Now parse by basic platform
 #ifdef __linux__
-  if (wxFileExists("/etc/os-release")) {
-    wxTextFile release_file("/etc/os-release");
-    if (release_file.Open()) {
-      wxString val;
-      for (wxString str = release_file.GetFirstLine(); !release_file.Eof();
-           str = release_file.GetNextLine()) {
-        if (str.StartsWith("NAME")) {
-          val = str.AfterFirst('=').Mid(1);
-          val = val.Mid(0, val.Length() - 1);
-          if (val.Length()) detail->osd_name = std::string(val.mb_str());
-        } else if (str.StartsWith("VERSION_ID")) {
-          val = str.AfterFirst('=').Mid(1);
-          val = val.Mid(0, val.Length() - 1);
-          if (val.Length()) detail->osd_version = std::string(val.mb_str());
-        } else if (str.StartsWith("ID=")) {
-          val = str.AfterFirst('=');
-          if (val.Length()) detail->osd_ID = ocpn::split(val.mb_str(), " ")[0];
-        } else if (str.StartsWith("ID_LIKE")) {
-          if (val.StartsWith('"')) {
-            val = str.AfterFirst('=').Mid(1);
-            val = val.Mid(0, val.Length() - 1);
+  if (QFile::exists("/etc/os-release")) {
+    QFile release_file("/etc/os-release");
+    if (release_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+      QTextStream ts(&release_file);
+      QString val;
+      while (!ts.atEnd()) {
+        QString str = ts.readLine();
+        if (str.startsWith("NAME")) {
+          val = str.section('=', 1).mid(1);
+          val = val.left(val.length() - 1);
+          if (val.length()) detail->osd_name = val.toStdString();
+        } else if (str.startsWith("VERSION_ID")) {
+          val = str.section('=', 1).mid(1);
+          val = val.left(val.length() - 1);
+          if (val.length()) detail->osd_version = val.toStdString();
+        } else if (str.startsWith("ID=")) {
+          val = str.section('=', 1);
+          if (val.length())
+            detail->osd_ID = ocpn::split(val.toStdString().c_str(), " ")[0];
+        } else if (str.startsWith("ID_LIKE")) {
+          if (val.startsWith('"')) {
+            val = str.section('=', 1).mid(1);
+            val = val.left(val.length() - 1);
           } else {
-            val = str.AfterFirst('=');
+            val = str.section('=', 1);
           }
 
-          if (val.Length()) {
-            detail->osd_names_like = ocpn::split(val.mb_str(), " ");
+          if (val.length()) {
+            detail->osd_names_like =
+                ocpn::split(val.toStdString().c_str(), " ");
           }
         }
       }
-
-      release_file.Close();
+      release_file.close();
     }
     if (detail->osd_name == "Linux Mint") {
-      if (wxFileExists("/etc/upstream-release/lsb-release")) {
-        wxTextFile upstream_release_file("/etc/upstream-release/lsb-release");
-        if (upstream_release_file.Open()) {
-          wxString val;
-          for (wxString str = upstream_release_file.GetFirstLine();
-               !upstream_release_file.Eof();
-               str = upstream_release_file.GetNextLine()) {
-            if (str.StartsWith("DISTRIB_RELEASE")) {
-              val = str.AfterFirst('=').Mid(0);
-              val = val.Mid(0, val.Length());
-              if (val.Length()) detail->osd_version = std::string(val.mb_str());
+      if (QFile::exists("/etc/upstream-release/lsb-release")) {
+        QFile upstream_release_file("/etc/upstream-release/lsb-release");
+        if (upstream_release_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+          QTextStream ts(&upstream_release_file);
+          QString val;
+          while (!ts.atEnd()) {
+            QString str = ts.readLine();
+            if (str.startsWith("DISTRIB_RELEASE")) {
+              val = str.section('=', 1);
+              if (val.length()) detail->osd_version = val.toStdString();
             }
           }
-          upstream_release_file.Close();
+          upstream_release_file.close();
         }
       }
     }
@@ -658,33 +667,42 @@ bool BasePlatform::InitializeLogFile() {
 
 #ifdef __WXOSX__
 
-  wxFileName LibPref(mlog_file);  // starts like "~/Library/Preferences/opencpn"
-  LibPref.RemoveLastDir();        // takes off "opencpn"
-  LibPref.RemoveLastDir();        // takes off "Preferences"
-
-  mlog_file = LibPref.GetFullPath();
-  appendOSDirSlash(&mlog_file);
-
-  mlog_file.Append("Logs/");  // so, on OS X, opencpn.log ends up in
-                              // ~/Library/Logs which makes it accessible to
-                              // Applications/Utilities/Console....
+  {
+    // mlog_file starts like "~/Library/Preferences/opencpn/".
+    // Drop the trailing "opencpn" and "Preferences" segments to land at
+    // ~/Library, then append "Logs/" so opencpn.log ends up in
+    // ~/Library/Logs (accessible to Console.app).
+    QDir LibPref(wxString_to_QString(mlog_file));
+    LibPref.cdUp();  // takes off "opencpn"
+    LibPref.cdUp();  // takes off "Preferences"
+    mlog_file = QString_to_wxString(LibPref.absolutePath());
+    appendOSDirSlash(&mlog_file);
+    mlog_file.Append("Logs/");
+  }
 #endif
 
   // create the opencpn "home" directory if we need to
-  wxFileName wxHomeFiledir(GetHomeDir());
-  if (true != wxHomeFiledir.DirExists(wxHomeFiledir.GetPath()))
-    if (!wxHomeFiledir.Mkdir(wxHomeFiledir.GetPath())) {
-      wxASSERT_MSG(false, "Cannot create opencpn home directory");
-      return false;
+  {
+    QFileInfo homeFiledir(wxString_to_QString(GetHomeDir()));
+    QString homePath = homeFiledir.absolutePath();
+    if (!QDir(homePath).exists()) {
+      if (!QDir().mkpath(homePath)) {
+        wxASSERT_MSG(false, "Cannot create opencpn home directory");
+        return false;
+      }
     }
+  }
 
   // create the opencpn "log" directory if we need to
-  wxFileName wxLogFiledir(mlog_file);
-  if (true != wxLogFiledir.DirExists(wxLogFiledir.GetPath())) {
-    if (!wxLogFiledir.Mkdir(wxLogFiledir.GetPath())) {
-      wxASSERT_MSG(false, wxString("Cannot create opencpn log directory: ") +
-                              wxLogFiledir.GetPath());
-      return false;
+  {
+    QFileInfo logFiledir(wxString_to_QString(mlog_file));
+    QString logPath = logFiledir.absolutePath();
+    if (!QDir(logPath).exists()) {
+      if (!QDir().mkpath(logPath)) {
+        wxASSERT_MSG(false, wxString("Cannot create opencpn log directory: ") +
+                                QString_to_wxString(logPath));
+        return false;
+      }
     }
   }
 
@@ -697,21 +715,25 @@ bool BasePlatform::InitializeLogFile() {
 #endif
 
   //  Constrain the size of the log file
-  if (::wxFileExists(mlog_file)) {
-    if (wxFileName::GetSize(mlog_file) > 1000000) {
-      wxString oldlog = mlog_file;
-      oldlog.Append(".log");
-      //  Defer the showing of this messagebox until the system locale is
-      //  established.
-      large_log_message = ("Old log will be moved to opencpn.log.log");
-      ::wxRenameFile(mlog_file, oldlog);
+  {
+    QString qlog = wxString_to_QString(mlog_file);
+    QFileInfo log_info(qlog);
+    if (log_info.exists()) {
+      if (log_info.size() > 1000000) {
+        wxString oldlog = mlog_file;
+        oldlog.Append(".log");
+        //  Defer the showing of this messagebox until the system locale is
+        //  established.
+        large_log_message = ("Old log will be moved to opencpn.log.log");
+        QFile::rename(qlog, wxString_to_QString(oldlog));
+      }
     }
   }
 #ifdef __ANDROID__
-  if (::wxFileExists(mlog_file)) {
+  if (QFile::exists(wxString_to_QString(mlog_file))) {
     //  Force new logfile for each instance
     // TODO Remove this behaviour on Release
-    ::wxRemoveFile(mlog_file);
+    QFile::remove(wxString_to_QString(mlog_file));
   }
 #endif
 
@@ -735,7 +757,7 @@ void AbstractPlatform::CloseLogFile() {
 
 wxString AbstractPlatform::GetPluginDataPath() {
   if (g_bportable) {
-    wxString sep = wxFileName::GetPathSeparator();
+    wxString sep = QString_to_wxString(QDir::separator());
     wxString ret = GetPrivateDataDir() + sep + "plugins";
     return ret;
   }
@@ -767,7 +789,7 @@ wxString AbstractPlatform::GetPluginDataPath() {
     m_pluginDataPath += ";";
   }
   m_pluginDataPath += GetPluginDir();
-  if (m_pluginDataPath.EndsWith(wxFileName::GetPathSeparator())) {
+  if (m_pluginDataPath.EndsWith(QString_to_wxString(QDir::separator()))) {
     m_pluginDataPath.RemoveLast();
   }
   wxLogMessage("Using plugin data path: %s", m_pluginDataPath.mb_str().data());

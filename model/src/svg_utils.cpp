@@ -26,8 +26,11 @@
 #include "qdebug.h"
 #endif
 
-#include <wx/filename.h>
-#include <wx/dir.h>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+
+#include "model/wx_qt_string.h"
 
 #ifdef ocpnUSE_SVG
 #ifndef ocpnUSE_wxBitmapBundle
@@ -75,7 +78,7 @@ wxBitmap LoadSVG(const wxString filename, const unsigned int width,
   return loadAndroidSVG(filename, width, height);
 #else
   wxSize s(width, height);
-  if (wxFileExists(filename)) {
+  if (QFile::exists(wxString_to_QString(filename))) {
     wxBitmap bmp;
     std::string key;
     if (use_cache && SVGBitmapCache::GetInstance().HasKey(
@@ -213,14 +216,14 @@ wxBitmap LoadSvgStdIcon(const std::string& svg_file, const wxWindow* w,
 }
 
 SVGBitmapCache::SVGBitmapCache() {
-  wxFileName iconcachedir;
-  iconcachedir.SetName("iconCacheSVG");
-  iconcachedir.SetPath(g_BasePlatform->GetPrivateDataDir());
+  QString iconcachedir =
+      wxString_to_QString(g_BasePlatform->GetPrivateDataDir()) +
+      QDir::separator() + "iconCacheSVG";
   //  Create the cache dir here if necessary
-  if (!wxDir::Exists(iconcachedir.GetFullPath())) {
-    wxFileName::Mkdir(iconcachedir.GetFullPath());
+  if (!QDir(iconcachedir).exists()) {
+    QDir().mkpath(iconcachedir);
   }
-  cache_directory = iconcachedir.GetFullPath();
+  cache_directory = QString_to_wxString(iconcachedir);
 }
 
 std::string SVGBitmapCache::MakeKey(wxString file_path, const int width,
@@ -246,10 +249,9 @@ void SVGBitmapCache::Add(const wxString key, const wxBitmap bmp) {
   }
   sync.lock();
   items.emplace(key, bmp);
-  wxFileName fn;
-  fn.SetName(key);
-  fn.SetPath(cache_directory);
-  bmp.SaveFile(fn.GetFullPath(), wxBITMAP_TYPE_PNG);
+  QString path = wxString_to_QString(cache_directory) + QDir::separator() +
+                 wxString_to_QString(key);
+  bmp.SaveFile(QString_to_wxString(path), wxBITMAP_TYPE_PNG);
   sync.unlock();
 }
 
@@ -261,11 +263,10 @@ wxBitmap SVGBitmapCache::Get(const wxString key) {
   if (i != items.end()) {
     bmp = i->second;
   } else {
-    wxFileName fn;
-    fn.SetName(key);
-    fn.SetPath(cache_directory);
-    if (fn.FileExists()) {
-      bmp.LoadFile(fn.GetFullPath(), wxBITMAP_TYPE_PNG);
+    QString path = wxString_to_QString(cache_directory) + QDir::separator() +
+                   wxString_to_QString(key);
+    if (QFileInfo(path).isFile()) {
+      bmp.LoadFile(QString_to_wxString(path), wxBITMAP_TYPE_PNG);
       if (bmp.IsOk()) {
         items.emplace(key, bmp);
       } else {
@@ -283,13 +284,12 @@ bool SVGBitmapCache::HasKey(const wxString key) {
   if (items.find(key.ToStdString()) != items.end()) {
     res = true;
   } else {
-    wxFileName fn;
-    fn.SetName(key);
-    fn.SetPath(cache_directory);
-    if (fn.FileExists()) {
+    QString path = wxString_to_QString(cache_directory) + QDir::separator() +
+                   wxString_to_QString(key);
+    if (QFileInfo(path).isFile()) {
       // We proactively also load it here if it exists
       wxBitmap bmp;
-      bmp.LoadFile(fn.GetFullPath(), wxBITMAP_TYPE_PNG);
+      bmp.LoadFile(QString_to_wxString(path), wxBITMAP_TYPE_PNG);
       if (bmp.IsOk()) {
         items.emplace(key, bmp);
         res = true;

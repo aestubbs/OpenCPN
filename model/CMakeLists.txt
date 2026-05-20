@@ -295,6 +295,15 @@ if (NOT QT_ANDROID)
   target_link_libraries(_model_src PUBLIC Qt6::Core Qt6::Network Qt6::SerialPort)
 endif ()
 
+# P1.10: Qt 6 file-I/O headers (QFile/QDir/QFileInfo) expose
+# std::filesystem::path overloads that require macOS 10.15+. Bump the
+# per-source deployment target to 10.15 so those declarations compile,
+# without changing the project-wide CMAKE_OSX_DEPLOYMENT_TARGET (10.13).
+# Qt 6 itself already requires >=10.15 to link, so this is consistent.
+if (APPLE)
+  target_compile_options(_model_src PRIVATE -mmacosx-version-min=10.15)
+endif ()
+
 target_include_directories(
   _OCPN_MODEL BEFORE INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/include

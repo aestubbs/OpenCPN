@@ -29,8 +29,8 @@
 
 #include <QDateTime>
 
-#include <wx/dir.h>
-#include <wx/filename.h>
+#include <QDir>
+#include <QFile>
 
 #include "model/base_platform.h"
 #include "model/comm_appmsg_bus.h"
@@ -556,21 +556,23 @@ NavObj_dB::NavObj_dB() {
   int ie = sqlite3_config(SQLITE_CONFIG_LOG, errorLogCallback, nullptr);
 
   // Does dB file exist?
-  wxString db_filename = g_BasePlatform->GetPrivateDataDir() +
-                         wxFileName::GetPathSeparator() + "navobj.db";
-  if (!wxFileExists(db_filename)) {
+  wxString db_filename =
+      g_BasePlatform->GetPrivateDataDir() + wxChar(QDir::separator().unicode()) + "navobj.db";
+  if (!QFile::exists(wxString_to_QString(db_filename))) {
     //  Make a safety backup of current navobj.xml
-    wxString xml_filename = g_BasePlatform->GetPrivateDataDir() +
-                            wxFileName::GetPathSeparator() + "navobj.xml";
-    if (wxFileExists(xml_filename)) {
-      wxCopyFile(xml_filename, xml_filename + ".backup");
+    wxString xml_filename =
+        g_BasePlatform->GetPrivateDataDir() + wxChar(QDir::separator().unicode()) + "navobj.xml";
+    if (QFile::exists(wxString_to_QString(xml_filename))) {
+      QFile::copy(wxString_to_QString(xml_filename),
+                  wxString_to_QString(xml_filename + ".backup"));
 
       // Make another safety backup, one time
-      wxString deep_backup_filename = g_BasePlatform->GetPrivateDataDir() +
-                                      wxFileName::GetPathSeparator() +
-                                      "navobj.xml.import_backup";
-      if (!wxFileExists(deep_backup_filename)) {
-        wxCopyFile(xml_filename, deep_backup_filename);
+      wxString deep_backup_filename =
+          g_BasePlatform->GetPrivateDataDir() +
+          wxChar(QDir::separator().unicode()) + "navobj.xml.import_backup";
+      if (!QFile::exists(wxString_to_QString(deep_backup_filename))) {
+        QFile::copy(wxString_to_QString(xml_filename),
+                    wxString_to_QString(deep_backup_filename));
       }
     }
 
@@ -650,10 +652,10 @@ bool NavObj_dB::FullSchemaMigrate(wxFrame* frame) {
 }
 
 bool NavObj_dB::ImportLegacyNavobj(wxFrame* frame) {
-  wxString navobj_filename = g_BasePlatform->GetPrivateDataDir() +
-                             wxFileName::GetPathSeparator() + "navobj.xml";
+  wxString navobj_filename =
+      g_BasePlatform->GetPrivateDataDir() + wxChar(QDir::separator().unicode()) + "navobj.xml";
   bool rv = false;
-  if (::wxFileExists(navobj_filename)) {
+  if (QFile::exists(wxString_to_QString(navobj_filename))) {
     m_importing = true;
     CountImportNavObjects();
     m_pImportProgress = new wxProgressDialog(_("Importing Navobj database"), "",
@@ -668,7 +670,8 @@ bool NavObj_dB::ImportLegacyNavobj(wxFrame* frame) {
   }
 
   // Delete the imported navobj.xml
-  if (::wxFileExists(navobj_filename)) ::wxRemoveFile(navobj_filename);
+  if (QFile::exists(wxString_to_QString(navobj_filename)))
+    QFile::remove(wxString_to_QString(navobj_filename));
 
   return rv;
 }
@@ -680,10 +683,10 @@ void NavObj_dB::CountImportNavObjects() {
   m_nimportTracks = 0;
 
   auto input_set = new NavObjectCollection1();
-  wxString navobj_filename = g_BasePlatform->GetPrivateDataDir() +
-                             wxFileName::GetPathSeparator() + "navobj.xml";
+  wxString navobj_filename =
+      g_BasePlatform->GetPrivateDataDir() + wxChar(QDir::separator().unicode()) + "navobj.xml";
 
-  if (::wxFileExists(navobj_filename) &&
+  if (QFile::exists(wxString_to_QString(navobj_filename)) &&
       input_set->load_file(navobj_filename.ToStdString().c_str()).status ==
           pugi::xml_parse_status::status_ok) {
     input_set->LoadAllGPXPointObjects();

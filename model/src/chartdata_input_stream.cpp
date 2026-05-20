@@ -28,24 +28,34 @@
 #include <wx/wx.h>
 #endif
 
-#include <wx/filename.h>
 #include <wx/log.h>
 #include <wx/wfstream.h>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryFile>
+
 #include "config.h"
 #include "model/chartdata_input_stream.h"
+#include "model/wx_qt_string.h"
 
 #ifdef OCPN_USE_LZMA
 
 wxCompressedFFileInputStream::wxCompressedFFileInputStream(
     const wxString &fileName) {
   init_lzma();
-  m_file = new wxFFile(fileName, "rb");
+  m_file = new QFile(wxString_to_QString(fileName));
+  m_file->open(QIODevice::ReadOnly);
 }
 
 wxCompressedFFileInputStream::~wxCompressedFFileInputStream() {
   delete m_file;
   lzma_end(&strm);
+}
+
+bool wxCompressedFFileInputStream::IsOk() const {
+  return wxStreamBase::IsOk() && m_file && m_file->isOpen();
 }
 
 size_t wxCompressedFFileInputStream::OnSysRead(void *buffer, size_t size) {
@@ -56,12 +66,16 @@ size_t wxCompressedFFileInputStream::OnSysRead(void *buffer, size_t size) {
 
   for (;;) {
     if (strm.avail_in == 0) {
-      if (!m_file->Eof()) {
+      if (!m_file->atEnd()) {
         strm.next_in = inbuf;
-        strm.avail_in = m_file->Read(inbuf, sizeof inbuf);
-
-        if (m_file->Error()) return 0;
-
+        qint64 nread =
+            m_file->read(reinterpret_cast<char *>(inbuf), sizeof inbuf);
+        if (nread < 0) {
+          // QFile error -- treat as read error
+          m_lasterror = wxSTREAM_READ_ERROR;
+          return 0;
+        }
+        strm.avail_in = static_cast<size_t>(nread);
       } else
         action = LZMA_FINISH;
     }
@@ -85,7 +99,7 @@ wxFileOffset wxCompressedFFileInputStream::OnSysSeek(wxFileOffset pos,
   if (pos == 0 && mode == wxFromStart) {
     lzma_end(&strm);
     init_lzma();
-    return m_file->Seek(pos, mode);
+    return m_file->seek(0) ? 0 : wxInvalidOffset;
   }
 
   return wxInvalidOffset;
@@ -132,22 +146,32 @@ wxFileOffset ChartDataNonSeekableInputStream::OnSysTell() const {
 ChartDataInputStream::ChartDataInputStream(const wxString &fileName) {
   if (fileName.Upper().EndsWith("XZ")) {
     // decompress to temp file to allow seeking
-    m_tempfilename =
-        wxFileName::CreateTempFileName(wxFileName(fileName).GetFullName());
+    QFileInfo fi(wxString_to_QString(fileName));
+    QString tmpl =
+        QDir::tempPath() + QDir::separator() + fi.fileName() + "_XXXXXX";
+    QTemporaryFile tmp_file(tmpl);
+    tmp_file.setAutoRemove(false);
+    if (tmp_file.open()) {
+      m_tempfilename = QString_to_wxString(tmp_file.fileName());
+      // We close the temp file so we can write through QFile with our own
+      // handle (matching the prior wxFFileOutputStream semantics).
+      tmp_file.close();
+    }
     wxCompressedFFileInputStream stream(fileName);
-    wxFFileOutputStream tmp(m_tempfilename);
+    QFile tmp(wxString_to_QString(m_tempfilename));
+    tmp.open(QIODevice::WriteOnly);
 
     char buffer[8192];
     int len;
     do {
       stream.Read(buffer, sizeof buffer);
       len = stream.LastRead();
-      tmp.Write(buffer, len);
+      tmp.write(buffer, len);
     } while (len == sizeof buffer);
 
     // do some error checking here?
 
-    tmp.Close();
+    tmp.close();
     m_stream = new wxFFileInputStream(m_tempfilename);
   } else
     m_stream = new wxFFileInputStream(fileName);
@@ -157,7 +181,8 @@ ChartDataInputStream::~ChartDataInputStream() {
   // close it
   delete m_stream;
   // delete the temp file, how do we remove temp files if the program crashed?
-  if (!m_tempfilename.empty()) wxRemoveFile(m_tempfilename);
+  if (!m_tempfilename.empty())
+    QFile::remove(wxString_to_QString(m_tempfilename));
 }
 
 size_t ChartDataInputStream::OnSysRead(void *buffer, size_t size) {
@@ -175,18 +200,19 @@ wxFileOffset ChartDataInputStream::OnSysTell() const {
 }
 
 bool DecompressXZFile(const wxString &input_path, const wxString &output_path) {
-  if (!wxFileExists(input_path)) {
+  if (!QFile::exists(wxString_to_QString(input_path))) {
     return false;
   }
   wxCompressedFFileInputStream in(input_path);
-  wxFFileOutputStream out(output_path);
+  QFile out(wxString_to_QString(output_path));
+  out.open(QIODevice::WriteOnly);
 
   char buffer[8192];
   int len;
   do {
     in.Read(buffer, sizeof buffer);
     len = in.LastRead();
-    out.Write(buffer, len);
+    out.write(buffer, len);
   } while (len == sizeof buffer);
 
   return in.GetLastError() != wxSTREAM_READ_ERROR;
