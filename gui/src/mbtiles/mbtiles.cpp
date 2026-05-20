@@ -166,8 +166,9 @@ ChartMbTiles::ChartMbTiles() {
 
 #ifdef OCPN_USE_CONFIG
   OcpnConfig* pfc = pConfig;
-  pfc->SetPath("/Settings");
-  pfc->Read("DebugMBTiles", &m_b_cdebug, 0);
+  pfc->beginGroup("Settings");
+  m_b_cdebug = pfc->value("DebugMBTiles", 0).toInt();
+  pfc->endGroup();
 #endif
   m_db = NULL;
 }

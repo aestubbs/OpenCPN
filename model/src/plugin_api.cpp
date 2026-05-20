@@ -288,19 +288,20 @@ void ReloadConfigConnections() {
   OcpnConfig* pConf = TheBaseConfig();
   if (pConf) {
     TheConnectionParams().clear();
-    pConf->SetPath("/Settings/NMEADataSource");
+    pConf->beginGroup("Settings/NMEADataSource");
 
-    wxString connectionconfigs;
-    pConf->Read("DataConnections", &connectionconfigs);
-    if (!connectionconfigs.IsEmpty()) {
-      const QStringList confs = wxString_to_QString(connectionconfigs)
-                                    .split('|', Qt::SkipEmptyParts);
+    const QString connectionconfigs =
+        pConf->value("DataConnections").toString();
+    if (!connectionconfigs.isEmpty()) {
+      const QStringList confs =
+          connectionconfigs.split('|', Qt::SkipEmptyParts);
       for (const QString& conf : confs) {
         ConnectionParams* prm = new ConnectionParams(QString_to_wxString(conf));
         if (!prm->Valid) continue;
         TheConnectionParams().push_back(prm);
       }
     }
+    pConf->endGroup();
   }
 
   // Reconnect enabled connections

@@ -1567,8 +1567,9 @@ ChartBaseBSB::ChartBaseBSB() {
 
 #ifdef OCPN_USE_CONFIG
   OcpnConfig *pfc = pConfig;
-  pfc->SetPath("/Settings");
-  pfc->Read("DebugBSBImg", &m_b_cdebug, 0);
+  pfc->beginGroup("Settings");
+  m_b_cdebug = pfc->value("DebugBSBImg", 0).toInt();
+  pfc->endGroup();
 #endif
 }
 

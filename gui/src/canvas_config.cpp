@@ -27,6 +27,8 @@
 #include <wx/wx.h>
 #endif  // precompiled headers
 
+#include <QString>
+
 #include "gl_headers.h"
 
 #include "canvas_config.h"
@@ -79,58 +81,64 @@ void canvasConfig::LoadFromLegacyConfig(OcpnConfig *conf) {
   bShowAIS = true;
 
   // S52 stuff
-  conf->SetPath("/Settings/GlobalState");
-  conf->Read("bShowS57Text", &bShowENCText, 1);
-  conf->Read("bShowLightDescription", &bShowENCLightDescriptions, 1);
-  conf->Read("nDisplayCategory", &nENCDisplayCategory, (enum _DisCat)OTHER);
-  conf->Read("bShowSoundg", &bShowENCDepths, 1);
-  conf->Read("bShowAtonText", &bShowENCBuoyLabels, 0);
+  conf->beginGroup("Settings/GlobalState");
+  bShowENCText = conf->value("bShowS57Text", true).toBool();
+  bShowENCLightDescriptions =
+      conf->value("bShowLightDescription", true).toBool();
+  nENCDisplayCategory =
+      conf->value("nDisplayCategory", (int)(enum _DisCat)OTHER).toInt();
+  bShowENCDepths = conf->value("bShowSoundg", true).toBool();
+  bShowENCBuoyLabels = conf->value("bShowAtonText", false).toBool();
+  conf->endGroup();
   bShowENCLights = true;
   bShowENCVisibleSectorLights = false;
   bShowENCAnchorInfo = false;
   bShowENCDataQuality = false;
 
-  conf->SetPath("/Settings/AIS");
-  conf->Read("bShowScaledTargets", &bAttenAIS, 0);
+  conf->beginGroup("Settings/AIS");
+  bAttenAIS = conf->value("bShowScaledTargets", false).toBool();
+  conf->endGroup();
 
-  conf->SetPath("/Settings");
-  conf->Read("ShowTide", &bShowTides, 0);
-  conf->Read("ShowCurrent", &bShowCurrents, 0);
-  conf->Read("CourseUpMode", &bCourseUp, 0);
-  conf->Read("HeadUpMode", &bHeadUp, 0);
-  conf->Read("LookAheadMode", &bLookahead, 0);
+  conf->beginGroup("Settings");
+  bShowTides = conf->value("ShowTide", false).toBool();
+  bShowCurrents = conf->value("ShowCurrent", false).toBool();
+  bCourseUp = conf->value("CourseUpMode", false).toBool();
+  bHeadUp = conf->value("HeadUpMode", false).toBool();
+  bLookahead = conf->value("LookAheadMode", false).toBool();
 
-  conf->Read("ShowGrid", &bShowGrid, 0);
-  conf->Read("ShowChartOutlines", &bShowOutlines, 1);
-  conf->Read("ShowDepthUnits", &bShowDepthUnits, 1);
-  conf->Read("ChartQuilting", &bQuilt, 1);
+  bShowGrid = conf->value("ShowGrid", false).toBool();
+  bShowOutlines = conf->value("ShowChartOutlines", true).toBool();
+  bShowDepthUnits = conf->value("ShowDepthUnits", true).toBool();
+  bQuilt = conf->value("ChartQuilting", true).toBool();
 
-  conf->Read("ActiveChartGroup", &GroupID, 0);
-  conf->Read("InitialdBIndex", &DBindex, -1);
+  GroupID = conf->value("ActiveChartGroup", 0).toInt();
+  DBindex = conf->value("InitialdBIndex", -1).toInt();
+  conf->endGroup();
 
-  conf->SetPath("/Settings/GlobalState");
-  wxString st;
+  conf->beginGroup("Settings/GlobalState");
   double st_view_scale, st_rotation;
-  if (conf->Read(wxString("VPScale"), &st)) {
-    sscanf(st.mb_str(wxConvUTF8), "%lf", &st_view_scale);
+  if (conf->contains("VPScale")) {
+    const QString st = conf->value("VPScale").toString();
+    sscanf(st.toUtf8().constData(), "%lf", &st_view_scale);
     //    Sanity check the scale
     st_view_scale = fmax(st_view_scale, .001 / 32);
     st_view_scale = fmin(st_view_scale, 4);
     iScale = st_view_scale;
   }
 
-  if (conf->Read(wxString("VPRotation"), &st)) {
-    sscanf(st.mb_str(wxConvUTF8), "%lf", &st_rotation);
+  if (conf->contains("VPRotation")) {
+    const QString st = conf->value("VPRotation").toString();
+    sscanf(st.toUtf8().constData(), "%lf", &st_rotation);
     //    Sanity check the rotation
     st_rotation = fmin(st_rotation, 360);
     st_rotation = fmax(st_rotation, 0);
     iRotation = st_rotation * PI / 180.;
   }
 
-  wxString sll;
   double lat, lon;
-  if (conf->Read("VPLatLon", &sll)) {
-    sscanf(sll.mb_str(wxConvUTF8), "%lf,%lf", &lat, &lon);
+  if (conf->contains("VPLatLon")) {
+    const QString sll = conf->value("VPLatLon").toString();
+    sscanf(sll.toUtf8().constData(), "%lf,%lf", &lat, &lon);
 
     //    Sanity check the lat/lon...both have to be reasonable.
     if (fabs(lon) < 360.) {
@@ -143,4 +151,5 @@ void canvasConfig::LoadFromLegacyConfig(OcpnConfig *conf) {
 
     if (fabs(lat) < 90.0) iLat = lat;
   }
+  conf->endGroup();
 }

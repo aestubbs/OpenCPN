@@ -485,19 +485,22 @@ void RestServer::StopServer() {
 }
 
 bool RestServer::LoadConfig() {
-  TheBaseConfig()->SetPath("/Settings/RestServer");
-  wxString key_string;
-  TheBaseConfig()->Read("ServerKeys", &key_string);
-  m_key_map = Apikeys::Parse(key_string.ToStdString());
-  TheBaseConfig()->Read("ServerOverwriteDuplicates", &m_overwrite, false);
+  OcpnConfig* cfg = TheBaseConfig();
+  cfg->beginGroup("Settings/RestServer");
+  const QString key_string = cfg->value("ServerKeys").toString();
+  m_key_map = Apikeys::Parse(key_string.toStdString());
+  m_overwrite = cfg->value("ServerOverwriteDuplicates", false).toBool();
+  cfg->endGroup();
   return true;
 }
 
 bool RestServer::SaveConfig() {
-  TheBaseConfig()->SetPath("/Settings/RestServer");
-  TheBaseConfig()->Write("ServerKeys", wxString(m_key_map.ToString()));
-  TheBaseConfig()->Write("ServerOverwriteDuplicates", m_overwrite);
-  TheBaseConfig()->Flush();
+  OcpnConfig* cfg = TheBaseConfig();
+  cfg->beginGroup("Settings/RestServer");
+  cfg->setValue("ServerKeys", QString::fromStdString(m_key_map.ToString()));
+  cfg->setValue("ServerOverwriteDuplicates", m_overwrite);
+  cfg->endGroup();
+  cfg->sync();
   return true;
 }
 
