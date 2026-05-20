@@ -818,9 +818,9 @@ bool MyApp::OnInit() {
   MyApp::SetAppDisplayName("OpenCPN");
 
   //  Seed the random number generator
-  wxDateTime x = wxDateTime::UNow();
-  long seed = x.GetMillisecond();
-  seed *= x.GetTicks();
+  QDateTime x = QDateTime::currentDateTime();
+  long seed = x.time().msec();
+  seed *= x.toSecsSinceEpoch();
   srand(seed);
 
   // Fulup: force floating point to use dot as separation.
@@ -867,9 +867,9 @@ bool MyApp::OnInit() {
   //      Send init message
   wxLogMessage("\n\n________\n");
 
-  wxDateTime now = wxDateTime::Now();
+  QDateTime now = QDateTime::currentDateTime();
   LOG_INFO("------- OpenCPN version %s restarted at %s -------\n", VERSION_FULL,
-           now.FormatISODate().mb_str().data());
+           now.date().toString(Qt::ISODate).toUtf8().constData());
   wxLogLevel level = wxLog::GetLogLevel();
   LOG_INFO("Using loglevel %s", OcpnLog::level2str(level).c_str());
 
@@ -1763,10 +1763,9 @@ int MyApp::OnExit() {
   m_usb_watcher.Stop();
   //  Send current nav status data to log file   // pjotrc 2010.02.09
 
-  wxDateTime lognow = wxDateTime::Now();
-  lognow.MakeGMT();
-  wxString day = lognow.FormatISODate();
-  wxString utc = lognow.FormatISOTime();
+  QDateTime lognow = QDateTime::currentDateTimeUtc();
+  wxString day = QString_to_wxString(lognow.date().toString(Qt::ISODate));
+  wxString utc = QString_to_wxString(lognow.time().toString(Qt::ISODate));
   wxString navmsg = "LOGBOOK:  ";
   navmsg += day;
   navmsg += " ";
@@ -1799,8 +1798,7 @@ int MyApp::OnExit() {
     navmsg += data;
   }
   wxLogMessage(navmsg);
-  g_loglast_time =
-      QDateTime::fromSecsSinceEpoch(lognow.GetTicks(), Qt::UTC);
+  g_loglast_time = lognow;
 
   if (ptcmgr) delete ptcmgr;
 

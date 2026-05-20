@@ -58,6 +58,8 @@
 #include <wx/timectrl.h>
 #include <wx/tokenzr.h>
 
+#include <QDateTime>
+
 #include "o_sound/o_sound.h"
 
 #include "model/ais_decoder.h"
@@ -2464,8 +2466,9 @@ static wxFileName exportFileName(wxWindow *parent,
 
 int BackupDatabase(wxWindow *parent) {
   bool backupResult = false;
-  wxDateTime tm = wxDateTime::Now();
-  wxString proposedName = tm.Format("navobj-%Y-%m-%d_%H_%M");
+  QDateTime tm = QDateTime::currentDateTime();
+  wxString proposedName =
+      QString_to_wxString(tm.toString("'navobj-'yyyy-MM-dd_HH_mm"));
   wxString acceptedName;
 
   if (wxID_OK ==
@@ -2909,9 +2912,9 @@ void SwitchInlandEcdisMode(bool Switch) {
 // This function formats the input date/time into a valid GPX ISO 8601
 // time string specified in the UTC time zone.
 
-wxString FormatGPXDateTime(wxDateTime dt) {
+wxString FormatGPXDateTime(QDateTime dt) {
   //      return dt.Format("%Y-%m-%dT%TZ", wxDateTime::GMT0);
-  return dt.Format("%Y-%m-%dT%H:%M:%SZ");
+  return QString_to_wxString(dt.toString("yyyy-MM-ddTHH:mm:ss'Z'"));
 }
 
 /**************************************************************************/

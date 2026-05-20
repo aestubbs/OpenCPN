@@ -31,6 +31,8 @@
 #include <wx/grid.h>
 #include <wx/treectrl.h>
 
+#include <QDateTime>
+
 #ifdef ocpnUSE_GL
 #include <wx/glcanvas.h>
 #endif
@@ -1252,7 +1254,7 @@ private:
    */
   int m_mustmove;
 
-  wxDateTime m_last_movement_time;
+  QDateTime m_last_movement_time;
 
   int m_AISRollover_MMSI;
   bool m_bsectors_shown;
@@ -1352,8 +1354,8 @@ private:
   double m_chart_drag_total_time;
   double m_chart_drag_velocity_x;
   double m_chart_drag_velocity_y;
-  wxLongLong m_chart_drag_inertia_time;
-  wxLongLong m_chart_drag_inertia_start_time;
+  qint64 m_chart_drag_inertia_time;        // ms
+  qint64 m_chart_drag_inertia_start_time;  // ms since epoch
   bool m_chart_drag_inertia_active;
   double m_last_elapsed;
   std::vector<int> m_drag_vec_x;
@@ -1364,8 +1366,8 @@ private:
 
   // For Jump animation
   wxTimer m_easeTimer;
-  wxLongLong m_animationStart;
-  wxLongLong m_animationDuration;  // e.g. 300 ms
+  qint64 m_animationStart;     // ms since epoch
+  qint64 m_animationDuration;  // ms; e.g. 300 ms
   double m_startLat, m_startLon, m_startScale;
   double m_endLat, m_endLon, m_endScale;
   bool m_animationActive;

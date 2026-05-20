@@ -83,6 +83,7 @@
 #include "model/nav_object_database.h"
 #include "model/navutil_base.h"
 #include <QDateTime>
+#include <QLocale>
 
 #include "model/notification_manager.h"
 #include "model/own_ship.h"
@@ -1628,7 +1629,6 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
 
     QDateTime now_q = QDateTime::currentDateTime();
     qint64 uptime_secs = g_start_time.secsTo(now_q);  // seconds
-    wxDateTime now = wxDateTime::Now();
 
     if (!watching_anchor && (g_bCruising) && (gSog < 0.5) &&
         (uptime_secs > 30 * 60))  // pjotrc 2010.02.15
@@ -1655,7 +1655,8 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
         }
       }
 
-      wxString name = now.Format();
+      wxString name = QString_to_wxString(
+          QLocale::system().toString(now_q, QLocale::ShortFormat));
       name.Prepend(_("Anchorage created "));
       RoutePoint *pWP =
           new RoutePoint(gLat, gLon, "anchorage",
@@ -1801,14 +1802,14 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
     g_glTextureManager->ClearAllRasterTextures();
 
     wxLogMessage("Starting compressor pool drain");
-    wxDateTime now = wxDateTime::Now();
-    time_t stall = now.GetTicks();
+    QDateTime now = QDateTime::currentDateTime();
+    time_t stall = static_cast<time_t>(now.toSecsSinceEpoch());
     time_t end = stall + THREAD_WAIT_SECONDS;
 
     int n_comploop = 0;
     while (stall < end) {
-      wxDateTime later = wxDateTime::Now();
-      stall = later.GetTicks();
+      QDateTime later = QDateTime::currentDateTime();
+      stall = static_cast<time_t>(later.toSecsSinceEpoch());
 
       wxString msg;
       msg.Printf("Time: %d  Job Count: %d", n_comploop,
@@ -3037,7 +3038,6 @@ void MyFrame::ToggleFullScreen() {
 
 void MyFrame::ActivateMOB() {
   //    The MOB point
-  wxDateTime mob_time = wxDateTime::Now();
   QDateTime mob_time_q = QDateTime::currentDateTime();
   wxString mob_label(_("MAN OVERBOARD"));
   mob_label += _(" on ");
@@ -3205,14 +3205,14 @@ Track *MyFrame::TrackOff(bool do_add_point) {
 #endif
 
   // Invalidate the rotate tiem
-  m_target_rotate_time = wxInvalidDateTime;
+  m_target_rotate_time = QDateTime();
 
   return return_val;
 }
 
 void MyFrame::InitializeTrackRestart() {
   if (!g_bTrackDaily) return;
-  if (m_target_rotate_time.IsValid()) return;
+  if (m_target_rotate_time.isValid()) return;
 
   int rotate_at = 0;
   switch (g_track_rotate_time_type) {
@@ -3223,8 +3223,9 @@ void MyFrame::InitializeTrackRestart() {
       rotate_at = g_track_rotate_time;
       break;
     case TIME_TYPE_UTC:
-      int utc_offset =
-          wxDateTime::Now().GetTicks() - wxDateTime::Now().ToUTC().GetTicks();
+      int utc_offset = static_cast<int>(
+          QDateTime::currentDateTime().toSecsSinceEpoch() -
+          QDateTime::currentDateTimeUtc().toSecsSinceEpoch());
       rotate_at = g_track_rotate_time + utc_offset;
       break;
   }
@@ -3233,12 +3234,14 @@ void MyFrame::InitializeTrackRestart() {
   else if (rotate_at < 0)
     rotate_at += 86400;
 
-  wxTimeSpan rotate_seconds = wxTimeSpan(0, 0, rotate_at);
-  m_target_rotate_time = wxDateTime::Today() + rotate_seconds;
+  qint64 rotate_seconds = rotate_at;  // seconds
+  m_target_rotate_time =
+      QDateTime(QDate::currentDate(), QTime(0, 0)).addSecs(rotate_seconds);
 
   // Avoid restarting immediately
-  if (wxDateTime::Now().IsLaterThan(m_target_rotate_time)) {
-    m_target_rotate_time += wxTimeSpan(24);  // tomorrow, same time.
+  if (QDateTime::currentDateTime() > m_target_rotate_time) {
+    m_target_rotate_time =
+        m_target_rotate_time.addSecs(24 * 3600);  // tomorrow, same time.
   }
 }
 
@@ -3246,8 +3249,9 @@ bool MyFrame::ShouldRestartTrack() {
   if (!g_pActiveTrack || !g_bTrackDaily) return false;
   InitializeTrackRestart();
 
-  if (wxDateTime::Now().IsLaterThan(m_target_rotate_time)) {
-    m_target_rotate_time += wxTimeSpan(24);  // tomorrow, same time.
+  if (QDateTime::currentDateTime() > m_target_rotate_time) {
+    m_target_rotate_time =
+        m_target_rotate_time.addSecs(24 * 3600);  // tomorrow, same time.
     return true;
   }
   return false;
@@ -4911,15 +4915,15 @@ void MyFrame::HandleGPSWatchdogMsg(std::shared_ptr<const GPSWatchdogMsg> msg) {
       // Possible notification on position watchdog timeout...
       // if fix has been valid for at least 5 minutes, and then lost,
       // then post a critical notification
-      if (m_fix_start_time.IsValid()) {
-        wxDateTime now = wxDateTime::Now();
-        wxTimeSpan span = now - m_fix_start_time;
-        if (span.IsLongerThan(wxTimeSpan(0, 5))) {
+      if (m_fix_start_time.isValid()) {
+        QDateTime now = QDateTime::currentDateTime();
+        qint64 span_secs = m_fix_start_time.secsTo(now);  // seconds
+        if (span_secs > 5 * 60) {
           auto &noteman = NotificationManager::GetInstance();
           wxString msg = _("GNSS Position fix lost");
           noteman.AddNotification(NotificationSeverity::kCritical,
                                   msg.ToStdString());
-          m_fix_start_time = wxInvalidDateTime;
+          m_fix_start_time = QDateTime();
         }
       }
 
@@ -4980,8 +4984,8 @@ void MyFrame::HandleBasicNavMsg(std::shared_ptr<const BasicNavDataMsg> msg) {
   if (((msg->vflag & POS_UPDATE) == POS_UPDATE) &&
       ((msg->vflag & POS_VALID) == POS_VALID)) {
     // Maintain valid fix start time
-    if (!m_fix_start_time.IsValid()) {
-      m_fix_start_time = wxDateTime::Now();
+    if (!m_fix_start_time.isValid()) {
+      m_fix_start_time = QDateTime::currentDateTime();
     }
 
     // Check the position change, looking for a valid new fix.
@@ -5133,10 +5137,10 @@ void MyFrame::UpdateStatusBar() {
   //      Show a little heartbeat tick in StatusWindow0 on NMEA events
   //      But no faster than 10 hz.
   unsigned long uiCurrentTickCount;
-  m_MMEAeventTime.SetToCurrent();
+  m_MMEAeventTime = QDateTime::currentDateTime();
   uiCurrentTickCount =
-      m_MMEAeventTime.GetMillisecond() / 100;  // tenths of a second
-  uiCurrentTickCount += m_MMEAeventTime.GetTicks() * 10;
+      m_MMEAeventTime.time().msec() / 100;  // tenths of a second
+  uiCurrentTickCount += m_MMEAeventTime.toSecsSinceEpoch() * 10;
   if (uiCurrentTickCount > m_ulLastNMEATicktime + 1) {
     m_ulLastNMEATicktime = uiCurrentTickCount;
 
@@ -5531,17 +5535,18 @@ void MyFrame::SendFixToPlugins() {
     GPSData.kHdt = gHdt;
     GPSData.nSats = g_SatsInView;
 
-    wxDateTime tCheck((time_t)m_fixtime);
-    if (tCheck.IsValid()) {
+    QDateTime tCheck =
+        QDateTime::fromSecsSinceEpoch(static_cast<qint64>(m_fixtime));
+    if (tCheck.isValid()) {
       // As a special case, when no GNSS data is available, m_fixtime is set to
-      // zero. Note wxDateTime(0) is valid, so the zero value is passed to the
-      // plugins. The plugins should check for zero and not use the time in that
-      // case.
+      // zero. Note QDateTime::fromSecsSinceEpoch(0) is valid, so the zero value
+      // is passed to the plugins. The plugins should check for zero and not use
+      // the time in that case.
       GPSData.FixTime = m_fixtime;
     } else {
-      // Note: I don't think this is ever reached, as m_fixtime can never be set
-      // to wxLongLong(wxINT64_MIN), which is the only way to get here.
-      GPSData.FixTime = wxDateTime::Now().GetTicks();
+      // Note: I don't think this is ever reached, as m_fixtime can never be
+      // INT64_MIN, which is the only way to get here.
+      GPSData.FixTime = QDateTime::currentDateTime().toSecsSinceEpoch();
     }
 
     SendPositionFixToAllPlugIns(&GPSData);
@@ -5551,20 +5556,18 @@ void MyFrame::SendFixToPlugins() {
 void MyFrame::ProcessLogAndBells() {
   //  Send current nav status data to log file on every half hour   // pjotrc
   //  2010.02.09
-  wxDateTime lognow = wxDateTime::Now();  // pjotrc 2010.02.09
-  int hourLOC = lognow.GetHour();
-  int minuteLOC = lognow.GetMinute();
-  lognow.MakeGMT();
-  int minuteUTC = lognow.GetMinute();
-  int second = lognow.GetSecond();
+  QDateTime lognow_local = QDateTime::currentDateTime();  // pjotrc 2010.02.09
+  int hourLOC = lognow_local.time().hour();
+  int minuteLOC = lognow_local.time().minute();
+  QDateTime lognow_q = lognow_local.toUTC();
+  int minuteUTC = lognow_q.time().minute();
+  int second = lognow_q.time().second();
 
-  QDateTime lognow_q =
-      QDateTime::fromSecsSinceEpoch(lognow.GetTicks(), Qt::UTC);
   qint64 logspan_secs = g_loglast_time.secsTo(lognow_q);  // seconds
   if ((logspan_secs > 30 * 60) || (minuteUTC == 0) || (minuteUTC == 30)) {
     if (logspan_secs > 60) {
-      wxString day = lognow.FormatISODate();
-      wxString utc = lognow.FormatISOTime();
+      wxString day = QString_to_wxString(lognow_q.date().toString(Qt::ISODate));
+      wxString utc = QString_to_wxString(lognow_q.time().toString(Qt::ISODate));
       wxString navmsg = "LOGBOOK:  ";
       navmsg += day;
       navmsg += " ";
@@ -5818,7 +5821,7 @@ double MyFrame::GetMag(double a, double lat, double lon) {
     // stream, so there may be invalid data returned on the first call to this
     // method. In the case of rollover windows, the value is requested
     // continuously, so will be correct very soon.
-    wxDateTime now = wxDateTime::Now();
+    QDateTime now = QDateTime::currentDateTime();
     SendJSON_WMM_Var_Request(lat, lon, now);
     if (fabs(gQueryVar) < 360.0)  // Don't use WMM variance if not updated yet
       Variance = gQueryVar;
@@ -5827,14 +5830,16 @@ double MyFrame::GetMag(double a, double lat, double lon) {
 }
 
 bool MyFrame::SendJSON_WMM_Var_Request(double lat, double lon,
-                                       wxDateTime date) {
+                                       QDateTime date) {
   if (g_pi_manager) {
     wxJSONValue v;
     v["Lat"] = lat;
     v["Lon"] = lon;
-    v["Year"] = date.GetYear();
-    v["Month"] = date.GetMonth();
-    v["Day"] = date.GetDay();
+    v["Year"] = date.date().year();
+    // Qt months are 1-based; preserve the legacy wxDateTime 0-based value
+    // (wxDateTime::Month: January = 0) consumed by the WMM plugin ABI.
+    v["Month"] = date.date().month() - 1;
+    v["Day"] = date.date().day();
 
     SendJSONMessageToAllPlugins("WMM_VARIATION_REQUEST", v);
     return true;
@@ -6534,7 +6539,6 @@ void MyFrame::ActivateAISMOBRoute(const AisTargetData *ptarget) {
   if (!ptarget) return;
 
   //    The MOB point
-  wxDateTime mob_time = wxDateTime::Now();
   QDateTime mob_time_q = QDateTime::currentDateTime();
   wxString mob_label(_("AIS MAN OVERBOARD"));
   mob_label += _(" on ");
@@ -6759,14 +6763,14 @@ void MyFrame::OnSuspendCancel(wxPowerEvent &WXUNUSED(event)) {
 
 int g_last_resume_ticks;
 void MyFrame::OnResume(wxPowerEvent &WXUNUSED(event)) {
-  wxDateTime now = wxDateTime::Now();
+  QDateTime now = QDateTime::currentDateTime();
   wxLogMessage("System resumed from suspend.");
 
-  if ((now.GetTicks() - g_last_resume_ticks) > 5) {
+  if ((now.toSecsSinceEpoch() - g_last_resume_ticks) > 5) {
     SystemEvents::GetInstance().evt_resume.Notify();
 
     wxLogMessage("Restarting streams.");
-    g_last_resume_ticks = now.GetTicks();
+    g_last_resume_ticks = static_cast<int>(now.toSecsSinceEpoch());
 // FIXME (dave)
 #if 0
     if (g_pMUX) {

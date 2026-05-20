@@ -1203,8 +1203,8 @@ wxString RoutePropDlgImpl::MakeTideInfo(wxString stationName, double lat,
   time_t dtmtt = static_cast<time_t>(utcTime.toUTC().toSecsSinceEpoch());
   int ev = ptcmgr->GetNextBigEvent(&dtmtt, stationID);
 
-  wxDateTime dtm;
-  dtm.Set(dtmtt).MakeUTC();
+  QDateTime dtm = QDateTime::fromSecsSinceEpoch(
+      static_cast<qint64>(dtmtt), Qt::UTC);
 
   wxString tide_form = "";
 
@@ -1222,17 +1222,19 @@ wxString RoutePropDlgImpl::MakeTideInfo(wxString stationName, double lat,
       DateTimeFormatOptions()
           .SetTimezone(getDatetimeTimezoneSelector(m_tz_selection))
           .SetLongitude(lon);
-  QDateTime tide_qdt =
-      QDateTime::fromSecsSinceEpoch(dtm.GetTicks(), Qt::UTC);
   wxString tideDateTime =
-      QString_to_wxString(ocpn::toUsrDateTimeFormat(tide_qdt, opts));
+      QString_to_wxString(ocpn::toUsrDateTimeFormat(dtm, opts));
   tide_form.Append(tideDateTime);
-  dtm.Add(wxTimeSpan(0, offset, 0));
+  // offset is minutes from UTC for the station's local time.
+  QDateTime dtm_local = dtm.addSecs(offset * 60);
   // Write next tide event using station timezone, formatted with explicit HH:MM
   // offset from UTC.
+  QString station_local =
+      QLocale::system().toString(dtm_local, "ddd dd/MM/yyyy HH:mm:ss");
   tide_form.Append(wxString::Format(" (" + _("Local") + ": %s%+03d:%02d) @ %s",
-                                    dtm.Format("%a %x %H:%M:%S"), (offset / 60),
-                                    abs(offset) % 60, stationName.c_str()));
+                                    QString_to_wxString(station_local),
+                                    (offset / 60), abs(offset) % 60,
+                                    stationName.c_str()));
   return tide_form;
 }
 

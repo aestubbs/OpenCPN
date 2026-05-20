@@ -32,11 +32,15 @@
 
 #include <wx/app.h>
 #include <wx/datetime.h>
+
+#include <QDateTime>
+
 #include "gl_headers.h"  // Must be before anything using GL
 
 #include "model/config_vars.h"
 #include "model/navutil_base.h"
 #include "model/own_ship.h"
+#include "model/wx_qt_string.h"
 #include "model/route.h"
 #include "model/routeman.h"
 
@@ -337,8 +341,14 @@ void ConsoleCanvasWin::UpdateRouteData() {
         wxString ttg_s;
         if ((speed > 0.) && !std::isnan(gCog) && !std::isnan(gSog)) {
           float ttg_sec = (rng / speed) * 3600.;
-          wxTimeSpan ttg_span(0, 0, long(ttg_sec), 0);
-          ttg_s = ttg_span.Format();
+          qint64 ttg_secs = static_cast<qint64>(ttg_sec);  // seconds
+          qint64 hh = ttg_secs / 3600;
+          qint64 mm = (ttg_secs % 3600) / 60;
+          qint64 ss = ttg_secs % 60;
+          ttg_s = wxString::Format("%02lld:%02lld:%02lld",
+                                   static_cast<long long>(hh),
+                                   static_cast<long long>(mm),
+                                   static_cast<long long>(ss));
         } else
           ttg_s = "---";
 
@@ -373,31 +383,42 @@ void ConsoleCanvasWin::UpdateRouteData() {
         // If showing total route TTG/ETA, use gSog for calculation
 
         wxString tttg_s;
-        wxTimeSpan tttg_span;
+        qint64 tttg_secs = 0;  // seconds
         float tttg_sec = 0.0;
         if (speed > 0.) {
           tttg_sec = (trng / gSog) * 3600.;
-          tttg_span = wxTimeSpan::Seconds((long)tttg_sec);
+          tttg_secs = static_cast<qint64>(tttg_sec);
+          qint64 days = tttg_secs / 86400;
+          qint64 hh = (tttg_secs % 86400) / 3600;
+          qint64 mm = (tttg_secs % 3600) / 60;
+          qint64 ss = tttg_secs % 60;
           // Show also #days if TTG > 24 h
-          tttg_s = tttg_sec > SECONDS_PER_DAY ? tttg_span.Format(_("%Dd %H:%M"))
-                                              : tttg_span.Format("%H:%M:%S");
+          if (tttg_sec > SECONDS_PER_DAY) {
+            tttg_s = wxString::Format(_("%lldd %02lld:%02lld"),
+                                      static_cast<long long>(days),
+                                      static_cast<long long>(hh),
+                                      static_cast<long long>(mm));
+          } else {
+            tttg_s = wxString::Format("%02lld:%02lld:%02lld",
+                                      static_cast<long long>(hh),
+                                      static_cast<long long>(mm),
+                                      static_cast<long long>(ss));
+          }
         } else {
-          tttg_span = wxTimeSpan::Seconds(0);
           tttg_s = "---";
         }
 
         pTTG->SetAValue(tttg_s);
 
         //                total ETA to be shown on XTE panel
-        wxDateTime dtnow, eta;
-        dtnow.SetToCurrent();
-        eta = dtnow.Add(tttg_span);
+        QDateTime eta = QDateTime::currentDateTime().addSecs(tttg_secs);
         wxString seta;
 
         if (speed > 0.) {
           // Show date, e.g. Feb 15, if TTG > 24 h
-          seta = tttg_sec > SECONDS_PER_DAY ? eta.Format("%d/%m %H:%M")
-                                            : eta.Format("%H:%M");
+          seta = tttg_sec > SECONDS_PER_DAY
+                     ? QString_to_wxString(eta.toString("dd/MM HH:mm"))
+                     : QString_to_wxString(eta.toString("HH:mm"));
         } else {
           seta = "---";
         }
@@ -746,8 +767,14 @@ void ConsoleCanvasFrame::UpdateRouteData() {
         wxString ttg_s;
         if ((speed > 0.) && !std::isnan(gCog) && !std::isnan(gSog)) {
           float ttg_sec = (rng / speed) * 3600.;
-          wxTimeSpan ttg_span(0, 0, long(ttg_sec), 0);
-          ttg_s = ttg_span.Format();
+          qint64 ttg_secs = static_cast<qint64>(ttg_sec);  // seconds
+          qint64 hh = ttg_secs / 3600;
+          qint64 mm = (ttg_secs % 3600) / 60;
+          qint64 ss = ttg_secs % 60;
+          ttg_s = wxString::Format("%02lld:%02lld:%02lld",
+                                   static_cast<long long>(hh),
+                                   static_cast<long long>(mm),
+                                   static_cast<long long>(ss));
         } else
           ttg_s = "---";
 
@@ -782,31 +809,42 @@ void ConsoleCanvasFrame::UpdateRouteData() {
         // If showing total route TTG/ETA, use gSog for calculation
 
         wxString tttg_s;
-        wxTimeSpan tttg_span;
+        qint64 tttg_secs = 0;  // seconds
         float tttg_sec = 0.0;
         if (speed > 0.) {
           tttg_sec = (trng / gSog) * 3600.;
-          tttg_span = wxTimeSpan::Seconds((long)tttg_sec);
+          tttg_secs = static_cast<qint64>(tttg_sec);
+          qint64 days = tttg_secs / 86400;
+          qint64 hh = (tttg_secs % 86400) / 3600;
+          qint64 mm = (tttg_secs % 3600) / 60;
+          qint64 ss = tttg_secs % 60;
           // Show also #days if TTG > 24 h
-          tttg_s = tttg_sec > SECONDS_PER_DAY ? tttg_span.Format(_("%Dd %H:%M"))
-                                              : tttg_span.Format("%H:%M:%S");
+          if (tttg_sec > SECONDS_PER_DAY) {
+            tttg_s = wxString::Format(_("%lldd %02lld:%02lld"),
+                                      static_cast<long long>(days),
+                                      static_cast<long long>(hh),
+                                      static_cast<long long>(mm));
+          } else {
+            tttg_s = wxString::Format("%02lld:%02lld:%02lld",
+                                      static_cast<long long>(hh),
+                                      static_cast<long long>(mm),
+                                      static_cast<long long>(ss));
+          }
         } else {
-          tttg_span = wxTimeSpan::Seconds(0);
           tttg_s = "---";
         }
 
         pTTG->SetAValue(tttg_s);
 
         //                total ETA to be shown on XTE panel
-        wxDateTime dtnow, eta;
-        dtnow.SetToCurrent();
-        eta = dtnow.Add(tttg_span);
+        QDateTime eta = QDateTime::currentDateTime().addSecs(tttg_secs);
         wxString seta;
 
         if (speed > 0.) {
           // Show date, e.g. Feb 15, if TTG > 24 h
-          seta = tttg_sec > SECONDS_PER_DAY ? eta.Format("%d/%m %H:%M")
-                                            : eta.Format("%H:%M");
+          seta = tttg_sec > SECONDS_PER_DAY
+                     ? QString_to_wxString(eta.toString("dd/MM HH:mm"))
+                     : QString_to_wxString(eta.toString("HH:mm"));
         } else {
           seta = "---";
         }

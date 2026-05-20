@@ -205,12 +205,12 @@ static void SendAisJsonMessage(std::shared_ptr<const AisTargetData> pTarget) {
   // Do JSON message to all Plugin to inform of target
   wxJSONValue jMsg;
 
-  wxLongLong t = ::wxGetLocalTimeMillis();
+  qint64 t = QDateTime::currentMSecsSinceEpoch();  // ms
 
   jMsg[wxS("Source")] = wxS("AisDecoder");
   jMsg["Type"] = "Information";
   jMsg["Msg"] = wxS("AIS Target");
-  jMsg["MsgId"] = t.GetValue();
+  jMsg["MsgId"] = static_cast<wxLongLong_t>(t);
   jMsg[wxS("lat")] = pTarget->Lat;
   jMsg[wxS("lon")] = pTarget->Lon;
   jMsg[wxS("sog")] = pTarget->SOG;
@@ -5248,14 +5248,14 @@ _OCPN_DLStatus OCPN_downloadFile(const wxString& url,
     return OCPN_DL_FAILED;
   }
 
-  wxDateTime dl_start_time = wxDateTime::Now();
+  QDateTime dl_start_time = QDateTime::currentDateTime();
 
   //  Spin, waiting for timeout or event from downstream, and checking status
   while (1) {
-    wxTimeSpan dt = wxDateTime::Now() - dl_start_time;
-    qDebug() << "Spin.." << dt.GetSeconds().GetLo();
+    qint64 dt_secs = dl_start_time.secsTo(QDateTime::currentDateTime());
+    qDebug() << "Spin.." << static_cast<qint32>(dt_secs);
 
-    if (dt.GetSeconds() > timeout_secs) {
+    if (dt_secs > timeout_secs) {
       qDebug() << "USER_TIMOUT";
       finishAndroidFileDownload();
       g_piEventHandler->Disconnect(
@@ -5494,13 +5494,14 @@ bool OCPN_isOnline() {
 #endif
 
 #if !defined(__ANDROID__) && defined(OCPN_USE_CURL)
-  if (wxDateTime::GetTimeNow() >
+  if (QDateTime::currentDateTime().toSecsSinceEpoch() >
       g_pi_manager->m_last_online_chk + ONLINE_CHECK_RETRY) {
     wxCurlHTTP get;
     get.Head("http://yahoo.com/");
     g_pi_manager->m_last_online = get.GetResponseCode() > 0;
 
-    g_pi_manager->m_last_online_chk = wxDateTime::GetTimeNow();
+    g_pi_manager->m_last_online_chk = static_cast<long>(
+        QDateTime::currentDateTime().toSecsSinceEpoch());
   }
   return g_pi_manager->m_last_online;
 #else

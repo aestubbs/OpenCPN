@@ -1934,10 +1934,10 @@ PlugIn_Route_ExV2::PlugIn_Route_ExV2() {
 
   // Generate a unique GUID if none provided
   if (m_GUID.IsEmpty()) {
-    wxDateTime now = wxDateTime::Now();
-    m_GUID = wxString::Format("RT%d%d%d%d", (int)now.GetMillisecond(),
-                              (int)now.GetSecond(), (int)now.GetMinute(),
-                              (int)now.GetHour());
+    QDateTime now = QDateTime::currentDateTime();
+    m_GUID = wxString::Format("RT%d%d%d%d", now.time().msec(),
+                              now.time().second(), now.time().minute(),
+                              now.time().hour());
   }
 }
 

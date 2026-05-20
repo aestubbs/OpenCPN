@@ -33,6 +33,8 @@
 #include <wx/aui/dockart.h>
 
 #include <memory>
+
+#include <QDateTime>
 #ifdef __WXMSW__
 #include <wx/msw/private.h>
 #endif
@@ -449,7 +451,7 @@ public:
   void HandleGPSWatchdogMsg(std::shared_ptr<const GPSWatchdogMsg> msg);
 
   bool CheckGroup(int igroup);
-  bool SendJSON_WMM_Var_Request(double lat, double lon, wxDateTime date);
+  bool SendJSON_WMM_Var_Request(double lat, double lon, QDateTime date);
 
   void DestroyPersistentDialogs();
   void UpdateAISTool(void);
@@ -534,10 +536,10 @@ private:
 
   int m_StatusBarFieldCount;
 
-  wxDateTime m_MMEAeventTime;
+  QDateTime m_MMEAeventTime;
   unsigned long m_ulLastNMEATicktime;
   int m_tick_idx;
-  wxDateTime m_fix_start_time;
+  QDateTime m_fix_start_time;
 
   wxString m_last_reported_chart_name;
   wxString m_last_reported_chart_pubdate;
@@ -567,7 +569,7 @@ private:
   time_t m_fixtime;
   bool b_autofind;
 
-  wxDateTime m_target_rotate_time;
+  QDateTime m_target_rotate_time;
 
   wxTimer ToolbarAnimateTimer;
   int m_nMasterToolCountShown;

@@ -3472,7 +3472,7 @@ void ChartCanvas::StartChartDragInertia() {
 
   // Set some parameters
   m_chart_drag_inertia_time = 750;  // msec
-  m_chart_drag_inertia_start_time = wxGetLocalTimeMillis();
+  m_chart_drag_inertia_start_time = QDateTime::currentMSecsSinceEpoch();
   m_last_elapsed = 0;
 
   // Calculate ending drag velocity
@@ -3510,9 +3510,9 @@ void ChartCanvas::StartChartDragInertia() {
 void ChartCanvas::OnChartDragInertiaTimer(wxTimerEvent &event) {
   if (!m_chart_drag_inertia_active) return;
   // Calculate time fraction from 0..1
-  wxLongLong now = wxGetLocalTimeMillis();
-  double elapsed = (now - m_chart_drag_inertia_start_time).ToDouble();
-  double t = elapsed / m_chart_drag_inertia_time.ToDouble();
+  qint64 now = QDateTime::currentMSecsSinceEpoch();  // ms
+  double elapsed = static_cast<double>(now - m_chart_drag_inertia_start_time);
+  double t = elapsed / static_cast<double>(m_chart_drag_inertia_time);
   if (t > 1.0) t = 1.0;
   double e = 1.0 - easeOutCubic(t);  // 0..1
 
@@ -3593,7 +3593,7 @@ bool ChartCanvas::StartTimedMovement(bool stoptimer) {
     return false;
   }
 
-  m_last_movement_time = wxDateTime::UNow();
+  m_last_movement_time = QDateTime::currentDateTime();
 
   return true;
 }
@@ -3662,10 +3662,10 @@ void ChartCanvas::DoTimedMovement() {
       !m_rotation_speed)
     return; /* not moving */
 
-  wxDateTime now = wxDateTime::UNow();
+  QDateTime now = QDateTime::currentDateTime();
   long dt = 0;
-  if (m_last_movement_time.IsValid())
-    dt = (now - m_last_movement_time).GetMilliseconds().ToLong();
+  if (m_last_movement_time.isValid())
+    dt = static_cast<long>(m_last_movement_time.msecsTo(now));
 
   m_last_movement_time = now;
 
@@ -4129,15 +4129,13 @@ void ChartCanvas::OnRolloverPopupTimerEvent(wxTimerEvent &event) {
                         PI / 180.);
             if (vmg > 0.) {
               float ttg_sec = (shiptoEndLeg / gSog) * 3600.;
-              wxTimeSpan ttg_span = wxTimeSpan::Seconds((long)ttg_sec);
+              qint64 ttg_secs = static_cast<qint64>(ttg_sec);  // seconds
               s << " - "
-                << wxString(ttg_sec > SECONDS_PER_DAY
-                                ? ttg_span.Format(_("%Dd %H:%M"))
-                                : ttg_span.Format(_("%H:%M")));
-              wxDateTime dtnow, eta;
-              eta = dtnow.SetToCurrent().Add(ttg_span);
-              s << " - " << eta.Format("%b").Mid(0, 4)
-                << eta.Format(" %d %H:%M");
+                << QString_to_wxString(formatTimeDelta(ttg_secs));
+              QDateTime eta = QDateTime::currentDateTime().addSecs(ttg_secs);
+              s << " - "
+                << QString_to_wxString(eta.toString("MMM").left(4))
+                << QString_to_wxString(eta.toString(" dd HH:mm"));
             } else
               s << "   ----   ----";
           }
@@ -5080,7 +5078,7 @@ bool ChartCanvas::StartSmoothJump(double lat, double lon, double scale_ppm) {
 
   // Setup timing
   m_animationDuration = 600;  // ms
-  m_animationStart = wxGetLocalTimeMillis();
+  m_animationStart = QDateTime::currentMSecsSinceEpoch();
 
   // Stop any previous movement, ensure no conflicts
   StopMovement();
@@ -5095,9 +5093,9 @@ bool ChartCanvas::StartSmoothJump(double lat, double lon, double scale_ppm) {
 
 void ChartCanvas::OnJumpEaseTimer(wxTimerEvent &event) {
   // Calculate time fraction from 0..1
-  wxLongLong now = wxGetLocalTimeMillis();
-  double elapsed = (now - m_animationStart).ToDouble();
-  double t = elapsed / m_animationDuration.ToDouble();
+  qint64 now = QDateTime::currentMSecsSinceEpoch();  // ms
+  double elapsed = static_cast<double>(now - m_animationStart);
+  double t = elapsed / static_cast<double>(m_animationDuration);
   if (t > 1.0) t = 1.0;
 
   // Ease function for smoother movement
@@ -6819,8 +6817,6 @@ void ChartCanvas::JaggyCircle(ocpnDC &dc, wxPen pen, int x, int y, int radius) {
   double ra_max = 40.;
 
   wxPen pen_save = dc.GetPen();
-
-  wxDateTime now = wxDateTime::Now();
 
   dc.SetPen(pen);
 
@@ -11134,7 +11130,6 @@ void pupHandler_PasteTrack() {
 
     newPoint = new TrackPoint(curPoint);
 
-    wxDateTime now = wxDateTime::Now();
     newPoint->SetCreateTime(curPoint->GetCreateTime());
 
     newTrack->AddPoint(newPoint);
