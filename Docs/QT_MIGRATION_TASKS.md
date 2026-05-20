@@ -7,24 +7,27 @@
 **Current position:** P1.5 comms migration done (P1.5a/b/d/e/f/h/i, P1.5j-1);
 the comms pipeline is on the framework and, as of P1.6a, wx-free behind the
 `ConnectionParams` facade. `n2k_net` stays the standalone P1.5a driver;
-SignalK/SocketCAN parked (P1.5m). P1.6–P1.12 done — the model's
+SignalK/SocketCAN parked (P1.5m). P1.6–P1.13 done — the model's
 `wxString` / `wxDateTime` / wx-container / `wxConfig` / file-I/O /
-threading-and-timer / JSON sweeps are all complete. `QStringList` /
-`QList<T*>` / `QHash` / `QSet` are the container vocabulary;
-`model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string conversions;
-`QDateTime` / `qint64`-seconds is the time/duration vocabulary;
-`OcpnConfig` (wraps `QSettings`) is the settings store; `QFile` /
-`QDir` / `QFileInfo` / `QStandardPaths` is the file-I/O vocabulary;
-`QThread` / `QMutex` / `QSemaphore` / `QTimer` / `QObject` with Qt
-signals/slots is the threading + event-loop vocabulary; `QJsonDocument`
-/ `QJsonObject` / `QJsonArray` / `QJsonValue` is the JSON vocabulary.
-Remaining wx references are deliberate boundaries — the frozen plugin
-ABI (incl. the `GetSignalkPayload` `wxJSONValue` shim), the chart-
-reader `wxInputStream`/`wxOutputStream` streams, `wxStandardPaths` on
-macOS bundle paths, wx-widget plumbing (Phase 3), deferred-ownership
-container types, `libs/wxcurl` + `libs/wxservdisc` (P1.13 library
-replacement), and the post-P1.9 config call-site helpers. Next: P1.13
-(delete `libs/wxcurl`; move networking to `QNetworkAccessManager`).
+threading-and-timer / JSON / networking sweeps are all complete.
+`QStringList` / `QList<T*>` / `QHash` / `QSet` are the container
+vocabulary; `model/wx_qt_string.h` (UTF-8) centralizes wx⇄Qt string
+conversions; `QDateTime` / `qint64`-seconds is the time/duration
+vocabulary; `OcpnConfig` (wraps `QSettings`) is the settings store;
+`QFile` / `QDir` / `QFileInfo` / `QStandardPaths` is the file-I/O
+vocabulary; `QThread` / `QMutex` / `QSemaphore` / `QTimer` / `QObject`
+with Qt signals/slots is the threading + event-loop vocabulary;
+`QJsonDocument` / `QJsonObject` / `QJsonArray` / `QJsonValue` is the
+JSON vocabulary; `QNetworkAccessManager` / `QNetworkReply` is the HTTP
+vocabulary, and `libs/wxcurl` has been deleted. Remaining wx
+references are deliberate boundaries — the frozen plugin ABI (incl.
+the `GetSignalkPayload` `wxJSONValue` shim), the chart-reader
+`wxInputStream`/`wxOutputStream` streams, `wxStandardPaths` on macOS
+bundle paths, wx-widget plumbing (Phase 3), deferred-ownership
+container types, `libs/wxservdisc` (mDNS — service discovery, separate
+concern), and the post-P1.9 config call-site helpers. Next: P1.14
+(abstract route/mark UI types: `wxColour`/`wxPen`/`wxBitmap` →
+`QColor`/`QPen`/`QImage`).
 **Last updated:** 2026-05-20.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
@@ -505,7 +508,40 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         preservation: OCPN_ROUTELIST_RESPONSE's index-from-1 slot-0-
         null quirk reproduced with `arr.append(QJsonValue())` before
         the loop.
-- [ ] **P1.13** Delete `libs/wxcurl`; move networking to `QNetworkAccessManager`.
+- [x] **P1.13** Delete `libs/wxcurl`; move networking to
+      `QNetworkAccessManager`. Done in 2 steps. `libs/wxcurl` removed
+      entirely from the tree (33 files); CMake plumbing
+      (`add_subdirectory`, `pkg_search_module SYS_WXCURL`,
+      `use_bundled_lib USE_BUNDLED_WXCURL`, the bundled libcurl
+      headers, the Android `libcurl.a` wiring, the `s57` and `cli`
+      link entries) deleted. The `OCPN_USE_CURL` macro stays — it
+      still gates the plugin-API download surface
+      (`OCPN_downloadFile*` / `OCPN_postDataHttp` / `OCPN_isOnline`),
+      which is a frozen ABI; renaming would break plugins.
+  - [x] **P1.13-1** Model direct-libcurl (`downloader`, `mdns_cache`,
+        `peer_client`) → `QNetworkAccessManager` + `QEventLoop`
+        synchronous wait for the existing blocking-API shape;
+        `QTimer::singleShot` watchdog for timeouts; `QSslConfiguration
+        ::PeerVerifyMode::VerifyNone` to match the curl
+        `SSL_VERIFYPEER=0` setting (with the same "FIXME proper certs"
+        comment). User-Agent flips from `curl/<ver>` to `Qt/<ver>`.
+        `QNetworkRequest::NoLessSafeRedirectPolicy` preserves curl's
+        `FOLLOWLOCATION`.
+  - [x] **P1.13-2** GUI `wxcurl` (`pluginmanager`) → QNAM, then
+        `libs/wxcurl` deleted. `PlugInManager` became
+        `: public QObject, public wxEvtHandler` (QObject first per the
+        established multi-inherit pattern) with `Q_OBJECT`; AUTOMOC
+        enabled on the OpenCPN target. The threaded
+        `wxCurlDownloadThread` + `wxCurlDownloadDialog` modal +
+        `wxCurlHTTP` sync mix collapsed onto a single QNAM with
+        `QNetworkReply` slots for finished/progress. The modal-progress
+        UI uses `wxProgressDialog` driven by a `QTimer`-pumped wx-yield
+        loop alongside a `QEventLoop` on the QNetworkReply's `finished`
+        signal — `QProgressDialog` would pull in `QtWidgets` for one
+        dialog, disproportionate. `send_to_peer_dlg`'s
+        `curl_easy_strerror` mapper now decodes the negative
+        `QNetworkReply::NetworkError` sentinel `peer_client` sets via
+        `QMetaEnum::valueToKey`.
 - [ ] **P1.14** Abstract route/mark UI types (`wxColour`/`wxPen`/`wxBitmap`) → `QColor`/`QPen`/`QImage`.
 - [ ] **P1.15** Verify: core compiles wx-free; unit tests pass.
 
@@ -943,3 +979,28 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
   added to preserve their wire format. `OCPN_ROUTELIST_RESPONSE`'s
   index-from-1 slot-0-null quirk preserved with
   `arr.append(QJsonValue())` before the loop.
+- 2026-05-20 — P1.13 done: `libs/wxcurl` is gone (33 files removed)
+  and networking is `QNetworkAccessManager` end to end. The model's
+  three direct-libcurl users (`downloader`, `mdns_cache`,
+  `peer_client`) use QNAM with a local `QEventLoop` to preserve their
+  synchronous "return-the-body" API shape (these are non-GUI worker
+  paths; nesting an event loop is fine). The GUI's wxcurl machinery
+  in `pluginmanager` (modal `wxCurlDownloadDialog` + threaded
+  `wxCurlDownloadThread` + sync `wxCurlHTTP`) collapsed onto a single
+  QNAM with `QNetworkReply` signal/slot wiring. `PlugInManager` is
+  now `: public QObject, public wxEvtHandler` (QObject first per the
+  established multi-inherit pattern) with `Q_OBJECT`; AUTOMOC enabled
+  on the OpenCPN target. The modal-progress UI is `wxProgressDialog`
+  driven by a `QTimer`-pumped wx-yield loop alongside a `QEventLoop`
+  on `QNetworkReply::finished` — `QProgressDialog` would have pulled
+  in `QtWidgets` for a single dialog. The `OCPN_USE_CURL` config
+  macro stays (still gates the plugin-API download surface) but is
+  now a misnomer for "download support enabled". CMake plumbing —
+  `add_subdirectory(libs/wxcurl)`, `pkg_search_module SYS_WXCURL`,
+  `use_bundled_lib USE_BUNDLED_WXCURL`, the bundled libcurl headers,
+  Android `libcurl.a`, and the `s57` and `cli` link entries — all
+  deleted. `libs/wxservdisc` (mDNS service discovery) stays for now —
+  it's a separate concern from "HTTP networking" and would need
+  routing through `libs/mdns` (we already have it vendored) or a Qt-
+  native zeroconf solution. Listed in the deliberate-boundaries
+  ledger.
