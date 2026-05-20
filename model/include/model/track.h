@@ -27,6 +27,7 @@
 
 #include <wx/progdlg.h>
 
+#include <QDateTime>
 #include <QString>
 
 #include <deque>
@@ -61,22 +62,22 @@ struct SubTrack {
 class TrackPoint {
 public:
   TrackPoint(double lat, double lon, QString ts = QString());
-  TrackPoint(double lat, double lon, wxDateTime dt);
+  TrackPoint(double lat, double lon, QDateTime dt);
   TrackPoint(TrackPoint *orig);
   ~TrackPoint();
 
   /**
-   * Retrieves the creation timestamp of a track point as a wxDateTime object.
+   * Retrieves the creation timestamp of a track point as a QDateTime object.
    *
-   * @return wxDateTime object representing the creation time in UTC.
+   * @return QDateTime object representing the creation time in UTC.
    *         If the internal timestamp string is invalid or empty, the
-   *         returned wxDateTime may be invalid.
+   *         returned QDateTime may be invalid.
    */
-  wxDateTime GetCreateTime(void);
+  QDateTime GetCreateTime(void);
   /**
    * Sets the creation timestamp for a track point.
    *
-   * @param dt The wxDateTime object containing the timestamp to set.
+   * @param dt The QDateTime object containing the timestamp to set.
    *           Should be in UTC time already, as no time zone conversion is
    * performed. The time is directly formatted and marked with 'Z' (UTC
    * indicator). If the provided datetime is invalid, an empty string will be
@@ -85,7 +86,7 @@ public:
    * Format: YYYY-MM-DDThh:mm:ssZ
    * Example: 2023-04-15T14:22:38Z
    */
-  void SetCreateTime(wxDateTime dt);
+  void SetCreateTime(QDateTime dt);
   const char *GetTimeString() { return m_stimestring.c_str(); }
   bool HasValidTimestamp() {
     if (m_stimestring.size() < strlen("YYYY-MM-DDTHH:MM:SSZ")) return false;
@@ -107,7 +108,7 @@ private:
    * - "2023-04-15T10:22:38-04:00" (EDT, 4 hours west of UTC)
    *
    * Time zone information will be correctly interpreted when the timestamp is
-   * read via GetCreateTime() which will return a wxDateTime object in UTC.
+   * read via GetCreateTime() which will return a QDateTime object in UTC.
    */
   void SetCreateTime(QString ts);
   std::string m_stimestring;
@@ -130,7 +131,7 @@ public:
   TrackPoint *GetLastPoint();
   void AddPoint(TrackPoint *pNewPoint);
   void AddPointFinalized(TrackPoint *pNewPoint);
-  TrackPoint *AddNewPoint(vector2D point, wxDateTime time);
+  TrackPoint *AddNewPoint(vector2D point, QDateTime time);
 
   void SetListed(bool listed = true) { m_bListed = listed; }
   virtual bool IsRunning() { return false; }
@@ -248,7 +249,7 @@ private:
 
   vector2D m_lastAddedPoint;
   double m_prev_dist;
-  wxDateTime m_prev_time;
+  QDateTime m_prev_time;
 
   TrackPoint *m_lastStoredTP;
   TrackPoint *m_removeTP;
@@ -264,7 +265,7 @@ private:
   } trackPointState;
 
   std::deque<vector2D> skipPoints;
-  std::deque<wxDateTime> skipTimes;
+  std::deque<QDateTime> skipTimes;
 
   DECLARE_EVENT_TABLE()
 };

@@ -4238,31 +4238,39 @@ void ChartCanvas::OnRolloverPopupTimerEvent(wxTimerEvent &event) {
           s << "\n" << _("Total Track: ") << FormatDistanceAdaptive(tlenght);
           if (pt->GetLastPoint()->GetTimeString() &&
               pt->GetPoint(0)->GetTimeString()) {
-            wxDateTime lastPointTime = pt->GetLastPoint()->GetCreateTime();
-            wxDateTime zeroPointTime = pt->GetPoint(0)->GetCreateTime();
-            if (lastPointTime.IsValid() && zeroPointTime.IsValid()) {
-              wxTimeSpan ttime = lastPointTime - zeroPointTime;
-              double htime = ttime.GetSeconds().ToDouble() / 3600.;
+            QDateTime lastPointTime = pt->GetLastPoint()->GetCreateTime();
+            QDateTime zeroPointTime = pt->GetPoint(0)->GetCreateTime();
+            if (lastPointTime.isValid() && zeroPointTime.isValid()) {
+              qint64 secs = zeroPointTime.secsTo(lastPointTime);
+              double htime = secs / 3600.;
               s << wxString::Format("  %.1f ", (float)(tlenght / htime))
                 << getUsrSpeedUnit();
-              s << wxString(htime > 24. ? ttime.Format("  %Dd %H:%M")
-                                        : ttime.Format("  %H:%M"));
+              // "%Dd %H:%M" => "<days>d HH:MM"; "%H:%M" => "HH:MM".
+              qint64 days = secs / 86400;
+              qint64 hours = (secs % 86400) / 3600;
+              qint64 minutes = (secs % 3600) / 60;
+              if (htime > 24.)
+                s << wxString::Format("  %lldd %02lld:%02lld",
+                                      static_cast<long long>(days),
+                                      static_cast<long long>(hours),
+                                      static_cast<long long>(minutes));
+              else
+                s << wxString::Format("  %02lld:%02lld",
+                                      static_cast<long long>(hours),
+                                      static_cast<long long>(minutes));
             }
           }
 
           if (g_bShowTrackPointTime &&
               strlen(segShow_point_b->GetTimeString())) {
             wxString stamp = segShow_point_b->GetTimeString();
-            wxDateTime timestamp = segShow_point_b->GetCreateTime();
-            if (timestamp.IsValid()) {
+            QDateTime timestamp = segShow_point_b->GetCreateTime();
+            if (timestamp.isValid()) {
               // Format track rollover timestamp to OCPN global TZ setting.
-              // timestamp carries the UTC instant; rebuild as a UTC QDateTime.
               DateTimeFormatOptions opts =
                   DateTimeFormatOptions().SetTimezone("");
-              QDateTime ts_q = QDateTime::fromSecsSinceEpoch(
-                  timestamp.GetTicks(), Qt::UTC);
               stamp = QString_to_wxString(
-                  ocpn::toUsrDateTimeFormat(ts_q, opts));
+                  ocpn::toUsrDateTimeFormat(timestamp, opts));
             }
             s << "\n" << _("Segment Created: ") << stamp;
           }
@@ -4288,11 +4296,11 @@ void ChartCanvas::OnRolloverPopupTimerEvent(wxTimerEvent &event) {
 
           if (segShow_point_a->GetTimeString() &&
               segShow_point_b->GetTimeString()) {
-            wxDateTime apoint = segShow_point_a->GetCreateTime();
-            wxDateTime bpoint = segShow_point_b->GetCreateTime();
-            if (apoint.IsValid() && bpoint.IsValid()) {
-              double segmentSpeed = toUsrSpeed(
-                  dist / ((bpoint - apoint).GetSeconds().ToDouble() / 3600.));
+            QDateTime apoint = segShow_point_a->GetCreateTime();
+            QDateTime bpoint = segShow_point_b->GetCreateTime();
+            if (apoint.isValid() && bpoint.isValid()) {
+              double segmentSpeed =
+                  toUsrSpeed(dist / (apoint.secsTo(bpoint) / 3600.));
               s << wxString::Format("  %.1f ", (float)segmentSpeed)
                 << getUsrSpeedUnit();
             }

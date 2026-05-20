@@ -94,7 +94,7 @@ protected:
   void HyperlinkContextMenu(wxMouseEvent& event);
   void m_scrolledWindowLinksOnContextMenu(wxMouseEvent& event);
   /** Returns the departure time of the route, in UTC. */
-  wxDateTime GetDepartureTS();
+  QDateTime GetDepartureTS();
   void SaveChanges();
   void ResetChanges();
 
@@ -182,7 +182,7 @@ private:
   bool IsThisRouteExtendable();
 
   wxString MakeTideInfo(wxString stationName, double lat, double lon,
-                        wxDateTime utcTime);
+                        const QDateTime &utcTime);
 };
 
 #endif  // _ROUTEPROPDLGIMPL_H_

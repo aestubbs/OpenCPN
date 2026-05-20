@@ -67,6 +67,7 @@
 
 #ifdef __ANDROID__
 #include "androidUTIL.h"
+#include <QDateTime>
 #include <QtWidgets/QScroller>
 #endif
 
@@ -1497,22 +1498,23 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
         delete pRouteArray;
       }
     }
-    wxDateTime etd;
-    etd = m_pRoutePoint->GetManualETD();
+    QDateTime etd = m_pRoutePoint->GetManualETD();
     if (isLastWaypoint) {
       // If this is the last waypoint in a route, uncheck the checkbox and set
       // the date/time to empty, as the ETD is meaningless.
-      etd = wxDateTime();
+      etd = QDateTime();
     }
-    if (etd.IsValid()) {
+    if (etd.isValid()) {
       m_cbEtdPresent->SetValue(true);
       wxString dtFormat = QString_to_wxString(ocpn::getUsrDateTimeFormat());
+      // Pick the picker-display calendar/time fields.
+      // etd is stored UTC; pick local or UTC fields depending on user format.
+      QDateTime etd_for_picker = etd;
+      bool ok = true;
       if (dtFormat == "Local Time") {
-        // The ETD is in UTC and needs to be converted to local time for display
-        // purpose.
-        etd.MakeFromUTC();
+        etd_for_picker = etd.toLocalTime();
       } else if (dtFormat == "UTC") {
-        // The date/time is already in UTC.
+        // Already UTC; no conversion.
       } else {
         // This code path is not expected to be reached, unless
         // the global date/time format is enhanced in the future
@@ -1520,10 +1522,21 @@ bool MarkInfoDlg::UpdateProperties(bool positionOnly) {
         wxLogError(
             "MarkInfoDlg::UpdateProperties. Unexpected date/time format: %s",
             dtFormat);
-        etd = wxInvalidDateTime;
+        ok = false;
       }
-      m_EtdDatePickerCtrl->SetValue(etd.GetDateOnly());
-      m_EtdTimePickerCtrl->SetValue(etd);
+      if (ok) {
+        // The wx picker controls store wxDateTime as broken-down local fields;
+        // build one carrying the same calendar/clock fields.
+        wxDateTime wx_etd(
+            static_cast<wxDateTime::wxDateTime_t>(etd_for_picker.date().day()),
+            static_cast<wxDateTime::Month>(etd_for_picker.date().month() - 1),
+            etd_for_picker.date().year(),
+            static_cast<wxDateTime::wxDateTime_t>(etd_for_picker.time().hour()),
+            static_cast<wxDateTime::wxDateTime_t>(etd_for_picker.time().minute()),
+            static_cast<wxDateTime::wxDateTime_t>(etd_for_picker.time().second()));
+        m_EtdDatePickerCtrl->SetValue(wx_etd.GetDateOnly());
+        m_EtdTimePickerCtrl->SetValue(wx_etd);
+      }
     } else {
       m_cbEtdPresent->SetValue(false);
     }
@@ -1730,10 +1743,17 @@ bool MarkInfoDlg::SaveChanges() {
         // Time" or "UTC". If the date/time format is "Local Time", convert to
         // UTC. Otherwise, it is already in UTC.
         wxString dtFormat = QString_to_wxString(ocpn::getUsrDateTimeFormat());
+        // Reconstruct a QDateTime carrying the same broken-down fields the
+        // pickers expose, then tag the timespec per the user format.
+        QDateTime picked(
+            QDate(dt.GetYear(), dt.GetMonth() + 1, dt.GetDay()),
+            QTime(dt.GetHour(), dt.GetMinute(), dt.GetSecond()));
         if (dtFormat == "Local Time") {
-          m_pRoutePoint->SetETD(dt.MakeUTC());
+          picked.setTimeSpec(Qt::LocalTime);
+          m_pRoutePoint->SetETD(picked.toUTC());
         } else if (dtFormat == "UTC") {
-          m_pRoutePoint->SetETD(dt);
+          picked.setTimeSpec(Qt::UTC);
+          m_pRoutePoint->SetETD(picked);
         } else {
           // This code path should never be reached, as the date/time format is
           // either "Local Time" or "UTC".
@@ -1744,11 +1764,11 @@ bool MarkInfoDlg::SaveChanges() {
           wxLogError(
               "Failed to configured ETD. Unsupported date/time format: %s",
               dtFormat);
-          m_pRoutePoint->SetETD(wxInvalidDateTime);
+          m_pRoutePoint->SetETD(QDateTime());
         }
       }
     } else {
-      m_pRoutePoint->SetETD(wxInvalidDateTime);
+      m_pRoutePoint->SetETD(QDateTime());
     }
 
     if (m_pRoutePoint->m_bIsInRoute) {

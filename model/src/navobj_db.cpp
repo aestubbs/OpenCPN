@@ -27,6 +27,8 @@
 #include <string>
 #include <vector>
 
+#include <QDateTime>
+
 #include <wx/dir.h>
 #include <wx/filename.h>
 
@@ -1351,8 +1353,8 @@ bool NavObj_dB::UpdateDBRouteAttributes(Route* route) {
                       -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt, 5, route->IsVisible());
     sqlite3_bind_int(stmt, 6, route->GetSharedWPViz());
-    if (route->m_PlannedDeparture.IsValid())
-      sqlite3_bind_int(stmt, 7, route->m_PlannedDeparture.GetTicks());
+    if (route->m_PlannedDeparture.isValid())
+      sqlite3_bind_int(stmt, 7, route->m_PlannedDeparture.toSecsSinceEpoch());
     sqlite3_bind_double(stmt, 8, route->m_PlannedSpeed);
     sqlite3_bind_text(stmt, 9, route->m_TimeDisplayFormat.toStdString().c_str(),
                       -1, SQLITE_TRANSIENT);
@@ -1463,7 +1465,8 @@ bool NavObj_dB::UpdateDBRoutePointAttributes(RoutePoint* point) {
                       SQLITE_TRANSIENT);
     sqlite3_bind_double(stmt, 7, point->GetPlannedSpeed());
     time_t etd = -1;
-    if (point->GetManualETD().IsValid()) etd = point->GetManualETD().GetTicks();
+    if (point->GetManualETD().isValid())
+      etd = static_cast<time_t>(point->GetManualETD().toSecsSinceEpoch());
     sqlite3_bind_int(stmt, 8, etd);
     sqlite3_bind_text(stmt, 9, "type", -1, SQLITE_TRANSIENT);
     std::string timit = point->m_timestring.toStdString().c_str();
@@ -1715,7 +1718,9 @@ bool NavObj_dB::LoadAllRoutes() {
         route->m_RouteEndString = end_string.c_str();
         route->SetVisible(visibility == 1);
         route->SetSharedWPViz(sharewp_viz == 1);
-        route->m_PlannedDeparture.Set((time_t)planned_departure_ticks);
+        // m_PlannedDeparture is stored as Unix seconds in the on-disk DB.
+        route->m_PlannedDeparture = QDateTime::fromSecsSinceEpoch(
+            static_cast<qint64>(planned_departure_ticks), Qt::UTC);
         route->m_PlannedSpeed = plan_speed;
         route->m_TimeDisplayFormat = time_format.c_str();
 
@@ -1802,9 +1807,13 @@ bool NavObj_dB::LoadAllRoutes() {
         point->m_TideStation = s2q(tide_station);
         point->SetPlannedSpeed(plan_speed);
 
-        wxDateTime etd;
-        etd.Set((time_t)etd_epoch);
-        if (etd.IsValid()) point->SetETD(etd);
+        // The on-disk encoding for etd is Unix seconds; preserve that.
+        // Build a UTC QDateTime from that epoch.
+        if (etd_epoch > 0) {
+          QDateTime etd_qdt = QDateTime::fromSecsSinceEpoch(
+              static_cast<qint64>(etd_epoch), Qt::UTC);
+          if (etd_qdt.isValid()) point->SetETD(etd_qdt);
+        }
 
         point->m_WaypointArrivalRadius = arrival_radius;
 
@@ -1825,13 +1834,15 @@ bool NavObj_dB::LoadAllRoutes() {
         point->m_bIsolatedMark = (isolated == 1);
 
         if (point_created_at.size()) {
-          // Convert from sqLite default date/time format to wxDateTime
-          // sqLite format uses UTC, so conversion to epoch_time is clear.
-          std::tm tm = {};
-          std::istringstream ss(point_created_at);
-          ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-          time_t epoch_time = mktime(&tm);
-          point->m_CreateTimeX = epoch_time;
+          // SQLite default date/time format is "YYYY-MM-DD HH:MM:SS" in UTC.
+          // Parse it as ISO 8601 (after swapping space for 'T') and tag UTC.
+          QString iso =
+              QString::fromStdString(point_created_at).replace(' ', 'T');
+          QDateTime created = QDateTime::fromString(iso, Qt::ISODate);
+          if (created.isValid()) {
+            created.setTimeSpec(Qt::UTC);
+            point->m_CreateTimeX = created;
+          }
         }
 
         //    Add the point HTML links
@@ -2046,13 +2057,15 @@ bool NavObj_dB::LoadAllPoints() {
       point->m_bIsolatedMark = (isolated == 1);
 
       if (point_created_at.size()) {
-        // Convert from sqLite default date/time format to wxDateTime
-        // sqLite format uses UTC, so conversion to epoch_time is clear.
-        std::tm tm = {};
-        std::istringstream ss(point_created_at);
-        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-        time_t epoch_time = mktime(&tm);
-        point->m_CreateTimeX = epoch_time;
+        // SQLite default date/time format is "YYYY-MM-DD HH:MM:SS" in UTC.
+        // Parse it as ISO 8601 (after swapping space for 'T') and tag UTC.
+        QString iso =
+            QString::fromStdString(point_created_at).replace(' ', 'T');
+        QDateTime created = QDateTime::fromString(iso, Qt::ISODate);
+        if (created.isValid()) {
+          created.setTimeSpec(Qt::UTC);
+          point->m_CreateTimeX = created;
+        }
       }
 
       // Add it here

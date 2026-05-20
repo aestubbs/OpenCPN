@@ -27,10 +27,10 @@
 #include <functional>
 #include <vector>
 
+#include <QDateTime>
 #include <QString>
 
 #include <wx/colour.h>
-#include <wx/datetime.h>
 #include <wx/gdicmn.h>
 #include <wx/object.h>
 #include <wx/pen.h>
@@ -49,7 +49,7 @@
 #define RTE_TIME_DISP_PC "PC"
 #define RTE_TIME_DISP_LOCAL "LOCAL"
 #define RTE_TIME_DISP_GLOBAL "GLOBAL SETTING"
-#define RTE_UNDEF_DEPARTURE wxInvalidDateTime
+#define RTE_UNDEF_DEPARTURE QDateTime()
 
 class WayPointman;  // FIXME (leamas) why? routeman.h defines this.
 
@@ -185,8 +185,8 @@ public:
    *
    * @param dt The departure date and time to set, in UTC.
    */
-  void SetDepartureDate(const wxDateTime &dt) {
-    if (dt.IsValid()) m_PlannedDeparture = dt;
+  void SetDepartureDate(const QDateTime &dt) {
+    if (dt.isValid()) m_PlannedDeparture = dt;
   }
 
   QString GetName() const { return m_RouteNameString; }
@@ -327,7 +327,7 @@ public:
    * Planned departure time for the route, in UTC.
    * Used as the starting time for all ETA calculations along the route.
    */
-  wxDateTime m_PlannedDeparture;
+  QDateTime m_PlannedDeparture;
   /**
    * Format for displaying times in the UI.
    * Can be UTC, local time, PC time, or follow global settings.

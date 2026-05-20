@@ -3140,10 +3140,12 @@ void MyFrame::TrackOn() {
   wxString name = QString_to_wxString(g_pActiveTrack->GetName());
   if (name.IsEmpty()) {
     TrackPoint *tp = g_pActiveTrack->GetPoint(0);
-    if (tp->GetCreateTime().IsValid())
-      name = tp->GetCreateTime().FormatISODate() + " " +
-             tp->GetCreateTime().FormatISOTime();
-    else
+    if (tp->GetCreateTime().isValid()) {
+      // ISO 8601 with a space between date and time, matching the legacy
+      // wxDateTime FormatISODate + " " + FormatISOTime pattern.
+      name = QString_to_wxString(
+          tp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss"));
+    } else
       name = _("(Unnamed Track)");
   }
   v["Name"] = name;
@@ -6261,9 +6263,9 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
         name = QString_to_wxString(ptrack->GetName());
         if (name.IsEmpty()) {
           TrackPoint *rp = ptrack->GetPoint(0);
-          if (rp && rp->GetCreateTime().IsValid())
-            name = rp->GetCreateTime().FormatISODate() + " " +
-                   rp->GetCreateTime().FormatISOTime();
+          if (rp && rp->GetCreateTime().isValid())
+            name = QString_to_wxString(
+                rp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss"));
           else
             name = _("(Unnamed Track)");
         }
@@ -6379,9 +6381,9 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
           wxString name = QString_to_wxString(ptrack->GetName());
           if (name.IsEmpty()) {
             TrackPoint *tp = ptrack->GetPoint(0);
-            if (tp && tp->GetCreateTime().IsValid())
-              name = tp->GetCreateTime().FormatISODate() + " " +
-                     tp->GetCreateTime().FormatISOTime();
+            if (tp && tp->GetCreateTime().isValid())
+              name = QString_to_wxString(
+                  tp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss"));
             else
               name = _("(Unnamed Track)");
           }

@@ -22,9 +22,9 @@
  */
 
 #include <QDateTime>
+#include <QLocale>
 
 #include <wx/colour.h>
-#include <wx/datetime.h>
 #include <wx/dynarray.h>
 #include <wx/string.h>
 #include <wx/tokenzr.h>
@@ -58,16 +58,16 @@ RoutePoint::RoutePoint() {
   m_seg_len = 0.0;
   m_seg_vmg = 0.0;
 
-  m_seg_etd = wxInvalidDateTime;
+  m_seg_etd = QDateTime();
   m_manual_etd = false;
 
-  m_seg_eta = wxInvalidDateTime;
+  m_seg_eta = QDateTime();
   m_bPtIsSelected = false;
   m_bRPIsBeingEdited = false;
   m_bIsActive = false;
   m_bBlink = false;
   m_bIsInRoute = false;
-  m_CreateTimeX = wxDateTime::Now();
+  m_CreateTimeX = QDateTime::currentDateTimeUtc();
   m_bIsolatedMark = false;
   m_bShowName = true;
   SetShared(false);
@@ -190,7 +190,7 @@ RoutePoint::RoutePoint(double lat, double lon, const QString &icon_ident,
   m_seg_len = 0.0;
   m_seg_vmg = 0.0;
 
-  m_seg_etd = wxInvalidDateTime;
+  m_seg_etd = QDateTime();
   m_manual_etd = false;
 
   m_bPtIsSelected = false;
@@ -198,7 +198,7 @@ RoutePoint::RoutePoint(double lat, double lon, const QString &icon_ident,
   m_bIsActive = false;
   m_bBlink = false;
   m_bIsInRoute = false;
-  m_CreateTimeX = wxDateTime::Now();
+  m_CreateTimeX = QDateTime::currentDateTimeUtc();
   m_bIsolatedMark = false;
   m_bShowName = true;
   SetShared(false);
@@ -271,21 +271,20 @@ RoutePoint::~RoutePoint() {
   RoutePoint::delete_gl_textures(1, &m_dragIconTexture);
 }
 
-wxDateTime RoutePoint::GetCreateTime() {
-  if (!m_CreateTimeX.IsValid()) {
+QDateTime RoutePoint::GetCreateTime() {
+  if (!m_CreateTimeX.isValid()) {
     if (m_timestring.length()) {
       QDateTime qdt;
       if (ParseGPXDateTime(qdt, m_timestring)) {
-        // qdt is UTC; wxDateTime ctor from time_t stores the same Unix epoch.
-        // The m_CreateTimeX field holds the UTC instant by convention.
-        m_CreateTimeX = wxDateTime((time_t)qdt.toSecsSinceEpoch());
+        // ParseGPXDateTime yields a UTC QDateTime; store it directly.
+        m_CreateTimeX = qdt;
       }
     }
   }
   return m_CreateTimeX;
 }
 
-void RoutePoint::SetCreateTime(wxDateTime dt) { m_CreateTimeX = dt; }
+void RoutePoint::SetCreateTime(QDateTime dt) { m_CreateTimeX = dt; }
 
 void RoutePoint::SetName(const QString &name) {
   if (m_iTextTexture) {
@@ -475,38 +474,37 @@ double RoutePoint::GetPlannedSpeed() {
   return m_PlannedSpeed;
 }
 
-wxDateTime RoutePoint::GetETD() {
-  if (m_seg_etd.IsValid()) {
-    if (!GetETA().IsValid() || m_seg_etd > GetETA()) {
+QDateTime RoutePoint::GetETD() {
+  if (m_seg_etd.isValid()) {
+    if (!GetETA().isValid() || m_seg_etd > GetETA()) {
       return m_seg_etd;
     } else {
       return GetETA();
     }
   } else {
     if (m_MarkDescription.indexOf("ETD=") != -1) {
-      wxDateTime etd = wxInvalidDateTime;
-      QString s_etd = m_MarkDescription.mid(m_MarkDescription.indexOf("ETD=") + 4)
-                          .section(';', 0, 0);
-      const wxChar *parse_return = etd.ParseDateTime(QString_to_wxString(s_etd));
-      if (parse_return) {
-        wxString tz(parse_return);
-
-        if (tz.Find("UT") != wxNOT_FOUND) {
-          // TODO: This is error-prone. It would match any string containing
-          // these characters, not just time zone codes For example, "UT" would
-          // match "UTC+2".
-          m_seg_etd = etd;
+      QString s_etd =
+          m_MarkDescription.mid(m_MarkDescription.indexOf("ETD=") + 4)
+              .section(';', 0, 0);
+      // Try ISO 8601 (with or without trailing timezone) and a locale parse.
+      QDateTime etd = QDateTime::fromString(s_etd, Qt::ISODate);
+      if (!etd.isValid()) {
+        etd = QLocale::system().toDateTime(s_etd, QLocale::ShortFormat);
+      }
+      if (etd.isValid()) {
+        // Detect simple timezone hints in the trailing payload, mirroring the
+        // legacy parser (which read whatever ParseDateTime left in the tail).
+        if (s_etd.contains("UT")) {
+          // Treat as UTC instant.
+          m_seg_etd = etd.toUTC();
+        } else if (s_etd.contains("LMT")) {
+          // Local Mean Time: subtract a longitude-derived offset to get UTC.
+          long lmt_offset = static_cast<long>((m_lon * 3600.) / 15.);
+          m_seg_etd = etd.addSecs(-static_cast<qint64>(lmt_offset));
         } else {
-          if (tz.Find("LMT") != wxNOT_FOUND) {
-            m_seg_etd = etd;
-            long lmt_offset = (long)((m_lon * 3600.) / 15.);
-            wxTimeSpan lmt(0, 0, (int)lmt_offset, 0);
-            m_seg_etd -= lmt;
-          } else {
-            m_seg_etd = etd.ToUTC();
-          }
+          m_seg_etd = etd.toUTC();
         }
-        if (etd.IsValid() && (!GetETA().IsValid() || etd > GetETA())) {
+        if (etd.isValid() && (!GetETA().isValid() || etd > GetETA())) {
           m_MarkDescription.replace(s_etd, "");
           m_seg_etd = etd;
           return m_seg_etd;
@@ -516,56 +514,56 @@ wxDateTime RoutePoint::GetETD() {
       }
     }
   }
-  return wxInvalidDateTime;
+  return QDateTime();
 }
 
-wxDateTime RoutePoint::GetManualETD() {
-  if (m_manual_etd && m_seg_etd.IsValid()) {
+QDateTime RoutePoint::GetManualETD() {
+  if (m_manual_etd && m_seg_etd.isValid()) {
     return m_seg_etd;
   }
-  return wxInvalidDateTime;
+  return QDateTime();
 }
 
-wxDateTime RoutePoint::GetETA() {
-  if (m_seg_eta.IsValid()) {
+QDateTime RoutePoint::GetETA() {
+  if (m_seg_eta.isValid()) {
     return m_seg_eta;
   }
-  return wxInvalidDateTime;
+  return QDateTime();
 }
 
 QString RoutePoint::GetETE() {
   if (m_seg_ete != 0) {
-    // m_seg_ete is a wxLongLong of seconds.
-    return formatTimeDelta(static_cast<qint64>(m_seg_ete.GetValue()));
+    // m_seg_ete is seconds.
+    return formatTimeDelta(m_seg_ete);
   }
   return "";
 }
 
-void RoutePoint::SetETE(wxLongLong secs) { m_seg_ete = secs; }
+void RoutePoint::SetETE(qint64 secs) { m_seg_ete = secs; }
 
-void RoutePoint::SetETD(const wxDateTime &etd) {
+void RoutePoint::SetETD(const QDateTime &etd) {
   m_seg_etd = etd;
-  m_manual_etd = TRUE;
+  m_manual_etd = true;
 }
 
 bool RoutePoint::SetETD(const QString &ts) {
   if (ts.isEmpty()) {
-    m_seg_etd = wxInvalidDateTime;
+    m_seg_etd = QDateTime();
     m_manual_etd = false;
     return true;
   }
-  wxDateTime tmp;
-  wxString ws_ts = QString_to_wxString(ts);
-  wxString::const_iterator end;
   // No timezone conversion is done because the serialized string
-  // does not include timezone information, e.g., "2025-03-26T18:57:01"
+  // does not include timezone information, e.g., "2025-03-26T18:57:01".
   // The input string is assumed to be in UTC format.
-  if (tmp.ParseISOCombined(ws_ts)) {
+  QDateTime tmp = QDateTime::fromString(ts, Qt::ISODate);
+  if (tmp.isValid()) {
     SetETD(tmp);
-    return TRUE;
-  } else if (tmp.ParseDateTime(ws_ts, &end)) {
-    SetETD(tmp);
-    return TRUE;
+    return true;
   }
-  return FALSE;
+  tmp = QLocale::system().toDateTime(ts, QLocale::ShortFormat);
+  if (tmp.isValid()) {
+    SetETD(tmp);
+    return true;
+  }
+  return false;
 }

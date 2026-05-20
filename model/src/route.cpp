@@ -29,7 +29,6 @@
 #include <QStringList>
 
 #include <wx/arrstr.h>
-#include <wx/datetime.h>
 #include <wx/gdicmn.h>
 #include <wx/log.h>
 #include <wx/pen.h>
@@ -481,8 +480,6 @@ void Route::UpdateSegmentDistance(RoutePoint *prp0, RoutePoint *prp,
   //    Point2 If Point1 Description contains ETD, store it in Point1
 
   if (planspeed > 0.) {
-    wxDateTime etd;
-
     double legspeed = planspeed;
     if (prp->GetPlannedSpeed() > 0.1 && prp->GetPlannedSpeed() < 1000.)
       legspeed = prp->GetPlannedSpeed();
@@ -490,21 +487,21 @@ void Route::UpdateSegmentDistance(RoutePoint *prp0, RoutePoint *prp,
       m_route_time += 3600. * dd / legspeed;
       prp->m_seg_vmg = legspeed;
     }
-    wxLongLong duration = wxLongLong(3600.0 * prp->m_seg_len / prp->m_seg_vmg);
+    qint64 duration =
+        static_cast<qint64>(3600.0 * prp->m_seg_len / prp->m_seg_vmg);
     prp->SetETE(duration);
-    wxTimeSpan ts(0, 0, duration);
-    if (!prp0->GetManualETD().IsValid()) {
+    if (!prp0->GetManualETD().isValid()) {
       prp0->m_manual_etd = false;
-      if (prp0->GetETA().IsValid()) {
+      if (prp0->GetETA().isValid()) {
         prp0->m_seg_etd = prp0->GetETA();
       } else {
-        prp0->m_seg_etd =
-            m_PlannedDeparture + wxTimeSpan(0, 0, m_route_time - duration);
+        prp0->m_seg_etd = m_PlannedDeparture.addSecs(
+            static_cast<qint64>(m_route_time) - duration);
       }
     }
 
-    prp->m_seg_eta = prp0->GetETD() + ts;
-    if (!prp->m_manual_etd || !prp->GetETD().IsValid()) {
+    prp->m_seg_eta = prp0->GetETD().addSecs(duration);
+    if (!prp->m_manual_etd || !prp->GetETD().isValid()) {
       prp->m_seg_etd = prp->m_seg_eta;
       prp->m_manual_etd = false;
     }

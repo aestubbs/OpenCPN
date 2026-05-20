@@ -27,6 +27,7 @@
 #include "gl_headers.h"  // Must be included before anything using GL stuff
 
 #include <QDateTime>
+#include <QLocale>
 
 #include "model/georef.h"
 #include "model/gui_vars.h"
@@ -1161,12 +1162,10 @@ bool TrackPropDlg::UpdateProperties() {
   wxString speed("--");
 
   if (last_point && first_point) {
-    if (last_point->GetCreateTime().IsValid() &&
-        first_point->GetCreateTime().IsValid()) {
-      total_seconds = last_point->GetCreateTime()
-                          .Subtract(first_point->GetCreateTime())
-                          .GetSeconds()
-                          .ToDouble();
+    if (last_point->GetCreateTime().isValid() &&
+        first_point->GetCreateTime().isValid()) {
+      total_seconds = static_cast<double>(
+          first_point->GetCreateTime().secsTo(last_point->GetCreateTime()));
       if (total_seconds != 0.) {
         m_avgspeed = trackLength / total_seconds * 3600;
       } else {
@@ -1266,7 +1265,7 @@ bool TrackPropDlg::IsThisTrackExtendable() {
   }
 
   TrackPoint* pLastPoint = m_pTrack->GetPoint(0);
-  if (!pLastPoint->GetCreateTime().IsValid()) {
+  if (!pLastPoint->GetCreateTime().isValid()) {
     return false;
   }
 
@@ -1274,7 +1273,7 @@ bool TrackPropDlg::IsThisTrackExtendable() {
     if (ptrack->IsVisible() && (ptrack->m_GUID != m_pTrack->m_GUID)) {
       TrackPoint* track_node = ptrack->GetLastPoint();
       if (track_node) {
-        if (track_node->GetCreateTime().IsValid()) {
+        if (track_node->GetCreateTime().isValid()) {
           if (track_node->GetCreateTime() <= pLastPoint->GetCreateTime()) {
             if (!m_pExtendPoint ||
                 track_node->GetCreateTime() > m_pExtendPoint->GetCreateTime()) {
@@ -1370,7 +1369,10 @@ void TrackPropDlg::OnTrackPropCopyTxtClick(wxCommandEvent& event) {
             << m_tTotDistance->GetValue() << eol << _("Speed") << tab
             << m_tAvgSpeed->GetValue() << eol
             << _("Departure Time") + " " + _("(m/d/y h:m)") << tab
-            << m_pTrack->GetPoint(1)->GetCreateTime().Format() << eol
+            << QString_to_wxString(QLocale::system().toString(
+                   m_pTrack->GetPoint(1)->GetCreateTime(),
+                   QLocale::ShortFormat))
+            << eol
             << _("Time enroute") << tab << m_tTimeEnroute->GetValue() << eol
             << eol;
 
@@ -1862,30 +1864,25 @@ wxString OCPNTrackListCtrl::OnGetItemText(long item, long column) const {
       break;
 
     case 5: {
-      wxDateTime timestamp = this_point->GetCreateTime();
-      if (timestamp.IsValid()) {
+      QDateTime timestamp = this_point->GetCreateTime();
+      if (timestamp.isValid()) {
         DateTimeFormatOptions opts =
             DateTimeFormatOptions()
                 .SetTimezone(getDatetimeTimezoneSelector(m_tz_selection))
                 .SetLongitude(getStartPointLongitude());
-        // timestamp carries the UTC instant.
-        QDateTime ts_q = QDateTime::fromSecsSinceEpoch(
-            timestamp.GetTicks(), Qt::UTC);
-        ret = QString_to_wxString(ocpn::toUsrDateTimeFormat(ts_q, opts));
+        ret = QString_to_wxString(ocpn::toUsrDateTimeFormat(timestamp, opts));
       } else
         ret = "----";
     } break;
 
     case 6:
-      if ((item > 0) && this_point->GetCreateTime().IsValid() &&
-          prev_point->GetCreateTime().IsValid()) {
+      if ((item > 0) && this_point->GetCreateTime().isValid() &&
+          prev_point->GetCreateTime().isValid()) {
         DistanceBearingMercator(this_point->m_lat, this_point->m_lon, slat,
                                 slon, &gt_brg, &gt_leg_dist);
         double speed = 0.;
-        double seconds = this_point->GetCreateTime()
-                             .Subtract(prev_point->GetCreateTime())
-                             .GetSeconds()
-                             .ToDouble();
+        double seconds = static_cast<double>(
+            prev_point->GetCreateTime().secsTo(this_point->GetCreateTime()));
 
         if (seconds > 0.) speed = gt_leg_dist / seconds * 3600;
 

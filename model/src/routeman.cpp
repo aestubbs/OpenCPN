@@ -29,6 +29,7 @@
 #include <time.h>
 #include <vector>
 
+#include <QDateTime>
 #include <QtGlobal>
 
 #include <wx/wxprec.h>
@@ -587,11 +588,10 @@ bool Routeman::UpdateAutopilot() {
       m_NMEA0183.Rmc.UTCTime = gRmcTime;
       m_NMEA0183.Rmc.Date = gRmcDate;
     } else {
-      wxDateTime now = wxDateTime::Now();
-      wxDateTime utc = now.ToUTC();
-      wxString time = utc.Format("%H%M%S");
+      QDateTime utc = QDateTime::currentDateTimeUtc();
+      wxString time = QString_to_wxString(utc.toString("HHmmss"));
       m_NMEA0183.Rmc.UTCTime = time;
-      wxString date = utc.Format("%d%m%y");
+      wxString date = QString_to_wxString(utc.toString("ddMMyy"));
       m_NMEA0183.Rmc.Date = date;
     }
 

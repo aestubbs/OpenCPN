@@ -24,6 +24,7 @@
  */
 #include <vector>
 
+#include <QDateTime>
 #include <QString>
 
 #include "dychart.h"  // Must be ahead due to buggy GL includes handling
@@ -80,6 +81,20 @@
 #if wxUSE_XLOCALE || !wxCHECK_VERSION(3, 0, 0)
 extern wxLocale* plocale_def_lang;
 #endif
+
+// Bridge helpers between the wxDateTime-based plugin ABI and the internal
+// QDateTime-based core. Both representations carry a UTC instant, converted
+// via Unix seconds.
+static inline wxDateTime QDateTimeToWxDateTimeUtc(const QDateTime& qdt) {
+  if (!qdt.isValid()) return wxInvalidDateTime;
+  return wxDateTime(static_cast<time_t>(qdt.toUTC().toSecsSinceEpoch()));
+}
+
+static inline QDateTime WxDateTimeToQDateTimeUtc(const wxDateTime& wdt) {
+  if (!wdt.IsValid()) return QDateTime();
+  return QDateTime::fromSecsSinceEpoch(
+      static_cast<qint64>(wdt.GetTicks()), Qt::UTC);
+}
 
 extern PlugInManager* s_ppim;  // FIXME (leamas) another name for global mgr
 
@@ -867,9 +882,9 @@ bool AddSingleWaypoint(PlugIn_Waypoint* pwaypoint, bool b_permanent) {
   pWP->m_MarkDescription = pwaypoint->m_MarkDescription;
 
   if (pwaypoint->m_CreateTime.IsValid())
-    pWP->SetCreateTime(pwaypoint->m_CreateTime);
+    pWP->SetCreateTime(WxDateTimeToQDateTimeUtc(pwaypoint->m_CreateTime));
   else {
-    pWP->SetCreateTime(wxDateTime::Now().ToUTC());
+    pWP->SetCreateTime(QDateTime::currentDateTimeUtc());
   }
 
   pWP->m_btemp = (b_permanent == false);
@@ -921,7 +936,7 @@ bool UpdateSingleWaypoint(PlugIn_Waypoint* pwaypoint) {
         wxString_to_QString(pwaypoint->m_MarkDescription);
     prp->SetVisible(pwaypoint->m_IsVisible);
     if (pwaypoint->m_CreateTime.IsValid())
-      prp->SetCreateTime(pwaypoint->m_CreateTime);
+      prp->SetCreateTime(WxDateTimeToQDateTimeUtc(pwaypoint->m_CreateTime));
 
     //  Transcribe (clone) the html HyperLink List, if present
 
@@ -978,7 +993,7 @@ static void PlugInFromRoutePoint(PlugIn_Waypoint* dst,
   dst->m_MarkName = QString_to_wxString(src->GetName());
   dst->m_MarkDescription = QString_to_wxString(src->m_MarkDescription);
   dst->m_IsVisible = src->IsVisible();
-  dst->m_CreateTime = src->GetCreateTime();  // not const
+  dst->m_CreateTime = QDateTimeToWxDateTimeUtc(src->GetCreateTime());
   dst->m_GUID = QString_to_wxString(src->m_GUID);
 
   //  Transcribe (clone) the html HyperLink List, if present
@@ -1113,7 +1128,7 @@ bool AddPlugInRoute(PlugIn_Route* proute, bool b_permanent) {
   PlugIn_Waypoint* pwp;
   RoutePoint* pWP_src;
   int ip = 0;
-  wxDateTime plannedDeparture;
+  QDateTime plannedDeparture;
 
   wxPlugin_WaypointListNode* pwpnode = proute->pWaypointList->GetFirst();
   while (pwpnode) {
@@ -1129,7 +1144,7 @@ bool AddPlugInRoute(PlugIn_Route* proute, bool b_permanent) {
     cloneHyperlinkList(pWP, pwp);
     pWP->m_MarkDescription = pwp->m_MarkDescription;
     pWP->m_bShowName = false;
-    pWP->SetCreateTime(pwp->m_CreateTime);
+    pWP->SetCreateTime(WxDateTimeToQDateTimeUtc(pwp->m_CreateTime));
 
     route->AddPoint(pWP);
 
@@ -1140,7 +1155,7 @@ bool AddPlugInRoute(PlugIn_Route* proute, bool b_permanent) {
                                          pWP->m_lat, pWP->m_lon, pWP_src, pWP,
                                          route);
     else
-      plannedDeparture = pwp->m_CreateTime;
+      plannedDeparture = WxDateTimeToQDateTimeUtc(pwp->m_CreateTime);
     ip++;
     pWP_src = pWP;
 
@@ -1209,7 +1224,7 @@ bool AddPlugInTrack(PlugIn_Track* ptrack, bool b_permanent) {
     pwp = pwpnode->GetData();
 
     TrackPoint* pWP = new TrackPoint(pwp->m_lat, pwp->m_lon);
-    pWP->SetCreateTime(pwp->m_CreateTime);
+    pWP->SetCreateTime(WxDateTimeToQDateTimeUtc(pwp->m_CreateTime));
 
     track->AddPoint(pWP);
 
@@ -1600,7 +1615,7 @@ std::unique_ptr<PlugIn_Track> GetTrack_Plugin(const wxString& GUID) {
 
     dst_wp->m_lat = ptp->m_lat;
     dst_wp->m_lon = ptp->m_lon;
-    dst_wp->m_CreateTime = ptp->GetCreateTime();  // not const
+    dst_wp->m_CreateTime = QDateTimeToWxDateTimeUtc(ptp->GetCreateTime());
 
     dst_track->pWaypointList->Append(dst_wp);
   }
@@ -1943,7 +1958,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
   dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
   dst->IconDescription = QString_to_wxString(pWayPointMan->GetIconDescription(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
-  dst->m_CreateTime = src->GetCreateTime();  // not const
+  dst->m_CreateTime = QDateTimeToWxDateTimeUtc(src->GetCreateTime());
   dst->m_GUID = QString_to_wxString(src->m_GUID);
 
   //  Transcribe (clone) the html HyperLink List, if present
@@ -1979,7 +1994,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
 
   dst->scamax = src->GetScaMax();
   dst->m_PlannedSpeed = src->GetPlannedSpeed();
-  dst->m_ETD = src->GetManualETD();
+  dst->m_ETD = QDateTimeToWxDateTimeUtc(src->GetManualETD());
   dst->m_WaypointArrivalRadius = src->GetWaypointArrivalRadius();
   dst->m_bShowWaypointRangeRings = src->GetShowWaypointRangeRings();
 }
@@ -2029,9 +2044,9 @@ RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src, bool b_permanent) {
   pWP->m_MarkDescription = src->m_MarkDescription;
 
   if (src->m_CreateTime.IsValid())
-    pWP->SetCreateTime(src->m_CreateTime);
+    pWP->SetCreateTime(WxDateTimeToQDateTimeUtc(src->m_CreateTime));
   else {
-    pWP->SetCreateTime(wxDateTime::Now().ToUTC());
+    pWP->SetCreateTime(QDateTime::currentDateTimeUtc());
   }
 
   pWP->m_btemp = (b_permanent == false);
@@ -2053,7 +2068,7 @@ RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src, bool b_permanent) {
   pWP->SetScaMax(src->scamax);
   pWP->SetPlannedSpeed(src->m_PlannedSpeed);
   if (src->m_ETD.IsValid())
-    pWP->SetETD(src->m_ETD);
+    pWP->SetETD(WxDateTimeToQDateTimeUtc(src->m_ETD));
   else
     pWP->SetETD(QString());
   return pWP;
@@ -2110,7 +2125,7 @@ bool UpdateSingleWaypointExV2(PlugIn_Waypoint_ExV2* pwaypoint) {
         wxString_to_QString(pwaypoint->m_MarkDescription);
     prp->SetVisible(pwaypoint->IsVisible);
     if (pwaypoint->m_CreateTime.IsValid())
-      prp->SetCreateTime(pwaypoint->m_CreateTime);
+      prp->SetCreateTime(WxDateTimeToQDateTimeUtc(pwaypoint->m_CreateTime));
 
     //  Transcribe (clone) the html HyperLink List, if present
 
@@ -2159,7 +2174,7 @@ bool UpdateSingleWaypointExV2(PlugIn_Waypoint_ExV2* pwaypoint) {
 
     prp->SetPlannedSpeed(pwaypoint->m_PlannedSpeed);
     if (pwaypoint->m_ETD.IsValid())
-      prp->SetETD(pwaypoint->m_ETD);
+      prp->SetETD(WxDateTimeToQDateTimeUtc(pwaypoint->m_ETD));
     else
       prp->SetETD(QString());
     prp->SetWaypointArrivalRadius(pwaypoint->m_WaypointArrivalRadius);
@@ -2185,7 +2200,7 @@ bool AddPlugInRouteExV2(PlugIn_Route_ExV2* proute, bool b_permanent) {
   PlugIn_Waypoint_ExV2* pwaypointex;
   RoutePoint *pWP, *pWP_src;
   int ip = 0;
-  wxDateTime plannedDeparture;
+  QDateTime plannedDeparture;
 
   wxPlugin_WaypointExV2ListNode* pwpnode = proute->pWaypointList->GetFirst();
   while (pwpnode) {
@@ -2206,7 +2221,7 @@ bool AddPlugInRouteExV2(PlugIn_Route_ExV2* proute, bool b_permanent) {
                                          pWP->m_lat, pWP->m_lon, pWP_src, pWP,
                                          route);
 
-    plannedDeparture = pwaypointex->m_CreateTime;
+    plannedDeparture = WxDateTimeToQDateTimeUtc(pwaypointex->m_CreateTime);
     ip++;
     pWP_src = pWP;
 
@@ -2303,7 +2318,7 @@ static void PlugInExFromRoutePoint(PlugIn_Waypoint_Ex* dst,
   dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
   dst->IconDescription = QString_to_wxString(pWayPointMan->GetIconDescription(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
-  dst->m_CreateTime = src->GetCreateTime();  // not const
+  dst->m_CreateTime = QDateTimeToWxDateTimeUtc(src->GetCreateTime());
   dst->m_GUID = QString_to_wxString(src->m_GUID);
 
   //  Transcribe (clone) the html HyperLink List, if present
@@ -2369,9 +2384,9 @@ RoutePoint* CreateNewPoint(const PlugIn_Waypoint_Ex* src, bool b_permanent) {
   pWP->m_MarkDescription = src->m_MarkDescription;
 
   if (src->m_CreateTime.IsValid())
-    pWP->SetCreateTime(src->m_CreateTime);
+    pWP->SetCreateTime(WxDateTimeToQDateTimeUtc(src->m_CreateTime));
   else {
-    pWP->SetCreateTime(wxDateTime::Now().ToUTC());
+    pWP->SetCreateTime(QDateTime::currentDateTimeUtc());
   }
 
   pWP->m_btemp = (b_permanent == false);
@@ -2448,7 +2463,7 @@ bool UpdateSingleWaypointEx(PlugIn_Waypoint_Ex* pwaypoint) {
         wxString_to_QString(pwaypoint->m_MarkDescription);
     prp->SetVisible(pwaypoint->IsVisible);
     if (pwaypoint->m_CreateTime.IsValid())
-      prp->SetCreateTime(pwaypoint->m_CreateTime);
+      prp->SetCreateTime(WxDateTimeToQDateTimeUtc(pwaypoint->m_CreateTime));
 
     //  Transcribe (clone) the html HyperLink List, if present
 
@@ -2512,7 +2527,7 @@ bool AddPlugInRouteEx(PlugIn_Route_Ex* proute, bool b_permanent) {
   PlugIn_Waypoint_Ex* pwaypointex;
   RoutePoint *pWP, *pWP_src;
   int ip = 0;
-  wxDateTime plannedDeparture;
+  QDateTime plannedDeparture;
 
   wxPlugin_WaypointExListNode* pwpnode = proute->pWaypointList->GetFirst();
   while (pwpnode) {
@@ -2533,7 +2548,7 @@ bool AddPlugInRouteEx(PlugIn_Route_Ex* proute, bool b_permanent) {
                                          pWP->m_lat, pWP->m_lon, pWP_src, pWP,
                                          route);
 
-    plannedDeparture = pwaypointex->m_CreateTime;
+    plannedDeparture = WxDateTimeToQDateTimeUtc(pwaypointex->m_CreateTime);
     ip++;
     pWP_src = pWP;
 

@@ -161,9 +161,9 @@ void AISTargetQueryDialog::OnIdTrkCreateClick(wxCommandEvent &event) {
         }
         for (const AISTargetTrackPoint &ptrack_point : td->m_ptrack) {
           vector2D point(ptrack_point.m_lon, ptrack_point.m_lat);
-          tp1 =
-              t->AddNewPoint(point, wxDateTime((time_t)ptrack_point.m_time)
-                                        .ToUTC());
+          tp1 = t->AddNewPoint(
+              point, QDateTime::fromSecsSinceEpoch(
+                         static_cast<qint64>(ptrack_point.m_time), Qt::UTC));
           if (tp) {
             pSelect->AddSelectableTrackSegment(tp->m_lat, tp->m_lon, tp1->m_lat,
                                                tp1->m_lon, tp, tp1, t);

@@ -76,7 +76,6 @@ millions of points.
 #include <QString>
 
 #include <wx/colour.h>
-#include <wx/datetime.h>
 #include <wx/event.h>
 #include <wx/jsonval.h>
 #include <wx/pen.h>
@@ -127,7 +126,7 @@ TrackPoint::TrackPoint(double lat, double lon, QString ts)
   SetCreateTime(ts);
 }
 
-TrackPoint::TrackPoint(double lat, double lon, wxDateTime dt)
+TrackPoint::TrackPoint(double lat, double lon, QDateTime dt)
     : m_lat(lat), m_lon(lon), m_GPXTrkSegNo(1) {
   SetCreateTime(dt);
 }
@@ -140,24 +139,19 @@ TrackPoint::TrackPoint(TrackPoint *orig)
 
 TrackPoint::~TrackPoint() {}
 
-wxDateTime TrackPoint::GetCreateTime() {
-  wxDateTime CreateTimeX;
+QDateTime TrackPoint::GetCreateTime() {
   QDateTime qdt;
-  if (ParseGPXDateTime(qdt, QString::fromStdString(m_stimestring))) {
-    // qdt is UTC; wxDateTime ctor from time_t stores the same Unix epoch.
-    CreateTimeX = wxDateTime((time_t)qdt.toSecsSinceEpoch());
-  }
-  return CreateTimeX;
+  // ParseGPXDateTime yields a UTC QDateTime; return it directly.
+  ParseGPXDateTime(qdt, QString::fromStdString(m_stimestring));
+  return qdt;
 }
 
-void TrackPoint::SetCreateTime(wxDateTime dt) {
+void TrackPoint::SetCreateTime(QDateTime dt) {
   QString ts;
-  if (dt.IsValid()) {
-    wxString wts =
-        dt.FormatISODate().Append("T").Append(dt.FormatISOTime()).Append("Z");
-    ts = wxString_to_QString(wts);
+  if (dt.isValid()) {
+    // Persist in ISO 8601 with 'Z' suffix, matching the on-wire GPX format.
+    ts = dt.toUTC().toString("yyyy-MM-ddTHH:mm:ss") + "Z";
   }
-
   SetCreateTime(ts);
 }
 
@@ -211,11 +205,11 @@ ActiveTrack::ActiveTrack() {
 
   SetPrecision(g_nTrackPrecision);
 
-  m_prev_time = wxInvalidDateTime;
+  m_prev_time = QDateTime();
   m_lastStoredTP = NULL;
 
-  wxDateTime now = wxDateTime::Now();
-  //    m_ConfigRouteNum = now.GetTicks();        // a unique number....
+  QDateTime now = QDateTime::currentDateTime();
+  //    m_ConfigRouteNum = now.toSecsSinceEpoch();  // a unique number....
   trackPointState = firstPoint;
   m_lastStoredTP = NULL;
   m_removeTP = NULL;
@@ -286,7 +280,7 @@ Track *ActiveTrack::DoExtendDaily() {
   TrackPoint *pExtendPoint = NULL;
 
   TrackPoint *pLastPoint = GetPoint(0);
-  if (!pLastPoint->GetCreateTime().IsValid()) return NULL;
+  if (!pLastPoint->GetCreateTime().isValid()) return NULL;
 
   for (Track *ptrack : g_TrackList) {
     if (!ptrack->m_bIsInLayer && ptrack->m_GUID != m_GUID) {
@@ -294,7 +288,7 @@ Track *ActiveTrack::DoExtendDaily() {
       if (ptrack->GetName().startsWith("AIS")) continue;
 
       TrackPoint *track_node = ptrack->GetLastPoint();
-      if (!track_node->GetCreateTime().IsValid())
+      if (!track_node->GetCreateTime().isValid())
         continue;  // Skip this bad track
       if (track_node->GetCreateTime() <= pLastPoint->GetCreateTime()) {
         if (!pExtendPoint ||
@@ -305,19 +299,16 @@ Track *ActiveTrack::DoExtendDaily() {
       }
     }
   }
-  if (pExtendTrack && pExtendTrack->GetPoint(0)
-                          ->GetCreateTime()
-                          .FromTimezone(wxDateTime::GMT0)
-                          .IsSameDate(pLastPoint->GetCreateTime().FromTimezone(
-                              wxDateTime::GMT0))) {
+  if (pExtendTrack &&
+      pExtendTrack->GetPoint(0)->GetCreateTime().toUTC().date() ==
+          pLastPoint->GetCreateTime().toUTC().date()) {
     int begin = 1;
     if (pLastPoint->GetCreateTime() == pExtendPoint->GetCreateTime()) begin = 2;
     pSelect->DeleteAllSelectableTrackSegments(pExtendTrack);
     QString suffix;
     if (GetName().isNull()) {
       suffix = pExtendTrack->GetName();
-      if (suffix.isNull())
-        suffix = wxString_to_QString(wxDateTime::Today().FormatISODate());
+      if (suffix.isNull()) suffix = QDate::currentDate().toString(Qt::ISODate);
     }
     pExtendTrack->Clone(this, begin, GetnPoints(), suffix);
     pSelect->AddAllSelectableTrackSegments(pExtendTrack);
@@ -326,7 +317,7 @@ Track *ActiveTrack::DoExtendDaily() {
     return pExtendTrack;
   } else {
     if (GetName().isNull())
-      SetName(wxString_to_QString(wxDateTime::Today().FormatISODate()));
+      SetName(QDate::currentDate().toString(Qt::ISODate));
     return NULL;
   }
 }
@@ -361,7 +352,12 @@ void Track::Clone(Track *psourcetrack, int start_nPoint, int end_nPoint,
 void ActiveTrack::AdjustCurrentTrackPoint(TrackPoint *prototype) {
   if (prototype) {
     *m_lastStoredTP = *prototype;
-    m_prev_time = prototype->GetCreateTime().FromUTC();
+    // GetCreateTime() returns a UTC QDateTime; m_prev_time stores the same
+    // UTC instant. Earlier wx code applied FromUTC() to reinterpret the
+    // instant as a local clock, but the only consumer is an equality test
+    // against now (also a QDateTime); UTC vs local does not affect equality
+    // of the underlying instant.
+    m_prev_time = prototype->GetCreateTime();
   }
 }
 
@@ -387,20 +383,20 @@ void ActiveTrack::OnTimerTrack(wxTimerEvent &event) {
     AddPointNow();
   else  // continuously update track beginning point timestamp if no movement.
     if ((trackPointState == firstPoint) && !g_bTrackDaily) {
-      wxDateTime now = wxDateTime::Now();
-      if (TrackPoints.empty()) TrackPoints.front()->SetCreateTime(now.ToUTC());
+      QDateTime now = QDateTime::currentDateTimeUtc();
+      if (TrackPoints.empty()) TrackPoints.front()->SetCreateTime(now);
     }
 
   m_TimerTrack.Start(1000, wxTIMER_CONTINUOUS);
 }
 
 void ActiveTrack::AddPointNow(bool do_add_point) {
-  wxDateTime now = wxDateTime::Now();
+  QDateTime now = QDateTime::currentDateTimeUtc();
 
   if (m_prev_dist < 0.0005)  // avoid zero length segs
     if (!do_add_point) return;
 
-  if (m_prev_time.IsValid())
+  if (m_prev_time.isValid())
     if (m_prev_time == now)  // avoid zero time segs
       if (!do_add_point) return;
 
@@ -425,7 +421,7 @@ void ActiveTrack::AddPointNow(bool do_add_point) {
 
   switch (trackPointState) {
     case firstPoint: {
-      TrackPoint *pTrackPoint = AddNewPoint(gpsPoint, now.ToUTC());
+      TrackPoint *pTrackPoint = AddNewPoint(gpsPoint, now);
       m_lastStoredTP = pTrackPoint;
       trackPointState = secondPoint;
       do_add_point = false;
@@ -434,7 +430,7 @@ void ActiveTrack::AddPointNow(bool do_add_point) {
     case secondPoint: {
       vector2D pPoint(gLon, gLat);
       skipPoints.push_back(pPoint);
-      skipTimes.push_back(now.ToUTC());
+      skipTimes.push_back(now);
       trackPointState = potentialPoint;
       break;
     }
@@ -495,14 +491,14 @@ void ActiveTrack::AddPointNow(bool do_add_point) {
       }
 
       skipPoints.push_back(gpsPoint);
-      skipTimes.push_back(now.ToUTC());
+      skipTimes.push_back(now);
       break;
     }
   }
 
   // Check if this is the last point of the track.
   if (do_add_point) {
-    TrackPoint *pTrackPoint = AddNewPoint(gpsPoint, now.ToUTC());
+    TrackPoint *pTrackPoint = AddNewPoint(gpsPoint, now);
     pSelect->AddSelectableTrackSegment(
         m_lastStoredTP->m_lat, m_lastStoredTP->m_lon, pTrackPoint->m_lat,
         pTrackPoint->m_lon, m_lastStoredTP, pTrackPoint, this);
@@ -688,7 +684,7 @@ void Track::AddPointFinalized(TrackPoint *pNewPoint) {
   }
 }
 
-TrackPoint *Track::AddNewPoint(vector2D point, wxDateTime time) {
+TrackPoint *Track::AddNewPoint(vector2D point, QDateTime time) {
   TrackPoint *tPoint = new TrackPoint(point.lat, point.lon, time);
 
   AddPointFinalized(tPoint);
@@ -1002,8 +998,10 @@ QString Track::GetIsoDateTime(const QString &label_for_invalid_date) const {
   QString name;
   TrackPoint *rp = NULL;
   if ((int)TrackPoints.size() > 0) rp = TrackPoints[0];
-  if (rp && rp->GetCreateTime().IsValid())
-    name = wxString_to_QString(rp->GetCreateTime().FormatISOCombined(' '));
+  if (rp && rp->GetCreateTime().isValid())
+    // ISO 8601 with a space separator between date and time, mirroring
+    // wxDateTime::FormatISOCombined(' ').
+    name = rp->GetCreateTime().toString("yyyy-MM-dd HH:mm:ss");
   else
     name = label_for_invalid_date;
   return name;
@@ -1017,12 +1015,8 @@ QString Track::GetDateTime(const QString &label_for_invalid_date) const {
   QString name;
   TrackPoint *rp = NULL;
   if ((int)TrackPoints.size() > 0) rp = TrackPoints[0];
-  if (rp && rp->GetCreateTime().IsValid()) {
-    // GetCreateTime() stores UTC; build a UTC QDateTime carrying the same
-    // Unix epoch so toUsrDateTimeFormat sees the right instant.
-    QDateTime qdt = QDateTime::fromSecsSinceEpoch(
-        rp->GetCreateTime().GetTicks(), Qt::UTC);
-    name = ocpn::toUsrDateTimeFormat(qdt);
+  if (rp && rp->GetCreateTime().isValid()) {
+    name = ocpn::toUsrDateTimeFormat(rp->GetCreateTime());
   } else
     name = label_for_invalid_date;
   return name;

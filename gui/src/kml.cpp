@@ -37,6 +37,8 @@
 #include <sstream>
 #include <string>
 
+#include <QDateTime>
+
 #include <wx/clipbrd.h>
 #include <wx/datetime.h>
 #include <wx/file.h>
@@ -125,14 +127,12 @@ KmlPastebufferType Kml::ParseTrack(TiXmlNode* node, wxString& name) {
 
     TiXmlElement* when = node->FirstChildElement("when");
 
-    wxDateTime whenTime;
-
     int i = 0;
     for (; when; when = when->NextSiblingElement("when")) {
       trackpoint = parsedTrack->GetPoint(i);
       if (!trackpoint) continue;
-      whenTime.ParseFormat(wxString(when->GetText(), wxConvUTF8),
-                           "%Y-%m-%dT%H:%M:%SZ");
+      QDateTime whenTime = QDateTime::fromString(
+          QString::fromUtf8(when->GetText()), Qt::ISODate);
       trackpoint->SetCreateTime(whenTime);
       i++;
     }
@@ -534,9 +534,10 @@ wxString Kml::MakeKmlFromTrack(Track* track) {
     TiXmlElement* when = new TiXmlElement("when");
     gxTrack->LinkEndChild(when);
 
-    wxDateTime whenTime(trackpoint->GetCreateTime());
-    TiXmlText* whenVal =
-        new TiXmlText(whenTime.Format("%Y-%m-%dT%H:%M:%SZ").mb_str(wxConvUTF8));
+    QDateTime whenTime = trackpoint->GetCreateTime();
+    QString stamp =
+        whenTime.toUTC().toString("yyyy-MM-ddTHH:mm:ss") + "Z";
+    TiXmlText* whenVal = new TiXmlText(stamp.toUtf8().constData());
     when->LinkEndChild(whenVal);
   }
 

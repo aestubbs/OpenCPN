@@ -27,11 +27,12 @@
 #include <functional>
 #include <vector>
 
+#include <QDateTime>
 #include <QString>
+#include <QtGlobal>
 
 #include <wx/bitmap.h>
 #include <wx/colour.h>
-#include <wx/datetime.h>
 #include <wx/string.h>
 
 #include "model/hyperlink.h"
@@ -116,9 +117,9 @@ public:
   QString GetDescription(void) { return m_MarkDescription; }
 
   /** Returns the Create Time of this RoutePoint in UTC. */
-  wxDateTime GetCreateTime(void);
+  QDateTime GetCreateTime(void);
   /** Sets the create time of this RoutePoint in UTC. */
-  void SetCreateTime(wxDateTime dt);
+  void SetCreateTime(QDateTime dt);
 
   QString GetIconName(void) { return m_IconName; }
   void SetIconName(QString name) { m_IconName = name; }
@@ -196,10 +197,10 @@ public:
    * considering both explicitly set ETD values and values embedded in the
    * waypoint description.
    *
-   * @return The estimated time of departure as a wxDateTime object, or
-   * wxInvalidDateTime if no valid ETD information exists.
+   * @return The estimated time of departure as a QDateTime object (UTC), or
+   * an invalid QDateTime if no valid ETD information exists.
    */
-  wxDateTime GetETD();
+  QDateTime GetETD();
   /**
    * Retrieves the manually set Estimated Time of Departure for this waypoint,
    * in UTC.
@@ -213,20 +214,20 @@ public:
    * 1. The m_manual_etd flag must be true, indicating the ETD was manually set
    * 2. The m_seg_etd value must be valid
    *
-   * @return The manually set ETD as a wxDateTime object if available, or
-   *         wxInvalidDateTime if no manual ETD has been set.
+   * @return The manually set ETD as a QDateTime object (UTC) if available, or
+   *         an invalid QDateTime if no manual ETD has been set.
    */
-  wxDateTime GetManualETD();
+  QDateTime GetManualETD();
   /**
    * Sets the Estimated Time of Departure for this waypoint, in UTC.
    *
    * This function sets the ETD (Estimated Time of Departure) for the waypoint
    * and marks it as manually set by setting the m_manual_etd flag to true.
    *
-   * @param etd The wxDateTime object representing the estimated time of
-   * departure.
+   * @param etd The QDateTime object representing the estimated time of
+   * departure (UTC).
    */
-  void SetETD(const wxDateTime &etd);
+  void SetETD(const QDateTime &etd);
   /**
    * Sets the Estimated Time of Departure from a string.
    *
@@ -269,10 +270,10 @@ public:
    * which then affects the ETA at the next waypoint, and so on through the
    * route.
    *
-   * @return The estimated time of arrival as a wxDateTime object, or
-   * wxInvalidDateTime if no valid ETA information exists.
+   * @return The estimated time of arrival as a QDateTime object (UTC), or
+   * an invalid QDateTime if no valid ETA information exists.
    */
-  wxDateTime GetETA();
+  QDateTime GetETA();
   /**
    * Retrieves the Estimated Time En route as a formatted string.
    *
@@ -284,7 +285,7 @@ public:
    * string if no ETE value is available.
    */
   QString GetETE();
-  void SetETE(wxLongLong secs);
+  void SetETE(qint64 secs);  // seconds
 
   double m_lat, m_lon;
   /**
@@ -327,7 +328,7 @@ public:
    * flag), in which case it takes precedence over the automatically calculated
    * value.
    */
-  wxDateTime m_seg_etd;
+  QDateTime m_seg_etd;
 
   /**
    * Estimated Time of Arrival at this waypoint, in UTC.
@@ -351,7 +352,7 @@ public:
    * which then affects the ETA at the next waypoint, and so on through the
    * route.
    */
-  wxDateTime m_seg_eta;
+  QDateTime m_seg_eta;
   /**
    * Estimated Time Enroute for the leg leading to this waypoint.
    *
@@ -365,7 +366,7 @@ public:
    * @note Calculated field - derived from segment length to this waypoint and
    * planned speed for this leg (m_seg_vmg)
    */
-  wxLongLong m_seg_ete = 0;
+  qint64 m_seg_ete = 0;  // seconds
   /**
    * Flag indicating whether the ETD has been manually set by the user.
    *
@@ -553,7 +554,7 @@ public:
   /**
    * Creation timestamp for the waypoint, in UTC.
    */
-  wxDateTime m_CreateTimeX;
+  QDateTime m_CreateTimeX;
 
 private:
   /**

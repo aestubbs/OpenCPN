@@ -196,13 +196,21 @@ RoutePrintout::RoutePrintout(Route* route, const std::set<int>& options,
       }
     }
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointETA)) {
-      m_table << toUsrDateTime(point->GetETA(), tz_selection, point->m_lon)
+      // GetETA() now returns QDateTime; bridge to wxDateTime via Unix seconds
+      // to call the still-wx-typed toUsrDateTime helper.
+      wxDateTime eta_wx =
+          point->GetETA().isValid()
+              ? wxDateTime(static_cast<time_t>(
+                    point->GetETA().toUTC().toSecsSinceEpoch()))
+              : wxInvalidDateTime;
+      m_table << toUsrDateTime(eta_wx, tz_selection, point->m_lon)
                      .FormatISOCombined(' ');
     }
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointETD)) {
-      if (point->GetManualETD().IsValid()) {
-        m_table << toUsrDateTime(point->GetManualETD(), tz_selection,
-                                 point->m_lon)
+      if (point->GetManualETD().isValid()) {
+        wxDateTime etd_wx = wxDateTime(static_cast<time_t>(
+            point->GetManualETD().toUTC().toSecsSinceEpoch()));
+        m_table << toUsrDateTime(etd_wx, tz_selection, point->m_lon)
                        .FormatISOCombined(' ');
       } else {
         m_table << "---";
@@ -210,12 +218,14 @@ RoutePrintout::RoutePrintout(Route* route, const std::set<int>& options,
     }
     if (GUI::HasKey(options, RoutePrintOptions::kWaypointTideEvent)) {
       std::wostringstream point_tide;
-      if (point->m_TideStation.length() > 0 && point->GetETA().IsValid()) {
+      if (point->m_TideStation.length() > 0 && point->GetETA().isValid()) {
         int station_id = ptcmgr->GetStationIDXbyName(
             QString_to_wxString(point->m_TideStation), point->m_lat,
             point->m_lon);
         if (station_id > 0) {
-          point_tide << ptcmgr->GetTidalEventStr(station_id, point->GetETA(),
+          wxDateTime eta_wx = wxDateTime(static_cast<time_t>(
+              point->GetETA().toUTC().toSecsSinceEpoch()));
+          point_tide << ptcmgr->GetTidalEventStr(station_id, eta_wx,
                                                  point->m_lat, point->m_lon,
                                                  tz_selection);
           point_tide << "\n@"

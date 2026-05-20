@@ -53,7 +53,6 @@ RoutePoint *GPXLoadWaypoint1(pugi::xml_node &wpt_node, QString def_symbol_name,
   QString TypeString;
   QString GuidString = GUID;  // default
   QString TimeString;
-  wxDateTime dt;
   RoutePoint *pWP;
 
   HyperlinkList *linklist = NULL;
@@ -258,7 +257,7 @@ RoutePoint *GPXLoadWaypoint1(pugi::xml_node &wpt_node, QString def_symbol_name,
 
   if (TimeString.length()) {
     pWP->m_timestring = TimeString;
-    pWP->SetCreateTime(wxInvalidDateTime);  // cause deferred timestamp parsing
+    pWP->SetCreateTime(QDateTime());  // cause deferred timestamp parsing
   }
 
   if (linklist) {
@@ -505,9 +504,8 @@ Route *GPXLoadRoute1(pugi::xml_node &wpt_node, bool b_fullviz, bool b_layer,
             if (ParseGPXDateTime(
                     qdt,
                     QString::fromUtf8(ext_child.first_child().value()))) {
-              // m_PlannedDeparture is wxDateTime holding the UTC instant.
-              pTentRoute->m_PlannedDeparture =
-                  wxDateTime((time_t)qdt.toSecsSinceEpoch());
+              // m_PlannedDeparture stores the UTC instant as a QDateTime.
+              pTentRoute->m_PlannedDeparture = qdt;
             }
           }
 
@@ -663,15 +661,11 @@ static bool GPXCreateWpt(pugi::xml_node node, RoutePoint *pr,
       child.append_child(pugi::node_pcdata)
           .set_value(pr->m_timestring.toUtf8().constData());
     else {
-      wxDateTime dt = pr->GetCreateTime();
-      if (!dt.IsValid()) dt = wxDateTime::Now();
-
-      wxString t = dt.ToUTC()
-                       .FormatISODate()
-                       .Append("T")
-                       .Append(dt.ToUTC().FormatISOTime())
-                       .Append("Z");
-      child.append_child(pugi::node_pcdata).set_value(t.mb_str());
+      QDateTime dt = pr->GetCreateTime();
+      if (!dt.isValid()) dt = QDateTime::currentDateTimeUtc();
+      // GPX serializes datetimes as ISO 8601 UTC with a trailing 'Z'.
+      QString t = dt.toUTC().toString("yyyy-MM-ddTHH:mm:ss") + "Z";
+      child.append_child(pugi::node_pcdata).set_value(t.toUtf8().constData());
     }
   }
 
@@ -811,13 +805,14 @@ static bool GPXCreateWpt(pugi::xml_node node, RoutePoint *pr,
         QString ps = QString::asprintf("%.1lf", pr->GetPlannedSpeed());
         use.set_value(ps.toUtf8().constData());
       }
-      if (pr->m_manual_etd && pr->GetManualETD().IsValid()) {
+      if (pr->m_manual_etd && pr->GetManualETD().isValid()) {
         pugi::xml_attribute use = child.append_attribute("etd");
         // Currently, the serialization format is YYYY-MM-DDTHH:MM:SS
         // without timezone information, e.g., etd="2025-04-03T20:00:27"
         // TODO: serialize using ISO 8601 or RFC 3339 format to ensure
         // the serialized date/time is unambiguous.
-        use.set_value(pr->GetManualETD().FormatISOCombined().mb_str());
+        QString etd_iso = pr->GetManualETD().toString(Qt::ISODate);
+        use.set_value(etd_iso.toUtf8().constData());
       }
     }
   }
@@ -1033,13 +1028,13 @@ static bool GPXCreateRoute(pugi::xml_node node, Route *pRoute) {
     child.append_child(pugi::node_pcdata).set_value(s.toUtf8().constData());
   }
 
-  if (pRoute->m_PlannedDeparture.IsValid()) {
+  if (pRoute->m_PlannedDeparture.isValid()) {
     child = child_ext.append_child("opencpn:planned_departure");
-    wxString t = pRoute->m_PlannedDeparture.FormatISODate()
-                     .Append("T")
-                     .Append(pRoute->m_PlannedDeparture.FormatISOTime())
-                     .Append("Z");
-    child.append_child(pugi::node_pcdata).set_value(t.mb_str());
+    // GPX serializes datetimes as ISO 8601 UTC with a trailing 'Z'.
+    QString t = pRoute->m_PlannedDeparture.toUTC().toString(
+                    "yyyy-MM-ddTHH:mm:ss") +
+                "Z";
+    child.append_child(pugi::node_pcdata).set_value(t.toUtf8().constData());
   }
 
   child = child_ext.append_child("opencpn:time_display");

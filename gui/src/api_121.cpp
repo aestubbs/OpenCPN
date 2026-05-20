@@ -43,9 +43,25 @@
 #include "model/wx_qt_string.h"
 #include "model/track.h"
 
+#include <QDateTime>
+
 #include "chcanv.h"
 #include "ocpn_plugin.h"
 #include "tcmgr.h"
+
+// Bridge helpers between the wxDateTime-based plugin ABI and the internal
+// QDateTime-based core. Both representations carry a UTC instant, so we
+// convert via Unix seconds.
+static inline wxDateTime QDateTimeToWxDateTimeUtc(const QDateTime &qdt) {
+  if (!qdt.isValid()) return wxInvalidDateTime;
+  return wxDateTime(static_cast<time_t>(qdt.toUTC().toSecsSinceEpoch()));
+}
+
+static inline QDateTime WxDateTimeToQDateTimeUtc(const wxDateTime &wdt) {
+  if (!wdt.IsValid()) return QDateTime();
+  return QDateTime::fromSecsSinceEpoch(
+      static_cast<qint64>(wdt.GetTicks()), Qt::UTC);
+}
 
 // translate O route class to PlugIn_Waypoint_ExV2
 static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
@@ -57,7 +73,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
   dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
   dst->IconDescription = QString_to_wxString(pWayPointMan->GetIconDescription(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
-  dst->m_CreateTime = src->GetCreateTime();  // not const
+  dst->m_CreateTime = QDateTimeToWxDateTimeUtc(src->GetCreateTime());
   dst->m_GUID = QString_to_wxString(src->m_GUID);
 
   //  Transcribe (clone) the html HyperLink List, if present
@@ -93,7 +109,7 @@ static void PlugInExV2FromRoutePoint(PlugIn_Waypoint_ExV2* dst,
 
   dst->scamax = src->GetScaMax();
   dst->m_PlannedSpeed = src->GetPlannedSpeed();
-  dst->m_ETD = src->GetManualETD();
+  dst->m_ETD = QDateTimeToWxDateTimeUtc(src->GetManualETD());
   dst->m_WaypointArrivalRadius = src->GetWaypointArrivalRadius();
   dst->m_bShowWaypointRangeRings = src->GetShowWaypointRangeRings();
 }
@@ -133,9 +149,9 @@ static RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src,
   pWP->m_MarkDescription = src->m_MarkDescription;
 
   if (src->m_CreateTime.IsValid())
-    pWP->SetCreateTime(src->m_CreateTime);
+    pWP->SetCreateTime(WxDateTimeToQDateTimeUtc(src->m_CreateTime));
   else {
-    pWP->SetCreateTime(wxDateTime::Now().ToUTC());
+    pWP->SetCreateTime(QDateTime::currentDateTimeUtc());
   }
 
   pWP->m_btemp = (b_permanent == false);
@@ -157,7 +173,7 @@ static RoutePoint* CreateNewPoint(const PlugIn_Waypoint_ExV2* src,
   pWP->SetScaMax(src->scamax);
   pWP->SetPlannedSpeed(src->m_PlannedSpeed);
   if (src->m_ETD.IsValid())
-    pWP->SetETD(src->m_ETD);
+    pWP->SetETD(WxDateTimeToQDateTimeUtc(src->m_ETD));
   else
     pWP->SetETD(QString());
   return pWP;
@@ -169,7 +185,7 @@ static bool AddPlugInRouteExV3(HostApi121::Route* proute, bool b_permanent) {
   PlugIn_Waypoint_ExV2* pwaypointex;
   RoutePoint *pWP, *pWP_src;
   int ip = 0;
-  wxDateTime plannedDeparture;
+  QDateTime plannedDeparture;
 
   wxPlugin_WaypointExV2ListNode* pwpnode = proute->pWaypointList->GetFirst();
   while (pwpnode) {
@@ -191,7 +207,7 @@ static bool AddPlugInRouteExV3(HostApi121::Route* proute, bool b_permanent) {
                                          pWP->m_lat, pWP->m_lon, pWP_src, pWP,
                                          route);
 
-    plannedDeparture = pwaypointex->m_CreateTime;
+    plannedDeparture = WxDateTimeToQDateTimeUtc(pwaypointex->m_CreateTime);
     ip++;
     pWP_src = pWP;
 
@@ -213,7 +229,7 @@ static bool AddPlugInRouteExV3(HostApi121::Route* proute, bool b_permanent) {
   route->m_PlannedSpeed = proute->m_PlannedSpeed;
   route->m_Colour = proute->m_Colour;
   route->m_style = proute->m_style;
-  route->m_PlannedDeparture = proute->m_PlannedDeparture;
+  route->m_PlannedDeparture = WxDateTimeToQDateTimeUtc(proute->m_PlannedDeparture);
   route->m_TimeDisplayFormat = proute->m_TimeDisplayFormat;
 
   pRouteList->push_back(route);
@@ -256,7 +272,7 @@ static void PlugInExFromRoutePoint(PlugIn_Waypoint_Ex* dst,
   dst->m_MarkDescription = QString_to_wxString(src->GetDescription());
   dst->IconDescription = QString_to_wxString(pWayPointMan->GetIconDescription(src->GetIconName()));
   dst->IsVisible = src->IsVisible();
-  dst->m_CreateTime = src->GetCreateTime();  // not const
+  dst->m_CreateTime = QDateTimeToWxDateTimeUtc(src->GetCreateTime());
   dst->m_GUID = QString_to_wxString(src->m_GUID);
 
   //  Transcribe (clone) the html HyperLink List, if present
@@ -908,7 +924,7 @@ std::unique_ptr<HostApi121::Route> HostApi121::GetRoute(const wxString& guid) {
   dst_route->m_PlannedSpeed = route->m_PlannedSpeed;
   dst_route->m_Colour = QString_to_wxString(route->m_Colour);
   dst_route->m_style = route->m_style;
-  dst_route->m_PlannedDeparture = route->m_PlannedDeparture;
+  dst_route->m_PlannedDeparture = QDateTimeToWxDateTimeUtc(route->m_PlannedDeparture);
   dst_route->m_TimeDisplayFormat = QString_to_wxString(route->m_TimeDisplayFormat);
 
   return dst_route;

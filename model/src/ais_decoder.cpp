@@ -3887,8 +3887,9 @@ void AisDecoder::UpdateOneTrack(AisTargetData *ptarget) {
       }
       TrackPoint *tp = t->GetLastPoint();
       vector2D point(ptrackpoint.m_lon, ptrackpoint.m_lat);
-      TrackPoint *tp1 =
-          t->AddNewPoint(point, wxDateTime((time_t)ptrackpoint.m_time).ToUTC());
+      TrackPoint *tp1 = t->AddNewPoint(
+          point, QDateTime::fromSecsSinceEpoch(
+                     static_cast<qint64>(ptrackpoint.m_time), Qt::UTC));
 
       if (tp)
         pSelect->AddSelectableTrackSegment(tp->m_lat, tp->m_lon, tp1->m_lat,
