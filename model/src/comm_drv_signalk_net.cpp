@@ -27,6 +27,10 @@
 
 #include <wx/socket.h>
 
+#include <QMetaObject>
+#include <QString>
+#include <Qt>
+
 #include "rapidjson/document.h"
 #include "ixwebsocket/IXNetSystem.h"
 #include "ixwebsocket/IXSocketTLSOptions.h"
@@ -43,7 +47,6 @@
 
 using namespace std::literals::chrono_literals;
 
-constexpr int kTimerSocket = 9006;
 constexpr int kSignalkSocketId = 5011;
 constexpr int kDogTimeoutReconnectSeconds = 10;
 
@@ -52,7 +55,7 @@ constexpr double kMsToKnotFactor = 1.9438444924406;
 class CommDriverSignalKNet::IoThread : public ThreadCtrl {
 public:
   IoThread(const std::string& iface, const wxIPV4address& address,
-           wxEvtHandler* consumer, const std::string& token);
+           CommDriverSignalKNet* consumer, const std::string& token);
 
   ~IoThread() override = default;
 
@@ -62,7 +65,7 @@ public:
 
 private:
   wxIPV4address m_address;
-  wxEvtHandler* m_consumer;
+  CommDriverSignalKNet* m_consumer;
   const std::string m_iface;
   std::string m_token;
   ix::WebSocket m_ws;
@@ -71,10 +74,6 @@ private:
   mutable std::mutex m_stats_mutex;
 };
 
-// i. e. wxDEFINE_EVENT(), avoiding the evil macro.
-static const wxEventTypeTag<CommDriverSignalKNet::InputEvt> SignalkEvtType(
-    wxNewEventType());
-
 static wxIPV4address ParamsIpAddress(const ConnectionParams& params) {
   wxIPV4address addr;
   addr.Hostname(params.NetworkAddress);
@@ -82,26 +81,12 @@ static wxIPV4address ParamsIpAddress(const ConnectionParams& params) {
   return addr;
 }
 
-class CommDriverSignalKNet::InputEvt : public wxEvent {
-public:
-  explicit InputEvt(std::string payload)
-      : wxEvent(0, SignalkEvtType), m_payload(std::move(payload)) {};
-
-  std::string GetPayload() const { return m_payload; }
-
-  // required for sending with wxPostEvent()
-  wxEvent* Clone() const override { return new InputEvt(m_payload); };
-
-private:
-  const std::string m_payload;
-};
-
 //========================================================================
 //      IoThread implementation
 //
 CommDriverSignalKNet::IoThread::IoThread(const std::string& iface,
                                          const wxIPV4address& address,
-                                         wxEvtHandler* consumer,
+                                         CommDriverSignalKNet* consumer,
                                          const std::string& token)
     : m_address(address), m_consumer(consumer), m_iface(iface), m_token(token) {
   m_resume_listener.Init(SystemEvents::GetInstance().evt_resume,
@@ -143,7 +128,12 @@ void CommDriverSignalKNet::IoThread::Run() {
 
   auto message_callback = [&](const ix::WebSocketMessagePtr& msg) {
     if (msg->type == ix::WebSocketMessageType::Message) {
-      m_consumer->QueueEvent(new InputEvt(msg->str));
+      // Hop from the I/O thread to the consumer's owning thread via
+      // a queued connection -- safe because m_consumer is a QObject.
+      QString payload = QString::fromStdString(msg->str);
+      QMetaObject::invokeMethod(m_consumer, "HandleSkSentence",
+                                Qt::QueuedConnection,
+                                Q_ARG(QString, payload));
       m_driver_stats.rx_count++;
     } else if (msg->type == ix::WebSocketMessageType::Open) {
       wxLogDebug("websocket: Connection to %s established",
@@ -192,10 +182,10 @@ CommDriverSignalKNet::CommDriverSignalKNet(const ConnectionParams* params,
                                              ParamsIpAddress(*params), this,
                                              params->AuthToken.ToStdString())),
       m_stats_timer(*this, 2s) {
-  // Prepare the wxEventHandler to accept events from the actual hardware thread
-  Bind(SignalkEvtType, &CommDriverSignalKNet::HandleSkSentence, this);
-
-  m_socketread_watchdog_timer.SetOwner(this, kTimerSocket);
+  // I/O thread posts payloads back via QMetaObject::invokeMethod, so no
+  // explicit wiring of an event/slot is needed here. The watchdog timer
+  // is single-shot and started on demand below.
+  m_socketread_watchdog_timer.setSingleShot(true);
 
   // Dummy Driver Stats, may be polled before worker thread is active
   m_driver_stats.driver_bus = NavAddr::Bus::Signalk;
@@ -278,7 +268,7 @@ void CommDriverSignalKNet::OpenWebSocket() {
     return;
   }
   ResetWatchdog();
-  m_socketread_watchdog_timer.Start(1000, wxTIMER_ONE_SHOT);
+  m_socketread_watchdog_timer.start(1000);
 }
 
 void CommDriverSignalKNet::CloseWebSocket() {
@@ -301,10 +291,10 @@ void CommDriverSignalKNet::CloseWebSocket() {
   }
 }
 
-void CommDriverSignalKNet::HandleSkSentence(const InputEvt& event) {
+void CommDriverSignalKNet::HandleSkSentence(const QString& payload) {
   rapidjson::Document root;
 
-  std::string msg = event.GetPayload();
+  std::string msg = payload.toStdString();
   root.Parse(msg);
   if (root.HasParseError()) {
     wxLogMessage(

@@ -192,15 +192,9 @@ Track::~Track() {
   delete m_TrackHyperlinkList;
 }
 
-#define TIMER_TRACK1 778
-
-BEGIN_EVENT_TABLE(ActiveTrack, wxEvtHandler)
-EVT_TIMER(TIMER_TRACK1, ActiveTrack::OnTimerTrack)
-END_EVENT_TABLE()
-
 ActiveTrack::ActiveTrack() {
-  m_TimerTrack.SetOwner(this, TIMER_TRACK1);
-  m_TimerTrack.Stop();
+  connect(&m_TimerTrack, &QTimer::timeout, this, &ActiveTrack::OnTimerTrack);
+  m_TimerTrack.stop();
   m_bRunning = false;
 
   SetPrecision(g_nTrackPrecision);
@@ -251,7 +245,7 @@ void ActiveTrack::SetPrecision(int prec) {
 void ActiveTrack::Start() {
   if (!m_bRunning) {
     AddPointNow(true);  // Add initial point
-    m_TimerTrack.Start(1000, wxTIMER_CONTINUOUS);
+    m_TimerTrack.start(1000);
     m_bRunning = true;
   }
 }
@@ -270,7 +264,7 @@ void ActiveTrack::Stop(bool do_add_point) {
     }
   }
 
-  m_TimerTrack.Stop();
+  m_TimerTrack.stop();
   m_bRunning = false;
   m_track_run = 0;
 }
@@ -361,8 +355,8 @@ void ActiveTrack::AdjustCurrentTrackPoint(TrackPoint *prototype) {
   }
 }
 
-void ActiveTrack::OnTimerTrack(wxTimerEvent &event) {
-  m_TimerTrack.Stop();
+void ActiveTrack::OnTimerTrack() {
+  m_TimerTrack.stop();
   m_track_run++;
 
   if (m_lastStoredTP)
@@ -387,7 +381,7 @@ void ActiveTrack::OnTimerTrack(wxTimerEvent &event) {
       if (TrackPoints.empty()) TrackPoints.front()->SetCreateTime(now);
     }
 
-  m_TimerTrack.Start(1000, wxTIMER_CONTINUOUS);
+  m_TimerTrack.start(1000);
 }
 
 void ActiveTrack::AddPointNow(bool do_add_point) {

@@ -24,7 +24,8 @@
 #ifndef NOTIFICATION_MANAGER_H_
 #define NOTIFICATION_MANAGER_H_
 
-#include <wx/timer.h>
+#include <QObject>
+#include <QTimer>
 
 #include "notification.h"
 #include "comm_appmsg.h"
@@ -47,7 +48,9 @@ public:
 };
 
 /** The global list of user notifications, a singleton. */
-class NotificationManager {
+class NotificationManager : public QObject {
+  Q_OBJECT
+
 public:
   static NotificationManager& GetInstance();
 
@@ -89,15 +92,16 @@ public:
   /** Notified without data when a notification is added or removed. */
   EventVar evt_notificationlist_change;
 
+private Q_SLOTS:
+  void OnTimer();
+
 private:
   NotificationManager();
   void PersistNotificationAsFile(
       const std::shared_ptr<Notification> _notification);
 
-  void OnTimer(wxTimerEvent& event);
-
   std::vector<std::shared_ptr<Notification>> active_notifications;
-  wxTimer m_timeout_timer;
+  QTimer m_timeout_timer;
 };
 
 #endif

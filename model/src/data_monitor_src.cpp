@@ -27,7 +27,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <wx/event.h>
 #include <wx/log.h>
 
 #include "model/comm_drv_registry.h"

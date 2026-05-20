@@ -49,12 +49,12 @@ NotificationManager& NotificationManager::GetInstance() {
 }
 
 NotificationManager::NotificationManager() {
-  m_timeout_timer.Bind(wxEVT_TIMER, &NotificationManager::OnTimer, this,
-                       m_timeout_timer.GetId());
-  m_timeout_timer.Start(1000, wxTIMER_CONTINUOUS);
+  connect(&m_timeout_timer, &QTimer::timeout, this,
+          &NotificationManager::OnTimer);
+  m_timeout_timer.start(1000);
 }
 
-void NotificationManager::OnTimer(wxTimerEvent& event) {
+void NotificationManager::OnTimer() {
   for (auto note : active_notifications) {
     if (note->GetTimeoutLeft() > 0) {
       note->DecrementTimoutCount();

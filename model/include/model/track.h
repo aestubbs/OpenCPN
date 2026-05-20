@@ -28,7 +28,9 @@
 #include <wx/progdlg.h>
 
 #include <QDateTime>
+#include <QObject>
 #include <QString>
+#include <QTimer>
 
 #include <deque>
 #include <list>
@@ -221,7 +223,9 @@ class Route;
 /**
  * Represents an active track that is currently being recorded.
  */
-class ActiveTrack : public wxEvtHandler, public Track {
+class ActiveTrack : public QObject, public Track {
+  Q_OBJECT
+
 public:
   ActiveTrack();
   ~ActiveTrack();
@@ -235,12 +239,14 @@ public:
 
   void AdjustCurrentTrackPoint(TrackPoint *prototype);
 
+private Q_SLOTS:
+  void OnTimerTrack();
+
 private:
-  void OnTimerTrack(wxTimerEvent &event);
   void AddPointNow(bool do_add_point = false);
 
   bool m_bRunning;
-  wxTimer m_TimerTrack;
+  QTimer m_TimerTrack;
 
   int m_nPrecision;
   double m_TrackTimerSec;
@@ -266,8 +272,6 @@ private:
 
   std::deque<vector2D> skipPoints;
   std::deque<QDateTime> skipTimes;
-
-  DECLARE_EVENT_TABLE()
 };
 
 #endif

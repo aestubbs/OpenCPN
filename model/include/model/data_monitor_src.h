@@ -32,8 +32,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <wx/event.h>
-
 #include "model/comm_navmsg.h"
 #include "model/comm_navmsg_bus.h"
 #include "model/ocpn_utils.h"
@@ -47,7 +45,7 @@
  * as defined by the mux. All messages received, whether they are know to
  * the mux or not, are added to the stream
  * */
-class DataMonitorSrc : public wxEvtHandler {
+class DataMonitorSrc {
   /** Callback function used to forward data to caller. */
   using SinkFunc = std::function<void(const std::shared_ptr<const NavMsg>&)>;
 

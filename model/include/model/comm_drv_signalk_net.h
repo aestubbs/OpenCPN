@@ -36,9 +36,10 @@
 #include <wx/wx.h>
 #endif
 
-#include <wx/event.h>
 #include <wx/string.h>
-#include <wx/timer.h>
+
+#include <QObject>
+#include <QTimer>
 
 #include "model/conn_params.h"
 #include "model/comm_drv_signalk.h"
@@ -46,15 +47,14 @@
 
 constexpr int kDogTimeoutSeconds = 5;
 
-class CommDriverSignalKNet : public CommDriverSignalK,
-                             public wxEvtHandler,
+class CommDriverSignalKNet : public QObject,
+                             public CommDriverSignalK,
                              public DriverStatsProvider {
+  Q_OBJECT
+
 public:
   CommDriverSignalKNet(const ConnectionParams* params, DriverListener& l);
   ~CommDriverSignalKNet() override;
-
-  /** \internal */
-  class InputEvt;
 
   DriverStats GetDriverStats() const override;
 
@@ -76,13 +76,17 @@ public:
   static bool DiscoverSkServer(const std::string& service_ident, wxString& ip,
                                int& port, int tSec);
 
+private Q_SLOTS:
+  /** Handle a SignalK JSON payload posted from the I/O thread. */
+  void HandleSkSentence(const QString& payload);
+
 private:
   class IoThread;
 
   ConnectionParams m_params;
   DriverListener& m_listener;
   int m_dog_value;
-  wxTimer m_socketread_watchdog_timer;
+  QTimer m_socketread_watchdog_timer;
   std::thread m_std_thread;
   std::unique_ptr<IoThread> m_io_thread;
   StatsTimer m_stats_timer;
@@ -94,8 +98,6 @@ private:
   void Close();
   void OpenWebSocket();
   void CloseWebSocket();
-
-  void HandleSkSentence(const InputEvt& event);
 
   void ResetWatchdog() { m_dog_value = kDogTimeoutSeconds; }
   void SetWatchdog(int n) { m_dog_value = n; }
