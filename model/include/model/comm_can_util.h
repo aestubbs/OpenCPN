@@ -28,12 +28,13 @@
 #include <memory>
 #include <string>
 
+#include <QDateTime>
+#include <QtGlobal>
+
 #if !defined(_WIN32) && !defined(__APPLE__)
 #include <linux/can.h>
 #include <linux/can/raw.h>
 #endif
-
-#include <wx/datetime.h>
 
 #ifdef __WXMSW__
 #define CAN_MAX_DLEN 8
@@ -80,12 +81,12 @@ public:
   class Entry {
   public:
     Entry()
-        : time_arrived(wxDateTime::Now()),
+        : time_arrived(QDateTime::currentDateTime()),
           sid(0),
           expected_length(0),
           cursor(0) {}
 
-    wxDateTime time_arrived;  ///< time of last fragment.
+    QDateTime time_arrived;  ///< time of last fragment.
 
     /// Can header, used to "map" the incoming fast message fragments
     CanHeader header;
@@ -99,7 +100,8 @@ public:
     std::vector<unsigned char> data;  ///< Received data
   };
 
-  FastMessageMap() : dropped_frames(0), last_gc_run(wxDateTime::Now()) {}
+  FastMessageMap()
+      : dropped_frames(0), last_gc_run(QDateTime::currentDateTime()) {}
 
   Entry operator[](int i) const { return entries[i]; }  /// Getter
   Entry& operator[](int i) { return entries[i]; }       /// Setter
@@ -128,8 +130,8 @@ private:
   void CheckGc();
 
   int dropped_frames;
-  wxDateTime last_gc_run;
-  wxDateTime dropped_frame_time;
+  QDateTime last_gc_run;
+  QDateTime dropped_frame_time;
 };
 
 #endif  // guard

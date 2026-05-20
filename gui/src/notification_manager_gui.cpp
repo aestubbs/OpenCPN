@@ -140,10 +140,8 @@ NotificationPanel::NotificationPanel(
   itemBoxSizer01->Add(counttextbox, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
 
   // Time
-  wxDateTime act_time = wxDateTime(notification->GetActivateTime());
-  // Build a QDateTime carrying the same Unix epoch as act_time.
-  QDateTime act_time_q =
-      QDateTime::fromSecsSinceEpoch(act_time.GetTicks(), Qt::UTC);
+  QDateTime act_time_q = QDateTime::fromSecsSinceEpoch(
+      static_cast<qint64>(notification->GetActivateTime()), Qt::UTC);
   wxString stime = wxString::Format(
       "%s",
       QString_to_wxString(ocpn::toUsrDateTimeFormat(

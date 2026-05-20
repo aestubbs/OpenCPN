@@ -1626,11 +1626,12 @@ void MyFrame::OnCloseWindow(wxCloseEvent &event) {
       watching_anchor |=
           (pAnchorWatchPoint2->GetIconName().startsWith("anchor"));  // pjotrc 2010.02.15
 
+    QDateTime now_q = QDateTime::currentDateTime();
+    qint64 uptime_secs = g_start_time.secsTo(now_q);  // seconds
     wxDateTime now = wxDateTime::Now();
-    wxTimeSpan uptime = now.Subtract(g_start_time);
 
     if (!watching_anchor && (g_bCruising) && (gSog < 0.5) &&
-        (uptime.IsLongerThan(wxTimeSpan(0, 30, 0, 0))))  // pjotrc 2010.02.15
+        (uptime_secs > 30 * 60))  // pjotrc 2010.02.15
     {
       //    First, if enabled, delete any single anchorage waypoints closer
       //    than 0.25 NM from this point
@@ -5557,10 +5558,11 @@ void MyFrame::ProcessLogAndBells() {
   int minuteUTC = lognow.GetMinute();
   int second = lognow.GetSecond();
 
-  wxTimeSpan logspan = lognow.Subtract(g_loglast_time);
-  if ((logspan.IsLongerThan(wxTimeSpan(0, 30, 0, 0))) || (minuteUTC == 0) ||
-      (minuteUTC == 30)) {
-    if (logspan.IsLongerThan(wxTimeSpan(0, 1, 0, 0))) {
+  QDateTime lognow_q =
+      QDateTime::fromSecsSinceEpoch(lognow.GetTicks(), Qt::UTC);
+  qint64 logspan_secs = g_loglast_time.secsTo(lognow_q);  // seconds
+  if ((logspan_secs > 30 * 60) || (minuteUTC == 0) || (minuteUTC == 30)) {
+    if (logspan_secs > 60) {
       wxString day = lognow.FormatISODate();
       wxString utc = lognow.FormatISOTime();
       wxString navmsg = "LOGBOOK:  ";
@@ -5594,7 +5596,7 @@ void MyFrame::ProcessLogAndBells() {
         navmsg += data;
       }
       wxLogMessage(navmsg);
-      g_loglast_time = lognow;
+      g_loglast_time = lognow_q;
 
       int bells = (hourLOC % 4) * 2;  // 2 bells each hour
       if (minuteLOC != 0) bells++;    // + 1 bell on 30 minutes
@@ -6218,15 +6220,17 @@ void MyFrame::OnEvtPlugInMessage(OCPN_MsgEvent &event) {
     }
 
     // Store old time source for comparison
-    wxDateTime oldTimeSource = gTimeSource;
+    QDateTime oldTimeSource = gTimeSource;
 
     if (v["Day"].AsInt() == -1) {
-      gTimeSource = wxInvalidDateTime;
+      gTimeSource = QDateTime();
       wxLogMessage("GRIB_TIMELINE: Reset to system time");
     } else {
-      gTimeSource.Set(v["Day"].AsInt(), (wxDateTime::Month)v["Month"].AsInt(),
-                      v["Year"].AsInt(), v["Hour"].AsInt(), v["Minute"].AsInt(),
-                      v["Second"].AsInt());
+      // Qt months are 1-based, matching wxDateTime::Month + 1.
+      // wxDateTime::Month is 0-based (January = 0).
+      gTimeSource = QDateTime(
+          QDate(v["Year"].AsInt(), v["Month"].AsInt() + 1, v["Day"].AsInt()),
+          QTime(v["Hour"].AsInt(), v["Minute"].AsInt(), v["Second"].AsInt()));
     }
 
     // Refresh tide displays if time source changed

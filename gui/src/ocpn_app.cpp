@@ -827,12 +827,11 @@ bool MyApp::OnInit() {
   // This needs to be set early to catch numerics in config file.
   setlocale(LC_NUMERIC, "C");
 
-  g_start_time = wxDateTime::Now();
+  g_start_time = QDateTime::currentDateTime();
 
-  g_loglast_time = g_start_time;
-  g_loglast_time.MakeGMT();
-  g_loglast_time.Subtract(
-      wxTimeSpan(0, 29, 0, 0));  // give 1 minute for GPS to get a fix
+  g_loglast_time = g_start_time.toUTC();
+  // give 1 minute for GPS to get a fix
+  g_loglast_time = g_loglast_time.addSecs(-29 * 60);
 
   AnchorPointMinDist = 5.0;
 
@@ -1800,7 +1799,8 @@ int MyApp::OnExit() {
     navmsg += data;
   }
   wxLogMessage(navmsg);
-  g_loglast_time = lognow;
+  g_loglast_time =
+      QDateTime::fromSecsSinceEpoch(lognow.GetTicks(), Qt::UTC);
 
   if (ptcmgr) delete ptcmgr;
 

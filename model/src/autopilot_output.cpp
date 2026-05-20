@@ -25,6 +25,8 @@
 #include <memory>
 #include <vector>
 
+#include <QDateTime>
+
 #include <wx/wxprec.h>
 
 #include "model/autopilot_output.h"
@@ -81,12 +83,9 @@ static void SendRmc(NMEA0183 &nmea0183, Routeman &routeman) {
     nmea0183.Rmc.UTCTime = gRmcTime;
     nmea0183.Rmc.Date = gRmcDate;
   } else {
-    wxDateTime now = wxDateTime::Now();
-    wxDateTime utc = now.ToUTC();
-    wxString time = utc.Format("%H%M%S");
-    nmea0183.Rmc.UTCTime = time;
-    wxString date = utc.Format("%d%m%y");
-    nmea0183.Rmc.Date = date;
+    QDateTime utc = QDateTime::currentDateTimeUtc();
+    nmea0183.Rmc.UTCTime = qs2ws(utc.toString("HHmmss"));
+    nmea0183.Rmc.Date = qs2ws(utc.toString("ddMMyy"));
   }
 
   nmea0183.Rmc.FAAModeIndicator = "A";
@@ -372,14 +371,12 @@ bool SendPGN129284(Routeman &routeman, AbstractCommDriver *driver) {
     double brg = routeman.GetCurrentBrgToActivePoint();
     vmg = gSog * cos((brg - gCog) * PI / 180.);
   }
-  wxTimeSpan tttg_span;
-  wxDateTime arrival_time = wxDateTime::Now();
+  QDateTime arrival_time = QDateTime::currentDateTime();
   if (vmg > 0.) {
     double tttg_sec = (routeman.GetCurrentRngToActivePoint() / gSog) * 3600;
-    tttg_span = wxTimeSpan::Seconds((long)tttg_sec);
-    arrival_time += tttg_span;
+    arrival_time = arrival_time.addSecs(static_cast<qint64>(tttg_sec));
   }
-  double time_days_1979 = arrival_time.GetTicks() / (3600. * 24.);
+  double time_days_1979 = arrival_time.toSecsSinceEpoch() / (3600. * 24.);
 
   //  ETA time_seconds, expressed as seconds since midnight
   //  ETA date, expressed as whole days since 1 January 1970

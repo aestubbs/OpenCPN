@@ -499,13 +499,13 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
   }
 
   // Time indicators - system time and "selected" time (e.g. GRIB time)
-  wxDateTime system_now = wxDateTime::Now();
-  wxDateTime this_now = gTimeSource;
-  bool cur_time = !gTimeSource.IsValid();
-  if (cur_time) this_now = wxDateTime::Now();
+  QDateTime system_now = QDateTime::currentDateTime();
+  QDateTime this_now = gTimeSource;
+  bool cur_time = !gTimeSource.isValid();
+  if (cur_time) this_now = QDateTime::currentDateTime();
 
   // Always draw system time indicator (solid red line)
-  time_t t_system_now = system_now.GetTicks();
+  time_t t_system_now = system_now.toSecsSinceEpoch();
   t_system_now -= m_diff_mins * 60;
   if (m_tzoneDisplay == 0)  // LMT @ Station
     t_system_now += m_stationOffset_mins * 60;
@@ -524,8 +524,8 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
 
   // Draw "selected time" indicator (from timeline widget) if different from
   // system time.
-  if (gTimeSource.IsValid()) {
-    time_t t_selected_time = gTimeSource.GetTicks();
+  if (gTimeSource.isValid()) {
+    time_t t_selected_time = gTimeSource.toSecsSinceEpoch();
     if (abs(t_selected_time - t_system_now) > 300) {
       t_selected_time -= m_diff_mins * 60;
       if (m_tzoneDisplay == 0)  // LMT @ Station
@@ -840,15 +840,15 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
   if ((m_button_height * 15) < x && cur_time) {  // large enough horizontally?
     wxString sday;
     int day = m_graphday.GetDayOfYear();
-    if (m_graphday.GetYear() == this_now.GetYear()) {
-      if (day == this_now.GetDayOfYear())
+    if (m_graphday.GetYear() == this_now.date().year()) {
+      if (day == this_now.date().dayOfYear())
         sday.Append(_("Today"));
-      else if (day == this_now.GetDayOfYear() + 1)
+      else if (day == this_now.date().dayOfYear() + 1)
         sday.Append(_("Tomorrow"));
       else
         sday.Append(m_graphday.GetWeekDayName(m_graphday.GetWeekDay()));
-    } else if (m_graphday.GetYear() == this_now.GetYear() + 1 &&
-               day == this_now.Add(wxTimeSpan::Day()).GetDayOfYear())
+    } else if (m_graphday.GetYear() == this_now.date().year() + 1 &&
+               day == this_now.addDays(1).date().dayOfYear())
       sday.Append(_("Tomorrow"));
 
     dc.SetFont(*pSFont);
@@ -880,11 +880,15 @@ void TCWin::PaintChart(wxDC &dc, const wxRect &chartRect) {
 
 void TCWin::SetTimeFactors() {
   //    Figure out this computer timezone minute offset
-  wxDateTime this_now = gTimeSource;
-  bool cur_time = !gTimeSource.IsValid();
+  // Keep this routine on wxDateTime locally: it relies on wxDateTime's
+  // IsDST() and the wx 3.0.2 toGMT() bug-workaround. Bridge via Unix epoch.
+  wxDateTime this_now;
+  bool cur_time = !gTimeSource.isValid();
 
   if (cur_time) {
     this_now = wxDateTime::Now();
+  } else {
+    this_now = wxDateTime((time_t)gTimeSource.toSecsSinceEpoch());
   }
   wxDateTime this_gmt = this_now.ToGMT();
 

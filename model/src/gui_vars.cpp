@@ -22,8 +22,9 @@
  * persisted in configuration file.
  */
 
+#include <QDateTime>
+
 #include <wx/colour.h>
-#include <wx/datetime.h>
 #include <wx/string.h>
 
 #include "model/gui_vars.h"
@@ -99,9 +100,9 @@ long g_tex_mem_used = 0;
 
 unsigned gs_plib_flags = 0;
 
-wxDateTime g_loglast_time;
-wxDateTime g_start_time;
-wxDateTime gTimeSource;
+QDateTime g_loglast_time;
+QDateTime g_start_time;
+QDateTime gTimeSource;
 
 wxColour g_colourOwnshipRangeRingsColour;
 wxColour g_colourTrackLineColour;

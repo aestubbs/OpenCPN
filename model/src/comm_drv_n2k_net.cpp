@@ -1315,8 +1315,8 @@ std::vector<unsigned char> MakeSimpleOutMsg(
     }
     case N2KFormat_Actisense_N2K_ASCII: {
       // Create the time field
-      wxDateTime now = wxDateTime::Now();
-      wxString stime = now.Format("%H%M%S");
+      QDateTime now = QDateTime::currentDateTime();
+      wxString stime = now.toString("HHmmss").toStdString();
       stime += ".000 ";
       std::string sstime = stime.ToStdString();
       out_vec.push_back('A');
@@ -1461,8 +1461,8 @@ std::vector<std::vector<unsigned char>> CommDriverN2KNet::GetTxVector(
         // No Need to create a timestamp or frame R/T indicator
 #if 0
         // time header
-        wxDateTime now = wxDateTime::Now();
-        wxString stime = now.Format("%H:%M:%S");
+        QDateTime now = QDateTime::currentDateTime();
+        wxString stime = now.toString("HH:mm:ss").toStdString();
         stime += ".000 ";
         std::string sstime = stime.ToStdString();
         for (unsigned char s : sstime) header_vec.push_back(s);
@@ -1552,8 +1552,8 @@ std::vector<std::vector<unsigned char>> CommDriverN2KNet::GetTxVector(
       std::vector<unsigned char> ovec;
 
       // Create the time field
-      wxDateTime now = wxDateTime::Now();
-      wxString stime = now.Format("%H%M%S");
+      QDateTime now = QDateTime::currentDateTime();
+      wxString stime = now.toString("HHmmss").toStdString();
       stime += ".000 ";
       std::string sstime = stime.ToStdString();
       ovec.push_back('A');

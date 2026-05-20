@@ -13389,10 +13389,10 @@ void ChartCanvas::RebuildTideSelectList(LLBBox &BBox) {
 void ChartCanvas::DrawAllTidesInBBox(ocpnDC &dc, LLBBox &BBox) {
   if (!ptcmgr) return;
 
-  wxDateTime this_now = gTimeSource;
-  bool cur_time = !gTimeSource.IsValid();
-  if (cur_time) this_now = wxDateTime::Now();
-  time_t t_this_now = this_now.GetTicks();
+  QDateTime this_now = gTimeSource;
+  bool cur_time = !gTimeSource.isValid();
+  if (cur_time) this_now = QDateTime::currentDateTime();
+  time_t t_this_now = this_now.toSecsSinceEpoch();
 
   wxPen *pblack_pen = wxThePenList->FindOrCreatePen(GetGlobalColor("UINFD"), 1,
                                                     wxPENSTYLE_SOLID);
@@ -13693,7 +13693,7 @@ void ChartCanvas::DrawAllCurrentsInBBox(ocpnDC &dc, LLBBox &BBox) {
   double lat_last = 0.;
   // arrow size for Raz Blanchard : 12 knots north
   double marge = 0.2;
-  bool cur_time = !gTimeSource.IsValid();
+  bool cur_time = !gTimeSource.isValid();
 
   double true_scale_display = floor(VPoint.chart_scale / 100.) * 100.;
   bDrawCurrentValues = true_scale_display < g_Show_Target_Name_Scale;

@@ -142,7 +142,7 @@ extern S57QueryDialog *g_pObjectQueryDialog;
 extern options *g_options;
 extern bool g_bSleep;
 androidUtilHandler *g_androidUtilHandler;
-extern wxDateTime g_start_time;
+extern QDateTime g_start_time;
 extern RouteManagerDialog *pRouteManagerDialog;
 extern About *g_pAboutDlgLegacy;
 extern bool g_bFullscreen;
@@ -4623,11 +4623,12 @@ int doAndroidPersistState() {
       watching_anchor |= (pAnchorWatchPoint2->GetIconName().StartsWith(
           _T("anchor")));  // pjotrc 2010.02.15
 
+    QDateTime now_qq = QDateTime::currentDateTime();
+    qint64 uptime_secs = g_start_time.secsTo(now_qq);  // seconds
     wxDateTime now = wxDateTime::Now();
-    wxTimeSpan uptime = now.Subtract(g_start_time);
 
     if (!watching_anchor && (g_bCruising) && (gSog < 0.5) &&
-        (uptime.IsLongerThan(wxTimeSpan(0, 30, 0, 0))))  // pjotrc 2010.02.15
+        (uptime_secs > 30 * 60))  // pjotrc 2010.02.15
     {
       //    First, delete any single anchorage waypoint closer than 0.25 NM from
       //    this point This will prevent clutter and database congestion....

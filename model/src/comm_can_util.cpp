@@ -119,16 +119,16 @@ bool CanHeader::IsFastMessage() const {
 //  FastMessage implementation
 
 bool FastMessageMap::IsEntryExpired(unsigned int i) {
-  return (wxDateTime::Now() - entries[i].time_arrived >
-          wxTimeSpan(0, 0, kEntryMaxAgeSecs));
+  return entries[i].time_arrived.secsTo(QDateTime::currentDateTime()) >
+         kEntryMaxAgeSecs;
 }
 
 void FastMessageMap::CheckGc() {
   bool last_run_over_age =
-      (wxDateTime::Now() - last_gc_run) > wxTimeSpan(0, 0, kGcIntervalSecs);
+      last_gc_run.secsTo(QDateTime::currentDateTime()) > kGcIntervalSecs;
   if (last_run_over_age || entries.size() > kGcThreshold) {
     GarbageCollector();
-    last_gc_run = wxDateTime::Now();
+    last_gc_run = QDateTime::currentDateTime();
   }
 }
 
@@ -187,7 +187,7 @@ bool FastMessageMap::InsertEntry(const CanHeader header,
     entries[index].sid = static_cast<unsigned int>(data[0]);
     entries[index].expected_length = static_cast<unsigned int>(data[1]);
     entries[index].header = header;
-    entries[index].time_arrived = wxDateTime::Now();
+    entries[index].time_arrived = QDateTime::currentDateTime();
 
     entries[index].data.resize(total_data_len);
     memcpy(&entries[index].data[0], &data[2], 6);
@@ -233,7 +233,7 @@ bool FastMessageMap::AppendEntry(const CanHeader header,
     entries.erase(entries.begin() + position);
     // Dropped Frame Statistics
     if (dropped_frames == 0) {
-      dropped_frame_time = wxDateTime::Now();
+      dropped_frame_time = QDateTime::currentDateTime();
       dropped_frames += 1;
     } else {
       dropped_frames += 1;

@@ -43,12 +43,13 @@
 #include <setupapi.h>
 #endif
 
+#include <QDateTime>
+
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
 #include <wx/wx.h>
 #endif
 
-#include <wx/datetime.h>
 #include <wx/event.h>
 #include <wx/log.h>
 #include <wx/string.h>
@@ -704,7 +705,7 @@ void *GARMIN_Serial_Thread::Entry() {
   m_bconnected = false;
 
   bool not_done = true;
-  wxDateTime last_rx_time;
+  QDateTime last_rx_time;
 
 #ifdef USE_GARMINHOST
   //    The main loop
@@ -779,13 +780,13 @@ void *GARMIN_Serial_Thread::Entry() {
           auto msg = snt.Sentence.ToStdString();
           m_send_msg_func(std::vector<unsigned char>(msg.begin(), msg.end()));
 
-          last_rx_time = wxDateTime::Now();
+          last_rx_time = QDateTime::currentDateTime();
         }
       } else {
-        wxDateTime now = wxDateTime::Now();
-        if (last_rx_time.IsValid()) {
-          wxTimeSpan delta_time = now - last_rx_time;
-          if (delta_time.GetSeconds() > 5) {
+        QDateTime now = QDateTime::currentDateTime();
+        if (last_rx_time.isValid()) {
+          qint64 delta_time = last_rx_time.secsTo(now);  // seconds
+          if (delta_time > 5) {
             m_bdetected = false;
             m_bconnected = false;
             Garmin_GPS_ClosePortVerify();

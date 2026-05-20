@@ -74,13 +74,16 @@ void NotificationManager::ScrubNotificationDirectory(int days_to_retain) {
                             wxFileName::GetPathSeparator();
   if (!wxDirExists(note_directory)) return;
 
-  wxDateTime now = wxDateTime::Now();
+  QDateTime now = QDateTime::currentDateTime();
   wxArrayString file_list;
   wxDir::GetAllFiles(note_directory, &file_list);
   for (size_t i = 0; i < file_list.GetCount(); i++) {
     wxFileName fn(file_list[i]);
-    wxTimeSpan age = now.Subtract(fn.GetModificationTime());
-    if (age.IsLongerThan(wxTimeSpan(days_to_retain * 24))) {
+    QDateTime mtime =
+        QDateTime::fromSecsSinceEpoch(fn.GetModificationTime().GetTicks());
+    qint64 age_secs = mtime.secsTo(now);  // seconds
+    qint64 retain_secs = static_cast<qint64>(days_to_retain) * 24 * 3600;
+    if (age_secs > retain_secs) {
       wxRemoveFile(file_list[i]);
     }
   }
@@ -103,10 +106,8 @@ void NotificationManager::PersistNotificationAsFile(
   file_name.Prepend(note_directory);
   file_name += ".txt";
 
-  wxDateTime act_time = wxDateTime(_notification->GetActivateTime());
-  // Preserve the wxDateTime's Unix epoch in a UTC QDateTime.
-  QDateTime act_time_q =
-      QDateTime::fromSecsSinceEpoch(act_time.GetTicks(), Qt::UTC);
+  QDateTime act_time_q = QDateTime::fromSecsSinceEpoch(
+      static_cast<qint64>(_notification->GetActivateTime()), Qt::UTC);
   wxString stime = wxString::Format(
       "%s",
       QString_to_wxString(ocpn::toUsrDateTimeFormat(

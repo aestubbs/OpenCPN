@@ -25,6 +25,8 @@
 #ifndef GUI_VARS_H_
 #define GUI_VARS_H_
 
+#include <QDateTime>
+
 #include <wx/colour.h>
 #include <wx/string.h>
 
@@ -104,9 +106,9 @@ extern unsigned gs_plib_flags;
 extern wxColour g_colourOwnshipRangeRingsColour;
 extern wxColour g_colourTrackLineColour;
 
-extern wxDateTime g_loglast_time;
-extern wxDateTime g_start_time;
-extern wxDateTime gTimeSource;
+extern QDateTime g_loglast_time;
+extern QDateTime g_start_time;
+extern QDateTime gTimeSource;
 
 extern wxString ChartListFileName;
 extern wxString g_csv_locn;

@@ -31,6 +31,8 @@
 #include <math.h>
 #include <time.h>
 
+#include <QDateTime>
+
 #include "model/georef.h"
 #include "model/logger.h"
 
@@ -806,7 +808,7 @@ bool TCMgr::GetTideOrCurrentMeters(time_t t, int idx, float &tcvalue,
     return false;
 }
 
-extern wxDateTime gTimeSource;
+extern QDateTime gTimeSource;
 
 bool TCMgr::GetTideOrCurrent15(time_t t_d, int idx, float &tcvalue, float &dir,
                                bool &bnew_val) {
@@ -820,8 +822,13 @@ bool TCMgr::GetTideOrCurrent15(time_t t_d, int idx, float &tcvalue, float &dir,
   }
 
   //    Figure out this computer timezone minute offset
-  wxDateTime this_now = gTimeSource;  // wxDateTime::Now();
-  if (this_now.IsValid() == false) this_now = wxDateTime::Now();
+  // gTimeSource is QDateTime; bridge to wxDateTime via Unix epoch since the
+  // routine below depends on wxDateTime IsDST()/ToGMT() semantics.
+  wxDateTime this_now;
+  if (!gTimeSource.isValid())
+    this_now = wxDateTime::Now();
+  else
+    this_now = wxDateTime((time_t)gTimeSource.toSecsSinceEpoch());
   wxDateTime this_gmt = this_now.ToGMT();
   wxTimeSpan diff = this_gmt.Subtract(this_now);
   int diff_mins = diff.GetMinutes();
