@@ -30,10 +30,15 @@
 #include "color_handler.h"
 #include "displays.h"
 
-// Forward-declare the plugin-ABI font-colour helper without pulling in
-// the full ocpn_plugin.h surface; we only need it to wrap as the
-// s52plib font-colour resolver.
+// Forward-declare the plugin-ABI font helpers without pulling in the
+// full ocpn_plugin.h surface; we only need them to wrap as s52plib
+// host hooks.
 extern wxColour GetFontColour_PlugIn(wxString TextElement);
+extern wxFont *FindOrCreateFont_PlugIn(int point_size, wxFontFamily family,
+                                       wxFontStyle style, wxFontWeight weight,
+                                       bool underline,
+                                       const wxString &facename,
+                                       wxFontEncoding encoding);
 #include "navutil.h"
 #include "ocpn_platform.h"
 #include "o_senc.h"
@@ -55,6 +60,7 @@ void LoadS57() {
       [](const wxString &name) { return GetGlobalColor(name); });
   s52plib::SetFontColourResolver(
       [](const wxString &name) { return GetFontColour_PlugIn(name); });
+  s52plib::SetFontFactory(&FindOrCreateFont_PlugIn);
 
   //  Start a SENC Thread manager
   g_SencThreadManager = new SENCThreadManager();

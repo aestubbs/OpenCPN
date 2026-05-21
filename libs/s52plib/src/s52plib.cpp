@@ -131,10 +131,35 @@ void s52plib::SetFontColourResolver(FontColourResolver fn) {
     return wxColour(0, 0, 0);
   };
 }
-wxFont *FindOrCreateFont_PlugIn(
-    int point_size, wxFontFamily family, wxFontStyle style, wxFontWeight weight,
-    bool underline = false, const wxString &facename = wxEmptyString,
-    wxFontEncoding encoding = wxFONTENCODING_DEFAULT);
+
+// FontFactory -- wxFont* by parameter tuple. Library default uses
+// wx's process-wide font cache (wxTheFontList) so it functions
+// standalone; the legacy host overrides with its FontMgr-backed
+// implementation so existing visual style is preserved. The returned
+// pointer is non-owning -- standard wxFont caches keep these alive
+// for the process lifetime.
+static s52plib::FontFactory g_font_factory =
+    [](int point_size, wxFontFamily family, wxFontStyle style,
+       wxFontWeight weight, bool underline, const wxString &facename,
+       wxFontEncoding encoding) -> wxFont * {
+  return wxTheFontList->FindOrCreateFont(point_size, family, style, weight,
+                                         underline, facename, encoding);
+};
+
+void s52plib::SetFontFactory(FontFactory fn) {
+  g_font_factory = fn ? fn
+                      : [](int ps, wxFontFamily f, wxFontStyle s,
+                           wxFontWeight w, bool u, const wxString &fn,
+                           wxFontEncoding e) -> wxFont * {
+    return wxTheFontList->FindOrCreateFont(ps, f, s, w, u, fn, e);
+  };
+}
+// FindOrCreateFont_PlugIn and GetOCPNScaledFont_PlugIn previously
+// declared here. The first is now injected via
+// s52plib::SetFontFactory() (P2.8.0d.4); the second has no
+// intra-library caller. The plugin-ABI shims in ocpn_plugin_gui.cpp
+// keep both symbols for external plugins.
+
 wxFont *GetOCPNScaledFont_PlugIn(wxString TextElement, int default_size = 0);
 float GetOCPNChartScaleFactor_Plugin();
 // `GetpSharedDataLocation()` used to be declared here; the only call
@@ -2257,9 +2282,9 @@ bool s52plib::RenderText(wxDC *pdc, S52_TextC *ptext, int x, int y,
       wxFont *pf = ptext->pFont;
       int old_size = pf->GetPointSize();
       int new_size = old_size * scale_factor;
-      wxFont *scaled_font =
-          FindOrCreateFont_PlugIn(new_size, pf->GetFamily(), pf->GetStyle(),
-                                  pf->GetWeight(), false, pf->GetFaceName());
+      wxFont *scaled_font = g_font_factory(
+          new_size, pf->GetFamily(), pf->GetStyle(), pf->GetWeight(),
+          /*underline=*/false, pf->GetFaceName(), wxFONTENCODING_DEFAULT);
       pdc->SetFont(*scaled_font);
     } else {
       pdc->SetFont(*(ptext->pFont));
@@ -3822,9 +3847,9 @@ void s52plib::SetupSoundingFont() {
     double font_size_mm = 0;
     bool not_done = true;
     while ((point_size < 32) && not_done) {
-      wxFont *tentativeFont = FindOrCreateFont_PlugIn(
-          point_size, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, fontWeight, false,
-          fontFacename);
+      wxFont *tentativeFont = g_font_factory(
+          point_size, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, fontWeight,
+          /*underline=*/false, fontFacename, wxFONTENCODING_DEFAULT);
       sdc.GetTextExtent(_T("0"), &charWidth, &charHeight, &charDescent, NULL,
                         tentativeFont);  // measure the text
       double font_size_mm = (double)(charHeight - charDescent) / GetPPMM();
@@ -3862,16 +3887,16 @@ void s52plib::SetupSoundingFont() {
       m_texSoundings.Delete();
       m_texSoundings.SetContentScaleFactor(m_ContentScaleFactor);
 
-      m_soundFont = FindOrCreateFont_PlugIn(point_size, wxFONTFAMILY_SWISS,
-                                            wxFONTSTYLE_NORMAL, fontWeight,
-                                            false, fontFacename);
+      m_soundFont = g_font_factory(
+          point_size, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, fontWeight,
+          /*underline=*/false, fontFacename, wxFONTENCODING_DEFAULT);
       m_texSoundings.Build(m_soundFont, scale_factor,
                            m_dipfactor);  // texSounding owns the font
     }
   } else {
-    m_soundFont = FindOrCreateFont_PlugIn(point_size, wxFONTFAMILY_SWISS,
-                                          wxFONTSTYLE_NORMAL, fontWeight, false,
-                                          fontFacename);
+    m_soundFont = g_font_factory(
+        point_size, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, fontWeight,
+        /*underline=*/false, fontFacename, wxFONTENCODING_DEFAULT);
     m_pdc->SetFont(*m_soundFont);
   }
 

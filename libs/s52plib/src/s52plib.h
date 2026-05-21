@@ -224,6 +224,20 @@ public:
   using FontColourResolver = std::function<wxColour(const wxString &)>;
   static void SetFontColourResolver(FontColourResolver fn);
 
+  /** Find or create a wxFont matching the given parameters. Lifetime
+   *  of the returned pointer is the host's responsibility (the legacy
+   *  `FindOrCreateFont_PlugIn` returns a font owned by the app-wide
+   *  FontMgr cache; the library only borrows it). Called from
+   *  RenderText and SetupSoundingFont. */
+  using FontFactory = std::function<wxFont *(int point_size,
+                                             wxFontFamily family,
+                                             wxFontStyle style,
+                                             wxFontWeight weight,
+                                             bool underline,
+                                             const wxString &facename,
+                                             wxFontEncoding encoding)>;
+  static void SetFontFactory(FontFactory fn);
+
   // TODO: SetPPM, SetDisplayWidth etc. should be combined to be set together by
   // pointing them to info about current monitor
   /**
