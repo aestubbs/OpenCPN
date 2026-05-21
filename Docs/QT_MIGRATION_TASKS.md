@@ -45,10 +45,14 @@ Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
       Added `OCPN_USE_QT_GUI` option (OFF — placeholder for the Phase 3 GUI switch).
       Temporary hint removed from `libs/observable`. Full configure verified:
       exit 0, finds Qt 6.11.0, wx build still works.
-- [ ] **P0.4** Scaffold an empty Qt app — `qt_add_executable` + `qt_add_qml_module`
-      — that shows a blank `QQuickWindow`.
+- [x] **P0.4** Scaffolded `opencpn-qt` — `qt_add_executable` + `qt_add_qml_module`
+      with `Main.qml` and a `ChartCanvas` `QQuickItem`. Sibling target to the
+      legacy wx `OpenCPN`; both build clean. (`gui/qt/main.cpp`,
+      `gui/qt/qml/Main.qml`, `gui/qt/CMakeLists.txt`.)
 - [ ] **P0.5** Get the empty Qt app building in CI for desktop (Win/macOS/Linux).
-- [ ] **P0.6** Decide repo layout for new code (`core/`, `render/`, `ui/`, `plugins-qt/`).
+- [x] **P0.6** Repo layout decided: new Qt-Quick code lives in `gui/qt/`
+      (subdir of the existing `gui/` tree — closest to what it'll
+      eventually replace; the legacy `gui/src/` retires in Phase 3).
 - [ ] **P0.7** Stand up an image-diff test harness skeleton (needed later for
       `s52plib` regression testing — set up early).
 
@@ -704,13 +708,16 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
       across a fixture chart set (raster + vector + AIS overlays); each port
       step compares against the captured baseline. *(dep: P0.7; original
       P2.11 promoted to a prerequisite.)*
-- [ ] **P2.1** Chart canvas `QQuickItem` subclass with the two top
-      `QSGTransformNode`s — `WorldAnchoredRoot` (viewport transform —
+- [x] **P2.1** Chart canvas `QQuickItem` subclass with the two top
+      `QSGTransformNode`s — `m_world_anchored_root` (viewport transform —
       pan/zoom mutates one matrix, whole subtree follows) and
-      `DisplayAnchoredRoot` (identity transform). The QML HUD lives in
-      QML, layered above the canvas in the QML tree — no scene-graph
-      node, declarative `Q_PROPERTY` bindings to the (already QObject)
-      model classes from P1.
+      `m_display_anchored_root` (identity transform). QML HUD lives in
+      `Main.qml` layered above the canvas in the QML tree — no scene-graph
+      node, declarative `Q_PROPERTY` bindings will hook to the (already
+      QObject) Phase 1 model classes. Skeleton ships with two placeholder
+      rects (red world-anchored slowly rotating to demonstrate the
+      transform path; fixed blue display-anchored) — removed when Layer /
+      LayerCompositor populate the subtrees.
 - [ ] **P2.2** `Layer` abstraction: small concrete class (`anchor`,
       `visible`, `zOrder`, `opacity`, `owner`, `id`, plus an internal
       `QSGNode* subtree`). Most layer subclasses just maintain their own
