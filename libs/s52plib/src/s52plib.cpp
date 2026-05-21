@@ -98,7 +98,24 @@ s52plib *ps52plib;  ///< Global instance
 #include "ocpn_plugin.h"
 #else
 wxColour GetFontColour_PlugIn(wxString TextElement);
-extern "C" bool GetGlobalColor(wxString colorName, wxColour *pcolour);
+// `GetGlobalColor` used to be declared here as an extern host helper.
+// Replaced with the s52plib::SetGlobalColorResolver() injection hook
+// (P2.8.0d.2). The legacy `bool GetGlobalColor(wxString, wxColour*)` in
+// gui/src/ocpn_plugin_gui.cpp is still part of the plugin ABI but is
+// no longer reached from s52plib's internals.
+static s52plib::GlobalColorResolver g_global_color_resolver =
+    [](const wxString &) -> wxColour {
+  // Default no-op resolver -- returns a visible-fail magenta so unset
+  // colour tokens stand out. Host code (legacy OpenCPN, opencpn-qt)
+  // overrides this via s52plib::SetGlobalColorResolver().
+  return wxColour(255, 0, 255);
+};
+
+void s52plib::SetGlobalColorResolver(GlobalColorResolver fn) {
+  g_global_color_resolver = fn ? fn : [](const wxString &) -> wxColour {
+    return wxColour(255, 0, 255);
+  };
+}
 wxFont *FindOrCreateFont_PlugIn(
     int point_size, wxFontFamily family, wxFontStyle style, wxFontWeight weight,
     bool underline = false, const wxString &facename = wxEmptyString,
@@ -6884,8 +6901,7 @@ int s52plib::RenderMPS(ObjRazRules *rzRules, Rules *rules) {
 
     Rules *rules = rzRules->mps->cs_rules->Item(ip);
     bool bColorSet = false;
-    wxColor symColor;
-    GetGlobalColor(_T("SNDG2"), &symColor);
+    wxColor symColor = g_global_color_resolver(_T("SNDG2"));
 
     while (rules) {
       //  Render a raster or vector symbol, as specified by LUP rules
@@ -6903,7 +6919,7 @@ int s52plib::RenderMPS(ObjRazRules *rzRules, Rules *rules) {
         // Parse the first rule to determine the color
         if (!bColorSet) {
           char symColorT = rules->razRule->name.SYNM[5];
-          if (symColorT == 'G') GetGlobalColor(_T("SNDG1"), &symColor);
+          if (symColorT == 'G') symColor = g_global_color_resolver(_T("SNDG1"));
           bColorSet = true;
         }
 
@@ -7530,9 +7546,7 @@ int s52plib::RenderCARC_VBO(ObjRazRules *rzRules, Rules *rules) {
        //      Undocumented "feature":  Pen must be fully specified <<<BEFORE>>>
        setting into DC pdc->SetPen ( *pthispen );
        */
-      // wxColour c = GetGlobalColor( _T ( "CHBLK" ) );
-      wxColour c;
-      GetGlobalColor(_T ( "CHBLK" ), &c);
+      wxColour c = g_global_color_resolver(_T("CHBLK"));
 
       float a = (sectr1 - 90) * PI / 180;
       int x = r.x + (int)(leg_len * cosf(a));

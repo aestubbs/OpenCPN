@@ -26,6 +26,7 @@
 #ifndef _S52PLIB_H_
 #define _S52PLIB_H_
 
+#include <functional>
 #include <vector>
 #include "s52s57.h"  //types
 
@@ -199,6 +200,24 @@ class s52plib {
 public:
   s52plib(const wxString &PLib, bool b_forceLegacy = false);
   ~s52plib();
+
+  // ---------------------------------------------------------------------
+  // Host hooks -- callbacks the library cannot satisfy from its own data.
+  //
+  // Process-wide (static): set once before constructing any s52plib
+  // instance. Defaults are sensible no-ops so the library still links
+  // and runs without a host registered, just with degraded visuals
+  // (default colours / fonts).
+  //
+  // P2.8.0d -- replaces the previous extern "C" host symbols that
+  // libs/s52plib was reaching for at link time, blocking it from being
+  // linked into anything except the legacy OpenCPN target.
+  // ---------------------------------------------------------------------
+
+  /** Resolve an S-52 named colour token (e.g. "DEPVS", "CHBLK", "SNDG1")
+   *  to a wxColour. Called from the symbol/pattern renderers. */
+  using GlobalColorResolver = std::function<wxColour(const wxString &)>;
+  static void SetGlobalColorResolver(GlobalColorResolver fn);
 
   // TODO: SetPPM, SetDisplayWidth etc. should be combined to be set together by
   // pointing them to info about current monitor

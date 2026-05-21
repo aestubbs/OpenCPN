@@ -27,6 +27,7 @@
 #include "model/gui_vars.h"
 
 #include "chart_ctx_factory.h"
+#include "color_handler.h"
 #include "displays.h"
 #include "navutil.h"
 #include "ocpn_platform.h"
@@ -38,6 +39,15 @@
 void LoadS57() {
   if (ps52plib)  // already loaded?
     return;
+
+  // Register the legacy app's named-colour resolver before constructing
+  // s52plib so rendering picks up the right colour table once
+  // S52_load_Plib finishes. Until P2.8.0d this happened implicitly via
+  // an extern `GetGlobalColor` symbol; the explicit registration was
+  // introduced when the library stopped depending on host symbols at
+  // link time.
+  s52plib::SetGlobalColorResolver(
+      [](const wxString &name) { return GetGlobalColor(name); });
 
   //  Start a SENC Thread manager
   g_SencThreadManager = new SENCThreadManager();
