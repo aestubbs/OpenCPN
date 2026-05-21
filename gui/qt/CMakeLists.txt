@@ -22,8 +22,14 @@ qt_add_qml_module(opencpn-qt
     layer.h
     layer_compositor.h
     layer_compositor.cpp
-    demo_layers.h
-    demo_layers.cpp
+    viewport.h
+    chart_provider.h
+    chart_layer.h
+    chart_layer.cpp
+    raster_chart_provider.h
+    raster_chart_provider.cpp
+    test_chart.h
+    test_chart.cpp
 )
 
 target_link_libraries(opencpn-qt PRIVATE

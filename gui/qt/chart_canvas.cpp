@@ -10,62 +10,73 @@
 /**
  * \file
  *
- * Implement chart_canvas.h -- ChartCanvas QQuickItem with a LayerCompositor.
+ * Implement chart_canvas.h.
  *
- * The canvas only owns the two top transform nodes; the LayerCompositor
- * (P2.3) populates them from registered Layer instances (P2.2). For the
- * scaffold we register two demo Layers (a rotating world-anchored rect,
- * a fixed display-anchored rect) that exercise the full plumbing.
+ * Owns the Viewport and the LayerCompositor. The compositor is fed a single
+ * ChartLayer wrapping a RasterChartProvider (test chart for the prototype).
+ * Mouse drag pans the Viewport; mouse wheel zooms about the cursor.
+ *
+ * Each frame, the WorldAnchored root's matrix is set from
+ * Viewport::transformMatrix(width, height) so all world-anchored Layers
+ * (chart, AIS, routes, ...) get the chart pan/zoom for free.
  */
 
 #include "chart_canvas.h"
 
-#include <cmath>
-
-#include <QColor>
-#include <QDateTime>
-#include <QRectF>
+#include <QMouseEvent>
+#include <QQuickWindow>
 #include <QSGNode>
 #include <QSGTransformNode>
+#include <QWheelEvent>
 
-#include "demo_layers.h"
+#include "chart_layer.h"
 #include "layer_compositor.h"
+#include "raster_chart_provider.h"
+#include "test_chart.h"
+#include "viewport.h"
 
 namespace ocpn::qtui {
 
+namespace {
+// Bounding box for the test chart -- a chunk of the North Sea.
+constexpr double kTestNorth = 55.0;
+constexpr double kTestSouth = 50.0;
+constexpr double kTestWest = 0.0;
+constexpr double kTestEast = 10.0;
+}  // namespace
+
 ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   setFlag(ItemHasContents, true);
+  setAcceptedMouseButtons(Qt::LeftButton);
+
+  m_viewport = std::make_unique<Viewport>();
+  // Centre on the test chart, with the scale ChartCanvas's QML host fits
+  // to. (User can zoom from here.)
+  m_viewport->setCenter((kTestNorth + kTestSouth) / 2.0,
+                        (kTestWest + kTestEast) / 2.0);
 
   m_compositor = std::make_unique<LayerCompositor>();
 
-  // Demo Layers -- removed when real Layers (raster chart, S52, AIS,
-  // routes) replace them. The rotating world-anchored rect exercises
-  // the Layer::dirty() → compositor → ChartCanvas::update() path; the
-  // fixed display-anchored rect exercises the second transform tier.
-  m_demo_rotating = new WorldRotatingRectLayer(
-      "demo.world.rotating-red",
-      QRectF(60, 60, 120, 120),
-      QColor(200, 60, 60));
-  m_compositor->addLayer(m_demo_rotating);
+  // Test chart -- RasterChartProvider holding a programmatically-drawn
+  // QImage. Real chart-DB integration plugs in by adding another
+  // ChartProvider implementation (KAP/BSB, MBTiles, S-52 vector via
+  // s52plib at P2.8).
+  auto* provider = new RasterChartProvider(
+      "demo.test-chart",
+      MakeTestChart(kTestNorth, kTestSouth, kTestWest, kTestEast),
+      kTestNorth, kTestSouth, kTestWest, kTestEast);
+  m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
 
-  m_compositor->addLayer(new DisplayRectLayer(
-      "demo.display.fixed-blue",
-      QRectF(20, 20, 80, 80),
-      QColor(60, 60, 200)));
-
-  // Drive the demo rect's rotation from a main-thread timer. Real Layers
-  // schedule updates off model signals (AisDecoder::info_update etc.) --
-  // no polling needed.
-  connect(&m_animation_timer, &QTimer::timeout, this, [this]() {
-    const double seconds = QDateTime::currentMSecsSinceEpoch() / 1000.0;
-    m_demo_rotating->setRotationDeg(std::fmod(seconds * 30.0, 360.0));
-  });
-  m_animation_timer.start(16);
-
-  // Any composition change (dirty Layer, z-order shuffle, add/remove)
-  // schedules a paint-node update.
+  // Repaint when:
+  //   - any Layer dirties (data change, visibility/z-order/opacity).
+  //   - the Viewport pans / zooms (transform matrix changes).
+  //   - the canvas resizes (transform depends on width/height).
   connect(m_compositor.get(), &LayerCompositor::changed, this,
           [this]() { update(); });
+  connect(m_viewport.get(), &Viewport::changed, this,
+          [this]() { update(); });
+  connect(this, &QQuickItem::widthChanged, this, [this]() { update(); });
+  connect(this, &QQuickItem::heightChanged, this, [this]() { update(); });
 }
 
 ChartCanvas::~ChartCanvas() = default;
@@ -81,13 +92,66 @@ QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,
     root->appendChildNode(m_display_anchored_root);
   }
 
-  // World-anchored root's transform stays identity for now -- when the
-  // chart viewport (pan/zoom) ships, it mutates this one matrix. The
-  // visible rotation comes from the demo Layer, not from this root.
+  // World-anchored root: the Viewport transform. Pan/zoom mutates this
+  // one matrix and all world-anchored Layer subtrees follow.
+  if (m_world_anchored_root) {
+    m_world_anchored_root->setMatrix(
+        m_viewport->transformMatrix(static_cast<int>(width()),
+                                    static_cast<int>(height())));
+  }
+  // Display-anchored root stays identity.
+
   m_compositor->syncToScene(m_world_anchored_root, m_display_anchored_root,
                             window());
-
   return root;
+}
+
+void ChartCanvas::mousePressEvent(QMouseEvent* event) {
+  if (event->button() == Qt::LeftButton) {
+    m_dragging = true;
+    m_drag_last_pos = event->position();
+    event->accept();
+  } else {
+    QQuickItem::mousePressEvent(event);
+  }
+}
+
+void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
+  if (m_dragging) {
+    const QPointF pos = event->position();
+    const QPointF delta = pos - m_drag_last_pos;
+    m_drag_last_pos = pos;
+    m_viewport->panBy(delta.x(), delta.y());
+    event->accept();
+    return;
+  }
+  QQuickItem::mouseMoveEvent(event);
+}
+
+void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
+  if (event->button() == Qt::LeftButton && m_dragging) {
+    m_dragging = false;
+    event->accept();
+  } else {
+    QQuickItem::mouseReleaseEvent(event);
+  }
+}
+
+void ChartCanvas::wheelEvent(QWheelEvent* event) {
+  // Vertical wheel: zoom. 120 units = one notch on a normal mouse wheel.
+  // Trackpads use smaller pixelDelta values; both feed into angleDelta.
+  const int deg = event->angleDelta().y() / 8;  // degrees (eighths)
+  if (deg == 0) {
+    QQuickItem::wheelEvent(event);
+    return;
+  }
+  // Each notch (15°) zooms by sqrt(2) -- four notches doubles/halves.
+  const double factor = std::pow(2.0, deg / 30.0);
+  const QPointF p = event->position();
+  m_viewport->zoomAt(p.x(), p.y(), factor,
+                     static_cast<int>(width()),
+                     static_cast<int>(height()));
+  event->accept();
 }
 
 }  // namespace ocpn::qtui

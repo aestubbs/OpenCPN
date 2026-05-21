@@ -13,21 +13,20 @@
  * ChartCanvas -- the QQuickItem that hosts the new Qt-Quick chart rendering.
  *
  * Three-tier scene-graph (per docs/QT_MIGRATION.md §5 + Phase 2 plan):
- *   - World-anchored subtree   : QSGTransformNode with the viewport matrix;
- *                                pan/zoom mutates one matrix, the whole
- *                                subtree follows. Hosts: chart tiles, S-52
- *                                vector objects, AIS targets, routes, tracks.
+ *   - World-anchored subtree   : QSGTransformNode driven by the Viewport's
+ *                                world→screen matrix; chart pan/zoom mutates
+ *                                this one matrix and the whole subtree
+ *                                follows. Hosts chart tiles, S-52 vector
+ *                                objects, AIS targets, routes, tracks.
  *   - Display-anchored subtree : identity QSGTransformNode for fixed-screen
  *                                overlays (radar/PPI, range rings, compass
  *                                rose, mini-map).
  *   - QML HUD                  : declarative QML items LAYERED ABOVE the
- *                                ChartCanvas in QML -- not a scene-graph
- *                                node; bound to QObject view-models via
- *                                Q_PROPERTY.
+ *                                ChartCanvas in QML.
  *
- * ChartCanvas owns a LayerCompositor (P2.3) that maintains the two anchored
- * subtrees from registered Layer instances (P2.2). The canvas itself only
- * holds the two top transform nodes and forwards updates to the compositor.
+ * Owns a `LayerCompositor` that maintains the two anchored subtrees from
+ * registered Layer instances, and a `Viewport` that's mutated by the
+ * canvas's mouse handlers (drag = pan, wheel = zoom about cursor).
  */
 
 #ifndef OCPN_QT_CHART_CANVAS_H_
@@ -35,18 +34,20 @@
 
 #include <memory>
 
+#include <QPointF>
 #include <QQuickItem>
-#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 class QSGNode;
 class QSGTransformNode;
+class QMouseEvent;
+class QWheelEvent;
 QT_END_NAMESPACE
 
 namespace ocpn::qtui {
 
 class LayerCompositor;
-class WorldRotatingRectLayer;
+class Viewport;
 
 class ChartCanvas : public QQuickItem {
   Q_OBJECT
@@ -60,22 +61,24 @@ protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
                            UpdatePaintNodeData* update_data) override;
 
+  void mousePressEvent(QMouseEvent* event) override;
+  void mouseMoveEvent(QMouseEvent* event) override;
+  void mouseReleaseEvent(QMouseEvent* event) override;
+  void wheelEvent(QWheelEvent* event) override;
+
 private:
-  // Non-owning pointers into the scene-graph tree we (re)build in
-  // updatePaintNode. The tree itself is owned by Qt's scene graph; we just
-  // remember the two top transform nodes so the compositor can attach
-  // Layer subtrees under them.
+  // Top transform nodes — non-owning pointers into the scene-graph tree
+  // (which is owned by Qt's scene graph); the LayerCompositor attaches
+  // Layer subtrees under each.
   QSGTransformNode* m_world_anchored_root = nullptr;
   QSGTransformNode* m_display_anchored_root = nullptr;
 
-  // The LayerCompositor owns all registered Layers and is in charge of
-  // populating the two transform roots from them.
   std::unique_ptr<LayerCompositor> m_compositor;
+  std::unique_ptr<Viewport> m_viewport;
 
-  // Demo Layer driven by an animation timer to validate the WorldAnchored
-  // transform path. Removed when real Layers replace the demos.
-  WorldRotatingRectLayer* m_demo_rotating = nullptr;
-  QTimer m_animation_timer;
+  // Drag state.
+  bool m_dragging = false;
+  QPointF m_drag_last_pos;
 };
 
 }  // namespace ocpn::qtui
