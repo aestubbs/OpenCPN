@@ -39,6 +39,7 @@ extern wxFont *FindOrCreateFont_PlugIn(int point_size, wxFontFamily family,
                                        bool underline,
                                        const wxString &facename,
                                        wxFontEncoding encoding);
+extern float GetOCPNChartScaleFactor_Plugin();
 #include "navutil.h"
 #include "ocpn_platform.h"
 #include "o_senc.h"
@@ -61,6 +62,7 @@ void LoadS57() {
   s52plib::SetFontColourResolver(
       [](const wxString &name) { return GetFontColour_PlugIn(name); });
   s52plib::SetFontFactory(&FindOrCreateFont_PlugIn);
+  s52plib::SetChartScaleFactorResolver(&GetOCPNChartScaleFactor_Plugin);
 
   //  Start a SENC Thread manager
   g_SencThreadManager = new SENCThreadManager();

@@ -238,6 +238,12 @@ public:
                                              wxFontEncoding encoding)>;
   static void SetFontFactory(FontFactory fn);
 
+  /** Return the user's chart-scale factor (typically in [0.5..2.0])
+   *  used to size soundings and symbols on hi-DPI displays. Called
+   *  every PrepareForRender. Default: 1.0. */
+  using ChartScaleFactorResolver = std::function<float()>;
+  static void SetChartScaleFactorResolver(ChartScaleFactorResolver fn);
+
   // TODO: SetPPM, SetDisplayWidth etc. should be combined to be set together by
   // pointing them to info about current monitor
   /**

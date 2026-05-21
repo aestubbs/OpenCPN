@@ -154,6 +154,17 @@ void s52plib::SetFontFactory(FontFactory fn) {
     return wxTheFontList->FindOrCreateFont(ps, f, s, w, u, fn, e);
   };
 }
+
+// ChartScaleFactorResolver -- user-configured chart-scale factor used
+// in PrepareForRender to size symbols/soundings on hi-DPI displays.
+// Default: 1.0 (no scaling adjustment) so the library is usable
+// standalone.
+static s52plib::ChartScaleFactorResolver g_chart_scale_factor_resolver =
+    []() -> float { return 1.0f; };
+
+void s52plib::SetChartScaleFactorResolver(ChartScaleFactorResolver fn) {
+  g_chart_scale_factor_resolver = fn ? fn : []() -> float { return 1.0f; };
+}
 // FindOrCreateFont_PlugIn and GetOCPNScaledFont_PlugIn previously
 // declared here. The first is now injected via
 // s52plib::SetFontFactory() (P2.8.0d.4); the second has no
@@ -161,7 +172,11 @@ void s52plib::SetFontFactory(FontFactory fn) {
 // keep both symbols for external plugins.
 
 wxFont *GetOCPNScaledFont_PlugIn(wxString TextElement, int default_size = 0);
-float GetOCPNChartScaleFactor_Plugin();
+
+// GetOCPNChartScaleFactor_Plugin previously declared here; replaced
+// with s52plib::SetChartScaleFactorResolver() (P2.8.0d.5). The
+// plugin-ABI symbol stays in gui/src/ocpn_plugin_gui.cpp for external
+// plugins.
 // `GetpSharedDataLocation()` used to be declared here; the only call
 // site (in `S52_load_Plib`) was replaced with a directory derived
 // from the PLib path itself (P2.8.0d).
@@ -11226,7 +11241,7 @@ void s52plib::PrepareForRender(VPointCompat *vp) {
   }
 #endif
 
-  float ChartScaleFactorExpNew = GetOCPNChartScaleFactor_Plugin();
+  float ChartScaleFactorExpNew = g_chart_scale_factor_resolver();
 
   if (ChartScaleFactorExpNew != m_ChartScaleFactorExp) {
     // Clear some cached data to handle new scale value.
