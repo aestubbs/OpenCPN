@@ -103,8 +103,12 @@ if (NOT QT_ANDROID)
   if (APPLE AND EXISTS "/opt/homebrew/opt/qt")
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/qt")
   endif ()
-  find_package(Qt6 REQUIRED COMPONENTS Core Gui Network SerialPort)
+  find_package(Qt6 REQUIRED COMPONENTS Core Gui Network SerialPort
+                                       Quick Qml QuickControls2)
   message(STATUS "Found Qt ${Qt6_VERSION}")
+  # qt_standard_project_setup() (Qt 6.3+) wires up qt_add_executable /
+  # qt_add_qml_module / qt_add_resources etc. used by the new gui/qt/ tree.
+  qt_standard_project_setup(REQUIRES 6.5)
 
   # Native QObject classes now live in headers shared with wxWidgets TUs.
   # QT_NO_KEYWORDS disables the signals/slots/emit macros (use Q_SIGNALS/
@@ -1555,6 +1559,13 @@ target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::s57-charts)
 
 add_subdirectory(libs/gui)
 target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::guilib)
+
+# New Qt-Quick chart-canvas prototype. Builds as a sibling executable
+# (opencpn-qt) to the legacy wx-based OpenCPN target. P0.4 / P2.1 of the
+# migration; eventually replaces the wx GUI in Phase 3.
+if (NOT QT_ANDROID)
+  add_subdirectory(gui/qt)
+endif ()
 
 if (NOT QT_ANDROID)
   # PlugInManager (gui/include/gui/pluginmanager.h) is a Q_OBJECT class for the
