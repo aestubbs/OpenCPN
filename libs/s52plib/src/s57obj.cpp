@@ -18,95 +18,52 @@
 /**
  * \file
  *
- *  S57 Chart Object
+ * S57 Chart Object -- the in-memory representation of one feature read
+ * from an ENC. The class declaration lives in s52s57.h (libs/s52plib's
+ * public header surface); the implementation was relocated here from
+ * gui/src/s57obj.cpp as part of P2.8.0b. opencpn-qt can now reach the
+ * symbol without pulling in the wx GUI layer, and the legacy OpenCPN
+ * target picks it up via libs/s52plib too -- both consumers go through
+ * the same library.
+ *
+ * The original include list was largely dead by inspection (ocpndc.h,
+ * dychart.h, navutil.h, ocpn_pixel.h, ocpn_platform.h, gdal/cpl_csv.h,
+ * s57chart.h, pluginmanager.h, gl_chart_canvas.h, o_senc.h, s52utils.h,
+ * wx/image.h, wx/wxprec.h, <map>, <algorithm> -- none of their symbols
+ * are referenced from this file). Trimmed to what is actually used.
  */
 
 #ifndef WX_PRECOMP
 #include "wx/wx.h"
 #endif  // precompiled headers
 
-#include "wx/image.h"  // for some reason, needed for msvc???
-#include "wx/tokenzr.h"
-#include <wx/textfile.h>
-
-#include "dychart.h"
-#include "ocpn_platform.h"
-
-#include "s52s57.h"
-#include "s52plib.h"
-
-#include "s57chart.h"
-
-#include "mygeom.h"
-#include "model/cutil.h"
-#include "model/georef.h"
-#include "navutil.h"  // for LogMessageOnce
-#include "ocpn_pixel.h"
-#include "ocpndc.h"
-#include "s52utils.h"
-
-#include "gdal/cpl_csv.h"
-#include "setjmp.h"
-
-#include "ogr_s57.h"
-
-#include "pluginmanager.h"  // for S57 lights overlay
-
-#include "o_senc.h"
-
-#ifdef __VISUALC__
-#include <wx/msw/msvcrt.h>
-#endif
-
-#ifdef ocpnUSE_GL
-#include "gl_chart_canvas.h"
-#endif
-
-#include <algorithm>  // for std::sort
-#include <map>
-
-#ifdef __MSVC__
-#define strncasecmp(x, y, z) _strnicmp(x, y, z)
-#endif
-
-#ifdef __VISUALC__
-#include <wx/msw/msvcrt.h>
-#endif
-
-// For compilers that support precompilation, includes "wx.h".
-#include <wx/wxprec.h>
-
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif
-
-#include <wx/image.h>  // for some reason, needed for msvc???
-#include <wx/textfile.h>
 #include <wx/string.h>
+#include <wx/textfile.h>
 #include <wx/tokenzr.h>
 
-#include "gdal/cpl_csv.h"
+#include <setjmp.h>
 
 #include "model/cutil.h"
 #include "model/georef.h"
 #include "model/gui_vars.h"
 
-#include "dychart.h"
+// bbox.h supplies LLBBox, transitively required by mygeom.h. The wx-side
+// callers picked this up through chcanv.h's include chain; here we have
+// to include it explicitly.
+#include "bbox.h"
 #include "mygeom.h"
-#include "navutil.h"  // for LogMessageOnce
-#include "ocpndc.h"
-#include "ocpn_pixel.h"
-#include "ocpn_platform.h"
-#include "ogr_s57.h"
-#include "o_senc.h"
-#include "pluginmanager.h"  // for S57 lights overlay
 #include "s52plib.h"
+// s52s57.h declares the S57Obj class and the OGRatt_t enum (OGR_INT /
+// OGR_REAL / OGR_STR) used in the attribute accessors below -- despite
+// the names, those are *not* from gdal/ogr_s57.h.
 #include "s52s57.h"
-#include "s52utils.h"
-#include "s57chart.h"
 
-#ifdef ocpnUSE_GL
-#include "gl_chart_canvas.h"
+#ifdef __VISUALC__
+#include <wx/msw/msvcrt.h>
+#endif
+
+#ifdef __MSVC__
+#define strncasecmp(x, y, z) _strnicmp(x, y, z)
 #endif
 
 //----------------------------------------------------------------------------------

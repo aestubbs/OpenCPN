@@ -10,6 +10,7 @@ SET(SRC
     src/s52cnsy.cpp
     src/s52utils.cpp
     src/s52shaders.cpp
+    src/s57obj.cpp        # relocated from gui/src/ in P2.8.0b
     src/TexFont.cpp
     src/DepthFont.cpp
     src/mygeom.cpp
