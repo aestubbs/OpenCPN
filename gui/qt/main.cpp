@@ -16,17 +16,28 @@
  * loads Main.qml; Main.qml hosts a ChartCanvas QQuickItem with the three-tier
  * scene-graph (World-anchored, Display-anchored) plus QML HUD layered above.
  *
+ * Now also initialises the S-52 vector-chart engine (P2.8a). The data
+ * directory containing S52RAZDS.RLE / chartsymbols.xml /
+ * rastersymbols-*.png is injected via the OCPN_QT_S57DATA_DIR compile
+ * definition (set in gui/qt/CMakeLists.txt to the source-tree
+ * data/s57data/ for development). Production installs will discover via
+ * QStandardPaths::AppDataLocation -- not implemented yet.
+ *
  * Builds as a sibling to the legacy wx-based OpenCPN executable; replaces it
  * in Phase 3.
- *
- * The S-52 vector-chart engine (s52_engine.{h,cpp}) sits in this directory
- * but is not wired in yet -- libs/s52plib needs a standalone-link refactor
- * first (P2.8.0 in docs/QT_MIGRATION_TASKS.md).
  */
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QString>
 #include <QSurfaceFormat>
+
+#include "s52_engine.h"
+
+#ifndef OCPN_QT_S57DATA_DIR
+#define OCPN_QT_S57DATA_DIR ""
+#endif
 
 int main(int argc, char* argv[]) {
   // Default to the platform's preferred surface; on macOS that's Metal via
@@ -36,7 +47,14 @@ int main(int argc, char* argv[]) {
   app.setOrganizationName("OpenCPN");
   app.setApplicationName("opencpn-qt");
 
+  // Initialise the S-52 engine before loading the QML so the status
+  // binding is current the moment Main.qml's HUD reads it.
+  ocpn::qtui::S52Engine s52;
+  const QString s57data = QString::fromUtf8(OCPN_QT_S57DATA_DIR);
+  if (!s57data.isEmpty()) s52.init(s57data);
+
   QQmlApplicationEngine engine;
+  engine.rootContext()->setContextProperty("s52", &s52);
   // QML module URI declared in CMakeLists qt_add_qml_module(URI opencpn.qt).
   engine.loadFromModule("opencpn.qt", "Main");
   if (engine.rootObjects().isEmpty()) return -1;

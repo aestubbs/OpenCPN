@@ -27,8 +27,10 @@ ApplicationWindow {
         anchors.fill: parent
     }
 
-    // Tier 3: QML HUD. Placeholder readout demonstrating the binding path
-    // that the AIS / nav-data / depth view-models will use in Phase 3.
+    // Tier 3: QML HUD. Two text items: the prototype label and a live
+    // binding to the S-52 engine status (Q_PROPERTY -> QML auto-rebinds
+    // on changed()). Demonstrates the binding path that AIS / nav-data /
+    // depth view-models will use in Phase 3.
     Text {
         anchors.right: parent.right
         anchors.top: parent.top
@@ -36,5 +38,14 @@ ApplicationWindow {
         text: qsTr("Phase 2 prototype")
         font.pointSize: 14
         color: "#202020"
+    }
+    Text {
+        id: s52Status
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: 12
+        text: s52 ? s52.status : qsTr("S-52: (no engine)")
+        font.pointSize: 11
+        color: s52 && s52.ok ? "#006400" : "#a00000"
     }
 }

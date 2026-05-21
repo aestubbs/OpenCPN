@@ -59,3 +59,9 @@ target_link_libraries(S52PLIB PRIVATE ocpn::tess2)
 # relocates here. Inverted as part of P2.8.0 (see
 # docs/QT_MIGRATION_TASKS.md).
 target_link_libraries(S52PLIB PUBLIC ocpn::model)
+# ocpn::model is an INTERFACE bundle of transitive deps; the actual
+# model source objects live in ocpn::model-src. Link both so any
+# consumer of libs/s52plib gets toSM/fromSM (georef.cpp) and
+# g_b_EnableVBO (gui_vars.cpp) -- referenced from the relocated
+# S57Obj impl (P2.8.0b).
+target_link_libraries(S52PLIB PUBLIC ocpn::model-src)
