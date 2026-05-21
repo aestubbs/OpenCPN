@@ -182,13 +182,9 @@ unsigned long connector_key::hash() const {
   return hash_fast32(k, sizeof k, 0);
 }
 
-//----------------------------------------------------------------------------------
-//      render_canvas_parms Implementation
-//----------------------------------------------------------------------------------
-
-render_canvas_parms::render_canvas_parms() { pix_buff = NULL; }
-
-render_canvas_parms::~render_canvas_parms() {}
+// render_canvas_parms ctor/dtor previously lived here; relocated to
+// libs/s52plib/src/render_canvas_parms.cpp in P2.8.0c so libs/s52plib
+// links standalone.
 
 static void PrepareForRender(ViewPort *pvp, s52plib *plib) {
   if (!plib) return;
