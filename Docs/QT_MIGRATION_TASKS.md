@@ -755,18 +755,70 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
 - [ ] **P2.7** Raster chart (KAP/BSB) Layer — `QSGImageNode` (built-in
       textured quad), one per chart-cell tile. No shader code.
       *(dep: P2.5)*
-- [ ] **P2.8** Port `s52plib` vector rendering output to scene-graph
-      geometry nodes. Largest task — `s52plib`'s `RenderObjectToGL` and
-      `RenderObjectToDC` (~hundreds of object types) get a third
-      output target: emit `QSGGeometry` + appropriate material into a
-      Layer subtree. Built-in materials handle most lines / polygons /
-      textured-icons; the residual custom shaders from P2.4 cover patterns
-      and AA-line caps. Chart text uses `QSGSimpleTextNode` (or
-      `QSGTextNode` via `QQuickWindow::createTextNode()` for richer
-      output) instead of `s52plib`'s `Helvetica.txf` texture-font sampler
-      — Qt's native text gives correct hinting / DPI scaling / Unicode /
-      complex-script support and removes the proprietary font-rendering
-      engine from the chart pipeline. *(dep: P2.4–2.6, P2.0)*
+- [ ] **P2.8** Vector-chart pipeline through `libs/s52plib`. Split into
+      four sub-phases because s52plib does not link standalone today — it
+      references symbols that live in `gui/src/` (`S57Obj`,
+      `render_canvas_parms`, `GetGlobalColor`, `GetpSharedDataLocation`,
+      `GetFontColour_PlugIn`, `FindOrCreateFont_PlugIn`,
+      `GetOCPNChartScaleFactor_Plugin`, plus `vGetLengthOfNormal` in
+      geoprim). Bringing those into the library is the prerequisite for
+      every step that follows.
+  - [ ] **P2.8.0** `libs/s52plib` standalone-link refactor. *No
+        functional change*; legacy `OpenCPN` and the new `opencpn-qt`
+        both link the library afterwards.
+    - [ ] **P2.8.0a** Add the missing `vGetLengthOfNormal` definition
+          in `libs/geoprim` (declared in `libs/geoprim/src/vector2D.h`
+          with no body — currently a latent unresolved symbol).
+    - [ ] **P2.8.0b** Move the `S57Obj` implementation from
+          `gui/src/s57obj.cpp` into `libs/s52plib/src/s57obj.cpp`. The
+          class is *declared* in `libs/s52plib/src/s52s57.h` already;
+          implementation lives in the wrong tree. Most of the file's
+          `#include`s are dead (`ocpndc.h`, `dychart.h`, `cpl_csv.h`,
+          `navutil.h`, `ocpn_pixel.h`, `s57chart.h`, `s52plib.h`,
+          `ocpn_platform.h` — none of their symbols are actually
+          referenced); drop them. Real deps: wx, `s52s57.h`, `mygeom.h`,
+          `model/cutil.h`, `model/georef.h`, `setjmp.h`.
+    - [ ] **P2.8.0c** Move `render_canvas_parms` ctor/dtor (two trivial
+          lines in `gui/src/s57chart.cpp`) into a new
+          `libs/s52plib/src/render_canvas_parms.cpp`.
+    - [ ] **P2.8.0d** Replace the host-callback symbols with
+          library-owned default implementations + injection setters:
+          `s52plib::SetGlobalColorResolver()`,
+          `SetSharedDataLocation()`, `SetFontResolver()`,
+          `SetChartScaleFactorResolver()`. Library has sensible
+          defaults; legacy `gui/src/` registers its existing
+          colour-table / plugin-font / platform-scale resolvers at
+          startup. Remove the now-duplicate definitions in
+          `gui/src/user_colors.cpp` (`GetGlobalColor` stays for non-s52
+          callers) and `gui/src/ocpn_plugin_gui.cpp` (`*_PlugIn`
+          helpers stay for plugin ABI — only the *call sites in
+          s52plib* change).
+    - [ ] **P2.8.0e** Verify (a) legacy `OpenCPN` still links + runs an
+          ENC chart unchanged; (b) `opencpn-qt` links `libs/s52plib`
+          with no `gui/src/` dep.
+  - [ ] **P2.8a** Wire `gui/qt/s52_engine.{h,cpp}` (already drafted)
+        into `opencpn-qt`'s build. Smoke test: load `S52RAZDS.RLE`,
+        report the presentation-library version + status in the QML
+        HUD. *(dep: P2.8.0)*
+  - [ ] **P2.8b** Synthetic S-57 chart rendered through
+        `s52plib::RenderObjectToDC` → `wxBitmap` → `QImage` →
+        `QSGTexture`. Bitmap-fallback ChartProvider; proves the
+        pipeline end-to-end before any scene-graph port.
+        *(dep: P2.8a)*
+  - [ ] **P2.8c** True scene-graph port — add
+        `s52plib::RenderObjectToQSG`. `RenderObjectToGL` and
+        `RenderObjectToDC` (~hundreds of object types) get a third
+        output target: emit `QSGGeometry` + appropriate material into
+        a Layer subtree. Built-in materials handle most lines /
+        polygons / textured-icons; the residual custom shaders from
+        P2.4 cover patterns and AA-line caps. Chart text uses
+        `QSGSimpleTextNode` (or `QSGTextNode` via
+        `QQuickWindow::createTextNode()` for richer output) instead of
+        `s52plib`'s `Helvetica.txf` texture-font sampler — Qt's native
+        text gives correct hinting / DPI scaling / Unicode /
+        complex-script support and removes the proprietary
+        font-rendering engine from the chart pipeline.
+        *(dep: P2.4–2.6, P2.0, P2.8b)*
 - [ ] **P2.9** Expose S52 display categories (Base / Standard / Other /
       Mariner) and viewing groups as chart sub-layers in the same
       compositor — surfacing what `s52plib` already tracks.

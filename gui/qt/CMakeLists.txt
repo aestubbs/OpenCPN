@@ -32,6 +32,12 @@ qt_add_qml_module(opencpn-qt
     test_chart.cpp
 )
 
+# s52_engine.{h,cpp} exist in this directory but are *not* added to the
+# build yet -- they require libs/s52plib to link standalone, which it
+# can't (it has unresolved symbols satisfied only by gui/src/ wx chart
+# engine files). See docs/QT_MIGRATION_TASKS.md P2.8 -- the standalone
+# refactor lands first, then we wire S52Engine in.
+
 target_link_libraries(opencpn-qt PRIVATE
   Qt6::Core
   Qt6::Gui

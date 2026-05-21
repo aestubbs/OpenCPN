@@ -18,6 +18,10 @@
  *
  * Builds as a sibling to the legacy wx-based OpenCPN executable; replaces it
  * in Phase 3.
+ *
+ * The S-52 vector-chart engine (s52_engine.{h,cpp}) sits in this directory
+ * but is not wired in yet -- libs/s52plib needs a standalone-link refactor
+ * first (P2.8.0 in docs/QT_MIGRATION_TASKS.md).
  */
 
 #include <QGuiApplication>
