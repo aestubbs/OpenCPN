@@ -97,7 +97,10 @@ s52plib *ps52plib;  ///< Global instance
 #ifdef BUILDING_PLUGIN
 #include "ocpn_plugin.h"
 #else
-wxColour GetFontColour_PlugIn(wxString TextElement);
+// GetFontColour_PlugIn previously declared here; the only call sites
+// (in RenderText) now go through s52plib::SetFontColourResolver()
+// (P2.8.0d.3). The plugin-ABI shim in ocpn_plugin_gui.cpp keeps the
+// symbol for external plugins.
 // `GetGlobalColor` used to be declared here as an extern host helper.
 // Replaced with the s52plib::SetGlobalColorResolver() injection hook
 // (P2.8.0d.2). The legacy `bool GetGlobalColor(wxString, wxColour*)` in
@@ -114,6 +117,18 @@ static s52plib::GlobalColorResolver g_global_color_resolver =
 void s52plib::SetGlobalColorResolver(GlobalColorResolver fn) {
   g_global_color_resolver = fn ? fn : [](const wxString &) -> wxColour {
     return wxColour(255, 0, 255);
+  };
+}
+
+// FontColourResolver -- chart text style colours ("ChartTexts" etc.).
+// Library default: opaque black (RGB 0,0,0). Loud-fail magenta would
+// blow out chart-label readability when no host is registered.
+static s52plib::FontColourResolver g_font_colour_resolver =
+    [](const wxString &) -> wxColour { return wxColour(0, 0, 0); };
+
+void s52plib::SetFontColourResolver(FontColourResolver fn) {
+  g_font_colour_resolver = fn ? fn : [](const wxString &) -> wxColour {
+    return wxColour(0, 0, 0);
   };
 }
 wxFont *FindOrCreateFont_PlugIn(
@@ -2219,7 +2234,7 @@ bool s52plib::RenderText(wxDC *pdc, S52_TextC *ptext, int x, int y,
         glEnable(GL_BLEND);
         glEnable(GL_TEXTURE_2D);
 
-        wxColour wcolor = GetFontColour_PlugIn(_("ChartTexts"));
+        wxColour wcolor = g_font_colour_resolver(_("ChartTexts"));
         f_cache->SetColor(wcolor);
 
         /* undo previous rotation to make text level */
@@ -2324,7 +2339,7 @@ bool s52plib::RenderText(wxDC *pdc, S52_TextC *ptext, int x, int y,
     }
 
     if (bdraw) {
-      wxColour wcolor = GetFontColour_PlugIn(_("ChartTexts"));
+      wxColour wcolor = g_font_colour_resolver(_("ChartTexts"));
 
       // If the user has not changed the color from BLACK, then use the color
       // specified in the S52 LUP

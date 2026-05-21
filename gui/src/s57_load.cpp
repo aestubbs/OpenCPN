@@ -29,6 +29,11 @@
 #include "chart_ctx_factory.h"
 #include "color_handler.h"
 #include "displays.h"
+
+// Forward-declare the plugin-ABI font-colour helper without pulling in
+// the full ocpn_plugin.h surface; we only need it to wrap as the
+// s52plib font-colour resolver.
+extern wxColour GetFontColour_PlugIn(wxString TextElement);
 #include "navutil.h"
 #include "ocpn_platform.h"
 #include "o_senc.h"
@@ -45,9 +50,11 @@ void LoadS57() {
   // S52_load_Plib finishes. Until P2.8.0d this happened implicitly via
   // an extern `GetGlobalColor` symbol; the explicit registration was
   // introduced when the library stopped depending on host symbols at
-  // link time.
+  // link time. Same story for the chart-text colour resolver (P2.8.0d.3).
   s52plib::SetGlobalColorResolver(
       [](const wxString &name) { return GetGlobalColor(name); });
+  s52plib::SetFontColourResolver(
+      [](const wxString &name) { return GetFontColour_PlugIn(name); });
 
   //  Start a SENC Thread manager
   g_SencThreadManager = new SENCThreadManager();

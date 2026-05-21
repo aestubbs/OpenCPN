@@ -219,6 +219,11 @@ public:
   using GlobalColorResolver = std::function<wxColour(const wxString &)>;
   static void SetGlobalColorResolver(GlobalColorResolver fn);
 
+  /** Resolve a chart-text style name (e.g. "ChartTexts") to its
+   *  configured colour. Called from RenderText. */
+  using FontColourResolver = std::function<wxColour(const wxString &)>;
+  static void SetFontColourResolver(FontColourResolver fn);
+
   // TODO: SetPPM, SetDisplayWidth etc. should be combined to be set together by
   // pointing them to info about current monitor
   /**
