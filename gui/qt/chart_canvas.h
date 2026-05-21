@@ -33,6 +33,7 @@
 #define OCPN_QT_CHART_CANVAS_H_
 
 #include <QQuickItem>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 class QSGNode;
@@ -59,6 +60,11 @@ private:
   // them.
   QSGTransformNode* m_world_anchored_root = nullptr;
   QSGTransformNode* m_display_anchored_root = nullptr;
+
+  // Drives the placeholder world-anchored-rect rotation in the scaffold.
+  // Removed when Layer / LayerCompositor populates the subtrees with real
+  // content; real Layers schedule their own updates off model signals.
+  QTimer m_animation_timer;
 };
 
 }  // namespace ocpn::qtui

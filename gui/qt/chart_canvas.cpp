@@ -26,6 +26,7 @@
 #include "chart_canvas.h"
 
 #include <QColor>
+#include <QDateTime>
 #include <QMatrix4x4>
 #include <QQuickWindow>
 #include <QSGNode>
@@ -36,14 +37,15 @@ namespace ocpn::qtui {
 
 ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   setFlag(ItemHasContents, true);
-  // The world-anchored transform will animate periodically while we have a
-  // placeholder under it, just to prove the transform-mutation path works.
-  // Drop this update tick once Layer subtrees take over.
-  connect(this, &QQuickItem::windowChanged, this,
-          [this](QQuickWindow* w) {
-            if (w) connect(w, &QQuickWindow::beforeRendering, this,
-                           [this]() { this->update(); }, Qt::DirectConnection);
-          });
+  // Drives the placeholder world-anchored-rect rotation. Calls update() from
+  // the main thread (QQuickItem::update() is thread-affine), which marks the
+  // item dirty so updatePaintNode() runs on the next frame. ~60 FPS.
+  //
+  // Real Layers will not poll like this -- they schedule update() in response
+  // to model signals (AisDecoder::info_update etc.). Remove with the
+  // placeholder rects.
+  connect(&m_animation_timer, &QTimer::timeout, this, [this]() { update(); });
+  m_animation_timer.start(16);
 }
 
 QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,
