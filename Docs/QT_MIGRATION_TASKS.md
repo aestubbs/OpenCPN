@@ -628,20 +628,127 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
 
 ## Phase 2 — Scene graph + LayerCompositor  (est. 10–16 wks)
 
-- [ ] **P2.1** Build the chart host `QQuickItem` with the two top nodes:
-      `WorldAnchoredRoot` (viewport transform) + `DisplayAnchoredRoot` (fixed transform).
-- [ ] **P2.2** Implement the `Layer` abstraction (anchor, visible, zOrder, opacity, owner, id).
-- [ ] **P2.3** Implement the `LayerCompositor` (two ordered stacks → the two top nodes).
-- [ ] **P2.4** Port the 6 GLSL shaders via `qsb` to `QShader`; build scene-graph materials.
-- [ ] **P2.5** Port the texture pipeline (`gl_tex_cache`/`gl_texture_mgr`) to `QSGTexture`.
-- [ ] **P2.6** Reimplement `ocpnDC` primitives — non-GL path on `QPainter`,
-      GL path on scene-graph geometry nodes.
-- [ ] **P2.7** Raster chart (KAP/BSB) Layer — textured quads.
-- [ ] **P2.8** Port `s52plib` vector rendering output to scene-graph geometry nodes.  *(dep: P2.4–2.6)*
-- [ ] **P2.9** Expose S52 display categories / viewing groups as chart sub-layers.
-- [ ] **P2.10** Per-layer `visible`/`zOrder`/`opacity` persistence via `QSettings`.
-- [ ] **P2.11** Image-diff regression suite: new renderer vs current GL renderer.  *(dep: P0.7)*
-- [ ] **P2.12** Performance profiling vs the current GL path; close gaps.
+**Revised 2026-05-21 after Phase 1 completion.** Phase 1 delivered a model
+layer that is Qt-typed end to end (`QColor`/`QPen`/`QImage`/`QFont`,
+`QObject` with signals/slots, `QString`/`QDateTime`/`QStringList`,
+`OcpnConfig`/`QSettings`, `QFile`/`QDir`, `QNetworkAccessManager`,
+`QJsonDocument`, `QThread`/`QTimer`/`QMutex`). Several Phase 2 tasks
+shrink as a consequence — what was originally "build the infrastructure"
+becomes "wire up existing primitives".
+
+### Implementation-option choices to settle in P2.1
+
+The chart canvas can be one of three Qt 6 types — choose deliberately:
+
+| Option | When right | Trade-off |
+|---|---|---|
+| **`QQuickItem` + scene-graph node tree** (recommended baseline) | Retained-mode 2D cartography, multiple layers, mix of textured quads + lines + polygons | Most ecosystem support, declarative composition, multi-backend (Metal/Vulkan/D3D/GL) automatically. Use built-in nodes/materials wherever possible. |
+| **`QQuickRhiItem`** (Qt 6.7+) | Need raw RHI access for a custom render pipeline | More code; lose the retained-mode dirty-tracking; only use if a layer's needs really exceed what scene-graph nodes give. |
+| **`QQuickFramebufferObject`** | Legacy GL-only path | OpenGL-only — skip. RHI replaces it in Qt 6. |
+
+For hot inner loops (e.g. AA-line shader, sounding-symbol instancing) we
+can drop into raw RHI via `QQuickWindow::beforeRendering`/`afterRendering`
+hooks **without** leaving the scene graph — best of both worlds.
+
+For built-in materials (no custom shader code): `QSGImageNode`,
+`QSGSimpleRectNode`, `QSGFlatColorMaterial`, `QSGVertexColorMaterial`,
+`QSGOpaqueTextureMaterial`, `QSGTextureMaterial`. The original "port 6
+shaders" estimate (old P2.4) is probably ~2–3 shaders once we account for
+how many old programs map to built-in materials.
+
+For composition (no custom code at all): `QSGTransformNode` (viewport
+transform → `WorldAnchoredRoot`), `QSGOpacityNode` (per-Layer opacity),
+`QSGClipNode` (clip to viewport).
+
+### Phase 1 deliverables that change Phase 2 scope
+
+| Phase 1 delivery | Phase 2 impact |
+|---|---|
+| `AisDecoder` / `comm_bridge` / many model classes are `QObject` with signals | Layer subscriptions are one-line `connect(...)`; no event-table porting |
+| Model uses `QColor`/`QPen`/`QBrush`/`QImage`/`QFont` (P1.14) | Renderer consumes Qt types directly; no wxBitmap→QImage step inside Layers |
+| `QImage` everywhere | `QQuickWindow::createTextureFromImage(QImage)` → `QSGTexture` is the texture pipeline |
+| `OcpnConfig` (`QSettings`) | Per-layer persistence is `cfg->value(key, def)` — trivial, no new infrastructure |
+| `QThread`/`QTimer`/`QMutex` everywhere | Chart-loading workers already use `QueuedConnection`; integrates with scene-graph update phase naturally |
+| `model/wx_qt_ui_types.h` bridge | Already handles `wxBitmap`⇄`QImage` for the plugin-rendering ABI boundary |
+| `QJsonDocument` | S52 lookup files / layer config / chart prefs use Qt JSON |
+
+### Revised task list
+
+- [ ] **P2.0** Image-diff regression harness — **prerequisite**, blocks every
+      visual port. Capture reference frames from the current GL renderer
+      across a fixture chart set (raster + vector + AIS overlays); each port
+      step compares against the captured baseline. *(dep: P0.7; original
+      P2.11 promoted to a prerequisite.)*
+- [ ] **P2.0a** Plugin-rendering ABI bridge plan — decide how plugin
+      `RenderOverlay(wxMemoryDC*)` / `RenderGLOverlay(wxGLContext*)` /
+      chart `PlugInChartBase::RenderRegionView()` (returns `wxBitmap&`)
+      work in the new renderer. `wxBitmap` outputs upload through
+      `WxBitmapToQImage` (P1.14) → `QSGTexture` and composite as a Layer.
+      `RenderGLOverlay` is the hard case — needs an interop story (offscreen
+      FBO that yields a `QImage`, or a new `RenderOverlayQt` ABI extension
+      for Qt-aware plugins). Document the choice before P2.6.
+- [ ] **P2.1** Chart canvas `QQuickItem` subclass with the two top
+      `QSGTransformNode`s: `WorldAnchoredRoot` (viewport transform —
+      pan/zoom mutates one matrix, whole subtree follows) +
+      `DisplayAnchoredRoot` (identity transform). Pick canvas type per the
+      table above (recommended: `QQuickItem` + node tree).
+- [ ] **P2.2** `Layer` abstraction: small concrete class (`anchor`,
+      `visible`, `zOrder`, `opacity`, `owner`, `id`, plus an internal
+      `QSGNode* subtree`). Most layer subclasses just maintain their own
+      subtree on data updates; no virtual rendering API needed beyond
+      `updateSubtree(QSGNode* parent)`.
+- [ ] **P2.3** `LayerCompositor`: two ordered `QList<Layer*>` stacks fed
+      into the two top transform nodes. Re-orders on `zOrder` change,
+      hides on `visible` toggle, wraps in `QSGOpacityNode` for opacity.
+      ~100 LOC.
+- [ ] **P2.4** Materials catalog — enumerate the ~6 current GL shader
+      programs, map each to a built-in `QSGMaterial` where possible,
+      identify the ones that genuinely need a custom `QSGMaterialShader`
+      (`QShader` compiled from GLSL via `qsb`). Expected residual: ~2–3
+      custom shaders (pattern fills, AA-line caps).
+- [ ] **P2.5** Texture pipeline — `gl_tex_cache`/`gl_texture_mgr` already
+      run on Qt threads (P1.11) and produce `QImage` (P1.14). Wrap with
+      `QQuickWindow::createTextureFromImage(QImage,
+      QQuickWindow::TextureCanUseAtlas)` to produce `QSGTexture`s. Keep
+      LZ-compressed on-disk format; decompress to `QImage` at load.
+- [ ] **P2.6** Reimplement `ocpnDC` primitives.
+      Non-GL path → `QPainter` (now HW-accelerated via the RHI backend).
+      GL path → `QSGGeometryNode` with built-in materials.
+      Plugin compat: `ocpnDC` keeps a `wxDC`-flavoured surface for the
+      plugin ABI; outputs bridge through `WxBitmapToQImage` → `QSGTexture`
+      for compositing.
+- [ ] **P2.7** Raster chart (KAP/BSB) Layer — `QSGImageNode` (built-in
+      textured quad), one per chart-cell tile. No shader code.
+      *(dep: P2.5)*
+- [ ] **P2.8** Port `s52plib` vector rendering output to scene-graph
+      geometry nodes. Largest task — `s52plib`'s `RenderObjectToGL` and
+      `RenderObjectToDC` (~hundreds of object types) get a third
+      output target: emit `QSGGeometry` + appropriate material into a
+      Layer subtree. Built-in materials handle most lines / polygons /
+      textured-icons; the residual custom shaders from P2.4 cover patterns
+      and AA-line caps. *(dep: P2.4–2.6, P2.0)*
+- [ ] **P2.9** Expose S52 display categories (Base / Standard / Other /
+      Mariner) and viewing groups as chart sub-layers in the same
+      compositor — surfacing what `s52plib` already tracks.
+- [ ] **P2.10** Per-layer `visible`/`zOrder`/`opacity` persistence via
+      `OcpnConfig` (P1.9 — already `QSettings`-backed) — single
+      `LayerCompositor::SaveState()/LoadState()` pair, ~30 LOC.
+- [ ] **P2.11** AIS / route / track / waypoint Layers — reactive `QObject`
+      Layer subclasses that `connect(...)` to `g_pAIS->info_update`,
+      `g_pRouteMan` signals, etc. (all already QObjects after P1.11).
+      Subtree rebuilds on signal. *Originally part of Phase 3 (P3.3); the
+      QObject-emitting model means these are cheaper to do alongside the
+      scene-graph work and validate the LayerCompositor with non-trivial
+      reactive layers before s52plib lands.*
+- [ ] **P2.12** Plugin-rendering Layer — concrete `Layer` subclass that
+      hosts plugin `RenderOverlay`/`RenderGLOverlay` outputs per the
+      P2.0a bridge plan. Required for the wx GUI to keep working with
+      existing plugins while Phase 3 is in progress.
+- [ ] **P2.13** Performance profiling vs the current GL path; close gaps.
+      `QSG_VISUALIZE=overdraw|batches|changes` for free Qt SG profiling.
+- [ ] **P2.14** Optional — drop to raw RHI via `beforeRendering`/
+      `afterRendering` for any hotspot that needs it (sounding-symbol
+      instancing, AA-line shader). Only if P2.13 finds genuine deficits.
 
 ## Phase 3 — QtQuick UI shell  (est. 16–24 wks)
 
