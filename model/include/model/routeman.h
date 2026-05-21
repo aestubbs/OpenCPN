@@ -45,7 +45,13 @@
 #include "model/route_point.h"
 #include "model/select.h"
 
-#include "color_types.h"
+// Previously: #include "color_types.h" (from libs/s52plib) just to
+// pick up the ColorScheme enum referenced in SetColorScheme() below.
+// That enum now lives in model/color_scheme.h, breaking model's only
+// dependency on libs/s52plib (so s52plib can in turn depend on model
+// without a cycle -- needed by the relocated S57Obj implementation;
+// see P2.8.0b in docs/QT_MIGRATION_TASKS.md).
+#include "model/color_scheme.h"
 #include "nmea0183.h"
 #include "observable_evtvar.h"
 

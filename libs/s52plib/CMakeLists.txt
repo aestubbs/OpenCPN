@@ -49,3 +49,11 @@ target_link_libraries(S52PLIB PRIVATE ocpn::gl-headers)
 target_link_libraries(S52PLIB PRIVATE ocpn::pugixml)
 target_link_libraries(S52PLIB PRIVATE ocpn::gdal)
 target_link_libraries(S52PLIB PRIVATE ocpn::tess2)
+# PUBLIC -- color_types.h re-includes model/color_scheme.h, so any
+# consumer of s52plib's public headers needs model's include path
+# propagated. The dependency direction used to be model -> s52plib (for
+# the very same enum), which blocked s52plib from reaching the model
+# symbols it needs (toSM/fromSM, g_b_EnableVBO) once S57Obj's impl
+# relocates here. Inverted as part of P2.8.0 (see
+# docs/QT_MIGRATION_TASKS.md).
+target_link_libraries(S52PLIB PUBLIC ocpn::model)

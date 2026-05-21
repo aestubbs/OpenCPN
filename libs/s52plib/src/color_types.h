@@ -28,6 +28,14 @@
 #ifndef _COLORTYPES_H_
 #define _COLORTYPES_H_
 
+// `ColorScheme` enum used to live in this header. It is now in
+// model/include/model/color_scheme.h -- it is referenced from
+// `ocpn::model` (routeman.h) so keeping it there lets libs/s52plib
+// depend on ocpn::model without creating a cycle. All existing
+// `#include "color_types.h"` call sites still get the enum via this
+// re-include.
+#include "model/color_scheme.h"
+
 typedef struct _S52color {
   char colName[20];
   unsigned char R;
@@ -37,14 +45,6 @@ typedef struct _S52color {
 
 WX_DECLARE_STRING_HASH_MAP(S52color, colorHashMap);
 WX_DECLARE_STRING_HASH_MAP(wxColour, wxColorHashMap);
-
-typedef enum ColorScheme {
-  GLOBAL_COLOR_SCHEME_RGB,
-  GLOBAL_COLOR_SCHEME_DAY,
-  GLOBAL_COLOR_SCHEME_DUSK,
-  GLOBAL_COLOR_SCHEME_NIGHT,
-  N_COLOR_SCHEMES
-} _ColorScheme;
 
 typedef struct _colTable {
   wxString *tableName;

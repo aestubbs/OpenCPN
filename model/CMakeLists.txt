@@ -441,7 +441,11 @@ target_link_libraries(
     ocpn::pugixml
     ocpn::rapidjson
     ocpn::sqlite
-    ocpn::s52plib
+    # ocpn::s52plib used to be linked here for color_types.h, an include
+    # that no model source actually referenced. Dropped to break the cycle
+    # so libs/s52plib can depend on ocpn::model for toSM/fromSM and
+    # g_b_EnableVBO -- needed by S57Obj's implementation after it moves
+    # into s52plib (P2.8.0b in docs/QT_MIGRATION_TASKS.md).
     ocpn::sound
     ocpn::wxjson
     ocpn::filesystem

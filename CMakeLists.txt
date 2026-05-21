@@ -2840,6 +2840,14 @@ endif ()
 
 add_subdirectory(model)
 target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::model-src ocpn::model)
+# libs/s52plib used to ride along on ocpn::model's link line via a
+# backwards model->s52plib dependency (model only needed s52plib for
+# the ColorScheme enum in color_types.h). That dep was inverted as
+# part of P2.8.0 (see docs/QT_MIGRATION_TASKS.md), so the OpenCPN
+# target now links s52plib directly. ColorScheme moved to
+# model/color_scheme.h; the remaining s52plib headers are still used
+# by gui/include/gui/chartbase.h, pluginmanager.h, etc.
+target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::s52plib)
 
 if ("${ENABLE_SANITIZER}" STREQUAL "none")
   if (MSVC)
