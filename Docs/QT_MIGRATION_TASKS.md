@@ -636,29 +636,54 @@ layer that is Qt-typed end to end (`QColor`/`QPen`/`QImage`/`QFont`,
 shrink as a consequence — what was originally "build the infrastructure"
 becomes "wire up existing primitives".
 
-### Implementation-option choices to settle in P2.1
+### Architecture — three rendering tiers
 
-The chart canvas can be one of three Qt 6 types — choose deliberately:
+Baseline is the high-level QtQuick scene-graph approach (per
+[`QT_MIGRATION.md`](./QT_MIGRATION.md) §5). One chart-canvas `QQuickItem`
+plus declarative QML on top:
 
-| Option | When right | Trade-off |
-|---|---|---|
-| **`QQuickItem` + scene-graph node tree** (recommended baseline) | Retained-mode 2D cartography, multiple layers, mix of textured quads + lines + polygons | Most ecosystem support, declarative composition, multi-backend (Metal/Vulkan/D3D/GL) automatically. Use built-in nodes/materials wherever possible. |
-| **`QQuickRhiItem`** (Qt 6.7+) | Need raw RHI access for a custom render pipeline | More code; lose the retained-mode dirty-tracking; only use if a layer's needs really exceed what scene-graph nodes give. |
-| **`QQuickFramebufferObject`** | Legacy GL-only path | OpenGL-only — skip. RHI replaces it in Qt 6. |
+| Tier | Anchored to | Implementation | Example contents |
+|---|---|---|---|
+| **World-anchored scene** | chart lat/lon | `QSGTransformNode` (viewport matrix) → per-Layer subtrees | raw chart tiles, S-52 vector objects, AIS targets, routes, tracks |
+| **Display-anchored scene** | screen pixels | identity `QSGTransformNode` → per-Layer subtrees | radar/PPI overlay, range rings, compass rose, mini-map |
+| **QML HUD** | screen pixels (declarative) | QML items *above* the chart `QQuickItem` (not a scene-graph node) | depth, SOG/COG, wind, alarms — `Q_PROPERTY` + binding, animation for free |
 
-For hot inner loops (e.g. AA-line shader, sounding-symbol instancing) we
-can drop into raw RHI via `QQuickWindow::beforeRendering`/`afterRendering`
-hooks **without** leaving the scene graph — best of both worlds.
+Plugins (future) will register their own subtree at the World or Display
+tier, or contribute QML items to the HUD — same `Layer` abstraction.
+That's the simplification the user is after.
 
-For built-in materials (no custom shader code): `QSGImageNode`,
-`QSGSimpleRectNode`, `QSGFlatColorMaterial`, `QSGVertexColorMaterial`,
-`QSGOpaqueTextureMaterial`, `QSGTextureMaterial`. The original "port 6
-shaders" estimate (old P2.4) is probably ~2–3 shaders once we account for
-how many old programs map to built-in materials.
+For composition (no custom code): `QSGTransformNode` (viewport),
+`QSGOpacityNode` (per-Layer opacity), `QSGClipNode` (clip to viewport).
+For most leaf nodes (no shader code): `QSGImageNode`, `QSGSimpleRectNode`,
+`QSGFlatColorMaterial`, `QSGVertexColorMaterial`, `QSGOpaqueTextureMaterial`,
+`QSGTextureMaterial`. The original "port 6 shaders" estimate (old P2.4)
+is probably ~2–3 custom shaders once we account for how many old programs
+map to built-in materials.
 
-For composition (no custom code at all): `QSGTransformNode` (viewport
-transform → `WorldAnchoredRoot`), `QSGOpacityNode` (per-Layer opacity),
-`QSGClipNode` (clip to viewport).
+**Raw RHI is an escape hatch, not a baseline.** The scene graph already
+runs on RHI underneath (Metal / Vulkan / D3D / GL automatic by backend).
+Drop into raw RHI **only** for a specific hotspot (e.g. AA-line shader,
+sounding-symbol instancing) via `QQuickWindow::beforeRendering` /
+`afterRendering` hooks — without leaving the scene graph. `QQuickRhiItem`
+and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
+
+### Glossary
+
+- **`s52plib`** — the vendored library in `libs/s52plib/` implementing
+  the **IHO S-52 presentation specification** for vector charts. S-57 is
+  the chart-data file format; S-52 is the strict cartographic spec for
+  *how to render them* (symbol catalogue, color tables, line styles, text
+  placement, depth-area shading, …). It's a domain-specific marine
+  cartography engine — Qt has no equivalent and no off-the-shelf GIS
+  engine (Qt Location, MapLibre, …) renders S-52. The migration keeps
+  using `s52plib`; only its *output stage* changes from "draw via
+  OpenGL or wxDC" to "emit Qt scene-graph nodes" (P2.8).
+- **`ocpnDC`** — OpenCPN's drawing abstraction (`gui/src/ocpndc.cpp`)
+  wrapping either a `wxDC` (CPU path) or direct OpenGL calls (GPU path).
+  P2.6 ports it; plugin compat is deferred.
+- **RHI** — Qt's Rendering Hardware Interface; Qt 6's cross-backend
+  graphics abstraction underneath the scene graph (Metal / Vulkan / D3D /
+  GL chosen at runtime per platform).
 
 ### Phase 1 deliverables that change Phase 2 scope
 
@@ -679,19 +704,13 @@ transform → `WorldAnchoredRoot`), `QSGOpacityNode` (per-Layer opacity),
       across a fixture chart set (raster + vector + AIS overlays); each port
       step compares against the captured baseline. *(dep: P0.7; original
       P2.11 promoted to a prerequisite.)*
-- [ ] **P2.0a** Plugin-rendering ABI bridge plan — decide how plugin
-      `RenderOverlay(wxMemoryDC*)` / `RenderGLOverlay(wxGLContext*)` /
-      chart `PlugInChartBase::RenderRegionView()` (returns `wxBitmap&`)
-      work in the new renderer. `wxBitmap` outputs upload through
-      `WxBitmapToQImage` (P1.14) → `QSGTexture` and composite as a Layer.
-      `RenderGLOverlay` is the hard case — needs an interop story (offscreen
-      FBO that yields a `QImage`, or a new `RenderOverlayQt` ABI extension
-      for Qt-aware plugins). Document the choice before P2.6.
 - [ ] **P2.1** Chart canvas `QQuickItem` subclass with the two top
-      `QSGTransformNode`s: `WorldAnchoredRoot` (viewport transform —
-      pan/zoom mutates one matrix, whole subtree follows) +
-      `DisplayAnchoredRoot` (identity transform). Pick canvas type per the
-      table above (recommended: `QQuickItem` + node tree).
+      `QSGTransformNode`s — `WorldAnchoredRoot` (viewport transform —
+      pan/zoom mutates one matrix, whole subtree follows) and
+      `DisplayAnchoredRoot` (identity transform). The QML HUD lives in
+      QML, layered above the canvas in the QML tree — no scene-graph
+      node, declarative `Q_PROPERTY` bindings to the (already QObject)
+      model classes from P1.
 - [ ] **P2.2** `Layer` abstraction: small concrete class (`anchor`,
       `visible`, `zOrder`, `opacity`, `owner`, `id`, plus an internal
       `QSGNode* subtree`). Most layer subclasses just maintain their own
@@ -711,12 +730,11 @@ transform → `WorldAnchoredRoot`), `QSGOpacityNode` (per-Layer opacity),
       `QQuickWindow::createTextureFromImage(QImage,
       QQuickWindow::TextureCanUseAtlas)` to produce `QSGTexture`s. Keep
       LZ-compressed on-disk format; decompress to `QImage` at load.
-- [ ] **P2.6** Reimplement `ocpnDC` primitives.
+- [ ] **P2.6** Reimplement `ocpnDC` primitives (core uses only — the
+      plugin-API surface and existing wx-plugin compat is deferred to
+      Phase 4 alongside the new plugin host).
       Non-GL path → `QPainter` (now HW-accelerated via the RHI backend).
       GL path → `QSGGeometryNode` with built-in materials.
-      Plugin compat: `ocpnDC` keeps a `wxDC`-flavoured surface for the
-      plugin ABI; outputs bridge through `WxBitmapToQImage` → `QSGTexture`
-      for compositing.
 - [ ] **P2.7** Raster chart (KAP/BSB) Layer — `QSGImageNode` (built-in
       textured quad), one per chart-cell tile. No shader code.
       *(dep: P2.5)*
@@ -740,15 +758,35 @@ transform → `WorldAnchoredRoot`), `QSGOpacityNode` (per-Layer opacity),
       QObject-emitting model means these are cheaper to do alongside the
       scene-graph work and validate the LayerCompositor with non-trivial
       reactive layers before s52plib lands.*
-- [ ] **P2.12** Plugin-rendering Layer — concrete `Layer` subclass that
-      hosts plugin `RenderOverlay`/`RenderGLOverlay` outputs per the
-      P2.0a bridge plan. Required for the wx GUI to keep working with
-      existing plugins while Phase 3 is in progress.
-- [ ] **P2.13** Performance profiling vs the current GL path; close gaps.
+- [ ] **P2.12** Performance profiling vs the current GL path; close gaps.
       `QSG_VISUALIZE=overdraw|batches|changes` for free Qt SG profiling.
-- [ ] **P2.14** Optional — drop to raw RHI via `beforeRendering`/
+- [ ] **P2.13** *Optional* — drop to raw RHI via `beforeRendering`/
       `afterRendering` for any hotspot that needs it (sounding-symbol
-      instancing, AA-line shader). Only if P2.13 finds genuine deficits.
+      instancing, AA-line shader). Only if P2.12 finds genuine deficits.
+
+### Deferred to Phase 4 (new Qt plugin host)
+
+Phase 2 deliberately does **not** carry the wx-plugin rendering ABI —
+the plan is to land a Qt-native plugin host first (in Phase 4) and
+migrate plugins onto it then, rather than maintain a wx-compat
+rendering bridge in the new renderer. Specifically deferred:
+
+- Plugin `RenderOverlay(wxMemoryDC*)` / `RenderGLOverlay(wxGLContext*)` /
+  `RenderOverlayMultiCanvas(...)` ABI bridging.
+- Chart plugin `PlugInChartBase::RenderRegionView()` (returns `wxBitmap&`)
+  bridging.
+- `GetThumbnail` / `GetPlugInBitmap` `wxBitmap` returns.
+
+Implication: during Phase 2 / 3 the wx GUI keeps running the wx plugin
+path against the *old* GL renderer; the new Qt renderer renders core
+content only. The Qt plugin host (Phase 4) lets each plugin contribute
+its own scene-graph subtree (registered at the World or Display tier)
+or its own QML HUD items — same `Layer` abstraction core uses, no wx
+bridging.
+
+The **plugin-management GUI** (catalog browser, install / uninstall /
+update flows, settings dialogs) is in scope for Phase 3 — it doesn't
+render anything onto the chart, only manages the plugin lifecycle.
 
 ## Phase 3 — QtQuick UI shell  (est. 16–24 wks)
 
