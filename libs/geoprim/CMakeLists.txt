@@ -16,6 +16,8 @@ SET(SRC
   src/LOD_reduce.cpp
   src/LOD_reduce.h
   src/linmath.h
+  src/vector2D.cpp
+  src/vector2D.h
 )
 
 add_library(GEOPRIM STATIC ${SRC})
