@@ -34,6 +34,8 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include <wx/filename.h>
+
 #ifdef __OCPN__ANDROID__
 // Handle occasional SIG on Android
 #include <signal.h>
@@ -103,7 +105,9 @@ wxFont *FindOrCreateFont_PlugIn(
     wxFontEncoding encoding = wxFONTENCODING_DEFAULT);
 wxFont *GetOCPNScaledFont_PlugIn(wxString TextElement, int default_size = 0);
 float GetOCPNChartScaleFactor_Plugin();
-extern "C" wxString *GetpSharedDataLocation();
+// `GetpSharedDataLocation()` used to be declared here; the only call
+// site (in `S52_load_Plib`) was replaced with a directory derived
+// from the PLib path itself (P2.8.0d).
 
 #endif
 
@@ -1182,8 +1186,15 @@ int s52plib::S52_load_Plib(const wxString &PLib, bool b_forceLegacy) {
     (*_cond_sym)[index] = (Rule *)(condTable[i].condInst);
   }
 
-  wxString s57data_dir = *GetpSharedDataLocation();
-  s57data_dir += _T("s57data");
+  // The s57objectclasses.csv data file lives in the same directory as
+  // the presentation library RLE we loaded. Previously this code called
+  // the host-supplied `GetpSharedDataLocation()` and appended "s57data",
+  // which made libs/s52plib non-self-contained at link time. Deriving
+  // from PLib's parent directory removes the host callback entirely
+  // (P2.8.0d) without changing the runtime behaviour for any standard
+  // installation layout.
+  wxFileName plib_path(PLib);
+  wxString s57data_dir = plib_path.GetPath();
 
   wxString oc_file(s57data_dir);
   oc_file.Append(_T("/s57objectclasses.csv"));
