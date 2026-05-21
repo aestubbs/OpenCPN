@@ -19,6 +19,11 @@ qt_add_qml_module(opencpn-qt
   SOURCES
     chart_canvas.h
     chart_canvas.cpp
+    layer.h
+    layer_compositor.h
+    layer_compositor.cpp
+    demo_layers.h
+    demo_layers.cpp
 )
 
 target_link_libraries(opencpn-qt PRIVATE

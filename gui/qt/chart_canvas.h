@@ -25,12 +25,15 @@
  *                                node; bound to QObject view-models via
  *                                Q_PROPERTY.
  *
- * This scaffold (P0.4 + P2.1) installs the two top transform nodes. Layer /
- * LayerCompositor (P2.2 / P2.3) plug subtrees in under each.
+ * ChartCanvas owns a LayerCompositor (P2.3) that maintains the two anchored
+ * subtrees from registered Layer instances (P2.2). The canvas itself only
+ * holds the two top transform nodes and forwards updates to the compositor.
  */
 
 #ifndef OCPN_QT_CHART_CANVAS_H_
 #define OCPN_QT_CHART_CANVAS_H_
+
+#include <memory>
 
 #include <QQuickItem>
 #include <QTimer>
@@ -42,12 +45,16 @@ QT_END_NAMESPACE
 
 namespace ocpn::qtui {
 
+class LayerCompositor;
+class WorldRotatingRectLayer;
+
 class ChartCanvas : public QQuickItem {
   Q_OBJECT
   QML_ELEMENT
 
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
+  ~ChartCanvas() override;
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
@@ -56,14 +63,18 @@ protected:
 private:
   // Non-owning pointers into the scene-graph tree we (re)build in
   // updatePaintNode. The tree itself is owned by Qt's scene graph; we just
-  // remember the two top transform nodes so future Layer plumbing can find
-  // them.
+  // remember the two top transform nodes so the compositor can attach
+  // Layer subtrees under them.
   QSGTransformNode* m_world_anchored_root = nullptr;
   QSGTransformNode* m_display_anchored_root = nullptr;
 
-  // Drives the placeholder world-anchored-rect rotation in the scaffold.
-  // Removed when Layer / LayerCompositor populates the subtrees with real
-  // content; real Layers schedule their own updates off model signals.
+  // The LayerCompositor owns all registered Layers and is in charge of
+  // populating the two transform roots from them.
+  std::unique_ptr<LayerCompositor> m_compositor;
+
+  // Demo Layer driven by an animation timer to validate the WorldAnchored
+  // transform path. Removed when real Layers replace the demos.
+  WorldRotatingRectLayer* m_demo_rotating = nullptr;
   QTimer m_animation_timer;
 };
 
