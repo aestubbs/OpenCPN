@@ -744,7 +744,12 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
       output target: emit `QSGGeometry` + appropriate material into a
       Layer subtree. Built-in materials handle most lines / polygons /
       textured-icons; the residual custom shaders from P2.4 cover patterns
-      and AA-line caps. *(dep: P2.4–2.6, P2.0)*
+      and AA-line caps. Chart text uses `QSGSimpleTextNode` (or
+      `QSGTextNode` via `QQuickWindow::createTextNode()` for richer
+      output) instead of `s52plib`'s `Helvetica.txf` texture-font sampler
+      — Qt's native text gives correct hinting / DPI scaling / Unicode /
+      complex-script support and removes the proprietary font-rendering
+      engine from the chart pipeline. *(dep: P2.4–2.6, P2.0)*
 - [ ] **P2.9** Expose S52 display categories (Base / Standard / Other /
       Mariner) and viewing groups as chart sub-layers in the same
       compositor — surfacing what `s52plib` already tracks.
@@ -763,6 +768,28 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
 - [ ] **P2.13** *Optional* — drop to raw RHI via `beforeRendering`/
       `afterRendering` for any hotspot that needs it (sounding-symbol
       instancing, AA-line shader). Only if P2.12 finds genuine deficits.
+
+### Future / post-Phase-2 follow-ups (capture, not scheduled)
+
+- **Vector S-52 symbols (research → P2.x or P4.x)** — the shipped
+  `data/s57data/rastersymbols-{day,dusk,dark}.png` symbol sheets are
+  pre-rendered PNG atlases (one per color scheme). Vector replacements
+  (SVG, or a path-based catalogue rendered through `QQuickShape`/
+  `QPainterPath`/`QSGGeometryNode`) would give clean scaling at any
+  DPI, recolouring without three separate atlases, and a smaller
+  on-disk footprint. Drop-in initially via raster; revisit after the
+  scene-graph port is working. User intends to research before
+  scheduling.
+- **Chart-colour editing UI (Phase 3)** — add an "S-52 colour-table
+  editor" pane to the ENC settings, letting users override individual
+  S-52 colour tokens (`DEPVS`, `LANDA`, `CHBLK`, …) per scheme. The
+  three DAY / DUSK / NIGHT tables are loaded from
+  `data/s57data/chartsymbols.xml` as plain RGB triples — a user-
+  overlay layer that persists overrides via `OcpnConfig` (P1.9) and
+  re-pushes via `s52plib::SetPLIBColorScheme(...)` would let users
+  tune colours without editing the data file. Add to the Phase 3 UI
+  scope once the new chart canvas is running and the standard ENC
+  settings panel is ported.
 
 ### Deferred to Phase 4 (new Qt plugin host)
 
