@@ -718,15 +718,25 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
       rects (red world-anchored slowly rotating to demonstrate the
       transform path; fixed blue display-anchored) — removed when Layer /
       LayerCompositor populate the subtrees.
-- [ ] **P2.2** `Layer` abstraction: small concrete class (`anchor`,
-      `visible`, `zOrder`, `opacity`, `owner`, `id`, plus an internal
-      `QSGNode* subtree`). Most layer subclasses just maintain their own
-      subtree on data updates; no virtual rendering API needed beyond
-      `updateSubtree(QSGNode* parent)`.
-- [ ] **P2.3** `LayerCompositor`: two ordered `QList<Layer*>` stacks fed
-      into the two top transform nodes. Re-orders on `zOrder` change,
-      hides on `visible` toggle, wraps in `QSGOpacityNode` for opacity.
-      ~100 LOC.
+- [x] **P2.2** `Layer` abstraction (`gui/qt/layer.h`). `QObject` base
+      with `Anchor` enum (`WorldAnchored`/`DisplayAnchored`), `id()`/
+      `name()`/`anchor()`/`updateSubtree(QSGNode* old, QQuickWindow*)`,
+      and `Q_PROPERTY`s for `visible`/`zOrder`/`opacity` + their change
+      signals. `owner` tag for UI/debug. `dirty()` signal flows from
+      setters and Layer subclasses; the compositor connects.
+- [x] **P2.3** `LayerCompositor` (`gui/qt/layer_compositor.{h,cpp}`).
+      Owns the registered `Layer*`s; `syncToScene(world_root,
+      display_root, window)` runs per frame: for each anchor, collect
+      visible Layers, sort by `zOrder`, update each dirty Layer's
+      subtree, detach the root's current children, re-append in order
+      (wrapped in `QSGOpacityNode` where opacity < 1). Re-parenting
+      hygiene: explicit detach from previous parent before re-attach
+      so `QSGNode`'s no-double-parenting invariant holds. `changed()`
+      signal aggregates per-Layer dirty + property changes and drives
+      `QQuickItem::update()`. Two demo Layers
+      (`DisplayRectLayer` + `WorldRotatingRectLayer` in
+      `gui/qt/demo_layers.{h,cpp}`) replace the scaffold's inline
+      rects and validate the wiring end-to-end.
 - [ ] **P2.4** Materials catalog — enumerate the ~6 current GL shader
       programs, map each to a built-in `QSGMaterial` where possible,
       identify the ones that genuinely need a custom `QSGMaterialShader`
