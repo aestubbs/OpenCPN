@@ -381,6 +381,13 @@ public:
   //    Areas first; lines/symbols/text follow in later sub-steps.
   int RenderAreaToSG(s52sg::Buffer &out, ObjRazRules *rzRules);
 
+  //    Line emit. `pts` is the feature's geometry in lon/lat (the OGR
+  //    driver assembles it directly, so no SM round-trip is needed). The
+  //    rule walk resolves the LS pen colour/width; conditional symbology
+  //    (e.g. DEPCNT depth-contour colour) is expanded first.
+  int RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
+                     const QList<QPointF> &pts);
+
   bool EnableGLLS(bool benable);
 
   bool IsObjNoshow(const char *objcl);
@@ -513,8 +520,10 @@ private:
 
   // Scene-graph emit (P2.8c). RenderToSGAC resolves an AC (area colour)
   // rule and appends the object's tessellated triangles -- converted
-  // from SM back to lon/lat -- to `out`.
+  // from SM back to lon/lat -- to `out`. RenderToSGLS resolves an LS
+  // (simple line) rule's pen and appends `pts` as a coloured line strip.
   int RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules, Rules *rules);
+  int RenderToSGLS(s52sg::Buffer &out, Rules *rules, const QList<QPointF> &pts);
 
   //    Object Renderers
   int RenderTX(ObjRazRules *rzRules, Rules *rules);

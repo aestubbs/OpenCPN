@@ -287,6 +287,7 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
 
   double n = -90, s = 90, e = -180, w = 180;  // accumulate extent
   int n_areas = 0;
+  int n_lines = 0;
 
   // NB: OGRS57Layer::GetNextFeature is disabled in this vendored driver
   // (its filter logic is commented out, so it always returns NULL). Read
@@ -325,8 +326,47 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
             for (int k = 0; k < mp->getNumGeometries(); ++k)
               emitOne(static_cast<OGRPolygon*>(mp->getGeometryRef(k)));
           }
+        } else if (gt == wkbLineString || gt == wkbMultiLineString) {
+          // The OGR driver assembles line geometry in lon/lat directly, so
+          // no SM round-trip: build a minimal GEO_LINE S57Obj for the LUP
+          // lookup, then emit each line string's points with the resolved
+          // pen.
+          auto emitLine = [&](OGRLineString* ls) {
+            const int np = ls->getNumPoints();
+            if (np < 2) return;
+            auto* obj = new S57Obj(className);
+            obj->m_chart_context = ctx;
+            obj->Primitive_type = GEO_LINE;
+            CopyFeatureAttributes(feat, obj);
+            LUPrec* lup = plib->S52_LUPLookup(LINES, obj->FeatureName, obj);
+            if (!lup) {
+              delete obj;
+              return;
+            }
+            plib->_LUP2rules(lup, obj);
+            ObjRazRules rz;
+            rz.obj = obj;
+            rz.LUP = lup;
+            rz.sm_transform_parms = nullptr;
+            rz.child = nullptr;
+            rz.next = nullptr;
+            rz.mps = nullptr;
+            QList<QPointF> pts;
+            pts.reserve(np);
+            for (int pi = 0; pi < np; ++pi)
+              pts.append(QPointF(ls->getX(pi), ls->getY(pi)));  // (lon, lat)
+            plib->RenderLineToSG(buf, &rz, pts);
+            ++n_lines;
+          };
+          if (gt == wkbLineString) {
+            emitLine(static_cast<OGRLineString*>(geom));
+          } else {
+            auto* ml = static_cast<OGRMultiLineString*>(geom);
+            for (int k = 0; k < ml->getNumGeometries(); ++k)
+              emitLine(static_cast<OGRLineString*>(ml->getGeometryRef(k)));
+          }
         }
-        // Lines and points are emitted in later P2.8d sub-steps.
+        // Point features (soundings/buoys/beacons) follow.
       }
       OGRFeature::DestroyFeature(feat);
     }
@@ -338,11 +378,12 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
   if (out_west) *out_west = w;
 
   m_impl->status = QStringLiteral(
-                       "S-52: loaded ENC %1 -- %2 area features, extent "
-                       "%3..%4 lat, %5..%6 lon")
+                       "S-52: loaded ENC %1 -- %2 areas, %3 lines, extent "
+                       "%4..%5 lat, %6..%7 lon")
                        .arg(QString::fromUtf8(
                            path_000.toUtf8().mid(path_000.lastIndexOf('/') + 1)))
                        .arg(n_areas)
+                       .arg(n_lines)
                        .arg(s, 0, 'f', 3)
                        .arg(n, 0, 'f', 3)
                        .arg(w, 0, 'f', 3)

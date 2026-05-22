@@ -25,50 +25,43 @@
  * consumer applies its own world->screen transform, so pan/zoom needs no
  * re-decode and stays vector-sharp at every scale.
  *
- * Deliberately Qt-free (plain structs + std::vector): the decode can run
- * off the scene-graph render thread, and the buffer is unit-testable
- * without a GPU. gui/qt translates it into QSGGeometryNodes.
+ * Uses only Qt value types (QList / QPointF / QColor) -- no scene-graph or
+ * GPU types -- so the decode can run off the render thread and the buffer
+ * is testable without a GPU, while staying idiomatic Qt. gui/qt
+ * translates it into QSGGeometryNodes.
  */
 
 #ifndef _S52_SG_H_
 #define _S52_SG_H_
 
-#include <cstdint>
-#include <vector>
+#include <QColor>
+#include <QList>
+#include <QPointF>
 
 namespace s52sg {
-
-/** A vertex in geographic coordinates. s52plib applies no projection to
- *  these -- the consumer maps (lon, lat) into its own world/screen space. */
-struct Vertex {
-  double lon;
-  double lat;
-};
 
 /** Primitive topology. Triangle kinds back area fills; LineStrip backs
  *  line features (coastlines, depth contours, ...). Symbols and text are
  *  added in later P2.8c sub-steps. */
 enum class PrimType { Triangles, TriangleStrip, TriangleFan, LineStrip };
 
-/** One renderable batch: a vertex run with a resolved RGBA colour. For
- *  LineStrip, `width` is the pen width in millimetres (the consumer
- *  converts to device pixels); ignored for fills. */
+/** One renderable batch: a run of geographic vertices (QPointF holding
+ *  (lon, lat) -- s52plib applies no projection, the consumer maps into
+ *  its own world/screen space) with a resolved colour. For LineStrip,
+ *  `width` is the pen width; ignored for fills. */
 struct Prim {
   PrimType type = PrimType::Triangles;
-  std::vector<Vertex> verts;
-  std::uint8_t r = 0;
-  std::uint8_t g = 0;
-  std::uint8_t b = 0;
-  std::uint8_t a = 255;
+  QList<QPointF> verts;  // (lon, lat) per point
+  QColor color;
   float width = 1.0f;
 };
 
 /** A decoded chart's geometry, ready for the consumer to upload. */
 class Buffer {
 public:
-  std::vector<Prim> prims;
+  QList<Prim> prims;
   void clear() { prims.clear(); }
-  bool empty() const { return prims.empty(); }
+  bool empty() const { return prims.isEmpty(); }
 };
 
 }  // namespace s52sg

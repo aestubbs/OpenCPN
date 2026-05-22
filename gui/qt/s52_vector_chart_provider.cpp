@@ -21,17 +21,16 @@
 #include <QSGGeometryNode>
 #include <QSGNode>
 
-#include <vector>
-
 #include "viewport.h"
 
 namespace ocpn::qtui {
 
 namespace {
-// World convention: x = lon, y = -lat (see viewport.h).
-QSGGeometry::Point2D worldPoint(const s52sg::Vertex& v) {
+// World convention: x = lon, y = -lat (see viewport.h). Buffer vertices
+// are QPointF(lon, lat).
+QSGGeometry::Point2D worldPoint(const QPointF& v) {
   QSGGeometry::Point2D p;
-  p.set(static_cast<float>(v.lon), static_cast<float>(-v.lat));
+  p.set(static_cast<float>(v.x()), static_cast<float>(-v.y()));
   return p;
 }
 
@@ -41,40 +40,40 @@ QSGGeometry::Point2D worldPoint(const s52sg::Vertex& v) {
 // and GLU tessellation emits fans and strips freely. Converting to a
 // DrawTriangles list here keeps the s52plib emit GPU-agnostic and works
 // on every backend.
-std::vector<QSGGeometry::Point2D> expandToTriangles(const s52sg::Prim& prim) {
-  const auto& v = prim.verts;
-  std::vector<QSGGeometry::Point2D> out;
+QList<QSGGeometry::Point2D> expandToTriangles(const s52sg::Prim& prim) {
+  const QList<QPointF>& v = prim.verts;
+  QList<QSGGeometry::Point2D> out;
   if (v.size() < 3) return out;
 
   switch (prim.type) {
     case s52sg::PrimType::TriangleFan:
       // (v0, vi, vi+1) for i in 1..n-2
       out.reserve((v.size() - 2) * 3);
-      for (size_t i = 1; i + 1 < v.size(); ++i) {
-        out.push_back(worldPoint(v[0]));
-        out.push_back(worldPoint(v[i]));
-        out.push_back(worldPoint(v[i + 1]));
+      for (qsizetype i = 1; i + 1 < v.size(); ++i) {
+        out.append(worldPoint(v[0]));
+        out.append(worldPoint(v[i]));
+        out.append(worldPoint(v[i + 1]));
       }
       break;
     case s52sg::PrimType::TriangleStrip:
       // (vi, vi+1, vi+2) with winding alternation
       out.reserve((v.size() - 2) * 3);
-      for (size_t i = 0; i + 2 < v.size(); ++i) {
+      for (qsizetype i = 0; i + 2 < v.size(); ++i) {
         if (i & 1) {
-          out.push_back(worldPoint(v[i + 1]));
-          out.push_back(worldPoint(v[i]));
-          out.push_back(worldPoint(v[i + 2]));
+          out.append(worldPoint(v[i + 1]));
+          out.append(worldPoint(v[i]));
+          out.append(worldPoint(v[i + 2]));
         } else {
-          out.push_back(worldPoint(v[i]));
-          out.push_back(worldPoint(v[i + 1]));
-          out.push_back(worldPoint(v[i + 2]));
+          out.append(worldPoint(v[i]));
+          out.append(worldPoint(v[i + 1]));
+          out.append(worldPoint(v[i + 2]));
         }
       }
       break;
     case s52sg::PrimType::Triangles:
     default:
       out.reserve(v.size());
-      for (const auto& vert : v) out.push_back(worldPoint(vert));
+      for (const QPointF& vert : v) out.append(worldPoint(vert));
       break;
   }
   return out;
@@ -105,7 +104,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   auto* root = new QSGNode();
 
   for (const s52sg::Prim& prim : m_buffer.prims) {
-    if (prim.verts.empty()) continue;
+    if (prim.verts.isEmpty()) continue;
 
     // Line features keep their strip topology (supported everywhere);
     // fills expand to an independent triangle list (fans aren't portable).
@@ -115,11 +114,11 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       geo->setDrawingMode(QSGGeometry::DrawLineStrip);
       geo->setLineWidth(prim.width);
       QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
-      for (size_t i = 0; i < prim.verts.size(); ++i)
+      for (qsizetype i = 0; i < prim.verts.size(); ++i)
         v[i] = worldPoint(prim.verts[i]);
 
       auto* mat = new QSGFlatColorMaterial();
-      mat->setColor(QColor(prim.r, prim.g, prim.b, prim.a));
+      mat->setColor(prim.color);
       auto* node = new QSGGeometryNode();
       node->setGeometry(geo);
       node->setFlag(QSGNode::OwnsGeometry);
@@ -129,17 +128,17 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       continue;
     }
 
-    std::vector<QSGGeometry::Point2D> tris = expandToTriangles(prim);
-    if (tris.empty()) continue;
+    QList<QSGGeometry::Point2D> tris = expandToTriangles(prim);
+    if (tris.isEmpty()) continue;
 
     auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(),
                                 static_cast<int>(tris.size()));
     geo->setDrawingMode(QSGGeometry::DrawTriangles);
     QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
-    for (size_t i = 0; i < tris.size(); ++i) v[i] = tris[i];
+    for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
 
     auto* mat = new QSGFlatColorMaterial();
-    mat->setColor(QColor(prim.r, prim.g, prim.b, prim.a));
+    mat->setColor(prim.color);
 
     auto* node = new QSGGeometryNode();
     node->setGeometry(geo);
