@@ -72,9 +72,16 @@ private:
     QSGTransformNode* xform = nullptr;
     QPointF worldPos;  // (x=lon, y=-lat)
     int scamin = 100000002;  // hidden when chart scale 1:N > scamin
+    bool isSounding = false;  // soundings get density declutter (shallowest)
+    float depth = 0.0f;       // sounding depth (metres) for shallowest-wins
   };
 
   void updateBillboards(const Viewport& viewport);
+
+  // Pixels per millimetre of the display, for the 1:N chart-scale
+  // denominator used by SCAMIN. Set from the window's QScreen each build;
+  // falls back to a 96-dpi nominal until then.
+  double m_screen_ppmm = 3.8;
 
   QString m_id;
   s52sg::Buffer m_buffer;

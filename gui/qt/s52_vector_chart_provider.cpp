@@ -21,8 +21,10 @@
 #include <QImage>
 #include <QMatrix4x4>
 #include <QPainter>
+#include <QHash>
 #include <QSet>
 #include <QQuickWindow>
+#include <QScreen>
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
@@ -143,36 +145,44 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   // Current chart scale as a 1:N denominator, for SCAMIN decluttering.
   // N = ground-metres-per-pixel / screen-metres-per-pixel:
   //   ground m/px = (metres per degree of lat) / (pixels per degree)
-  //   screen m/px = 1 / (kScreenPpmm * 1000)
-  // kScreenPpmm is a nominal display density (pixels/mm); becomes a real
-  // per-monitor value when display config lands. ~3.8 px/mm ~= 96 dpi.
+  //   screen m/px = 1 / (m_screen_ppmm * 1000)
+  // m_screen_ppmm is the real display density (set from QScreen at build).
   constexpr double kMetresPerDegLat = 111320.0;
-  constexpr double kScreenPpmm = 3.8;
   const double chart_scale_n =
-      (kMetresPerDegLat / s) * kScreenPpmm * 1000.0;
+      (kMetresPerDegLat / s) * m_screen_ppmm * 1000.0;
 
-  // Density declutter: at most one point item per ~kCellPx screen cell, so
-  // dense soundings thin out gradually as you zoom out (and repopulate as
-  // you zoom in) rather than the whole layer cutting at one SCAMIN. The
-  // cell is in screen pixels = worldPos * s (the constant canvas-centre
-  // offset doesn't affect which cell neighbouring points fall in). First
-  // item seen in a cell wins (buffer order).
+  // Sounding density declutter: at most one sounding per ~kCellPx screen
+  // cell, keeping the SHALLOWEST (safety). Soundings inherit a single
+  // per-feature SCAMIN, so without this they'd all vanish together. The
+  // cell is screen pixels = worldPos * s (the constant canvas-centre
+  // offset doesn't change which cell neighbours fall in). Non-soundings
+  // (symbols, names) are sparse -- shown subject only to SCAMIN.
   constexpr double kCellPx = 46.0;
-  QSet<qint64> occupied;
+  const auto cellKey = [&](const QPointF& wp) -> qint64 {
+    const long cx = std::lround(wp.x() * s / kCellPx);
+    const long cy = std::lround(wp.y() * s / kCellPx);
+    return (static_cast<qint64>(cx) << 32) ^ static_cast<quint32>(cy);
+  };
 
-  for (const Billboard& b : m_billboards) {
+  // Pass 1: for each cell, find the shallowest visible sounding.
+  QHash<qint64, int> cellShallowest;  // cell -> billboard index
+  for (int i = 0; i < m_billboards.size(); ++i) {
+    const Billboard& b = m_billboards[i];
+    if (!b.isSounding || chart_scale_n > b.scamin) continue;
+    const qint64 key = cellKey(b.worldPos);
+    auto it = cellShallowest.find(key);
+    if (it == cellShallowest.end() ||
+        b.depth < m_billboards[it.value()].depth)
+      cellShallowest[key] = i;
+  }
+
+  // Pass 2: place/hide each billboard.
+  for (int i = 0; i < m_billboards.size(); ++i) {
+    const Billboard& b = m_billboards[i];
     if (!b.xform) continue;
     bool hidden = chart_scale_n > b.scamin;  // SCAMIN hard floor
-    if (!hidden) {
-      const long cx = std::lround(b.worldPos.x() * s / kCellPx);
-      const long cy = std::lround(b.worldPos.y() * s / kCellPx);
-      const qint64 key = (static_cast<qint64>(cx) << 32) ^
-                         static_cast<quint32>(cy);
-      if (occupied.contains(key))
-        hidden = true;
-      else
-        occupied.insert(key);
-    }
+    if (!hidden && b.isSounding)
+      hidden = (cellShallowest.value(cellKey(b.worldPos), -1) != i);
 
     QMatrix4x4 m;
     if (hidden) {
@@ -254,9 +264,16 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // Billboarded point items: one QSGTransformNode (placed at the world
   // anchor, counter-scaled per viewport) wrapping a textured quad. Built
   // once with their textures; updateBillboards only touches the transform.
+  // Real per-monitor density for the SCAMIN scale denominator.
+  if (window && window->screen() &&
+      window->screen()->physicalDotsPerInch() > 1.0) {
+    m_screen_ppmm = window->screen()->physicalDotsPerInch() / 25.4;
+  }
+
   m_billboards.clear();
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
-                          QPointF pivotPx, int scamin) {
+                          QPointF pivotPx, int scamin, bool isSounding,
+                          float depth) {
     if (image.isNull() || !window) return;
     QSGTexture* tex = window->createTextureFromImage(
         image, QQuickWindow::TextureHasAlphaChannel);
@@ -273,7 +290,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     auto* xform = new QSGTransformNode();
     xform->appendChildNode(img);
     root->appendChildNode(xform);
-    m_billboards.append({xform, worldPos, scamin});
+    m_billboards.append({xform, worldPos, scamin, isSounding, depth});
   };
 
   // Text labels (soundings, names) -- centred on the anchor for now.
@@ -282,13 +299,13 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
     addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
                  QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0),
-                 lab.scamin);
+                 lab.scamin, lab.isSounding, lab.depth);
   }
 
   // Point symbols (buoys/beacons) -- pivot is the symbol's hot-spot.
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
     addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot,
-                 sym.scamin);
+                 sym.scamin, /*isSounding=*/false, /*depth=*/0.0f);
   }
 
   updateBillboards(viewport);

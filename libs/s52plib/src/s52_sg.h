@@ -85,6 +85,10 @@ struct Label {
   char vjust = '1';
   // S-52 SCAMIN: hidden when the chart is more zoomed out than 1:scamin.
   int scamin = 100000002;
+  // Soundings get spatial density declutter keeping the SHALLOWEST per
+  // cell (safety). isSounding marks them; depth is the value in metres.
+  bool isSounding = false;
+  float depth = 0.0f;
 };
 
 /** A decoded chart's geometry, ready for the consumer to upload. */

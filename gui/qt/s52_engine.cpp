@@ -389,6 +389,8 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
               const int si = feat->GetFieldIndex("SCAMIN");
               if (si >= 0 && feat->IsFieldSet(si))
                 lab.scamin = feat->GetFieldAsInteger(si);
+              lab.isSounding = true;
+              lab.depth = static_cast<float>(depth);
               buf.labels.push_back(lab);
               ++n_points;
               return;
