@@ -525,49 +525,54 @@ s52sg::Buffer S52Engine::loadEncCells(const QStringList& paths_000,
   return buf;
 }
 
+CellExtent S52Engine::scanOneCellExtent(const QString& path_000,
+                                        const QString& s57data_dir) {
+  CellExtent ce;
+  if (!m_impl->lib || !m_impl->lib->m_bOK) return ce;
+  if (!m_impl->registrar) m_impl->registrar = makeRegistrar(s57data_dir);
+  S57ClassRegistrar* registrar = m_impl->registrar;
+  if (!registrar) return ce;
+
+  OGRS57DataSource ds;
+  ds.SetS57Registrar(registrar);
+  // Assemble feature geometry (so envelopes are populated) but skip the
+  // expensive extras a full decode wants -- no depth ordinate, no
+  // multipoint splitting needed just for a bounding box.
+  const char* opts[] = {"RETURN_PRIMITIVES=OFF", "RETURN_LINKAGES=OFF",
+                        "LNAM_REFS=OFF", nullptr};
+  ds.SetOptionList(const_cast<char**>(opts));
+  if (ds.Open(path_000.toUtf8().constData(), TRUE)) return ce;  // open failed
+
+  ce.path = path_000;
+  ce.name = QFileInfo(path_000).completeBaseName();
+
+  // OGRS57Layer::GetNextFeature is disabled in the vendored driver; read
+  // straight from the reader module (as the loader does).
+  S57Reader* reader = ds.GetModule(0);
+  if (reader) {
+    reader->Rewind();
+    OGRFeature* feat;
+    while ((feat = reader->ReadNextFeature()) != nullptr) {
+      if (OGRGeometry* geom = feat->GetGeometryRef()) {
+        OGREnvelope env;
+        geom->getEnvelope(&env);
+        if (env.MaxY > ce.north) ce.north = env.MaxY;
+        if (env.MinY < ce.south) ce.south = env.MinY;
+        if (env.MaxX > ce.east) ce.east = env.MaxX;
+        if (env.MinX < ce.west) ce.west = env.MinX;
+      }
+      OGRFeature::DestroyFeature(feat);
+    }
+  }
+  return ce;  // caller checks ce.valid()
+}
+
 QList<CellExtent> S52Engine::scanCellExtents(const QStringList& paths_000,
                                              const QString& s57data_dir) {
   QList<CellExtent> out;
-  if (!m_impl->lib || !m_impl->lib->m_bOK) return out;
-
-  if (!m_impl->registrar) m_impl->registrar = makeRegistrar(s57data_dir);
-  S57ClassRegistrar* registrar = m_impl->registrar;
-  if (!registrar) return out;
-
   out.reserve(paths_000.size());
   for (const QString& path : paths_000) {
-    OGRS57DataSource ds;
-    ds.SetS57Registrar(registrar);
-    // Assemble feature geometry (so envelopes are populated) but skip the
-    // expensive extras a full decode wants -- no depth ordinate, no
-    // multipoint splitting needed just for a bounding box.
-    const char* opts[] = {"RETURN_PRIMITIVES=OFF", "RETURN_LINKAGES=OFF",
-                          "LNAM_REFS=OFF", nullptr};
-    ds.SetOptionList(const_cast<char**>(opts));
-    if (ds.Open(path.toUtf8().constData(), TRUE)) continue;  // open failed
-
-    CellExtent ce;
-    ce.path = path;
-    ce.name = QFileInfo(path).completeBaseName();
-
-    // OGRS57Layer::GetNextFeature is disabled in the vendored driver; read
-    // straight from the reader module (as the loader does).
-    S57Reader* reader = ds.GetModule(0);
-    if (reader) {
-      reader->Rewind();
-      OGRFeature* feat;
-      while ((feat = reader->ReadNextFeature()) != nullptr) {
-        if (OGRGeometry* geom = feat->GetGeometryRef()) {
-          OGREnvelope env;
-          geom->getEnvelope(&env);
-          if (env.MaxY > ce.north) ce.north = env.MaxY;
-          if (env.MinY < ce.south) ce.south = env.MinY;
-          if (env.MaxX > ce.east) ce.east = env.MaxX;
-          if (env.MinX < ce.west) ce.west = env.MinX;
-        }
-        OGRFeature::DestroyFeature(feat);
-      }
-    }
+    CellExtent ce = scanOneCellExtent(path, s57data_dir);
     if (ce.valid()) out.push_back(ce);
   }
   qWarning("scanCellExtents: %lld/%lld cells catalogued",

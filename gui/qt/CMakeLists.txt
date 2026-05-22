@@ -39,6 +39,8 @@ qt_add_qml_module(opencpn-qt
     chart_boundary_provider.cpp
     chart_worker.h
     chart_worker.cpp
+    gshhs_world_provider.h
+    gshhs_world_provider.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its
@@ -47,6 +49,14 @@ qt_add_qml_module(opencpn-qt
 # Production installs will discover via QStandardPaths::AppDataLocation.
 target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_S57DATA_DIR="${CMAKE_SOURCE_DIR}/data/s57data"
+  # GSHHS crude world coastline (poly-c-1.dat) -- the always-on world
+  # background chart, read directly by GshhsWorldProvider.
+  OCPN_QT_GSHHS_DIR="${CMAKE_SOURCE_DIR}/data/gshhs"
+)
+
+# libtess2: GshhsWorldProvider tessellates the GSHHS land polygons.
+target_include_directories(opencpn-qt PRIVATE
+  ${CMAKE_SOURCE_DIR}/libs/libtess2/Include
 )
 
 # Optional: an absolute path to a real S-57 .000 ENC cell to load on

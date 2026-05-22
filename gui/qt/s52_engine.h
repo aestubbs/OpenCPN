@@ -107,6 +107,12 @@ public:
   QList<CellExtent> scanCellExtents(const QStringList& paths_000,
                                     const QString& s57data_dir);
 
+  /** Scan a single cell's extent (see scanCellExtents). Returns an invalid
+   *  CellExtent if the cell can't be opened. Lets the worker emit the
+   *  catalog progressively so boundaries appear while a big set scans. */
+  CellExtent scanOneCellExtent(const QString& path_000,
+                               const QString& s57data_dir);
+
 Q_SIGNALS:
   void changed();
 

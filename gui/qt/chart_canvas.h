@@ -165,6 +165,9 @@ private:
   // Coalesces a burst of pan/zoom into one visible-cell evaluation.
   QTimer* m_load_debounce = nullptr;
   QString m_s57data_dir;
+  // The catalog scan publishes progressively; fit the viewport to the set
+  // only on the first batch (refitting each batch would jump the view).
+  bool m_world_fitted = false;
 
   // Drag state.
   bool m_dragging = false;

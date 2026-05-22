@@ -15,6 +15,8 @@
 
 #include "chart_worker.h"
 
+#include <QElapsedTimer>
+
 #include "s52_engine.h"
 
 namespace ocpn::qtui {
@@ -25,9 +27,28 @@ ChartWorker::ChartWorker(S52Engine* engine, QString s57data_dir,
 
 void ChartWorker::scanExtents(const QStringList& paths_000) {
   if (!m_engine) return;
-  const QList<CellExtent> cells =
-      m_engine->scanCellExtents(paths_000, m_s57data_dir);
-  Q_EMIT extentsScanned(cells);
+  // Scan cell-by-cell and publish the growing catalog in batches, so the
+  // boundary grid fills in progressively for a big set instead of after a
+  // single long blocking scan. The accumulated list is re-emitted each time
+  // (the consumer replaces its catalog wholesale).
+  QElapsedTimer timer;
+  timer.start();
+  QList<CellExtent> cells;
+  cells.reserve(paths_000.size());
+  constexpr int kBatch = 25;
+  int since_emit = 0;
+  for (const QString& path : paths_000) {
+    CellExtent ce = m_engine->scanOneCellExtent(path, m_s57data_dir);
+    if (ce.valid()) cells.push_back(ce);
+    if (++since_emit >= kBatch) {
+      Q_EMIT extentsScanned(cells);
+      since_emit = 0;
+    }
+  }
+  Q_EMIT extentsScanned(cells);  // final (also covers the empty case)
+  qWarning("ChartWorker: catalog scan %lld/%lld cells in %lld ms",
+           (long long)cells.size(), (long long)paths_000.size(),
+           (long long)timer.elapsed());
 }
 
 void ChartWorker::loadCell(const CellExtent& cell) {

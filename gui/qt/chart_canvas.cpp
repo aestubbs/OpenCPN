@@ -38,12 +38,17 @@
 #include "chart_boundary_provider.h"
 #include "chart_layer.h"
 #include "chart_worker.h"
+#include "gshhs_world_provider.h"
 #include "layer_compositor.h"
 #include "raster_chart_provider.h"
 #include "s52_engine.h"
 #include "s52_vector_chart_provider.h"
 #include "test_chart.h"
 #include "viewport.h"
+
+#ifndef OCPN_QT_GSHHS_DIR
+#define OCPN_QT_GSHHS_DIR ""
+#endif
 
 namespace ocpn::qtui {
 
@@ -67,15 +72,14 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
 
   m_compositor = std::make_unique<LayerCompositor>();
 
-  // Test chart -- RasterChartProvider holding a programmatically-drawn
-  // QImage. Real chart-DB integration plugs in by adding another
-  // ChartProvider implementation (KAP/BSB, MBTiles, S-52 vector via
-  // s52plib at P2.8).
-  auto* provider = new RasterChartProvider(
-      "demo.test-chart",
-      MakeTestChart(kTestNorth, kTestSouth, kTestWest, kTestEast),
-      kTestNorth, kTestSouth, kTestWest, kTestEast);
-  m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
+  // World background -- the bundled GSHHS crude coastline, always present
+  // under everything (lowest z) so the canvas shows a land/sea world map at
+  // any zoom. ENC cells and overlays composite on top.
+  auto* world = new GshhsWorldProvider(
+      QString::fromUtf8(OCPN_QT_GSHHS_DIR) + "/poly-c-1.dat");
+  auto* world_layer = new ChartLayer(world, m_viewport.get());
+  world_layer->setZOrder(-1000);
+  m_compositor->addLayer(world_layer);
 
   // Repaint when:
   //   - any Layer dirties (data change, visibility/z-order/opacity).
@@ -202,13 +206,15 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
   }
   m_boundary_provider->setExtents(cells);
 
-  // Start zoomed out to show the whole set's coverage (free world roam from
-  // here -- the viewport scale clamp reaches the whole globe).
+  // Fit the viewport to the set once (on the first batch). The GSHHS world
+  // backdrop is always present, so the user can freely zoom back out to the
+  // whole globe from here.
   const double n = m_boundary_provider->northLat();
   const double s = m_boundary_provider->southLat();
   const double e = m_boundary_provider->eastLon();
   const double w = m_boundary_provider->westLon();
-  if (e > w && n > s) {
+  if (!m_world_fitted && e > w && n > s) {
+    m_world_fitted = true;
     m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
     const double cw = width() > 0 ? width() : 1024.0;
     const double ch = height() > 0 ? height() : 720.0;
