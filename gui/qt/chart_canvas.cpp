@@ -130,9 +130,19 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
   if (!buf.empty()) {
     auto* provider = new S52VectorChartProvider(id, std::move(buf), n, s, w, e,
                                                 m_viewport.get());
+    provider->setDisplayCategory(m_display_category);
+    m_s52_provider = provider;
     m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
     update();
   }
+}
+
+void ChartCanvas::setDisplayCategory(int cat) {
+  if (cat == m_display_category) return;
+  m_display_category = cat;
+  if (m_s52_provider) m_s52_provider->setDisplayCategory(cat);
+  Q_EMIT displayCategoryChanged();
+  update();
 }
 
 QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,

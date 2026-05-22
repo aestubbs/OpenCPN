@@ -38,6 +38,21 @@
 extern void fromSM_plib(double x, double y, double lat0, double lon0,
                         double *lat, double *lon);
 
+// Map an S-52 display category to the scene-graph rank used for the
+// Base/Standard/All filter.
+static int dispRank(DisCat disc) {
+  switch (disc) {
+    case DISPLAYBASE:
+      return s52sg::CatBase;
+    case STANDARD:
+    case MARINERS_STANDARD:
+      return s52sg::CatStandard;
+    case OTHER:
+    default:
+      return s52sg::CatOther;
+  }
+}
+
 // Append one tessellated polygon (the object's PolyTessGeo) to `out` as
 // triangle primitives in lon/lat, coloured `c`. The TriPrim vertices are
 // SM metres relative to the PolyTessGeo feature reference; invert each
@@ -61,9 +76,11 @@ int s52plib::RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules,
 
   const bool is_double = (ppg->data_type == DATA_TYPE_DOUBLE);
   const QColor color(c->R, c->G, c->B);
+  const int dc = dispRank(rzRules->LUP->DISC);
 
   for (TriPrim *p_tp = ppg->tri_prim_head; p_tp; p_tp = p_tp->p_next) {
     s52sg::Prim prim;
+    prim.dispCat = dc;
     switch (p_tp->type) {
       case PTG_TRIANGLE_STRIP:
         prim.type = s52sg::PrimType::TriangleStrip;
@@ -106,7 +123,7 @@ int s52plib::RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules,
 // coloured line strip. INSTstr format: "<style:4>,<width>,<colour>" e.g.
 // "SOLD,2,CHGRD" -- style at [0..3], width at [5], colour token at [7].
 int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
-                          const QList<QPointF> &pts) {
+                          const QList<QPointF> &pts, int dispCat) {
   if (pts.size() < 2 || !rules->INSTstr) return 0;
   char *str = (char *)rules->INSTstr;
   S52color *c = getColor(str + 7);
@@ -118,6 +135,7 @@ int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
   prim.width = static_cast<float>(atoi(str + 5));
   if (prim.width < 1.0f) prim.width = 1.0f;
   prim.verts = pts;
+  prim.dispCat = dispCat;
   out.prims.push_back(std::move(prim));
   return 1;
 }
@@ -126,7 +144,7 @@ int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
 // colour and nominal point size come from s52plib's text parse; the
 // consumer renders it with a system font (not TexFont/DepthFont).
 static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
-                      double anchor_lat, int scamin) {
+                      double anchor_lat, int scamin, int dispCat) {
   if (!text || text->frmtd.IsEmpty()) return;
   s52sg::Label label;
   label.pos = QPointF(anchor_lon, anchor_lat);
@@ -140,6 +158,7 @@ static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
   label.hjust = text->hjust;
   label.vjust = text->vjust;
   label.scamin = scamin;
+  label.dispCat = dispCat;
   out.labels.push_back(std::move(label));
 }
 
@@ -148,14 +167,15 @@ int s52plib::RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
   if (!rzRules || !rzRules->LUP) return 0;
 
   const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
+  const int dc = dispRank(rzRules->LUP->DISC);
   auto handle = [&](Rules *rules) {
     if (rules->ruleType == RUL_TXT_TX) {
       S52_TextC *t = S52_PL_parseTX(rzRules, rules, (char *)rules->INSTstr);
-      EmitTextC(out, t, anchor_lon, anchor_lat, scamin);
+      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc);
       delete t;
     } else if (rules->ruleType == RUL_TXT_TE) {
       S52_TextC *t = S52_PL_parseTE(rzRules, rules, (char *)rules->INSTstr);
-      EmitTextC(out, t, anchor_lon, anchor_lat, scamin);
+      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc);
       delete t;
     }
   };
@@ -192,6 +212,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                                    double anchor_lon, double anchor_lat) {
   if (!rzRules || !rzRules->LUP) return 0;
   const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
+  const int dc = dispRank(rzRules->LUP->DISC);
 
   auto emitSY = [&](Rules *rules) {
     Rule *prule = rules->razRule;
@@ -205,6 +226,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     sym.pivot = QPointF(prule->pos.symb.pivot_x.SYCL,
                         prule->pos.symb.pivot_y.SYRW);
     sym.scamin = scamin;
+    sym.dispCat = dc;
     out.symbols.push_back(std::move(sym));
   };
 
@@ -239,12 +261,13 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
 int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                             const QList<QPointF> &pts) {
   if (!rzRules || !rzRules->LUP) return 0;
+  const int dc = dispRank(rzRules->LUP->DISC);
 
   Rules *rules = rzRules->LUP->ruleList;
   while (rules != NULL) {
     switch (rules->ruleType) {
       case RUL_SIM_LN:
-        RenderToSGLS(out, rules, pts);
+        RenderToSGLS(out, rules, pts, dc);
         break;
 
       case RUL_CND_SY: {
@@ -256,7 +279,7 @@ int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
         Rules *rules_last = rules;
         rules = rzRules->obj->CSrules;
         while (NULL != rules) {
-          if (rules->ruleType == RUL_SIM_LN) RenderToSGLS(out, rules, pts);
+          if (rules->ruleType == RUL_SIM_LN) RenderToSGLS(out, rules, pts, dc);
           rules_last = rules;
           rules = rules->next;
         }

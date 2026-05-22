@@ -43,6 +43,27 @@ ApplicationWindow {
         font.pointSize: 14
         color: "#202020"
     }
+
+    // S-52 display-category control (Base / Standard / All). Forwards to
+    // ChartCanvas::displayCategory, which filters the vector chart.
+    Row {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: 12
+        spacing: 6
+        Repeater {
+            model: [ { label: qsTr("Base"), cat: 0 },
+                     { label: qsTr("Standard"), cat: 1 },
+                     { label: qsTr("All"), cat: 2 } ]
+            delegate: Button {
+                required property var modelData
+                text: modelData.label
+                checkable: true
+                checked: chart.displayCategory === modelData.cat
+                onClicked: chart.displayCategory = modelData.cat
+            }
+        }
+    }
     Text {
         id: s52Status
         anchors.left: parent.left

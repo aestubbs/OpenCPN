@@ -140,6 +140,15 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
   }
 }
 
+void S52VectorChartProvider::setDisplayCategory(int cat) {
+  if (cat == m_displayCategory) return;
+  m_displayCategory = cat;
+  // Force a full rebuild filtering by the new category. m_built=false makes
+  // renderChart construct a fresh subtree (the compositor frees the old).
+  m_built = false;
+  Q_EMIT changed();
+}
+
 void S52VectorChartProvider::rebuildLines(double scale) {
   if (scale <= 0.0) return;
   // Each line feature is N parallel 1px polylines offset perpendicular from
@@ -295,6 +304,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
 
   for (const s52sg::Prim& prim : m_buffer.prims) {
     if (prim.verts.isEmpty()) continue;
+    if (prim.dispCat > m_displayCategory) continue;  // display-category filter
 
     // Line features: N parallel 1px polylines (Qt RHI caps real line width
     // at 1). N is fixed by the physical pen width; create the strips now
@@ -376,6 +386,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
 
   // Text labels (soundings, names) -- centred on the anchor for now.
   for (const s52sg::Label& lab : m_buffer.labels) {
+    if (lab.dispCat > m_displayCategory) continue;
     QImage img = renderLabelImage(lab);
     const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
     addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
@@ -385,6 +396,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
 
   // Point symbols (buoys/beacons) -- pivot is the symbol's hot-spot.
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
+    if (sym.dispCat > m_displayCategory) continue;
     addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot,
                  sym.scamin, /*isSounding=*/false, /*depth=*/0.0f);
   }

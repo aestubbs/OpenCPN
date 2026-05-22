@@ -50,6 +50,7 @@ namespace ocpn::qtui {
 
 class LayerCompositor;
 class Viewport;
+class S52VectorChartProvider;
 
 class ChartCanvas : public QQuickItem {
   Q_OBJECT
@@ -62,6 +63,11 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(ocpn::qtui::S52Engine* s52Engine READ s52Engine WRITE
                  setS52Engine NOTIFY s52EngineChanged)
 
+  // S-52 display category: 0 = Base, 1 = Standard, 2 = All. Bound from a
+  // QML control; forwards to the vector chart provider.
+  Q_PROPERTY(int displayCategory READ displayCategory WRITE setDisplayCategory
+                 NOTIFY displayCategoryChanged)
+
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
   ~ChartCanvas() override;
@@ -69,8 +75,12 @@ public:
   S52Engine* s52Engine() const { return m_s52_engine; }
   void setS52Engine(S52Engine* engine);
 
+  int displayCategory() const { return m_display_category; }
+  void setDisplayCategory(int cat);
+
 Q_SIGNALS:
   void s52EngineChanged();
+  void displayCategoryChanged();
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
@@ -93,6 +103,10 @@ private:
 
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;
+  // Non-owning (owned by the compositor's ChartLayer). The active vector
+  // chart provider, for forwarding display-category changes.
+  S52VectorChartProvider* m_s52_provider = nullptr;
+  int m_display_category = 1;  // 0 Base, 1 Standard, 2 All
 
   // Drag state.
   bool m_dragging = false;

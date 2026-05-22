@@ -537,7 +537,8 @@ private:
   // from SM back to lon/lat -- to `out`. RenderToSGLS resolves an LS
   // (simple line) rule's pen and appends `pts` as a coloured line strip.
   int RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules, Rules *rules);
-  int RenderToSGLS(s52sg::Buffer &out, Rules *rules, const QList<QPointF> &pts);
+  int RenderToSGLS(s52sg::Buffer &out, Rules *rules, const QList<QPointF> &pts,
+                   int dispCat);
 
   //    Object Renderers
   int RenderTX(ObjRazRules *rzRules, Rules *rules);

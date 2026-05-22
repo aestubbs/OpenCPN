@@ -65,6 +65,12 @@ public:
   QSGNode* renderChart(QSGNode* old_subtree, const Viewport& viewport,
                        QQuickWindow* window) override;
 
+  /** S-52 display category to show: 0 = Base, 1 = Standard, 2 = All
+   *  (Other). Items with a higher category rank are filtered out. Changing
+   *  it forces a rebuild (emits changed()). */
+  void setDisplayCategory(int cat);
+  int displayCategory() const { return m_displayCategory; }
+
 private:
   // One billboarded point item (symbol or text): a transform node placed
   // at the world anchor whose scale counters the viewport scale so the
@@ -99,6 +105,7 @@ private:
   double m_screen_ppmm = 3.8;
   QList<LineGeom> m_lines;
   double m_last_line_scale = -1.0;
+  int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All
 
   QString m_id;
   s52sg::Buffer m_buffer;

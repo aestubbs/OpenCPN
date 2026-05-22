@@ -50,11 +50,17 @@ enum class PrimType { Triangles, TriangleStrip, TriangleFan, LineStrip };
  *  (lon, lat) -- s52plib applies no projection, the consumer maps into
  *  its own world/screen space) with a resolved colour. For LineStrip,
  *  `width` is the pen width; ignored for fills. */
+// S-52 display-category rank: 0 = DISPLAYBASE (always shown), 1 = STANDARD,
+// 2 = OTHER. The consumer shows items whose rank <= the selected level
+// (Base / Standard / All).
+enum DisplayCat { CatBase = 0, CatStandard = 1, CatOther = 2 };
+
 struct Prim {
   PrimType type = PrimType::Triangles;
   QList<QPointF> verts;  // (lon, lat) per point
   QColor color;
   float width = 1.0f;
+  int dispCat = CatStandard;
 };
 
 /** A point symbol placement (buoy, beacon, ...). `image` is the symbol
@@ -69,6 +75,7 @@ struct Symbol {
   // S-52 SCAMIN: the 1:N chart scale beyond which (more zoomed out) this
   // item is hidden. The s52plib "unset" sentinel (~1e8) means always show.
   int scamin = 100000002;
+  int dispCat = CatStandard;
 };
 
 /** A text label (sounding, feature name, ...). Rendered by the consumer
@@ -89,6 +96,7 @@ struct Label {
   // cell (safety). isSounding marks them; depth is the value in metres.
   bool isSounding = false;
   float depth = 0.0f;
+  int dispCat = CatStandard;
 };
 
 /** A decoded chart's geometry, ready for the consumer to upload. */
