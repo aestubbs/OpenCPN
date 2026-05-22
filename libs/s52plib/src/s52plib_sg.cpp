@@ -51,7 +51,7 @@ int s52plib::RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules,
   if (!ppg_geo->IsOk()) ppg_geo->BuildDeferredTess();
 
   double ref_lat = 0, ref_lon = 0;
-  ppg_geo->GetFeatureRefPos(&ref_lat, &ref_lon);
+  ppg_geo->GetChartRefPos(&ref_lat, &ref_lon);
 
   PolyTriGroup *ppg = ppg_geo->Get_PolyTriGroup_head();
   if (!ppg) return 0;

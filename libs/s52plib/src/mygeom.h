@@ -240,13 +240,15 @@ public:
 
   int ErrorCode;
   void GetRefPos( double *lat, double *lon);
-  /** The feature reference position (polygon-bbox centre) that the
-   *  tessellated TriPrim vertices are SM-relative to. Needed to invert
-   *  those vertices back to lon/lat for the scene-graph emit path
-   *  (P2.8c). */
-  void GetFeatureRefPos(double *lat, double *lon) const {
-    *lat = m_feature_ref_lat;
-    *lon = m_feature_ref_lon;
+  /** The chart reference position the tessellated TriPrim vertices are
+   *  SM-relative to. BuildTessGLU adds m_feature_easting/northing to each
+   *  vertex ("adjust to chart ref coordinates"), so the vertices are
+   *  relative to the constructor's ref_lat/ref_lon -- NOT the per-feature
+   *  bbox centre. The scene-graph emit (P2.8c) inverts SM->lon/lat against
+   *  this. */
+  void GetChartRefPos(double *lat, double *lon) const {
+    *lat = m_ref_lat;
+    *lon = m_ref_lon;
   }
   void Set_PolyTriGroup_head(PolyTriGroup *head) { m_ppg_head = head; }
   void Set_OK(bool bok) { m_bOK = bok; }
