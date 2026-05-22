@@ -16,16 +16,48 @@
 #include "s52_vector_chart_provider.h"
 
 #include <QColor>
+#include <QFont>
+#include <QFontMetrics>
+#include <QImage>
+#include <QMatrix4x4>
+#include <QPainter>
+#include <QQuickWindow>
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
+#include <QSGImageNode>
 #include <QSGNode>
+#include <QSGTransformNode>
 
 #include "viewport.h"
 
 namespace ocpn::qtui {
 
 namespace {
+// Render a text label to an RGBA image using a SYSTEM font (the default
+// application font). This is the Qt-native replacement for the chart's
+// proprietary TexFont/DepthFont engine; font selection becomes
+// configurable later. Rendered at 2x for crispness on hi-DPI.
+QImage renderLabelImage(const s52sg::Label& lab) {
+  QFont font;  // default system font
+  font.setPointSizeF(lab.pointSize);
+  const qreal dpr = 2.0;
+  QFontMetrics fm(font);
+  QRect br = fm.boundingRect(lab.text);
+  const int w = (br.width() + 4);
+  const int h = (br.height() + 4);
+  QImage img(static_cast<int>(w * dpr), static_cast<int>(h * dpr),
+             QImage::Format_RGBA8888_Premultiplied);
+  img.setDevicePixelRatio(dpr);
+  img.fill(Qt::transparent);
+  QPainter p(&img);
+  p.setRenderHint(QPainter::TextAntialiasing, true);
+  p.setFont(font);
+  p.setPen(lab.color.isValid() ? lab.color : QColor(0, 0, 0));
+  p.drawText(QRectF(0, 0, w, h), Qt::AlignCenter, lab.text);
+  p.end();
+  return img;
+}
 // World convention: x = lon, y = -lat (see viewport.h). Buffer vertices
 // are QPointF(lon, lat).
 QSGGeometry::Point2D worldPoint(const QPointF& v) {
@@ -84,6 +116,7 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
                                                s52sg::Buffer buffer,
                                                double north, double south,
                                                double west, double east,
+                                               const Viewport* viewport,
                                                QObject* parent)
     : ChartProvider(parent),
       m_id(std::move(id)),
@@ -91,15 +124,44 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
       m_north(north),
       m_south(south),
       m_west(west),
-      m_east(east) {}
+      m_east(east),
+      m_viewport(viewport) {
+  // Billboarded point items (symbols/text) must re-apply their counter-
+  // scale when the viewport zooms. Watch the viewport and ask the
+  // wrapping ChartLayer to re-run renderChart (which only updates the
+  // billboard transforms -- geometry + textures are built once).
+  if (m_viewport) {
+    connect(m_viewport, &Viewport::changed, this, &ChartProvider::changed);
+  }
+}
+
+void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
+  const double s = viewport.scale();
+  if (s <= 0.0) return;
+  for (const Billboard& b : m_billboards) {
+    if (!b.xform) continue;
+    QMatrix4x4 m;
+    // Placed under the World-anchored root (transform M = ...*scale(s)).
+    // translate to the world anchor, then scale(1/s) so M*this leaves the
+    // content at screen-pixel size regardless of zoom.
+    m.translate(static_cast<float>(b.worldPos.x()),
+                static_cast<float>(b.worldPos.y()));
+    m.scale(static_cast<float>(1.0 / s), static_cast<float>(1.0 / s));
+    b.xform->setMatrix(m);
+  }
+}
 
 QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
-                                             const Viewport& /*viewport*/,
-                                             QQuickWindow* /*window*/) {
-  // Geometry is static in world coordinates -- build the node tree once
-  // and reuse it. Pan/zoom is handled entirely by the World-anchored
-  // root's transform, so there is nothing to rebuild per frame.
-  if (old_subtree) return old_subtree;
+                                             const Viewport& viewport,
+                                             QQuickWindow* window) {
+  // Static fills/lines + the billboard point items are built once. On
+  // later calls (viewport pan/zoom) we only re-apply the billboard
+  // counter-scale; the World-anchored root transform handles everything
+  // else, so no geometry or textures are rebuilt.
+  if (old_subtree && m_built) {
+    updateBillboards(viewport);
+    return old_subtree;
+  }
 
   auto* root = new QSGNode();
 
@@ -112,7 +174,10 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(),
                                   static_cast<int>(prim.verts.size()));
       geo->setDrawingMode(QSGGeometry::DrawLineStrip);
-      geo->setLineWidth(prim.width);
+      // The Qt RHI backends (Metal/Vulkan/D3D) only support line width 1;
+      // wider S-52 pens need quad geometry (a later refinement). Clamp to
+      // avoid the per-frame "line widths other than 1" warning.
+      geo->setLineWidth(1.0f);
       QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
       for (qsizetype i = 0; i < prim.verts.size(); ++i)
         v[i] = worldPoint(prim.verts[i]);
@@ -148,6 +213,46 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     root->appendChildNode(node);
   }
 
+  // Billboarded point items: one QSGTransformNode (placed at the world
+  // anchor, counter-scaled per viewport) wrapping a textured quad. Built
+  // once with their textures; updateBillboards only touches the transform.
+  m_billboards.clear();
+  auto addBillboard = [&](const QImage& image, QPointF worldPos,
+                          QPointF pivotPx) {
+    if (image.isNull() || !window) return;
+    QSGTexture* tex = window->createTextureFromImage(
+        image, QQuickWindow::TextureHasAlphaChannel);
+    if (!tex) return;
+    const qreal dpr = image.devicePixelRatio() > 0 ? image.devicePixelRatio()
+                                                    : 1.0;
+    const qreal w = image.width() / dpr;
+    const qreal h = image.height() / dpr;
+    auto* img = window->createImageNode();
+    img->setTexture(tex);
+    img->setOwnsTexture(true);
+    img->setRect(QRectF(-pivotPx.x(), -pivotPx.y(), w, h));
+    img->setFiltering(QSGTexture::Linear);
+    auto* xform = new QSGTransformNode();
+    xform->appendChildNode(img);
+    root->appendChildNode(xform);
+    m_billboards.append({xform, worldPos});
+  };
+
+  // Text labels (soundings, names) -- centred on the anchor for now.
+  for (const s52sg::Label& lab : m_buffer.labels) {
+    QImage img = renderLabelImage(lab);
+    const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
+    addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
+                 QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0));
+  }
+
+  // Point symbols (buoys/beacons) -- pivot is the symbol's hot-spot.
+  for (const s52sg::Symbol& sym : m_buffer.symbols) {
+    addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot);
+  }
+
+  updateBillboards(viewport);
+  m_built = true;
   return root;
 }
 

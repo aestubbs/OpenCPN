@@ -128,8 +128,8 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
   }
 
   if (!buf.empty()) {
-    auto* provider =
-        new S52VectorChartProvider(id, std::move(buf), n, s, w, e);
+    auto* provider = new S52VectorChartProvider(id, std::move(buf), n, s, w, e,
+                                                m_viewport.get());
     m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
     update();
   }

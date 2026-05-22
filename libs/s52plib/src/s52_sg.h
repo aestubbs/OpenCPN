@@ -35,14 +35,15 @@
 #define _S52_SG_H_
 
 #include <QColor>
+#include <QImage>
 #include <QList>
 #include <QPointF>
+#include <QString>
 
 namespace s52sg {
 
 /** Primitive topology. Triangle kinds back area fills; LineStrip backs
- *  line features (coastlines, depth contours, ...). Symbols and text are
- *  added in later P2.8c sub-steps. */
+ *  line features (coastlines, depth contours, ...). */
 enum class PrimType { Triangles, TriangleStrip, TriangleFan, LineStrip };
 
 /** One renderable batch: a run of geographic vertices (QPointF holding
@@ -56,12 +57,45 @@ struct Prim {
   float width = 1.0f;
 };
 
+/** A point symbol placement (buoy, beacon, ...). `image` is the symbol
+ *  bitmap cropped from the S-52 raster atlas; `pos` is its geographic
+ *  anchor; `pivot` is the pixel offset within the image that sits on the
+ *  anchor. Screen-fixed size -- the consumer billboards it (world
+ *  position, screen-pixel size). */
+struct Symbol {
+  QPointF pos;     // (lon, lat) anchor
+  QImage image;    // RGBA symbol bitmap
+  QPointF pivot;   // pixel offset of the anchor within image
+};
+
+/** A text label (sounding, feature name, ...). Rendered by the consumer
+ *  with a SYSTEM font (not the proprietary chart font engine); s52plib
+ *  only resolves the string, colour and nominal point size. Billboarded
+ *  like Symbol. `hjust`/`vjust` follow S-52 ('1' centre, '2' right/bottom,
+ *  '3' left/top per S-52 convention; the consumer interprets). */
+struct Label {
+  QPointF pos;       // (lon, lat) anchor
+  QString text;
+  QColor color;
+  float pointSize = 10.0f;
+  char hjust = '1';
+  char vjust = '1';
+};
+
 /** A decoded chart's geometry, ready for the consumer to upload. */
 class Buffer {
 public:
   QList<Prim> prims;
-  void clear() { prims.clear(); }
-  bool empty() const { return prims.isEmpty(); }
+  QList<Symbol> symbols;
+  QList<Label> labels;
+  void clear() {
+    prims.clear();
+    symbols.clear();
+    labels.clear();
+  }
+  bool empty() const {
+    return prims.isEmpty() && symbols.isEmpty() && labels.isEmpty();
+  }
 };
 
 }  // namespace s52sg

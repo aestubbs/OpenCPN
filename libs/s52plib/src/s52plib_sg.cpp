@@ -119,6 +119,66 @@ int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
   return 1;
 }
 
+// Resolve a parsed S52_TextC into a Label and append it. The string,
+// colour and nominal point size come from s52plib's text parse; the
+// consumer renders it with a system font (not TexFont/DepthFont).
+static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
+                      double anchor_lat) {
+  if (!text || text->frmtd.IsEmpty()) return;
+  s52sg::Label label;
+  label.pos = QPointF(anchor_lon, anchor_lat);
+  label.text = QString::fromUtf8(text->frmtd.ToUTF8().data());
+  if (text->pcol)
+    label.color = QColor(text->pcol->R, text->pcol->G, text->pcol->B);
+  else
+    label.color = QColor(0, 0, 0);
+  // bsize is the S-52 body size in points-ish; map directly for now.
+  label.pointSize = text->bsize > 0 ? static_cast<float>(text->bsize) : 10.0f;
+  label.hjust = text->hjust;
+  label.vjust = text->vjust;
+  out.labels.push_back(std::move(label));
+}
+
+int s52plib::RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
+                            double anchor_lon, double anchor_lat) {
+  if (!rzRules || !rzRules->LUP) return 0;
+
+  auto handle = [&](Rules *rules) {
+    if (rules->ruleType == RUL_TXT_TX) {
+      S52_TextC *t = S52_PL_parseTX(rzRules, rules, (char *)rules->INSTstr);
+      EmitTextC(out, t, anchor_lon, anchor_lat);
+      delete t;
+    } else if (rules->ruleType == RUL_TXT_TE) {
+      S52_TextC *t = S52_PL_parseTE(rzRules, rules, (char *)rules->INSTstr);
+      EmitTextC(out, t, anchor_lon, anchor_lat);
+      delete t;
+    }
+  };
+
+  Rules *rules = rzRules->LUP->ruleList;
+  while (rules != NULL) {
+    if (rules->ruleType == RUL_CND_SY) {
+      if (!rzRules->obj->bCS_Added) {
+        rzRules->obj->CSrules = NULL;
+        GetAndAddCSRules(rzRules, rules);
+        rzRules->obj->bCS_Added = 1;
+      }
+      Rules *rules_last = rules;
+      Rules *cs = rzRules->obj->CSrules;
+      while (NULL != cs) {
+        handle(cs);
+        rules_last = cs;
+        cs = cs->next;
+      }
+      rules = rules_last;
+    } else {
+      handle(rules);
+    }
+    rules = rules->next;
+  }
+  return 1;
+}
+
 // Walk a line object's rule list, mirroring DoRenderObject's LS/CS
 // dispatch: LS rules emit line strips; conditional symbology (e.g.
 // DEPCNT depth-contour colour) is expanded first. Complex-line (LC)

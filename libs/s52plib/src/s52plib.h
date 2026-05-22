@@ -388,6 +388,13 @@ public:
   int RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                      const QList<QPointF> &pts);
 
+  //    Text emit. Walks TX/TE rules, resolves the string/colour/size, and
+  //    appends a Label anchored at (anchor_lon, anchor_lat). The consumer
+  //    renders it with a system font -- the proprietary chart-font engine
+  //    is not used.
+  int RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
+                     double anchor_lon, double anchor_lat);
+
   bool EnableGLLS(bool benable);
 
   bool IsObjNoshow(const char *objcl);

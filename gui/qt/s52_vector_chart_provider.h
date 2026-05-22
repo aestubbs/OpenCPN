@@ -29,10 +29,16 @@
 #ifndef OCPN_QT_S52_VECTOR_CHART_PROVIDER_H_
 #define OCPN_QT_S52_VECTOR_CHART_PROVIDER_H_
 
+#include <QList>
+#include <QPointF>
 #include <QString>
 
 #include "chart_provider.h"
 #include "s52_sg.h"
+
+QT_BEGIN_NAMESPACE
+class QSGTransformNode;
+QT_END_NAMESPACE
 
 namespace ocpn::qtui {
 
@@ -40,12 +46,15 @@ class S52VectorChartProvider : public ChartProvider {
   Q_OBJECT
 
 public:
+  // `viewport` is used only to billboard point symbols / text labels
+  // (world-positioned but screen-fixed size): the provider watches it and
+  // re-applies the counter-scale on pan/zoom. Static fills/lines ignore it.
   S52VectorChartProvider(QString id, s52sg::Buffer buffer, double north,
                          double south, double west, double east,
-                         QObject* parent = nullptr);
+                         const Viewport* viewport, QObject* parent = nullptr);
 
   QString id() const override { return m_id; }
-  QString name() const override { return QStringLiteral("S-52 demo chart"); }
+  QString name() const override { return QStringLiteral("S-52 chart"); }
 
   double northLat() const override { return m_north; }
   double southLat() const override { return m_south; }
@@ -56,9 +65,22 @@ public:
                        QQuickWindow* window) override;
 
 private:
+  // One billboarded point item (symbol or text): a transform node placed
+  // at the world anchor whose scale counters the viewport scale so the
+  // content stays screen-pixel-sized.
+  struct Billboard {
+    QSGTransformNode* xform = nullptr;
+    QPointF worldPos;  // (x=lon, y=-lat)
+  };
+
+  void updateBillboards(const Viewport& viewport);
+
   QString m_id;
   s52sg::Buffer m_buffer;
   double m_north, m_south, m_west, m_east;
+  const Viewport* m_viewport;
+  QList<Billboard> m_billboards;
+  bool m_built = false;
 };
 
 }  // namespace ocpn::qtui

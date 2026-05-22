@@ -87,6 +87,12 @@ bool S52Engine::init(const QString& data_dir) {
     return false;
   }
 
+  // Several s52plib conditional-symbology procedures (e.g. _LITDSN01 for
+  // LIGHTS) reach for the global `ps52plib` instance rather than `this`.
+  // The legacy app sets it during chart load; do the same so the CS code
+  // doesn't dereference null.
+  ps52plib = m_impl->lib;
+
   // Configure the presentation library for rendering: a colour scheme
   // (so getColor() resolves S-52 tokens) and the standard display
   // category / boundary+symbol styles. ChartCtx(false, 0) -- not the GL
@@ -288,6 +294,7 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
   double n = -90, s = 90, e = -180, w = 180;  // accumulate extent
   int n_areas = 0;
   int n_lines = 0;
+  int n_points = 0;
 
   // NB: OGRS57Layer::GetNextFeature is disabled in this vendored driver
   // (its filter logic is commented out, so it always returns NULL). Read
@@ -365,8 +372,58 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
             for (int k = 0; k < ml->getNumGeometries(); ++k)
               emitLine(static_cast<OGRLineString*>(ml->getGeometryRef(k)));
           }
+        } else if (gt == wkbPoint || gt == wkbMultiPoint) {
+          auto emitPoint = [&](OGRPoint* pt) {
+            const double lon = pt->getX(), lat = pt->getY();
+            if (strncmp(className, "SOUNDG", 6) == 0) {
+              // Sounding: the depth rides in the Z ordinate (we opened the
+              // cell with ADD_SOUNDG_DEPTH + SPLIT_MULTIPOINT). Format it as
+              // a label; metres, one decimal under 10 fathoms-equivalent.
+              const double depth = pt->getZ();
+              s52sg::Label lab;
+              lab.pos = QPointF(lon, lat);
+              lab.color = QColor(60, 60, 60);
+              lab.pointSize = 9.0f;
+              lab.text = depth < 10.0 ? QString::number(depth, 'f', 1)
+                                      : QString::number(qRound(depth));
+              buf.labels.push_back(lab);
+              ++n_points;
+              return;
+            }
+            // Other point features: build a GEO_POINT S57Obj, look up its
+            // symbology, and emit any TX/TE text labels. (Raster point
+            // symbols are added next.)
+            auto* obj = new S57Obj(className);
+            obj->m_chart_context = ctx;
+            obj->Primitive_type = GEO_POINT;
+            obj->m_lat = lat;
+            obj->m_lon = lon;
+            CopyFeatureAttributes(feat, obj);
+            LUPrec* lup =
+                plib->S52_LUPLookup(PAPER_CHART, obj->FeatureName, obj);
+            if (!lup) {
+              delete obj;
+              return;
+            }
+            plib->_LUP2rules(lup, obj);
+            ObjRazRules rz;
+            rz.obj = obj;
+            rz.LUP = lup;
+            rz.sm_transform_parms = nullptr;
+            rz.child = nullptr;
+            rz.next = nullptr;
+            rz.mps = nullptr;
+            plib->RenderTextToSG(buf, &rz, lon, lat);
+            ++n_points;
+          };
+          if (gt == wkbPoint) {
+            emitPoint(static_cast<OGRPoint*>(geom));
+          } else {
+            auto* mp = static_cast<OGRMultiPoint*>(geom);
+            for (int k = 0; k < mp->getNumGeometries(); ++k)
+              emitPoint(static_cast<OGRPoint*>(mp->getGeometryRef(k)));
+          }
         }
-        // Point features (soundings/buoys/beacons) follow.
       }
       OGRFeature::DestroyFeature(feat);
     }
@@ -378,12 +435,13 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
   if (out_west) *out_west = w;
 
   m_impl->status = QStringLiteral(
-                       "S-52: loaded ENC %1 -- %2 areas, %3 lines, extent "
-                       "%4..%5 lat, %6..%7 lon")
+                       "S-52: loaded ENC %1 -- %2 areas, %3 lines, %4 points, "
+                       "extent %5..%6 lat, %7..%8 lon")
                        .arg(QString::fromUtf8(
                            path_000.toUtf8().mid(path_000.lastIndexOf('/') + 1)))
                        .arg(n_areas)
                        .arg(n_lines)
+                       .arg(n_points)
                        .arg(s, 0, 'f', 3)
                        .arg(n, 0, 'f', 3)
                        .arg(w, 0, 'f', 3)
