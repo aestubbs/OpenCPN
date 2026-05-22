@@ -256,80 +256,150 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
 
 // Walk a line object's rule list, mirroring DoRenderObject's LS/CS
 // dispatch: LS rules emit line strips; conditional symbology (e.g.
-// DEPCNT depth-contour colour) is expanded first. Complex-line (LC)
-// symbol patterns are deferred -- they fall back to nothing for now.
+// DEPCNT depth-contour colour) is expanded first. Complex-line (LC) rules
+// are HPGL symbol-along-line patterns we can't emit without the vector
+// path -- they fall back to a plain line in the LC's resolved colour.
 int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                             const QList<QPointF> &pts) {
   if (!rzRules || !rzRules->LUP) return 0;
   const int dc = dispRank(rzRules->LUP->DISC);
 
+  // LC fallback: resolve the line-symbol's colour (HPGL colRef "nXXX",
+  // skip the leading count char) and draw a plain line strip.
+  auto emitLC = [&](Rules *r) {
+    if (pts.size() < 2 || !r->razRule || !r->razRule->colRef.LCRF) return;
+    S52color *c = getColor(r->razRule->colRef.LCRF + 1);
+    if (!c) return;
+    s52sg::Prim prim;
+    prim.type = s52sg::PrimType::LineStrip;
+    prim.color = QColor(c->R, c->G, c->B);
+    prim.width = 1.0f;
+    prim.verts = pts;
+    prim.dispCat = dc;
+    out.prims.push_back(std::move(prim));
+  };
+
+  auto handle = [&](Rules *r) {
+    if (r->ruleType == RUL_SIM_LN)
+      RenderToSGLS(out, r, pts, dc);
+    else if (r->ruleType == RUL_COM_LN)
+      emitLC(r);
+  };
+
   Rules *rules = rzRules->LUP->ruleList;
   while (rules != NULL) {
-    switch (rules->ruleType) {
-      case RUL_SIM_LN:
-        RenderToSGLS(out, rules, pts, dc);
-        break;
-
-      case RUL_CND_SY: {
-        if (!rzRules->obj->bCS_Added) {
-          rzRules->obj->CSrules = NULL;
-          GetAndAddCSRules(rzRules, rules);
-          rzRules->obj->bCS_Added = 1;
-        }
-        Rules *rules_last = rules;
-        rules = rzRules->obj->CSrules;
-        while (NULL != rules) {
-          if (rules->ruleType == RUL_SIM_LN) RenderToSGLS(out, rules, pts, dc);
-          rules_last = rules;
-          rules = rules->next;
-        }
-        rules = rules_last;
-        break;
+    if (rules->ruleType == RUL_CND_SY) {
+      if (!rzRules->obj->bCS_Added) {
+        rzRules->obj->CSrules = NULL;
+        GetAndAddCSRules(rzRules, rules);
+        rzRules->obj->bCS_Added = 1;
       }
-
-      case RUL_NONE:
-      default:
-        break;
+      Rules *rules_last = rules;
+      Rules *cs = rzRules->obj->CSrules;
+      while (NULL != cs) {
+        handle(cs);
+        rules_last = cs;
+        cs = cs->next;
+      }
+      rules = rules_last;
+    } else {
+      handle(rules);
     }
     rules = rules->next;
   }
   return 1;
 }
 
+// Tessellate the object's polygon to an independent triangle list in
+// lon/lat (fans/strips expanded). Used by the AP pattern-fill emit.
+static QList<QPointF> tessLonLatTriangles(PolyTessGeo *ppg_geo) {
+  QList<QPointF> out;
+  if (!ppg_geo) return out;
+  if (!ppg_geo->IsOk()) ppg_geo->BuildDeferredTess();
+  double ref_lat = 0, ref_lon = 0;
+  ppg_geo->GetChartRefPos(&ref_lat, &ref_lon);
+  PolyTriGroup *ppg = ppg_geo->Get_PolyTriGroup_head();
+  if (!ppg) return out;
+  const bool is_double = (ppg->data_type == DATA_TYPE_DOUBLE);
+
+  for (TriPrim *p_tp = ppg->tri_prim_head; p_tp; p_tp = p_tp->p_next) {
+    QList<QPointF> v;
+    v.reserve(p_tp->nVert);
+    const float *pf = reinterpret_cast<const float *>(p_tp->p_vertex);
+    const double *pd = reinterpret_cast<const double *>(p_tp->p_vertex);
+    for (int i = 0; i < p_tp->nVert; ++i) {
+      double east = is_double ? pd[2 * i] : pf[2 * i];
+      double north = is_double ? pd[2 * i + 1] : pf[2 * i + 1];
+      double lat, lon;
+      fromSM_plib(east, north, ref_lat, ref_lon, &lat, &lon);
+      v.append(QPointF(lon, lat));
+    }
+    if (p_tp->type == PTG_TRIANGLE_FAN) {
+      for (qsizetype i = 1; i + 1 < v.size(); ++i) out << v[0] << v[i] << v[i + 1];
+    } else if (p_tp->type == PTG_TRIANGLE_STRIP) {
+      for (qsizetype i = 0; i + 2 < v.size(); ++i) {
+        if (i & 1)
+          out << v[i + 1] << v[i] << v[i + 2];
+        else
+          out << v[i] << v[i + 1] << v[i + 2];
+      }
+    } else {  // PTG_TRIANGLES
+      out += v;
+    }
+  }
+  return out;
+}
+
+int s52plib::RenderToSGAP(s52sg::Buffer &out, ObjRazRules *rzRules,
+                          Rules *rules) {
+  Rule *prule = rules->razRule;
+  if (!prule || prule->definition.PADF != 'R') return 0;  // raster patterns
+  wxImage img = m_chartSymbols.GetImage(prule->name.PANM);
+  if (!img.IsOk()) return 0;
+  if (!rzRules->obj->pPolyTessGeo) return 0;
+
+  s52sg::PatternFill pf;
+  pf.tris = tessLonLatTriangles(rzRules->obj->pPolyTessGeo);
+  if (pf.tris.isEmpty()) return 0;
+  pf.pattern = WxImageToQImage(img);
+  pf.dispCat = dispRank(rzRules->LUP->DISC);
+  pf.scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
+  out.patternFills.push_back(std::move(pf));
+  return 1;
+}
+
 // Walk an area object's rule list, mirroring RenderAreaToGL: AC rules emit
-// fills; conditional-symbology rules are expanded first. Pattern fills
-// (AP) and the visibility/scale culling that the GL path performs are
-// deferred -- synthetic demo objects are always in view.
+// solid fills, AP rules emit tiled pattern fills; conditional-symbology
+// rules are expanded first. Scale/category culling is applied by the
+// consumer.
 int s52plib::RenderAreaToSG(s52sg::Buffer &out, ObjRazRules *rzRules) {
   if (!rzRules || !rzRules->LUP) return 0;
 
+  auto handle = [&](Rules *r) {
+    if (r->ruleType == RUL_ARE_CO)
+      RenderToSGAC(out, rzRules, r);
+    else if (r->ruleType == RUL_ARE_PA)
+      RenderToSGAP(out, rzRules, r);
+  };
+
   Rules *rules = rzRules->LUP->ruleList;
   while (rules != NULL) {
-    switch (rules->ruleType) {
-      case RUL_ARE_CO:
-        RenderToSGAC(out, rzRules, rules);
-        break;
-
-      case RUL_CND_SY: {
-        if (!rzRules->obj->bCS_Added) {
-          rzRules->obj->CSrules = NULL;
-          GetAndAddCSRules(rzRules, rules);
-          rzRules->obj->bCS_Added = 1;
-        }
-        Rules *rules_last = rules;
-        rules = rzRules->obj->CSrules;
-        while (NULL != rules) {
-          if (rules->ruleType == RUL_ARE_CO) RenderToSGAC(out, rzRules, rules);
-          rules_last = rules;
-          rules = rules->next;
-        }
-        rules = rules_last;
-        break;
+    if (rules->ruleType == RUL_CND_SY) {
+      if (!rzRules->obj->bCS_Added) {
+        rzRules->obj->CSrules = NULL;
+        GetAndAddCSRules(rzRules, rules);
+        rzRules->obj->bCS_Added = 1;
       }
-
-      case RUL_NONE:
-      default:
-        break;
+      Rules *rules_last = rules;
+      Rules *cs = rzRules->obj->CSrules;
+      while (NULL != cs) {
+        handle(cs);
+        rules_last = cs;
+        cs = cs->next;
+      }
+      rules = rules_last;
+    } else {
+      handle(rules);
     }
     rules = rules->next;
   }

@@ -539,6 +539,11 @@ private:
   int RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules, Rules *rules);
   int RenderToSGLS(s52sg::Buffer &out, Rules *rules, const QList<QPointF> &pts,
                    int dispCat);
+  // RenderToSGAP resolves an AP (area pattern) rule -- for raster patterns,
+  // appends the object's tessellated triangles + the tile bitmap as a
+  // PatternFill (the consumer tiles it screen-fixed). Vector patterns are
+  // deferred.
+  int RenderToSGAP(s52sg::Buffer &out, ObjRazRules *rzRules, Rules *rules);
 
   //    Object Renderers
   int RenderTX(ObjRazRules *rzRules, Rules *rules);

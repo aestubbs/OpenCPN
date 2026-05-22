@@ -96,14 +96,26 @@ private:
     QList<QPointF> worldPts;         // (x=lon, y=-lat) centreline
   };
 
+  // An AP pattern fill: tessellated triangles (world coords) drawn with a
+  // tiling texture. Positions are static; only the per-vertex UVs change
+  // with zoom (screen-fixed tile size), so they rebuild on scale change.
+  struct PatternGeom {
+    QSGGeometryNode* node = nullptr;
+    QList<QPointF> tris;  // (x=lon, y=-lat) triangle list
+    double tileW = 16.0;  // pattern tile size in logical px
+    double tileH = 16.0;
+  };
+
   void updateBillboards(const Viewport& viewport);
   void rebuildLines(double scale);
+  void rebuildPatternUVs(double scale);
 
   // Pixels per millimetre of the display, for the 1:N chart-scale
   // denominator used by SCAMIN. Set from the window's QScreen each build;
   // falls back to a 96-dpi nominal until then.
   double m_screen_ppmm = 3.8;
   QList<LineGeom> m_lines;
+  QList<PatternGeom> m_patterns;
   double m_last_line_scale = -1.0;
   int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All
 

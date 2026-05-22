@@ -63,6 +63,19 @@ struct Prim {
   int dispCat = CatStandard;
 };
 
+/** An area filled with a repeated (tiled) pattern bitmap -- S-52 AP fills
+ *  (foul areas, dredged-area stipple, restricted zones, ...). `tris` is the
+ *  tessellated polygon as an independent triangle list in (lon, lat);
+ *  `pattern` is the tile bitmap. The consumer tiles it at a fixed screen
+ *  size (UVs recomputed on zoom), so the pattern density is constant
+ *  regardless of zoom. Raster patterns only (vector/HPGL patterns deferred). */
+struct PatternFill {
+  QList<QPointF> tris;  // (lon, lat) triangle list
+  QImage pattern;       // RGBA tile
+  int scamin = 100000002;
+  int dispCat = CatStandard;
+};
+
 /** A point symbol placement (buoy, beacon, ...). `image` is the symbol
  *  bitmap cropped from the S-52 raster atlas; `pos` is its geographic
  *  anchor; `pivot` is the pixel offset within the image that sits on the
@@ -103,15 +116,18 @@ struct Label {
 class Buffer {
 public:
   QList<Prim> prims;
+  QList<PatternFill> patternFills;
   QList<Symbol> symbols;
   QList<Label> labels;
   void clear() {
     prims.clear();
+    patternFills.clear();
     symbols.clear();
     labels.clear();
   }
   bool empty() const {
-    return prims.isEmpty() && symbols.isEmpty() && labels.isEmpty();
+    return prims.isEmpty() && patternFills.isEmpty() && symbols.isEmpty() &&
+           labels.isEmpty();
   }
 };
 

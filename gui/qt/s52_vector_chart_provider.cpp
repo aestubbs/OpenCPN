@@ -32,6 +32,7 @@
 #include <QSGGeometryNode>
 #include <QSGImageNode>
 #include <QSGNode>
+#include <QSGTextureMaterial>
 #include <QSGTransformNode>
 
 #include "viewport.h"
@@ -207,13 +208,38 @@ void S52VectorChartProvider::rebuildLines(double scale) {
   }
 }
 
+void S52VectorChartProvider::rebuildPatternUVs(double scale) {
+  if (scale <= 0.0) return;
+  // Screen-fixed tiling: one pattern tile spans tileW/tileH logical px on
+  // screen, i.e. (tileW/scale) world units. UV = worldCoord / tileWorld =
+  // worldCoord * scale / tilePx. The constant canvas-centre offset only
+  // shifts the tile phase, which is irrelevant.
+  for (const PatternGeom& pg : m_patterns) {
+    if (!pg.node) continue;
+    QSGGeometry* geo = pg.node->geometry();
+    geo->allocate(static_cast<int>(pg.tris.size()));
+    QSGGeometry::TexturedPoint2D* v = geo->vertexDataAsTexturedPoint2D();
+    const double ku = scale / pg.tileW;
+    const double kv = scale / pg.tileH;
+    for (qsizetype i = 0; i < pg.tris.size(); ++i) {
+      const double wx = pg.tris[i].x();
+      const double wy = -pg.tris[i].y();  // world y = -lat
+      v[i].set(static_cast<float>(wx), static_cast<float>(wy),
+               static_cast<float>(wx * ku), static_cast<float>(wy * kv));
+    }
+    pg.node->markDirty(QSGNode::DirtyGeometry);
+  }
+}
+
 void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   const double s = viewport.scale();  // pixels per degree
   if (s <= 0.0) return;
 
-  // Line quad widths depend only on scale, not pan -- rebuild on zoom.
+  // Line widths + pattern UVs depend only on scale, not pan -- rebuild on
+  // zoom.
   if (s != m_last_line_scale) {
     rebuildLines(s);
+    rebuildPatternUVs(s);
     m_last_line_scale = s;
   }
 
@@ -288,6 +314,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
 
   auto* root = new QSGNode();
   m_lines.clear();
+  m_patterns.clear();
   m_last_line_scale = -1.0;
 
   // Logical pixels per millimetre, for both physical-size line widths and
@@ -356,6 +383,44 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     node->setMaterial(mat);
     node->setFlag(QSGNode::OwnsMaterial);
     root->appendChildNode(node);
+  }
+
+  // AP pattern fills: tessellated triangles drawn with a tiling texture.
+  // Positions are static; rebuildPatternUVs() lays out screen-fixed UVs
+  // once the scale is known and on each zoom. Drawn after solid fills,
+  // before lines/symbols.
+  m_patterns.clear();
+  for (const s52sg::PatternFill& pf : m_buffer.patternFills) {
+    if (pf.dispCat > m_displayCategory || pf.tris.isEmpty() || pf.pattern.isNull() ||
+        !window)
+      continue;
+    QSGTexture* tex = window->createTextureFromImage(
+        pf.pattern, QQuickWindow::TextureHasAlphaChannel);
+    if (!tex) continue;
+    tex->setHorizontalWrapMode(QSGTexture::Repeat);
+    tex->setVerticalWrapMode(QSGTexture::Repeat);
+    tex->setFiltering(QSGTexture::Linear);
+    auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(),
+                                static_cast<int>(pf.tris.size()));
+    geo->setDrawingMode(QSGGeometry::DrawTriangles);
+    auto* mat = new QSGTextureMaterial();
+    mat->setTexture(tex);
+    mat->setFlag(QSGMaterial::Blending);  // patterns have transparent gaps
+    auto* node = new QSGGeometryNode();
+    node->setGeometry(geo);
+    node->setFlag(QSGNode::OwnsGeometry);
+    node->setMaterial(mat);
+    node->setFlag(QSGNode::OwnsMaterial);
+    root->appendChildNode(node);
+
+    const qreal dpr =
+        pf.pattern.devicePixelRatio() > 0 ? pf.pattern.devicePixelRatio() : 1.0;
+    PatternGeom pg;
+    pg.node = node;
+    pg.tris = pf.tris;
+    pg.tileW = pf.pattern.width() / dpr;
+    pg.tileH = pf.pattern.height() / dpr;
+    m_patterns.append(pg);
   }
 
   // Billboarded point items: one QSGTransformNode (placed at the world
