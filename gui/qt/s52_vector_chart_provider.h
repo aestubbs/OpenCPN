@@ -39,6 +39,7 @@
 QT_BEGIN_NAMESPACE
 class QSGTransformNode;
 class QSGGeometryNode;
+class QSGOpacityNode;
 QT_END_NAMESPACE
 
 namespace ocpn::qtui {
@@ -72,15 +73,22 @@ public:
   int displayCategory() const { return m_displayCategory; }
 
 private:
-  // One billboarded point item (symbol or text): a transform node placed
-  // at the world anchor whose scale counters the viewport scale so the
-  // content stays screen-pixel-sized.
+  // One billboarded point item (symbol or text): a transform node placed at
+  // the world anchor whose scale counters the viewport scale so the content
+  // stays screen-pixel-sized. Wrapped in an opacity node so a culled item is
+  // HIDDEN by setting opacity 0 -- the Qt renderer skips opacity-0 subtrees
+  // entirely (no draw call), unlike a zero-scale transform which still draws
+  // a degenerate quad. This matters at low zoom where most items are culled.
+  enum class BbKind { Symbol, Label, Sounding, Vector };
   struct Billboard {
+    QSGOpacityNode* opacity = nullptr;  // hide = opacity 0 (renderer culls)
     QSGTransformNode* xform = nullptr;
     QPointF worldPos;  // (x=lon, y=-lat)
     int scamin = 100000002;  // hidden when chart scale 1:N > scamin
-    bool isSounding = false;  // soundings get density declutter (shallowest)
+    BbKind kind = BbKind::Symbol;
     float depth = 0.0f;       // sounding depth (metres) for shallowest-wins
+    float screenW = 0.0f;     // on-screen size (logical px) -- for label
+    float screenH = 0.0f;     // bounding-box declutter
   };
 
   // A line feature rendered as N parallel 1px polylines offset from the

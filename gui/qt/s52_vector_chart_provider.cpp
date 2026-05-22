@@ -32,6 +32,7 @@
 #include <QSGGeometryNode>
 #include <QSGImageNode>
 #include <QSGNode>
+#include <QSGOpacityNode>
 #include <QSGTextureMaterial>
 #include <QSGTransformNode>
 
@@ -262,51 +263,82 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   const double chart_scale_n =
       (kMetresPerDegLat / s) * m_screen_ppmm * 1000.0;
 
-  // Sounding density declutter: at most one sounding per ~kCellPx screen
-  // cell, keeping the SHALLOWEST (safety). Soundings inherit a single
-  // per-feature SCAMIN, so without this they'd all vanish together. The
-  // cell is screen pixels = worldPos * s (the constant canvas-centre
-  // offset doesn't change which cell neighbours fall in). Non-soundings
-  // (symbols, names) are sparse -- shown subject only to SCAMIN.
-  constexpr double kCellPx = 46.0;
-  const auto cellKey = [&](const QPointF& wp) -> qint64 {
-    const long cx = std::lround(wp.x() * s / kCellPx);
-    const long cy = std::lround(wp.y() * s / kCellPx);
+  // Screen-density declutter (progressive detail). Cells are screen pixels =
+  // worldPos * s / cellPx; the constant canvas-centre offset doesn't change
+  // which cell a point falls in, so this is pan-invariant. At low zoom items
+  // crowd into the same cells -- we drop the losers, so detail thins out and
+  // stays readable as you zoom out, and hidden items become opacity-0 (no
+  // draw call).
+  //   - Soundings: fine grid, keep the SHALLOWEST (safety).
+  //   - Text labels: declutter by the label's whole screen bounding box (the
+  //     names are long and overlap horizontally even when anchors are far
+  //     apart), keep the first, mark every ~20px cell it covers as occupied.
+  //   - Symbols / vector marks: kept (nav aids), subject only to SCAMIN.
+  constexpr double kSoundingCellPx = 46.0;
+  constexpr double kOccCellPx = 20.0;  // label bbox occupancy grid
+  const auto soundKey = [&](const QPointF& wp) -> qint64 {
+    const long cx = std::lround(wp.x() * s / kSoundingCellPx);
+    const long cy = std::lround(wp.y() * s / kSoundingCellPx);
+    return (static_cast<qint64>(cx) << 32) ^ static_cast<quint32>(cy);
+  };
+  const auto occKey = [](long cx, long cy) -> qint64 {
     return (static_cast<qint64>(cx) << 32) ^ static_cast<quint32>(cy);
   };
 
-  // Pass 1: for each cell, find the shallowest visible sounding.
-  QHash<qint64, int> cellShallowest;  // cell -> billboard index
+  // Pass 1: per-cell winners. Soundings -> shallowest; labels -> first that
+  // fits, by bounding box.
+  QHash<qint64, int> cellShallowest;  // sounding cell -> billboard index
+  QSet<qint64> occupied;              // label-bbox-occupied cells
+  QHash<int, bool> labelKeep;         // label billboard index -> keep?
   for (int i = 0; i < m_billboards.size(); ++i) {
     const Billboard& b = m_billboards[i];
-    if (!b.isSounding || chart_scale_n > b.scamin) continue;
-    const qint64 key = cellKey(b.worldPos);
-    auto it = cellShallowest.find(key);
-    if (it == cellShallowest.end() ||
-        b.depth < m_billboards[it.value()].depth)
-      cellShallowest[key] = i;
+    if (chart_scale_n > b.scamin) continue;  // SCAMIN-culled anyway
+    if (b.kind == BbKind::Sounding) {
+      const qint64 key = soundKey(b.worldPos);
+      auto it = cellShallowest.find(key);
+      if (it == cellShallowest.end() || b.depth < m_billboards[it.value()].depth)
+        cellShallowest[key] = i;
+    } else if (b.kind == BbKind::Label) {
+      // Screen-pixel bbox of the label (centred on the anchor), in occupancy
+      // cells.
+      const double sx = b.worldPos.x() * s, sy = b.worldPos.y() * s;
+      const long c0x = std::lround((sx - b.screenW / 2.0) / kOccCellPx);
+      const long c1x = std::lround((sx + b.screenW / 2.0) / kOccCellPx);
+      const long c0y = std::lround((sy - b.screenH / 2.0) / kOccCellPx);
+      const long c1y = std::lround((sy + b.screenH / 2.0) / kOccCellPx);
+      bool clash = false;
+      for (long cy = c0y; cy <= c1y && !clash; ++cy)
+        for (long cx = c0x; cx <= c1x; ++cx)
+          if (occupied.contains(occKey(cx, cy))) { clash = true; break; }
+      labelKeep[i] = !clash;
+      if (!clash)
+        for (long cy = c0y; cy <= c1y; ++cy)
+          for (long cx = c0x; cx <= c1x; ++cx) occupied.insert(occKey(cx, cy));
+    }
   }
 
-  // Pass 2: place/hide each billboard.
+  // Pass 2: show/hide each billboard via its opacity node (opacity 0 =
+  // culled, no draw call); set the counter-scale transform when shown.
   for (int i = 0; i < m_billboards.size(); ++i) {
     const Billboard& b = m_billboards[i];
-    if (!b.xform) continue;
+    if (!b.opacity || !b.xform) continue;
     bool hidden = chart_scale_n > b.scamin;  // SCAMIN hard floor
-    if (!hidden && b.isSounding)
-      hidden = (cellShallowest.value(cellKey(b.worldPos), -1) != i);
+    if (!hidden && b.kind == BbKind::Sounding)
+      hidden = (cellShallowest.value(soundKey(b.worldPos), -1) != i);
+    else if (!hidden && b.kind == BbKind::Label)
+      hidden = !labelKeep.value(i, true);
 
-    QMatrix4x4 m;
-    if (hidden) {
-      m.scale(0.0f);  // collapse the quad to nothing
-    } else {
+    b.opacity->setOpacity(hidden ? 0.0 : 1.0);
+    if (!hidden) {
       // Placed under the World-anchored root (transform M = ...*scale(s)).
       // translate to the world anchor, then scale(1/s) so M*this leaves the
       // content at screen-pixel size regardless of zoom.
+      QMatrix4x4 m;
       m.translate(static_cast<float>(b.worldPos.x()),
                   static_cast<float>(b.worldPos.y()));
       m.scale(static_cast<float>(1.0 / s), static_cast<float>(1.0 / s));
+      b.xform->setMatrix(m);
     }
-    b.xform->setMatrix(m);
   }
 }
 
@@ -438,7 +470,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // once with their textures; updateBillboards only touches the transform.
   m_billboards.clear();
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
-                          QPointF pivotPx, int scamin, bool isSounding,
+                          QPointF pivotPx, int scamin, BbKind kind,
                           float depth) {
     if (image.isNull() || !window) return;
     QSGTexture* tex = window->createTextureFromImage(
@@ -455,8 +487,19 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     img->setFiltering(QSGTexture::Linear);
     auto* xform = new QSGTransformNode();
     xform->appendChildNode(img);
-    root->appendChildNode(xform);
-    m_billboards.append({xform, worldPos, scamin, isSounding, depth});
+    auto* opacity = new QSGOpacityNode();
+    opacity->appendChildNode(xform);
+    root->appendChildNode(opacity);
+    Billboard b;
+    b.opacity = opacity;
+    b.xform = xform;
+    b.worldPos = worldPos;
+    b.scamin = scamin;
+    b.kind = kind;
+    b.depth = depth;
+    b.screenW = static_cast<float>(w);
+    b.screenH = static_cast<float>(h);
+    m_billboards.append(b);
   };
 
   // Text labels (soundings, names) -- centred on the anchor for now.
@@ -466,14 +509,15 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
     addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
                  QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0),
-                 lab.scamin, lab.isSounding, lab.depth);
+                 lab.scamin, lab.isSounding ? BbKind::Sounding : BbKind::Label,
+                 lab.depth);
   }
 
   // Point symbols (buoys/beacons) -- pivot is the symbol's hot-spot.
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
     if (sym.dispCat > m_displayCategory) continue;
     addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot,
-                 sym.scamin, /*isSounding=*/false, /*depth=*/0.0f);
+                 sym.scamin, BbKind::Symbol, /*depth=*/0.0f);
   }
 
   // Vector (HPGL) symbols -- billboarded geometry. The op coords are
@@ -506,11 +550,15 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       delete xform;
       continue;
     }
-    root->appendChildNode(xform);
+    auto* opacity = new QSGOpacityNode();
+    opacity->appendChildNode(xform);
+    root->appendChildNode(opacity);
     Billboard b;
+    b.opacity = opacity;
     b.xform = xform;
     b.worldPos = QPointF(vs.pos.x(), -vs.pos.y());
     b.scamin = vs.scamin;
+    b.kind = BbKind::Vector;
     m_billboards.append(b);
   }
 

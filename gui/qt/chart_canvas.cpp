@@ -306,17 +306,18 @@ void ChartCanvas::updateVisibleCells() {
   const double c_lat = m_viewport->centerLat();
   const int pb = primaryBand(scale);
 
-  // Quilting: show the reference band and the one coarser (backdrop / gap
-  // fill), finer over coarser. Eviction uses a wider band window (one extra
-  // band each side) + a 50%-widened view, so a small zoom/pan across a band
-  // boundary doesn't immediately unload (hysteresis; the debounce smooths
-  // the rest).
-  // --- Load: in view, scale-appropriate band, not already requested. ---
+  // Quilting: show ONLY the reference band -- gaps fall through to the GSHHS
+  // world backdrop rather than a coarser ENC band, so overlap zones don't
+  // stack two bands of geometry/symbols (the big over-draw cost the user
+  // hit). Eviction keeps a one-band-either-side window + a 50%-widened view
+  // so a small zoom/pan across a band boundary doesn't immediately unload
+  // (hysteresis; the debounce smooths the rest).
+  // --- Load: in view, reference band, not already requested. ---
   for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
     const CellExtent& c = it.value();
     if (m_requested.contains(c.name)) continue;
     if (!cellWanted(c, c_lat - half_lat, c_lat + half_lat, c_lon - half_lon,
-                    c_lon + half_lon, pb - 1, pb))
+                    c_lon + half_lon, pb, pb))
       continue;
     m_requested.insert(c.name);
     QMetaObject::invokeMethod(m_worker, "loadCell", Qt::QueuedConnection,
