@@ -545,6 +545,7 @@ CellExtent S52Engine::scanOneCellExtent(const QString& path_000,
 
   ce.path = path_000;
   ce.name = QFileInfo(path_000).completeBaseName();
+  ce.band = CellExtent::bandFromName(ce.name);
 
   // OGRS57Layer::GetNextFeature is disabled in the vendored driver; read
   // straight from the reader module (as the loader does).

@@ -118,12 +118,16 @@ private:
   // screen to be worth decoding), and evict loaded cells that have left the
   // view or shrunk too small. Debounced off Viewport::changed.
   void updateVisibleCells();
-  // True if a cell at the given extent should be resident at `scale` for a
-  // view rectangle [lat/lon]. `margin` widens the rect (eviction uses a
-  // wider rect than loading, for hysteresis against pan/zoom thrash).
-  bool cellWanted(const CellExtent& c, double scale, double lat_min,
-                  double lat_max, double lon_min, double lon_max,
-                  double min_px) const;
+  // The S-57 usage band appropriate to the given viewport scale (px/degree)
+  // -- the "reference" band for quilting. Finer detail shows as you zoom in.
+  static int primaryBand(double scale);
+  // True if a cell should be resident: it intersects the [lat/lon] view rect
+  // and its usage band is within [lo_band, hi_band] (the scale-appropriate
+  // window). Eviction passes a wider rect + band window than loading, for
+  // hysteresis against pan/zoom thrash.
+  bool cellWanted(const CellExtent& c, double lat_min, double lat_max,
+                  double lon_min, double lon_max, int lo_band,
+                  int hi_band) const;
 
   // Top transform nodes — non-owning pointers into the scene-graph tree
   // (which is owned by Qt's scene graph); the LayerCompositor attaches

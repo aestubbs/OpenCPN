@@ -41,9 +41,22 @@ struct CellExtent {
   double south = 90.0;
   double east = -180.0;
   double west = 180.0;
+  // S-57 usage band (1 overview .. 6 berthing), the 3rd char of an S-57
+  // cell name (e.g. US**5**CA1EJ). 0 if it can't be determined. Drives
+  // scale-based quilting: only the band(s) appropriate to the current zoom
+  // are shown, finer over coarser.
+  int band = 0;
 
   /** A box is valid once it has been grown by at least one feature. */
   bool valid() const { return east > west && north > south; }
+
+  /** Parse the S-57 usage band from a cell name (3rd character). Returns 0
+   *  if the name doesn't look like a standard S-57 cell name. */
+  static int bandFromName(const QString& cell_name) {
+    if (cell_name.size() < 3) return 0;
+    const QChar c = cell_name.at(2);
+    return (c >= '1' && c <= '6') ? c.digitValue() : 0;
+  }
 
   /** True if this cell's box overlaps the given lon/lat rectangle. */
   bool intersects(double lat_min, double lat_max, double lon_min,

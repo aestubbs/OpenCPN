@@ -132,12 +132,21 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
       m_west(west),
       m_east(east),
       m_viewport(viewport) {
-  // Billboarded point items (symbols/text) must re-apply their counter-
-  // scale when the viewport zooms. Watch the viewport and ask the
-  // wrapping ChartLayer to re-run renderChart (which only updates the
-  // billboard transforms -- geometry + textures are built once).
+  // Billboarded point items (symbols/text) re-apply their counter-scale,
+  // and lines/patterns relay out, only when the viewport ZOOMS. A pure pan
+  // needs none of that -- the World-anchored root transform moves all this
+  // chart's geometry for free, billboards keep the same counter-scale, and
+  // the (world-space) declutter grid is unchanged. So dirty the layer only
+  // on a scale change; panning then costs zero provider work (the compositor
+  // just reuses the cached subtree). This is the key pan-performance lever.
   if (m_viewport) {
-    connect(m_viewport, &Viewport::changed, this, &ChartProvider::changed);
+    connect(m_viewport, &Viewport::changed, this, [this]() {
+      const double s = m_viewport->scale();
+      if (s != m_emit_scale) {
+        m_emit_scale = s;
+        Q_EMIT changed();
+      }
+    });
   }
 }
 
@@ -235,13 +244,14 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   const double s = viewport.scale();  // pixels per degree
   if (s <= 0.0) return;
 
-  // Line widths + pattern UVs depend only on scale, not pan -- rebuild on
-  // zoom.
-  if (s != m_last_line_scale) {
-    rebuildLines(s);
-    rebuildPatternUVs(s);
-    m_last_line_scale = s;
-  }
+  // Everything here -- line offsets, pattern UVs, billboard counter-scale,
+  // and the world-space sounding declutter -- depends only on scale, not on
+  // pan. Bail out if the scale hasn't changed since the last update so a
+  // pan (or a redundant call) does no work.
+  if (s == m_last_line_scale) return;
+  rebuildLines(s);
+  rebuildPatternUVs(s);
+  m_last_line_scale = s;
 
   // Current chart scale as a 1:N denominator, for SCAMIN decluttering.
   // N = ground-metres-per-pixel / screen-metres-per-pixel:

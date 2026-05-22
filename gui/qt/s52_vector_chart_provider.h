@@ -116,7 +116,13 @@ private:
   double m_screen_ppmm = 3.8;
   QList<LineGeom> m_lines;
   QList<PatternGeom> m_patterns;
+  // Scale at the last full billboard/line/pattern update; updates are
+  // skipped while it's unchanged (so panning is free). Reset to -1 on build.
   double m_last_line_scale = -1.0;
+  // Scale at which we last dirtied the layer; the provider only emits
+  // changed() (forcing a re-sync) when the scale actually changes, so a pan
+  // never re-syncs this chart.
+  double m_emit_scale = -1.0;
   int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All
 
   QString m_id;
