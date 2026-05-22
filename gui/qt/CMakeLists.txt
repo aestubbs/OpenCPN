@@ -44,6 +44,16 @@ target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_S57DATA_DIR="${CMAKE_SOURCE_DIR}/data/s57data"
 )
 
+# Optional: an absolute path to a real S-57 .000 ENC cell to load on
+# startup (P2.8d). Set -DOCPN_QT_TEST_ENC=/path/to/CELL.000 at configure
+# time; if unset/empty the canvas falls back to the synthetic demo chart.
+if (NOT DEFINED OCPN_QT_TEST_ENC)
+  set(OCPN_QT_TEST_ENC "")
+endif ()
+target_compile_definitions(opencpn-qt PRIVATE
+  OCPN_QT_TEST_ENC="${OCPN_QT_TEST_ENC}"
+)
+
 # wx_qt_string.h lives in the model layer; we use it from s52_engine.cpp
 # to bridge QString <-> wxString at the s52plib boundary.
 target_include_directories(opencpn-qt PRIVATE
@@ -65,6 +75,8 @@ target_link_libraries(opencpn-qt PRIVATE
   # ocpn::gl-headers, ocpn::pugixml, ocpn::gdal, ocpn::tess2 -- the
   # full set s52plib needs after the P2.8.0 standalone-link refactor.
   ocpn::s52plib
+  # OGR S-57 driver -- reads .000 ENC cells into OGR features (P2.8d).
+  ocpn::s57-charts
   ${wxWidgets_LIBRARIES}
 )
 

@@ -71,6 +71,20 @@ public:
   s52sg::Buffer buildDemoChart(double north, double south, double east,
                                double west);
 
+  /** Load a real S-57 ENC cell (`path_000` -> a .000 file) via the OGR
+   *  S-57 driver and decode it through s52plib into world-coordinate
+   *  geometry (P2.8d). `s57data_dir` supplies the S-57 object-class /
+   *  attribute CSVs the OGR driver needs. Geographic extent of the loaded
+   *  cell is written to *out_north/south/east/west when non-null. Returns
+   *  an empty buffer on failure. Currently emits area fills; lines and
+   *  point features follow. */
+  s52sg::Buffer loadEncCell(const QString& path_000,
+                            const QString& s57data_dir,
+                            double* out_north = nullptr,
+                            double* out_south = nullptr,
+                            double* out_east = nullptr,
+                            double* out_west = nullptr);
+
 Q_SIGNALS:
   void changed();
 

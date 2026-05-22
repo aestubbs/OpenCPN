@@ -23,6 +23,8 @@
 
 #include "chart_canvas.h"
 
+#include <algorithm>
+
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSGNode>
@@ -83,25 +85,53 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
 
 ChartCanvas::~ChartCanvas() = default;
 
+#ifndef OCPN_QT_TEST_ENC
+#define OCPN_QT_TEST_ENC ""
+#endif
+#ifndef OCPN_QT_S57DATA_DIR
+#define OCPN_QT_S57DATA_DIR ""
+#endif
+
 void ChartCanvas::setS52Engine(S52Engine* engine) {
   if (m_s52_engine == engine) return;
   m_s52_engine = engine;
   Q_EMIT s52EngineChanged();
+  if (!m_s52_engine || !m_s52_engine->isOk()) return;
 
-  // Decode the demo S-57 chart through s52plib into world-coordinate
-  // geometry and add it as a vector layer above the raster test chart.
-  // Geometry is static in world space; the viewport transform projects
-  // it, so this happens once -- not per frame.
-  if (m_s52_engine && m_s52_engine->isOk()) {
-    s52sg::Buffer buf = m_s52_engine->buildDemoChart(kTestNorth, kTestSouth,
-                                                     kTestEast, kTestWest);
-    if (!buf.empty()) {
-      auto* provider = new S52VectorChartProvider(
-          "demo.s52-chart", std::move(buf), kTestNorth, kTestSouth, kTestWest,
-          kTestEast);
-      m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
-      update();
+  // Prefer a real ENC cell if one was configured at build time
+  // (OCPN_QT_TEST_ENC); otherwise fall back to the synthetic demo chart.
+  // Either way we get a world-coordinate geometry buffer that the vector
+  // provider turns into a static QSGGeometry tree -- the viewport
+  // transform projects it, so this runs once, not per frame.
+  const QString enc_path = QString::fromUtf8(OCPN_QT_TEST_ENC);
+  s52sg::Buffer buf;
+  double n = kTestNorth, s = kTestSouth, e = kTestEast, w = kTestWest;
+  QString id = "demo.s52-chart";
+
+  if (!enc_path.isEmpty()) {
+    buf = m_s52_engine->loadEncCell(enc_path,
+                                    QString::fromUtf8(OCPN_QT_S57DATA_DIR), &n,
+                                    &s, &e, &w);
+    id = "enc." + enc_path.section('/', -1);
+    // Recentre + fit the viewport to the loaded cell. The canvas may not
+    // be laid out yet, so fall back to the QML window's default size.
+    if (!buf.empty() && e > w && n > s) {
+      m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
+      const double cw = width() > 0 ? width() : 1024.0;
+      const double ch = height() > 0 ? height() : 720.0;
+      const double fit = std::min(cw / (e - w), ch / (n - s)) * 0.9;
+      m_viewport->setScale(fit);
     }
+  } else {
+    buf = m_s52_engine->buildDemoChart(kTestNorth, kTestSouth, kTestEast,
+                                       kTestWest);
+  }
+
+  if (!buf.empty()) {
+    auto* provider =
+        new S52VectorChartProvider(id, std::move(buf), n, s, w, e);
+    m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
+    update();
   }
 }
 

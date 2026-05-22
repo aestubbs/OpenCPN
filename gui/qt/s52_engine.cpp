@@ -18,6 +18,7 @@
 
 #include "s52_engine.h"
 
+#include <cstring>
 #include <vector>
 
 #include <wx/init.h>
@@ -33,6 +34,11 @@
 #include "mygeom.h"        // PolyTessGeo
 #include "s52plib.h"
 #include "s52s57.h"        // S57Obj, ObjRazRules, LUPrec
+
+// OGR S-57 driver (libs/s57-charts) -- reads a .000 cell into OGR
+// features with assembled lon/lat geometry (P2.8d).
+#include "ogr_s57.h"
+#include "s57class_registrar.h"
 
 namespace ocpn::qtui {
 
@@ -103,28 +109,33 @@ bool S52Engine::init(const QString& data_dir) {
 }
 
 namespace {
-// Build one synthetic S-57 area feature, look up its symbology, and emit
-// its fill geometry into `buf`. `ring` is the exterior boundary as
-// (lon, lat) pairs (counter-clockwise, will be closed automatically).
-// `attrs` are optional (acronym, double-value) attributes -- e.g. DRVAL1
-// / DRVAL2 for a depth area so the DEPARE conditional symbology picks the
-// right depth shade.
-void EmitArea(s52plib* plib, s52sg::Buffer& buf, const char* feature,
-              const std::vector<std::pair<double, double>>& ring,
-              double ref_lat, double ref_lon,
-              const std::vector<std::pair<const char*, double>>& attrs = {}) {
-  auto* obj = new S57Obj(feature);
-  for (const auto& a : attrs) obj->AddDoubleAttribute(a.first, a.second);
+// Build an S-57 area object from an OGRPolygon, look up its symbology, and
+// emit its fill geometry into `buf`. Shared by the synthetic demo and the
+// real-ENC loader. The PolyTessGeo computes its own feature reference
+// internally and RenderAreaToSG inverts against that, so the ref_lat/ref_lon
+// passed here only seeds the SM origin -- any value is fine.
+// A minimal per-cell chart context shared by all objects. s52plib's
+// conditional-symbology procedures dereference obj->m_chart_context
+// (which S57Obj::Init leaves uninitialised) -- they null-check ->chart
+// before the s57chart associated-objects callback, but read
+// safety_contour directly, so a zeroed struct with chart=nullptr and a
+// sane safety contour is enough to render without the chart-DB host.
+chart_context* MakeMinimalChartContext(double ref_lat, double ref_lon) {
+  auto* ctx = new chart_context();
+  std::memset(ctx, 0, sizeof(chart_context));
+  ctx->chart = nullptr;
+  ctx->ref_lat = ref_lat;
+  ctx->ref_lon = ref_lon;
+  ctx->safety_contour = 30.0;  // S-52 default deep safety contour
+  ctx->chart_type = 0;
+  return ctx;
+}
 
-  OGRPolygon poly;
-  OGRLinearRing lr;
-  for (const auto& p : ring) lr.addPoint(p.first, p.second);  // (lon, lat)
-  // Close the ring explicitly (first point repeated) -- version-agnostic
-  // vs OGRLinearRing::closeRings().
-  if (!ring.empty()) lr.addPoint(ring.front().first, ring.front().second);
-  poly.addRing(&lr);
-
-  auto* ptg = new PolyTessGeo(&poly, true, ref_lat, ref_lon, 0.0);
+void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
+                  OGRPolygon* poly, double ref_lat, double ref_lon,
+                  S57Obj* obj, chart_context* ctx) {
+  obj->m_chart_context = ctx;
+  auto* ptg = new PolyTessGeo(poly, true, ref_lat, ref_lon, 0.0);
   if (!ptg->IsOk()) {
     delete ptg;
     delete obj;
@@ -150,6 +161,58 @@ void EmitArea(s52plib* plib, s52sg::Buffer& buf, const char* feature,
   plib->RenderAreaToSG(buf, &rzRules);
   // obj/ptg intentionally leaked for this proof-of-pipeline; real chart
   // loading owns these in the chart-object set.
+}
+
+// Synthetic helper: build an area from a (lon,lat) ring + double attrs.
+void EmitArea(s52plib* plib, s52sg::Buffer& buf, const char* feature,
+              const std::vector<std::pair<double, double>>& ring,
+              double ref_lat, double ref_lon,
+              const std::vector<std::pair<const char*, double>>& attrs = {}) {
+  auto* obj = new S57Obj(feature);
+  for (const auto& a : attrs) obj->AddDoubleAttribute(a.first, a.second);
+
+  OGRPolygon poly;
+  OGRLinearRing lr;
+  for (const auto& p : ring) lr.addPoint(p.first, p.second);  // (lon, lat)
+  if (!ring.empty()) lr.addPoint(ring.front().first, ring.front().second);
+  poly.addRing(&lr);
+
+  EmitAreaPoly(plib, buf, feature, &poly, ref_lat, ref_lon, obj,
+               MakeMinimalChartContext(ref_lat, ref_lon));
+}
+
+// Copy an OGR feature's set fields onto an S57Obj as S-52 attributes, so
+// conditional-symbology procedures (DEPARE01 reading DRVAL1/2, etc.) see
+// them. The OGR field names are the S-57 attribute acronyms (the driver's
+// class registrar maps them). Acronyms are truncated to 6 chars to match
+// S57Obj's fixed-width attribute store.
+void CopyFeatureAttributes(OGRFeature* feat, S57Obj* obj) {
+  OGRFeatureDefn* defn = feat->GetDefnRef();
+  const int n = defn->GetFieldCount();
+  for (int i = 0; i < n; ++i) {
+    if (!feat->IsFieldSet(i)) continue;
+    OGRFieldDefn* fd = defn->GetFieldDefn(i);
+    char acronym[7];
+    std::strncpy(acronym, fd->GetNameRef(), 6);
+    acronym[6] = 0;
+    switch (fd->GetType()) {
+      case OFTInteger:
+        obj->AddIntegerAttribute(acronym, feat->GetFieldAsInteger(i));
+        break;
+      case OFTReal:
+        obj->AddDoubleAttribute(acronym, feat->GetFieldAsDouble(i));
+        break;
+      case OFTString: {
+        // AddStringAttribute takes a mutable char*.
+        const char* s = feat->GetFieldAsString(i);
+        std::vector<char> buf(s, s + std::strlen(s) + 1);
+        obj->AddStringAttribute(acronym, buf.data());
+        break;
+      }
+      default:
+        break;
+    }
+  }
 }
 }  // namespace
 
@@ -180,6 +243,111 @@ s52sg::Buffer S52Engine::buildDemoChart(double north, double south,
            {{midlon, midlat}, {east, midlat}, {east, north}, {midlon, north}},
            ref_lat, ref_lon);
 
+  return buf;
+}
+
+s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
+                                     const QString& s57data_dir,
+                                     double* out_north, double* out_south,
+                                     double* out_east, double* out_west) {
+  s52sg::Buffer buf;
+  if (!m_impl->lib || !m_impl->lib->m_bOK) return buf;
+  s52plib* plib = m_impl->lib;
+
+  // The OGR S-57 driver needs an S57ClassRegistrar loaded from the
+  // object-class / attribute CSVs. Open()'s lazy init calls
+  // LoadInfo(NULL) which bails, so build it explicitly and inject it.
+  auto* registrar = new S57ClassRegistrar();
+  if (!registrar->LoadInfo(s57data_dir.toUtf8().constData(), FALSE)) {
+    delete registrar;
+    m_impl->status = QStringLiteral("S-52: could not load S-57 class CSVs from %1")
+                         .arg(s57data_dir);
+    Q_EMIT changed();
+    return buf;
+  }
+
+  OGRS57DataSource ds;
+  ds.SetS57Registrar(registrar);
+  // Assemble feature geometry (not raw primitives); split soundings into
+  // points and carry their depth as the 3rd ordinate.
+  const char* opts[] = {"RETURN_PRIMITIVES=OFF", "RETURN_LINKAGES=OFF",
+                        "LNAM_REFS=OFF", "SPLIT_MULTIPOINT=ON",
+                        "ADD_SOUNDG_DEPTH=ON", nullptr};
+  ds.SetOptionList(const_cast<char**>(opts));
+
+  int open_rv = ds.Open(path_000.toUtf8().constData(), TRUE);
+  if (open_rv) {
+    m_impl->status =
+        QStringLiteral("S-52: failed to open ENC cell %1 (rv=%2)")
+            .arg(path_000)
+            .arg(open_rv);
+    Q_EMIT changed();
+    return buf;
+  }
+
+  double n = -90, s = 90, e = -180, w = 180;  // accumulate extent
+  int n_areas = 0;
+
+  // NB: OGRS57Layer::GetNextFeature is disabled in this vendored driver
+  // (its filter logic is commented out, so it always returns NULL). Read
+  // straight from the S57Reader module instead, like the legacy ingest.
+  chart_context* ctx = MakeMinimalChartContext(0.0, 0.0);
+  S57Reader* reader = ds.GetModule(0);
+  if (reader) {
+    reader->Rewind();
+    OGRFeature* feat;
+    while ((feat = reader->ReadNextFeature()) != nullptr) {
+      OGRGeometry* geom = feat->GetGeometryRef();
+      OGRFeatureDefn* fdefn = feat->GetDefnRef();
+      const char* className = fdefn ? fdefn->GetName() : "";
+      if (geom && className && className[0]) {
+        OGREnvelope env;
+        geom->getEnvelope(&env);
+        if (env.MaxY > n) n = env.MaxY;
+        if (env.MinY < s) s = env.MinY;
+        if (env.MaxX > e) e = env.MaxX;
+        if (env.MinX < w) w = env.MinX;
+
+        const OGRwkbGeometryType gt = wkbFlatten(geom->getGeometryType());
+        if (gt == wkbPolygon || gt == wkbMultiPolygon) {
+          auto emitOne = [&](OGRPolygon* poly) {
+            OGRLinearRing* ext = poly->getExteriorRing();
+            if (!ext || ext->getNumPoints() < 3) return;  // skip degenerate
+            auto* obj = new S57Obj(className);
+            CopyFeatureAttributes(feat, obj);
+            EmitAreaPoly(plib, buf, className, poly, 0.0, 0.0, obj, ctx);
+            ++n_areas;
+          };
+          if (gt == wkbPolygon) {
+            emitOne(static_cast<OGRPolygon*>(geom));
+          } else {
+            auto* mp = static_cast<OGRMultiPolygon*>(geom);
+            for (int k = 0; k < mp->getNumGeometries(); ++k)
+              emitOne(static_cast<OGRPolygon*>(mp->getGeometryRef(k)));
+          }
+        }
+        // Lines and points are emitted in later P2.8d sub-steps.
+      }
+      OGRFeature::DestroyFeature(feat);
+    }
+  }
+
+  if (out_north) *out_north = n;
+  if (out_south) *out_south = s;
+  if (out_east) *out_east = e;
+  if (out_west) *out_west = w;
+
+  m_impl->status = QStringLiteral(
+                       "S-52: loaded ENC %1 -- %2 area features, extent "
+                       "%3..%4 lat, %5..%6 lon")
+                       .arg(QString::fromUtf8(
+                           path_000.toUtf8().mid(path_000.lastIndexOf('/') + 1)))
+                       .arg(n_areas)
+                       .arg(s, 0, 'f', 3)
+                       .arg(n, 0, 'f', 3)
+                       .arg(w, 0, 'f', 3)
+                       .arg(e, 0, 'f', 3);
+  Q_EMIT changed();
   return buf;
 }
 
