@@ -31,9 +31,13 @@
 #include <QQuickWindow>
 #include <QSGNode>
 #include <QSGTransformNode>
+#include <QThread>
+#include <QTimer>
 #include <QWheelEvent>
 
+#include "chart_boundary_provider.h"
 #include "chart_layer.h"
+#include "chart_worker.h"
 #include "layer_compositor.h"
 #include "raster_chart_provider.h"
 #include "s52_engine.h"
@@ -77,15 +81,38 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   //   - any Layer dirties (data change, visibility/z-order/opacity).
   //   - the Viewport pans / zooms (transform matrix changes).
   //   - the canvas resizes (transform depends on width/height).
+  // Custom value types crossing the worker-thread -> main-thread queued
+  // signal boundary must be registered.
+  qRegisterMetaType<ocpn::qtui::CellExtent>();
+  qRegisterMetaType<QList<ocpn::qtui::CellExtent>>();
+  qRegisterMetaType<s52sg::Buffer>();
+
+  // Pan/zoom fires Viewport::changed at mouse-move / wheel rate; coalesce a
+  // burst into one visible-cell evaluation once the gesture settles.
+  m_load_debounce = new QTimer(this);
+  m_load_debounce->setSingleShot(true);
+  m_load_debounce->setInterval(250);
+  connect(m_load_debounce, &QTimer::timeout, this,
+          [this]() { requestVisibleCells(); });
+
   connect(m_compositor.get(), &LayerCompositor::changed, this,
           [this]() { update(); });
-  connect(m_viewport.get(), &Viewport::changed, this,
-          [this]() { update(); });
+  connect(m_viewport.get(), &Viewport::changed, this, [this]() {
+    update();
+    // Only chase visible cells once a catalog exists (async ENC path).
+    if (!m_catalog.isEmpty()) m_load_debounce->start();
+  });
   connect(this, &QQuickItem::widthChanged, this, [this]() { update(); });
   connect(this, &QQuickItem::heightChanged, this, [this]() { update(); });
 }
 
-ChartCanvas::~ChartCanvas() = default;
+ChartCanvas::~ChartCanvas() {
+  // Stop the worker thread before the QObject teardown chain runs.
+  if (m_worker_thread) {
+    m_worker_thread->quit();
+    m_worker_thread->wait();
+  }
+}
 
 #ifndef OCPN_QT_TEST_ENC
 #define OCPN_QT_TEST_ENC ""
@@ -100,17 +127,15 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
   Q_EMIT s52EngineChanged();
   if (!m_s52_engine || !m_s52_engine->isOk()) return;
 
-  // Prefer real ENC cells if configured at build time (OCPN_QT_TEST_ENC);
-  // otherwise fall back to the synthetic demo chart. OCPN_QT_TEST_ENC may
-  // be a single .000 file or a DIRECTORY (every .000 under it is loaded
-  // and merged into one surface). Either way we get a world-coordinate
-  // buffer the vector provider turns into a static QSGGeometry tree.
+  // Real ENC cells if configured at build time (OCPN_QT_TEST_ENC -- a single
+  // .000 file or a DIRECTORY of them); otherwise the synthetic demo chart.
   const QString enc_path = QString::fromUtf8(OCPN_QT_TEST_ENC);
-  s52sg::Buffer buf;
-  double n = kTestNorth, s = kTestSouth, e = kTestEast, w = kTestWest;
-  QString id = "demo.s52-chart";
+  m_s57data_dir = QString::fromUtf8(OCPN_QT_S57DATA_DIR);
 
   if (!enc_path.isEmpty()) {
+    // Async path: enumerate the cell set and hand it to the worker thread.
+    // The catalog scan comes back first (boundaries + world navigation);
+    // per-cell content streams in on demand as the user zooms/pans.
     QStringList cells;
     QFileInfo fi(enc_path);
     if (fi.isDir()) {
@@ -118,41 +143,152 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
                       QDirIterator::Subdirectories);
       while (it.hasNext()) cells << it.next();
       cells.sort();
-      id = "enc.dir." + fi.fileName();
     } else {
       cells << enc_path;
-      id = "enc." + enc_path.section('/', -1);
     }
-    buf = m_s52_engine->loadEncCells(
-        cells, QString::fromUtf8(OCPN_QT_S57DATA_DIR), &n, &s, &e, &w);
-    // Recentre + fit the viewport to the combined extent. The canvas may
-    // not be laid out yet, so fall back to the QML window's default size.
-    if (!buf.empty() && e > w && n > s) {
-      m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
-      const double cw = width() > 0 ? width() : 1024.0;
-      const double ch = height() > 0 ? height() : 720.0;
-      const double fit = std::min(cw / (e - w), ch / (n - s)) * 0.9;
-      m_viewport->setScale(fit);
-    }
-  } else {
-    buf = m_s52_engine->buildDemoChart(kTestNorth, kTestSouth, kTestEast,
-                                       kTestWest);
+    if (!cells.isEmpty()) startAsyncLoad(cells, m_s57data_dir);
+    return;
   }
 
+  // Demo fallback: synthetic chart, decoded inline (tiny, no thread).
+  s52sg::Buffer buf = m_s52_engine->buildDemoChart(kTestNorth, kTestSouth,
+                                                   kTestEast, kTestWest);
   if (!buf.empty()) {
-    auto* provider = new S52VectorChartProvider(id, std::move(buf), n, s, w, e,
-                                                m_viewport.get());
+    auto* provider = new S52VectorChartProvider(
+        "demo.s52-chart", std::move(buf), kTestNorth, kTestSouth, kTestWest,
+        kTestEast, m_viewport.get());
     provider->setDisplayCategory(m_display_category);
-    m_s52_provider = provider;
+    m_chart_providers.append(provider);
     m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
     update();
   }
 }
 
+void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
+                                 const QString& s57data) {
+  m_worker_thread = new QThread(this);
+  m_worker = new ChartWorker(m_s52_engine, s57data);  // no parent (moved)
+  m_worker->moveToThread(m_worker_thread);
+  connect(m_worker_thread, &QThread::finished, m_worker,
+          &QObject::deleteLater);
+
+  // Results arrive on the main thread (queued; receiver lives here).
+  connect(m_worker, &ChartWorker::extentsScanned, this,
+          &ChartCanvas::onExtentsScanned);
+  connect(m_worker, &ChartWorker::cellLoaded, this,
+          &ChartCanvas::onCellLoaded);
+
+  m_worker_thread->start();
+
+  // Kick off the catalog scan on the worker.
+  QMetaObject::invokeMethod(m_worker, "scanExtents", Qt::QueuedConnection,
+                            Q_ARG(QStringList, cell_paths));
+}
+
+void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
+  m_catalog.clear();
+  for (const CellExtent& c : cells) m_catalog.insert(c.name, c);
+
+  // Boundary overlay: created once, drawn on top so the cell grid stays
+  // visible over loaded chart content.
+  if (!m_boundary_provider) {
+    m_boundary_provider = new ChartBoundaryProvider("enc.boundaries");
+    auto* layer = new ChartLayer(m_boundary_provider, m_viewport.get());
+    layer->setZOrder(100);
+    m_compositor->addLayer(layer);
+  }
+  m_boundary_provider->setExtents(cells);
+
+  // Start zoomed out to show the whole set's coverage (free world roam from
+  // here -- the viewport scale clamp reaches the whole globe).
+  const double n = m_boundary_provider->northLat();
+  const double s = m_boundary_provider->southLat();
+  const double e = m_boundary_provider->eastLon();
+  const double w = m_boundary_provider->westLon();
+  if (e > w && n > s) {
+    m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
+    const double cw = width() > 0 ? width() : 1024.0;
+    const double ch = height() > 0 ? height() : 720.0;
+    const double fit = std::min(cw / (e - w), ch / (n - s)) * 0.9;
+    m_viewport->setScale(fit);
+  }
+  update();
+
+  // Pull in whatever's already big enough on screen.
+  requestVisibleCells();
+}
+
+void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
+                               double north, double south, double east,
+                               double west) {
+  if (buffer.empty()) return;
+  auto* provider =
+      new S52VectorChartProvider("enc." + id, buffer, north, south, west, east,
+                                 m_viewport.get());
+  provider->setDisplayCategory(m_display_category);
+  m_chart_providers.append(provider);
+  m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
+  update();
+}
+
+void ChartCanvas::requestVisibleCells() {
+  if (!m_worker || m_catalog.isEmpty()) return;
+
+  const double scale = m_viewport->scale();
+  const double cw = width() > 0 ? width() : 1024.0;
+  const double ch = height() > 0 ? height() : 720.0;
+  const double half_lon = (cw / 2.0) / scale;
+  const double half_lat = (ch / 2.0) / scale;
+  const double lon_min = m_viewport->centerLon() - half_lon;
+  const double lon_max = m_viewport->centerLon() + half_lon;
+  const double lat_min = m_viewport->centerLat() - half_lat;
+  const double lat_max = m_viewport->centerLat() + half_lat;
+
+  // Don't decode a cell until it's at least this wide on screen -- when
+  // zoomed out over the whole set we show boundaries only; the content
+  // streams in as the user zooms into an area.
+  constexpr double kMinCellPx = 120.0;
+
+  for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
+    const CellExtent& c = it.value();
+    if (m_requested.contains(c.name)) continue;
+    if (!c.intersects(lat_min, lat_max, lon_min, lon_max)) continue;
+    if ((c.east - c.west) * scale < kMinCellPx) continue;
+    m_requested.insert(c.name);
+    QMetaObject::invokeMethod(m_worker, "loadCell", Qt::QueuedConnection,
+                              Q_ARG(ocpn::qtui::CellExtent, c));
+  }
+}
+
+void ChartCanvas::zoomIn() {
+  const int w = static_cast<int>(width());
+  const int h = static_cast<int>(height());
+  m_viewport->zoomAt(w / 2.0, h / 2.0, 1.4, w, h);
+}
+
+void ChartCanvas::zoomOut() {
+  const int w = static_cast<int>(width());
+  const int h = static_cast<int>(height());
+  m_viewport->zoomAt(w / 2.0, h / 2.0, 1.0 / 1.4, w, h);
+}
+
+void ChartCanvas::fitWorld() {
+  if (!m_boundary_provider) return;
+  const double n = m_boundary_provider->northLat();
+  const double s = m_boundary_provider->southLat();
+  const double e = m_boundary_provider->eastLon();
+  const double w = m_boundary_provider->westLon();
+  if (e <= w || n <= s) return;
+  m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
+  const double cw = width() > 0 ? width() : 1024.0;
+  const double ch = height() > 0 ? height() : 720.0;
+  m_viewport->setScale(std::min(cw / (e - w), ch / (n - s)) * 0.9);
+}
+
 void ChartCanvas::setDisplayCategory(int cat) {
   if (cat == m_display_category) return;
   m_display_category = cat;
-  if (m_s52_provider) m_s52_provider->setDisplayCategory(cat);
+  for (S52VectorChartProvider* p : m_chart_providers) p->setDisplayCategory(cat);
   Q_EMIT displayCategoryChanged();
   update();
 }

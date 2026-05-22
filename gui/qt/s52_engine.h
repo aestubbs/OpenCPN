@@ -37,7 +37,8 @@
 #include <QString>
 #include <QStringList>
 
-#include "s52_sg.h"  // s52sg::Buffer -- Qt-free world-coord geometry
+#include "chart_extent.h"  // CellExtent -- decode-free cell catalog entry
+#include "s52_sg.h"        // s52sg::Buffer -- Qt-free world-coord geometry
 
 namespace ocpn::qtui {
 
@@ -95,6 +96,16 @@ public:
                              double* out_south = nullptr,
                              double* out_east = nullptr,
                              double* out_west = nullptr);
+
+  /** Decode-free catalog scan: open each cell via the OGR S-57 driver and
+   *  union its feature envelopes into a CellExtent, WITHOUT running the
+   *  s52plib symbology decode / tessellation. Much cheaper than a full load
+   *  and (touching only OGR, never the global ps52plib) safe to run on the
+   *  worker thread for a whole chart set. Cells that fail to open are
+   *  skipped. Used to draw cell-coverage boundaries and seed on-demand
+   *  loading. */
+  QList<CellExtent> scanCellExtents(const QStringList& paths_000,
+                                    const QString& s57data_dir);
 
 Q_SIGNALS:
   void changed();

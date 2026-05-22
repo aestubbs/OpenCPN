@@ -34,16 +34,22 @@
 
 #include <memory>
 
+#include <QHash>
+#include <QList>
 #include <QPointF>
 #include <QQuickItem>
+#include <QSet>
 
-#include "s52_engine.h"  // S52Engine -- complete type needed for Q_PROPERTY
+#include "chart_extent.h"  // CellExtent -- catalog entry (value type)
+#include "s52_engine.h"    // S52Engine -- complete type needed for Q_PROPERTY
 
 QT_BEGIN_NAMESPACE
 class QSGNode;
 class QSGTransformNode;
 class QMouseEvent;
 class QWheelEvent;
+class QThread;
+class QTimer;
 QT_END_NAMESPACE
 
 namespace ocpn::qtui {
@@ -51,6 +57,8 @@ namespace ocpn::qtui {
 class LayerCompositor;
 class Viewport;
 class S52VectorChartProvider;
+class ChartBoundaryProvider;
+class ChartWorker;
 
 class ChartCanvas : public QQuickItem {
   Q_OBJECT
@@ -78,6 +86,12 @@ public:
   int displayCategory() const { return m_display_category; }
   void setDisplayCategory(int cat);
 
+  // Toolbar actions (bound from the QML chrome). Zoom about the canvas
+  // centre; fitWorld zooms out to show the whole scanned chart set.
+  Q_INVOKABLE void zoomIn();
+  Q_INVOKABLE void zoomOut();
+  Q_INVOKABLE void fitWorld();
+
 Q_SIGNALS:
   void s52EngineChanged();
   void displayCategoryChanged();
@@ -92,6 +106,18 @@ protected:
   void wheelEvent(QWheelEvent* event) override;
 
 private:
+  // Spin up the worker thread + ChartWorker and kick off the catalog scan
+  // for the configured chart set. Called once from setS52Engine().
+  void startAsyncLoad(const QStringList& cell_paths, const QString& s57data);
+  // Worker results (delivered to the main thread via queued connections).
+  void onExtentsScanned(const QList<CellExtent>& cells);
+  void onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
+                    double north, double south, double east, double west);
+  // Find catalogued cells overlapping the current view (and large enough on
+  // screen to be worth decoding) that aren't loaded yet, and ask the worker
+  // to decode them. Debounced off Viewport::changed.
+  void requestVisibleCells();
+
   // Top transform nodes — non-owning pointers into the scene-graph tree
   // (which is owned by Qt's scene graph); the LayerCompositor attaches
   // Layer subtrees under each.
@@ -103,10 +129,26 @@ private:
 
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;
-  // Non-owning (owned by the compositor's ChartLayer). The active vector
-  // chart provider, for forwarding display-category changes.
-  S52VectorChartProvider* m_s52_provider = nullptr;
+  // Non-owning (owned by the compositor's ChartLayers). Every active vector
+  // chart provider (one per loaded cell, or one for the demo chart), for
+  // forwarding display-category changes.
+  QList<S52VectorChartProvider*> m_chart_providers;
   int m_display_category = 1;  // 0 Base, 1 Standard, 2 All
+
+  // --- Async chart loading (P2.x) ---
+  // The worker + its thread (owned: thread parented to this; worker
+  // deleteLater on thread finish). null in the demo-chart path.
+  QThread* m_worker_thread = nullptr;
+  ChartWorker* m_worker = nullptr;
+  // Boundary overlay (owned by its ChartLayer in the compositor).
+  ChartBoundaryProvider* m_boundary_provider = nullptr;
+  // The decode-free catalog, keyed by cell name.
+  QHash<QString, CellExtent> m_catalog;
+  // Cells already asked of the worker (loaded or in flight) -- never twice.
+  QSet<QString> m_requested;
+  // Coalesces a burst of pan/zoom into one visible-cell evaluation.
+  QTimer* m_load_debounce = nullptr;
+  QString m_s57data_dir;
 
   // Drag state.
   bool m_dragging = false;
