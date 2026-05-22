@@ -35,6 +35,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include "s52_sg.h"  // s52sg::Buffer -- Qt-free world-coord geometry
 
@@ -84,6 +85,16 @@ public:
                             double* out_south = nullptr,
                             double* out_east = nullptr,
                             double* out_west = nullptr);
+
+  /** Load and merge several ENC cells into one geometry buffer (a larger
+   *  experimental surface). Cells are decoded in order and accumulated;
+   *  the combined geographic extent is written to the out params. */
+  s52sg::Buffer loadEncCells(const QStringList& paths_000,
+                             const QString& s57data_dir,
+                             double* out_north = nullptr,
+                             double* out_south = nullptr,
+                             double* out_east = nullptr,
+                             double* out_west = nullptr);
 
 Q_SIGNALS:
   void changed();

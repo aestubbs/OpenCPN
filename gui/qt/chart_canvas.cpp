@@ -25,6 +25,8 @@
 
 #include <algorithm>
 
+#include <QDirIterator>
+#include <QFileInfo>
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSGNode>
@@ -98,23 +100,33 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
   Q_EMIT s52EngineChanged();
   if (!m_s52_engine || !m_s52_engine->isOk()) return;
 
-  // Prefer a real ENC cell if one was configured at build time
-  // (OCPN_QT_TEST_ENC); otherwise fall back to the synthetic demo chart.
-  // Either way we get a world-coordinate geometry buffer that the vector
-  // provider turns into a static QSGGeometry tree -- the viewport
-  // transform projects it, so this runs once, not per frame.
+  // Prefer real ENC cells if configured at build time (OCPN_QT_TEST_ENC);
+  // otherwise fall back to the synthetic demo chart. OCPN_QT_TEST_ENC may
+  // be a single .000 file or a DIRECTORY (every .000 under it is loaded
+  // and merged into one surface). Either way we get a world-coordinate
+  // buffer the vector provider turns into a static QSGGeometry tree.
   const QString enc_path = QString::fromUtf8(OCPN_QT_TEST_ENC);
   s52sg::Buffer buf;
   double n = kTestNorth, s = kTestSouth, e = kTestEast, w = kTestWest;
   QString id = "demo.s52-chart";
 
   if (!enc_path.isEmpty()) {
-    buf = m_s52_engine->loadEncCell(enc_path,
-                                    QString::fromUtf8(OCPN_QT_S57DATA_DIR), &n,
-                                    &s, &e, &w);
-    id = "enc." + enc_path.section('/', -1);
-    // Recentre + fit the viewport to the loaded cell. The canvas may not
-    // be laid out yet, so fall back to the QML window's default size.
+    QStringList cells;
+    QFileInfo fi(enc_path);
+    if (fi.isDir()) {
+      QDirIterator it(enc_path, {"*.000"}, QDir::Files,
+                      QDirIterator::Subdirectories);
+      while (it.hasNext()) cells << it.next();
+      cells.sort();
+      id = "enc.dir." + fi.fileName();
+    } else {
+      cells << enc_path;
+      id = "enc." + enc_path.section('/', -1);
+    }
+    buf = m_s52_engine->loadEncCells(
+        cells, QString::fromUtf8(OCPN_QT_S57DATA_DIR), &n, &s, &e, &w);
+    // Recentre + fit the viewport to the combined extent. The canvas may
+    // not be laid out yet, so fall back to the QML window's default size.
     if (!buf.empty() && e > w && n > s) {
       m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
       const double cw = width() > 0 ? width() : 1024.0;

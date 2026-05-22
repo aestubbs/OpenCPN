@@ -252,26 +252,27 @@ s52sg::Buffer S52Engine::buildDemoChart(double north, double south,
   return buf;
 }
 
-s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
-                                     const QString& s57data_dir,
-                                     double* out_north, double* out_south,
-                                     double* out_east, double* out_west) {
-  s52sg::Buffer buf;
-  if (!m_impl->lib || !m_impl->lib->m_bOK) return buf;
-  s52plib* plib = m_impl->lib;
-
-  // The OGR S-57 driver needs an S57ClassRegistrar loaded from the
-  // object-class / attribute CSVs. Open()'s lazy init calls
-  // LoadInfo(NULL) which bails, so build it explicitly and inject it.
-  auto* registrar = new S57ClassRegistrar();
-  if (!registrar->LoadInfo(s57data_dir.toUtf8().constData(), FALSE)) {
-    delete registrar;
-    m_impl->status = QStringLiteral("S-52: could not load S-57 class CSVs from %1")
-                         .arg(s57data_dir);
-    Q_EMIT changed();
-    return buf;
+namespace {
+// Accumulators shared across cells when merging a multi-cell surface.
+struct LoadExtent {
+  double n = -90, s = 90, e = -180, w = 180;
+  void grow(const OGREnvelope& env) {
+    if (env.MaxY > n) n = env.MaxY;
+    if (env.MinY < s) s = env.MinY;
+    if (env.MaxX > e) e = env.MaxX;
+    if (env.MinX < w) w = env.MinX;
   }
+};
+struct LoadCounts {
+  int areas = 0, lines = 0, points = 0;
+};
 
+// Open one ENC cell via the OGR S-57 driver and append its features to
+// `buf` (decoded through `plib`). Shares the registrar across cells.
+// Returns false (and sets `err`) if the cell can't be opened.
+bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
+                 S57ClassRegistrar* registrar, LoadExtent& ext,
+                 LoadCounts& cc, QString& err) {
   OGRS57DataSource ds;
   ds.SetS57Registrar(registrar);
   // Assemble feature geometry (not raw primitives); split soundings into
@@ -281,20 +282,18 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
                         "ADD_SOUNDG_DEPTH=ON", nullptr};
   ds.SetOptionList(const_cast<char**>(opts));
 
-  int open_rv = ds.Open(path_000.toUtf8().constData(), TRUE);
-  if (open_rv) {
-    m_impl->status =
-        QStringLiteral("S-52: failed to open ENC cell %1 (rv=%2)")
-            .arg(path_000)
-            .arg(open_rv);
-    Q_EMIT changed();
-    return buf;
+  if (ds.Open(path_000.toUtf8().constData(), TRUE)) {
+    err = QStringLiteral("failed to open %1").arg(path_000);
+    return false;
   }
 
-  double n = -90, s = 90, e = -180, w = 180;  // accumulate extent
-  int n_areas = 0;
-  int n_lines = 0;
-  int n_points = 0;
+  double& n = ext.n;
+  double& s = ext.s;
+  double& e = ext.e;
+  double& w = ext.w;
+  int& n_areas = cc.areas;
+  int& n_lines = cc.lines;
+  int& n_points = cc.points;
 
   // NB: OGRS57Layer::GetNextFeature is disabled in this vendored driver
   // (its filter logic is commented out, so it always returns NULL). Read
@@ -436,24 +435,80 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
       OGRFeature::DestroyFeature(feat);
     }
   }
+  return true;
+}
 
-  if (out_north) *out_north = n;
-  if (out_south) *out_south = s;
-  if (out_east) *out_east = e;
-  if (out_west) *out_west = w;
+// Build the registrar the OGR S-57 driver needs (loaded from the
+// object-class / attribute CSVs). Open()'s lazy init calls LoadInfo(NULL)
+// which bails, so it must be created explicitly and injected. Returns
+// nullptr on failure.
+S57ClassRegistrar* makeRegistrar(const QString& s57data_dir) {
+  auto* registrar = new S57ClassRegistrar();
+  if (!registrar->LoadInfo(s57data_dir.toUtf8().constData(), FALSE)) {
+    delete registrar;
+    return nullptr;
+  }
+  return registrar;
+}
+}  // namespace
 
-  m_impl->status = QStringLiteral(
-                       "S-52: loaded ENC %1 -- %2 areas, %3 lines, %4 points, "
-                       "extent %5..%6 lat, %7..%8 lon")
-                       .arg(QString::fromUtf8(
-                           path_000.toUtf8().mid(path_000.lastIndexOf('/') + 1)))
-                       .arg(n_areas)
-                       .arg(n_lines)
-                       .arg(n_points)
-                       .arg(s, 0, 'f', 3)
-                       .arg(n, 0, 'f', 3)
-                       .arg(w, 0, 'f', 3)
-                       .arg(e, 0, 'f', 3);
+s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
+                                     const QString& s57data_dir,
+                                     double* out_north, double* out_south,
+                                     double* out_east, double* out_west) {
+  return loadEncCells({path_000}, s57data_dir, out_north, out_south, out_east,
+                      out_west);
+}
+
+s52sg::Buffer S52Engine::loadEncCells(const QStringList& paths_000,
+                                      const QString& s57data_dir,
+                                      double* out_north, double* out_south,
+                                      double* out_east, double* out_west) {
+  s52sg::Buffer buf;
+  if (!m_impl->lib || !m_impl->lib->m_bOK) return buf;
+  s52plib* plib = m_impl->lib;
+
+  S57ClassRegistrar* registrar = makeRegistrar(s57data_dir);
+  if (!registrar) {
+    m_impl->status =
+        QStringLiteral("S-52: could not load S-57 class CSVs from %1")
+            .arg(s57data_dir);
+    Q_EMIT changed();
+    return buf;
+  }
+
+  LoadExtent ext;
+  LoadCounts cc;
+  int n_cells = 0;
+  QString err;
+  for (const QString& path : paths_000) {
+    QString cellErr;
+    if (loadOneCell(plib, buf, path, registrar, ext, cc, cellErr))
+      ++n_cells;
+    else if (err.isEmpty())
+      err = cellErr;
+  }
+  qWarning("loadEncCells: %d/%lld cells -- %d areas, %d lines, %d points",
+           n_cells, (long long)paths_000.size(), cc.areas, cc.lines, cc.points);
+
+  if (out_north) *out_north = ext.n;
+  if (out_south) *out_south = ext.s;
+  if (out_east) *out_east = ext.e;
+  if (out_west) *out_west = ext.w;
+
+  m_impl->status =
+      QStringLiteral(
+          "S-52: %1 cell(s) -- %2 areas, %3 lines, %4 points, extent "
+          "%5..%6 lat, %7..%8 lon%9")
+          .arg(n_cells)
+          .arg(cc.areas)
+          .arg(cc.lines)
+          .arg(cc.points)
+          .arg(ext.s, 0, 'f', 3)
+          .arg(ext.n, 0, 'f', 3)
+          .arg(ext.w, 0, 'f', 3)
+          .arg(ext.e, 0, 'f', 3)
+          .arg(err.isEmpty() ? QString() : QStringLiteral(" [%1]").arg(err));
   Q_EMIT changed();
   return buf;
 }
