@@ -755,70 +755,64 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
 - [ ] **P2.7** Raster chart (KAP/BSB) Layer — `QSGImageNode` (built-in
       textured quad), one per chart-cell tile. No shader code.
       *(dep: P2.5)*
-- [ ] **P2.8** Vector-chart pipeline through `libs/s52plib`. Split into
-      four sub-phases because s52plib does not link standalone today — it
-      references symbols that live in `gui/src/` (`S57Obj`,
-      `render_canvas_parms`, `GetGlobalColor`, `GetpSharedDataLocation`,
-      `GetFontColour_PlugIn`, `FindOrCreateFont_PlugIn`,
-      `GetOCPNChartScaleFactor_Plugin`, plus `vGetLengthOfNormal` in
-      geoprim). Bringing those into the library is the prerequisite for
-      every step that follows.
-  - [ ] **P2.8.0** `libs/s52plib` standalone-link refactor. *No
-        functional change*; legacy `OpenCPN` and the new `opencpn-qt`
-        both link the library afterwards.
-    - [ ] **P2.8.0a** Add the missing `vGetLengthOfNormal` definition
-          in `libs/geoprim` (declared in `libs/geoprim/src/vector2D.h`
-          with no body — currently a latent unresolved symbol).
-    - [ ] **P2.8.0b** Move the `S57Obj` implementation from
-          `gui/src/s57obj.cpp` into `libs/s52plib/src/s57obj.cpp`. The
-          class is *declared* in `libs/s52plib/src/s52s57.h` already;
-          implementation lives in the wrong tree. Most of the file's
-          `#include`s are dead (`ocpndc.h`, `dychart.h`, `cpl_csv.h`,
-          `navutil.h`, `ocpn_pixel.h`, `s57chart.h`, `s52plib.h`,
-          `ocpn_platform.h` — none of their symbols are actually
-          referenced); drop them. Real deps: wx, `s52s57.h`, `mygeom.h`,
-          `model/cutil.h`, `model/georef.h`, `setjmp.h`.
-    - [ ] **P2.8.0c** Move `render_canvas_parms` ctor/dtor (two trivial
-          lines in `gui/src/s57chart.cpp`) into a new
+- [x] **P2.8** Vector-chart pipeline through `libs/s52plib`. **DONE** for
+      the major S-52 feature classes (areas, lines, text, symbols)
+      rendering from a real NOAA ENC cell through a scene-graph emit path.
+      The plan changed in flight: rather than a bitmap fallback (old
+      P2.8b) we went straight to a world-coordinate geometry emit, and
+      added real-ENC loading via the OGR S-57 driver. Sub-phases:
+  - [x] **P2.8.0** `libs/s52plib` standalone-link refactor — the library
+        referenced symbols defined in `gui/src/`; brought them in so it
+        links into `opencpn-qt` with no `gui/src/` dep. *No functional
+        change to legacy `OpenCPN`.*
+    - [x] **P2.8.0a** `vGetLengthOfNormal` (+ the vector2D helpers)
+          relocated from `model` to `libs/geoprim` (fixed a layering
+          inversion).
+    - [x] **P2.8.0b** `S57Obj` implementation moved
+          `gui/src/s57obj.cpp` → `libs/s52plib/src/s57obj.cpp`; dead
+          includes dropped.
+    - [x] **P2.8.0c** `render_canvas_parms` ctor/dtor →
           `libs/s52plib/src/render_canvas_parms.cpp`.
-    - [ ] **P2.8.0d** Replace the host-callback symbols with
-          library-owned default implementations + injection setters:
-          `s52plib::SetGlobalColorResolver()`,
-          `SetSharedDataLocation()`, `SetFontResolver()`,
-          `SetChartScaleFactorResolver()`. Library has sensible
-          defaults; legacy `gui/src/` registers its existing
-          colour-table / plugin-font / platform-scale resolvers at
-          startup. Remove the now-duplicate definitions in
-          `gui/src/user_colors.cpp` (`GetGlobalColor` stays for non-s52
-          callers) and `gui/src/ocpn_plugin_gui.cpp` (`*_PlugIn`
-          helpers stay for plugin ABI — only the *call sites in
-          s52plib* change).
-    - [ ] **P2.8.0e** Verify (a) legacy `OpenCPN` still links + runs an
-          ENC chart unchanged; (b) `opencpn-qt` links `libs/s52plib`
-          with no `gui/src/` dep.
-  - [ ] **P2.8a** Wire `gui/qt/s52_engine.{h,cpp}` (already drafted)
-        into `opencpn-qt`'s build. Smoke test: load `S52RAZDS.RLE`,
-        report the presentation-library version + status in the QML
-        HUD. *(dep: P2.8.0)*
-  - [ ] **P2.8b** Synthetic S-57 chart rendered through
-        `s52plib::RenderObjectToDC` → `wxBitmap` → `QImage` →
-        `QSGTexture`. Bitmap-fallback ChartProvider; proves the
-        pipeline end-to-end before any scene-graph port.
-        *(dep: P2.8a)*
-  - [ ] **P2.8c** True scene-graph port — add
-        `s52plib::RenderObjectToQSG`. `RenderObjectToGL` and
-        `RenderObjectToDC` (~hundreds of object types) get a third
-        output target: emit `QSGGeometry` + appropriate material into
-        a Layer subtree. Built-in materials handle most lines /
-        polygons / textured-icons; the residual custom shaders from
-        P2.4 cover patterns and AA-line caps. Chart text uses
-        `QSGSimpleTextNode` (or `QSGTextNode` via
-        `QQuickWindow::createTextNode()` for richer output) instead of
-        `s52plib`'s `Helvetica.txf` texture-font sampler — Qt's native
-        text gives correct hinting / DPI scaling / Unicode /
-        complex-script support and removes the proprietary
-        font-rendering engine from the chart pipeline.
-        *(dep: P2.4–2.6, P2.0, P2.8b)*
+    - [x] **P2.8.0d** Host callbacks replaced with injection hooks:
+          `SetGlobalColorResolver` / `SetFontColourResolver` /
+          `SetFontFactory` / `SetChartScaleFactorResolver`; the s57data
+          dir is derived from the PLib path. Also inverted the
+          `model`↔`s52plib` dependency (s52plib now depends on model;
+          `ColorScheme` enum extracted to `model/color_scheme.h`).
+    - [x] **P2.8.0e** Verified both targets build/link. *(Legacy
+          `OpenCPN` is slated for retirement, so future s52plib changes
+          may break it without further note.)*
+  - [x] **P2.8a** `s52_engine.{h,cpp}` wired into `opencpn-qt`; loads
+        `S52RAZDS.RLE` + `chartsymbols.xml`, reports status in the HUD.
+  - [x] **P2.8c** Scene-graph emit (no bitmap). `s52plib` gains a third
+        output target beside `RenderObjectToDC`/`GL`: `RenderAreaToSG` /
+        `RenderLineToSG` / `RenderTextToSG` / `RenderPointSymbolToSG`
+        resolve S-52 symbology (incl. the conditional-symbology
+        procedures) and append **world-coordinate** primitives to a
+        Qt-idiomatic `s52sg::Buffer` (`QList<QPointF>` + `QColor` +
+        `QImage`). `gui/qt` turns it into `QSGGeometryNode`s (fills/lines,
+        triangle fans expanded for the Metal RHI) + billboarded
+        `QSGImageNode`s (symbols/text). The Qt scene-graph transform does
+        world→screen on the GPU — vector-sharp, no per-frame re-decode.
+        Text uses a **system font** via `QPainter`/`QFont` (not the
+        proprietary `TexFont`/`DepthFont`).
+  - [x] **P2.8d** Real ENC load. `S52Engine::loadEncCell` drives the
+        standalone OGR S-57 driver (`libs/s57-charts`) directly —
+        `OGRS57DataSource` + `S57Reader::ReadNextFeature` (the
+        `OGRS57Layer::GetNextFeature` filter is disabled in the vendored
+        driver) — builds `S57Obj`s with copied attributes, looks up the
+        LUP, and emits via the P2.8c path. No `Osenc`/SENC, no
+        `s57chart.h`. Areas tessellate via `PolyTessGeo(OGRPolygon)`;
+        lines/points use the OGR-assembled lon/lat geometry directly.
+  - [x] **P2.8e** Point features: raster symbols (buoys/beacons from the
+        S-52 atlas, billboarded) + soundings/labels (system font). SCAMIN
+        + screen-density decluttering on zoom.
+  - [ ] **P2.8 follow-ups** (deferred refinements): vector (HPGL/SVG)
+        symbols instead of the raster atlas; wide S-52 line pens (Qt RHI
+        only supports width-1 lines → need quad geometry); shallowest-
+        sounding-per-cell selection; calibrate the 1:N scale denominator
+        with real per-monitor DPI; complex-line (LC) symbol patterns;
+        area pattern fills (AP). *(several overlap P2.9 below)*
 - [ ] **P2.9** Expose S52 display categories (Base / Standard / Other /
       Mariner) and viewing groups as chart sub-layers in the same
       compositor — surfacing what `s52plib` already tracks.
