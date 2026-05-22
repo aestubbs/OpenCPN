@@ -416,6 +416,9 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
             rz.child = nullptr;
             rz.next = nullptr;
             rz.mps = nullptr;
+            // Raster symbol (buoy/beacon/...) + any TX/TE label. Symbol
+            // first so CSrules are built once and shared with the text walk.
+            plib->RenderPointSymbolToSG(buf, &rz, lon, lat);
             plib->RenderTextToSG(buf, &rz, lon, lat);
             ++n_points;
           };

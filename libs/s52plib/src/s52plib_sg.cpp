@@ -26,7 +26,10 @@
 
 #include <wx/wx.h>
 
+#include "model/wx_qt_ui_types.h"  // WxImageToQImage
+
 #include "bbox.h"  // LLBBox, required transitively by mygeom.h
+#include "chartsymbols.h"  // ChartSymbols::GetImage (raster symbol atlas)
 #include "mygeom.h"
 #include "s52plib.h"
 #include "s52s57.h"
@@ -175,6 +178,54 @@ int s52plib::RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
       rules = rules_last;
     } else {
       handle(rules);
+    }
+    rules = rules->next;
+  }
+  return 1;
+}
+
+// Walk a point object's rule list for SY (symbol) rules and append each
+// raster symbol -- cropped from the S-52 atlas, with its pivot/hot-spot --
+// as an s52sg::Symbol. Conditional symbology (e.g. the buoy/beacon CS
+// procedures) is expanded first. Vector (HPGL) symbols are deferred.
+int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
+                                   double anchor_lon, double anchor_lat) {
+  if (!rzRules || !rzRules->LUP) return 0;
+  const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
+
+  auto emitSY = [&](Rules *rules) {
+    Rule *prule = rules->razRule;
+    if (!prule) return;
+    if (prule->definition.SYDF != 'R') return;  // raster symbols only for now
+    wxImage img = m_chartSymbols.GetImage(prule->name.SYNM);
+    if (!img.IsOk()) return;
+    s52sg::Symbol sym;
+    sym.pos = QPointF(anchor_lon, anchor_lat);
+    sym.image = WxImageToQImage(img);
+    sym.pivot = QPointF(prule->pos.symb.pivot_x.SYCL,
+                        prule->pos.symb.pivot_y.SYRW);
+    sym.scamin = scamin;
+    out.symbols.push_back(std::move(sym));
+  };
+
+  Rules *rules = rzRules->LUP->ruleList;
+  while (rules != NULL) {
+    if (rules->ruleType == RUL_SYM_PT) {
+      emitSY(rules);
+    } else if (rules->ruleType == RUL_CND_SY) {
+      if (!rzRules->obj->bCS_Added) {
+        rzRules->obj->CSrules = NULL;
+        GetAndAddCSRules(rzRules, rules);
+        rzRules->obj->bCS_Added = 1;
+      }
+      Rules *rules_last = rules;
+      Rules *cs = rzRules->obj->CSrules;
+      while (NULL != cs) {
+        if (cs->ruleType == RUL_SYM_PT) emitSY(cs);
+        rules_last = cs;
+        cs = cs->next;
+      }
+      rules = rules_last;
     }
     rules = rules->next;
   }

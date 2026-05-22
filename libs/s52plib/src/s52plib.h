@@ -395,6 +395,13 @@ public:
   int RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                      double anchor_lon, double anchor_lat);
 
+  //    Point-symbol emit. Walks SY rules, resolves each raster symbol from
+  //    the S-52 symbol atlas (the cropped bitmap + its pivot/hot-spot), and
+  //    appends a Symbol anchored at (anchor_lon, anchor_lat). Vector (HPGL)
+  //    symbols are deferred.
+  int RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
+                            double anchor_lon, double anchor_lat);
+
   bool EnableGLLS(bool benable);
 
   bool IsObjNoshow(const char *objcl);
