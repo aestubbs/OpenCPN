@@ -386,6 +386,9 @@ s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
               lab.pointSize = 9.0f;
               lab.text = depth < 10.0 ? QString::number(depth, 'f', 1)
                                       : QString::number(qRound(depth));
+              const int si = feat->GetFieldIndex("SCAMIN");
+              if (si >= 0 && feat->IsFieldSet(si))
+                lab.scamin = feat->GetFieldAsInteger(si);
               buf.labels.push_back(lab);
               ++n_points;
               return;

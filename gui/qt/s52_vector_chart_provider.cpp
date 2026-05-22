@@ -21,6 +21,7 @@
 #include <QImage>
 #include <QMatrix4x4>
 #include <QPainter>
+#include <QSet>
 #include <QQuickWindow>
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
@@ -136,17 +137,54 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
 }
 
 void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
-  const double s = viewport.scale();
+  const double s = viewport.scale();  // pixels per degree
   if (s <= 0.0) return;
+
+  // Current chart scale as a 1:N denominator, for SCAMIN decluttering.
+  // N = ground-metres-per-pixel / screen-metres-per-pixel:
+  //   ground m/px = (metres per degree of lat) / (pixels per degree)
+  //   screen m/px = 1 / (kScreenPpmm * 1000)
+  // kScreenPpmm is a nominal display density (pixels/mm); becomes a real
+  // per-monitor value when display config lands. ~3.8 px/mm ~= 96 dpi.
+  constexpr double kMetresPerDegLat = 111320.0;
+  constexpr double kScreenPpmm = 3.8;
+  const double chart_scale_n =
+      (kMetresPerDegLat / s) * kScreenPpmm * 1000.0;
+
+  // Density declutter: at most one point item per ~kCellPx screen cell, so
+  // dense soundings thin out gradually as you zoom out (and repopulate as
+  // you zoom in) rather than the whole layer cutting at one SCAMIN. The
+  // cell is in screen pixels = worldPos * s (the constant canvas-centre
+  // offset doesn't affect which cell neighbouring points fall in). First
+  // item seen in a cell wins (buffer order).
+  constexpr double kCellPx = 46.0;
+  QSet<qint64> occupied;
+
   for (const Billboard& b : m_billboards) {
     if (!b.xform) continue;
+    bool hidden = chart_scale_n > b.scamin;  // SCAMIN hard floor
+    if (!hidden) {
+      const long cx = std::lround(b.worldPos.x() * s / kCellPx);
+      const long cy = std::lround(b.worldPos.y() * s / kCellPx);
+      const qint64 key = (static_cast<qint64>(cx) << 32) ^
+                         static_cast<quint32>(cy);
+      if (occupied.contains(key))
+        hidden = true;
+      else
+        occupied.insert(key);
+    }
+
     QMatrix4x4 m;
-    // Placed under the World-anchored root (transform M = ...*scale(s)).
-    // translate to the world anchor, then scale(1/s) so M*this leaves the
-    // content at screen-pixel size regardless of zoom.
-    m.translate(static_cast<float>(b.worldPos.x()),
-                static_cast<float>(b.worldPos.y()));
-    m.scale(static_cast<float>(1.0 / s), static_cast<float>(1.0 / s));
+    if (hidden) {
+      m.scale(0.0f);  // collapse the quad to nothing
+    } else {
+      // Placed under the World-anchored root (transform M = ...*scale(s)).
+      // translate to the world anchor, then scale(1/s) so M*this leaves the
+      // content at screen-pixel size regardless of zoom.
+      m.translate(static_cast<float>(b.worldPos.x()),
+                  static_cast<float>(b.worldPos.y()));
+      m.scale(static_cast<float>(1.0 / s), static_cast<float>(1.0 / s));
+    }
     b.xform->setMatrix(m);
   }
 }
@@ -218,7 +256,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // once with their textures; updateBillboards only touches the transform.
   m_billboards.clear();
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
-                          QPointF pivotPx) {
+                          QPointF pivotPx, int scamin) {
     if (image.isNull() || !window) return;
     QSGTexture* tex = window->createTextureFromImage(
         image, QQuickWindow::TextureHasAlphaChannel);
@@ -235,7 +273,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     auto* xform = new QSGTransformNode();
     xform->appendChildNode(img);
     root->appendChildNode(xform);
-    m_billboards.append({xform, worldPos});
+    m_billboards.append({xform, worldPos, scamin});
   };
 
   // Text labels (soundings, names) -- centred on the anchor for now.
@@ -243,12 +281,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     QImage img = renderLabelImage(lab);
     const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
     addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
-                 QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0));
+                 QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0),
+                 lab.scamin);
   }
 
   // Point symbols (buoys/beacons) -- pivot is the symbol's hot-spot.
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
-    addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot);
+    addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot,
+                 sym.scamin);
   }
 
   updateBillboards(viewport);

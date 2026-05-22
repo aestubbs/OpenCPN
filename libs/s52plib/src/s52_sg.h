@@ -66,6 +66,9 @@ struct Symbol {
   QPointF pos;     // (lon, lat) anchor
   QImage image;    // RGBA symbol bitmap
   QPointF pivot;   // pixel offset of the anchor within image
+  // S-52 SCAMIN: the 1:N chart scale beyond which (more zoomed out) this
+  // item is hidden. The s52plib "unset" sentinel (~1e8) means always show.
+  int scamin = 100000002;
 };
 
 /** A text label (sounding, feature name, ...). Rendered by the consumer
@@ -80,6 +83,8 @@ struct Label {
   float pointSize = 10.0f;
   char hjust = '1';
   char vjust = '1';
+  // S-52 SCAMIN: hidden when the chart is more zoomed out than 1:scamin.
+  int scamin = 100000002;
 };
 
 /** A decoded chart's geometry, ready for the consumer to upload. */

@@ -123,7 +123,7 @@ int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
 // colour and nominal point size come from s52plib's text parse; the
 // consumer renders it with a system font (not TexFont/DepthFont).
 static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
-                      double anchor_lat) {
+                      double anchor_lat, int scamin) {
   if (!text || text->frmtd.IsEmpty()) return;
   s52sg::Label label;
   label.pos = QPointF(anchor_lon, anchor_lat);
@@ -136,6 +136,7 @@ static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
   label.pointSize = text->bsize > 0 ? static_cast<float>(text->bsize) : 10.0f;
   label.hjust = text->hjust;
   label.vjust = text->vjust;
+  label.scamin = scamin;
   out.labels.push_back(std::move(label));
 }
 
@@ -143,14 +144,15 @@ int s52plib::RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                             double anchor_lon, double anchor_lat) {
   if (!rzRules || !rzRules->LUP) return 0;
 
+  const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
   auto handle = [&](Rules *rules) {
     if (rules->ruleType == RUL_TXT_TX) {
       S52_TextC *t = S52_PL_parseTX(rzRules, rules, (char *)rules->INSTstr);
-      EmitTextC(out, t, anchor_lon, anchor_lat);
+      EmitTextC(out, t, anchor_lon, anchor_lat, scamin);
       delete t;
     } else if (rules->ruleType == RUL_TXT_TE) {
       S52_TextC *t = S52_PL_parseTE(rzRules, rules, (char *)rules->INSTstr);
-      EmitTextC(out, t, anchor_lon, anchor_lat);
+      EmitTextC(out, t, anchor_lon, anchor_lat, scamin);
       delete t;
     }
   };

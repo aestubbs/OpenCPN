@@ -71,6 +71,7 @@ private:
   struct Billboard {
     QSGTransformNode* xform = nullptr;
     QPointF worldPos;  // (x=lon, y=-lat)
+    int scamin = 100000002;  // hidden when chart scale 1:N > scamin
   };
 
   void updateBillboards(const Viewport& viewport);
