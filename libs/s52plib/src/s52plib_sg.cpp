@@ -217,17 +217,40 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
   auto emitSY = [&](Rules *rules) {
     Rule *prule = rules->razRule;
     if (!prule) return;
-    if (prule->definition.SYDF != 'R') return;  // raster symbols only for now
-    wxImage img = m_chartSymbols.GetImage(prule->name.SYNM);
-    if (!img.IsOk()) return;
-    s52sg::Symbol sym;
-    sym.pos = QPointF(anchor_lon, anchor_lat);
-    sym.image = WxImageToQImage(img);
-    sym.pivot = QPointF(prule->pos.symb.pivot_x.SYCL,
-                        prule->pos.symb.pivot_y.SYRW);
-    sym.scamin = scamin;
-    sym.dispCat = dc;
-    out.symbols.push_back(std::move(sym));
+
+    if (prule->definition.SYDF == 'R') {  // raster symbol from the atlas
+      wxImage img = m_chartSymbols.GetImage(prule->name.SYNM);
+      if (!img.IsOk()) return;
+      s52sg::Symbol sym;
+      sym.pos = QPointF(anchor_lon, anchor_lat);
+      sym.image = WxImageToQImage(img);
+      sym.pivot = QPointF(prule->pos.symb.pivot_x.SYCL,
+                          prule->pos.symb.pivot_y.SYRW);
+      sym.scamin = scamin;
+      sym.dispCat = dc;
+      out.symbols.push_back(std::move(sym));
+    } else if (prule->definition.SYDF == 'V' && prule->vector.SVCT) {
+      // Vector (HPGL) symbol -> billboard geometry. Render with r=(0,0),
+      // rot=0 so the captured Line/Circle/Polygon coords are symbol-local
+      // pixels relative to the pivot. g_scaminScale (a global the GL path
+      // sets in ObjectRenderCheckCat, which we bypass) must be 1.
+      extern float g_scaminScale;
+      g_scaminScale = 1.0f;
+      s52sg::VectorSymbol vsym;
+      vsym.pos = QPointF(anchor_lon, anchor_lat);
+      vsym.scamin = scamin;
+      vsym.dispCat = dc;
+      HPGL->SetVP(&vp_plib);
+      HPGL->SetTargetSG(&vsym);
+      wxPoint r0(0, 0);
+      wxPoint pivot(prule->pos.symb.pivot_x.SYCL,
+                    prule->pos.symb.pivot_y.SYRW);
+      wxPoint origin(prule->pos.symb.bnbox_x.SBXC,
+                     prule->pos.symb.bnbox_y.SBXR);
+      HPGL->Render(prule->vector.SVCT, prule->colRef.SCRF, r0, pivot, origin,
+                   1.0f, 0.0, true);
+      if (!vsym.ops.isEmpty()) out.vectorSymbols.push_back(std::move(vsym));
+    }
   };
 
   Rules *rules = rzRules->LUP->ruleList;

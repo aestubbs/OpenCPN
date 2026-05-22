@@ -466,6 +466,44 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                  sym.scamin, /*isSounding=*/false, /*depth=*/0.0f);
   }
 
+  // Vector (HPGL) symbols -- billboarded geometry. The op coords are
+  // symbol-local pixels (pivot at origin); the billboard transform places
+  // + screen-fixes them like the raster symbols.
+  for (const s52sg::VectorSymbol& vs : m_buffer.vectorSymbols) {
+    if (vs.dispCat > m_displayCategory) continue;
+    auto* xform = new QSGTransformNode();
+    for (const s52sg::VectorOp& op : vs.ops) {
+      const int need = op.filled ? 3 : 2;
+      if (op.verts.size() < need) continue;
+      auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(),
+                                  static_cast<int>(op.verts.size()));
+      geo->setDrawingMode(op.filled ? QSGGeometry::DrawTriangles
+                                    : QSGGeometry::DrawLines);
+      QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
+      for (qsizetype i = 0; i < op.verts.size(); ++i)
+        v[i].set(static_cast<float>(op.verts[i].x()),
+                 static_cast<float>(op.verts[i].y()));
+      auto* mat = new QSGFlatColorMaterial();
+      mat->setColor(op.color);
+      auto* node = new QSGGeometryNode();
+      node->setGeometry(geo);
+      node->setFlag(QSGNode::OwnsGeometry);
+      node->setMaterial(mat);
+      node->setFlag(QSGNode::OwnsMaterial);
+      xform->appendChildNode(node);
+    }
+    if (xform->childCount() == 0) {
+      delete xform;
+      continue;
+    }
+    root->appendChildNode(xform);
+    Billboard b;
+    b.xform = xform;
+    b.worldPos = QPointF(vs.pos.x(), -vs.pos.y());
+    b.scamin = vs.scamin;
+    m_billboards.append(b);
+  }
+
   updateBillboards(viewport);
   m_built = true;
   return root;

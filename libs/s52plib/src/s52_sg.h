@@ -76,6 +76,27 @@ struct PatternFill {
   int dispCat = CatStandard;
 };
 
+/** One drawing op of a vector symbol: either line segments (vertex pairs)
+ *  or filled triangles (vertex triples), in symbol-local pixel coords
+ *  (relative to the symbol pivot at origin), with a resolved colour. */
+struct VectorOp {
+  bool filled = false;     // false = line segments, true = triangles
+  QList<QPointF> verts;    // local pixel coords
+  QColor color;
+};
+
+/** A vector (HPGL) point symbol -- buoys/beacons/light flares decoded from
+ *  the S-52 vector definitions rather than the raster atlas. `ops` is the
+ *  symbol's geometry in local pixel coords; the consumer billboards it
+ *  (world position, screen-fixed size) like a raster Symbol. Crisp at any
+ *  DPI and recolourable. */
+struct VectorSymbol {
+  QPointF pos;             // (lon, lat) anchor (== symbol pivot/hot-spot)
+  QList<VectorOp> ops;
+  int scamin = 100000002;
+  int dispCat = CatStandard;
+};
+
 /** A point symbol placement (buoy, beacon, ...). `image` is the symbol
  *  bitmap cropped from the S-52 raster atlas; `pos` is its geographic
  *  anchor; `pivot` is the pixel offset within the image that sits on the
@@ -118,16 +139,18 @@ public:
   QList<Prim> prims;
   QList<PatternFill> patternFills;
   QList<Symbol> symbols;
+  QList<VectorSymbol> vectorSymbols;
   QList<Label> labels;
   void clear() {
     prims.clear();
     patternFills.clear();
     symbols.clear();
+    vectorSymbols.clear();
     labels.clear();
   }
   bool empty() const {
     return prims.isEmpty() && patternFills.isEmpty() && symbols.isEmpty() &&
-           labels.isEmpty();
+           vectorSymbols.isEmpty() && labels.isEmpty();
   }
 };
 

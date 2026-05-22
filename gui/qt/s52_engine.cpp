@@ -490,9 +490,10 @@ s52sg::Buffer S52Engine::loadEncCells(const QStringList& paths_000,
   }
   qWarning(
       "loadEncCells: %d/%lld cells -- %d areas, %d lines, %d points; "
-      "%lld pattern fills, %lld symbols",
+      "%lld pattern fills, %lld raster symbols, %lld vector symbols",
       n_cells, (long long)paths_000.size(), cc.areas, cc.lines, cc.points,
-      (long long)buf.patternFills.size(), (long long)buf.symbols.size());
+      (long long)buf.patternFills.size(), (long long)buf.symbols.size(),
+      (long long)buf.vectorSymbols.size());
 
   if (out_north) *out_north = ext.n;
   if (out_south) *out_south = ext.s;

@@ -755,6 +755,10 @@ public:
 #if wxUSE_GRAPHICS_CONTEXT
   void SetTargetGCDC(wxGCDC *gdc);
 #endif
+  // Scene-graph target (P2.8): Line/Circle/Polygon append local-pixel
+  // geometry to `vs` instead of drawing. Used by RenderPointSymbolToSG to
+  // decode HPGL vector symbols as billboard geometry.
+  void SetTargetSG(s52sg::VectorSymbol *vs);
   void SetVP(VPointCompat *pVP) { m_vp = pVP; }
   void SetContentScaleFactor(double factor) { m_content_scale_factor = factor; }
   bool Render(char *str, char *col, wxPoint &r, wxPoint &pivot, wxPoint origin,
@@ -807,6 +811,10 @@ private:
   bool renderToDC;
   bool renderToOpenGl;
   bool renderToGCDC;
+  bool renderToSG = false;
+  s52sg::VectorSymbol *m_sgSymbol = nullptr;
+  void sgAddSeg(wxPoint a, wxPoint b);   // append a line segment (SG target)
+  void sgAddTris(const QList<QPointF> &tris);  // append a fill (SG target)
   VPointCompat *m_vp;
 
   float *workBuf;

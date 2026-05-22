@@ -11766,12 +11766,14 @@ void RenderFromHPGL::SetTargetDC(wxDC *pdc) {
   renderToDC = true;
   renderToOpenGl = false;
   renderToGCDC = false;
+  renderToSG = false;
 }
 
 void RenderFromHPGL::SetTargetOpenGl() {
   renderToOpenGl = true;
   renderToDC = false;
   renderToGCDC = false;
+  renderToSG = false;
 }
 
 #if wxUSE_GRAPHICS_CONTEXT
@@ -11780,8 +11782,42 @@ void RenderFromHPGL::SetTargetGCDC(wxGCDC *gdc) {
   renderToGCDC = true;
   renderToDC = false;
   renderToOpenGl = false;
+  renderToSG = false;
 }
 #endif
+
+void RenderFromHPGL::SetTargetSG(s52sg::VectorSymbol *vs) {
+  m_sgSymbol = vs;
+  renderToSG = true;
+  renderToDC = false;
+  renderToOpenGl = false;
+  renderToGCDC = false;
+}
+
+// Append a line segment (current pen colour) to the SG symbol, grouping
+// consecutive same-colour segments into one line op.
+void RenderFromHPGL::sgAddSeg(wxPoint a, wxPoint b) {
+  if (!m_sgSymbol) return;
+  const QColor c(penColor.Red(), penColor.Green(), penColor.Blue());
+  if (m_sgSymbol->ops.isEmpty() || m_sgSymbol->ops.last().filled ||
+      m_sgSymbol->ops.last().color != c) {
+    s52sg::VectorOp op;
+    op.filled = false;
+    op.color = c;
+    m_sgSymbol->ops.append(op);
+  }
+  m_sgSymbol->ops.last().verts << QPointF(a.x, a.y) << QPointF(b.x, b.y);
+}
+
+// Append a filled triangle list (current brush colour) to the SG symbol.
+void RenderFromHPGL::sgAddTris(const QList<QPointF> &tris) {
+  if (!m_sgSymbol || tris.isEmpty()) return;
+  s52sg::VectorOp op;
+  op.filled = true;
+  op.color = QColor(brushColor.Red(), brushColor.Green(), brushColor.Blue());
+  op.verts = tris;
+  m_sgSymbol->ops.append(op);
+}
 
 const char *RenderFromHPGL::findColorNameInRef(char colorCode, char *col) {
   int noColors = strlen(col) / 6;
@@ -11800,6 +11836,11 @@ wxPoint RenderFromHPGL::ParsePoint(wxString &argument) {
 }
 
 void RenderFromHPGL::SetPen() {
+  // SG target reads penColor/brushColor directly (set by the SP command)
+  // and needs no wx pen/brush -- skip, especially since wxThePenList is
+  // null without a full wxApp (opencpn-qt only calls wxInitialize).
+  if (renderToSG) return;
+
   float nominal_line_width_pix =
       wxMax(1.0, floor(plib->GetPPMM() /
                        5.0));  // 0.2 mm nominal, but not less than 1 pixel
@@ -11852,6 +11893,10 @@ void RenderFromHPGL::SetPen() {
 }
 
 void RenderFromHPGL::Line(wxPoint from, wxPoint to) {
+  if (renderToSG) {
+    sgAddSeg(from, to);
+    return;
+  }
   if (renderToDC) {
     targetDC->DrawLine(from, to);
   }
@@ -11895,6 +11940,26 @@ void RenderFromHPGL::Line(wxPoint from, wxPoint to) {
 }
 
 void RenderFromHPGL::Circle(wxPoint center, int radius, bool filled) {
+  if (renderToSG) {
+    // Tessellate to a 24-gon: filled -> triangle fan, outline -> segments.
+    constexpr int kN = 24;
+    QPointF prev;
+    QList<QPointF> tris;
+    for (int i = 0; i <= kN; ++i) {
+      const double a = 2.0 * M_PI * i / kN;
+      QPointF p(center.x + radius * std::cos(a), center.y + radius * std::sin(a));
+      if (i > 0) {
+        if (filled) {
+          tris << QPointF(center.x, center.y) << prev << p;
+        } else {
+          sgAddSeg(wxPoint(prev.x(), prev.y()), wxPoint(p.x(), p.y()));
+        }
+      }
+      prev = p;
+    }
+    if (filled) sgAddTris(tris);
+    return;
+  }
   if (renderToDC) {
     if (filled)
       targetDC->SetBrush(*brush);
@@ -12011,6 +12076,17 @@ void RenderFromHPGL::Circle(wxPoint center, int radius, bool filled) {
 }
 
 void RenderFromHPGL::Polygon() {
+  if (renderToSG) {
+    // Fan-triangulate the polygon (HPGL fill polygons are simple/convex).
+    QList<QPointF> tris;
+    for (int i = 1; i + 1 < noPoints; ++i) {
+      tris << QPointF(polygon[0].x, polygon[0].y)
+           << QPointF(polygon[i].x, polygon[i].y)
+           << QPointF(polygon[i + 1].x, polygon[i + 1].y);
+    }
+    sgAddTris(tris);
+    return;
+  }
   if (renderToDC) {
     unsigned char rtrans = transparency;
 #if defined(__WXMSW__) || defined(__WXQT__)
