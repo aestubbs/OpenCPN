@@ -15,6 +15,8 @@
 
 #include "s52_vector_chart_provider.h"
 
+#include <cmath>
+
 #include <QColor>
 #include <QFont>
 #include <QFontMetrics>
@@ -138,9 +140,61 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
   }
 }
 
+void S52VectorChartProvider::rebuildLines(double scale) {
+  if (scale <= 0.0) return;
+  // S-52 line widths are in units of ~0.32 mm (the nominal pen unit).
+  // Convert width -> physical mm -> logical pixels (via m_screen_ppmm) ->
+  // world-space half-width (/scale). Screen-fixed physical thickness on
+  // any monitor. Each segment becomes two triangles offset by the segment
+  // normal; per-segment quads avoid miter-joint math (slight gaps at sharp
+  // bends are not noticeable at chart line widths).
+  constexpr double kS52PenWidthMM = 0.32;
+  for (const LineGeom& lg : m_lines) {
+    const QList<QPointF>& p = lg.worldPts;
+    if (p.size() < 2 || !lg.node) {
+      if (lg.node && lg.node->geometry())
+        lg.node->geometry()->allocate(0);
+      continue;
+    }
+    const double widthLogicalPx = lg.widthPx * kS52PenWidthMM * m_screen_ppmm;
+    const double halfW = (widthLogicalPx / scale) / 2.0;
+
+    QList<QSGGeometry::Point2D> tris;
+    tris.reserve((p.size() - 1) * 6);
+    for (qsizetype i = 0; i + 1 < p.size(); ++i) {
+      const QPointF a = p[i], b = p[i + 1];
+      double dx = b.x() - a.x(), dy = b.y() - a.y();
+      const double len = std::hypot(dx, dy);
+      if (len <= 0.0) continue;
+      // Perpendicular unit normal * half-width.
+      const double nx = -dy / len * halfW;
+      const double ny = dx / len * halfW;
+      QSGGeometry::Point2D a0, a1, b0, b1;
+      a0.set(a.x() + nx, a.y() + ny);
+      a1.set(a.x() - nx, a.y() - ny);
+      b0.set(b.x() + nx, b.y() + ny);
+      b1.set(b.x() - nx, b.y() - ny);
+      tris.append(a0); tris.append(a1); tris.append(b0);  // tri 1
+      tris.append(b0); tris.append(a1); tris.append(b1);  // tri 2
+    }
+
+    QSGGeometry* geo = lg.node->geometry();
+    geo->allocate(static_cast<int>(tris.size()));
+    QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
+    for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
+    lg.node->markDirty(QSGNode::DirtyGeometry);
+  }
+}
+
 void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   const double s = viewport.scale();  // pixels per degree
   if (s <= 0.0) return;
+
+  // Line quad widths depend only on scale, not pan -- rebuild on zoom.
+  if (s != m_last_line_scale) {
+    rebuildLines(s);
+    m_last_line_scale = s;
+  }
 
   // Current chart scale as a 1:N denominator, for SCAMIN decluttering.
   // N = ground-metres-per-pixel / screen-metres-per-pixel:
@@ -212,24 +266,19 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   }
 
   auto* root = new QSGNode();
+  m_lines.clear();
+  m_last_line_scale = -1.0;
 
   for (const s52sg::Prim& prim : m_buffer.prims) {
     if (prim.verts.isEmpty()) continue;
 
-    // Line features keep their strip topology (supported everywhere);
-    // fills expand to an independent triangle list (fans aren't portable).
+    // Line features: screen-fixed-width quad geometry (Qt RHI caps real
+    // line width at 1). Create the node now with its colour; the quad
+    // vertices are (re)built from the polyline by rebuildLines() once the
+    // scale is known, and again whenever the scale changes.
     if (prim.type == s52sg::PrimType::LineStrip) {
-      auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(),
-                                  static_cast<int>(prim.verts.size()));
-      geo->setDrawingMode(QSGGeometry::DrawLineStrip);
-      // The Qt RHI backends (Metal/Vulkan/D3D) only support line width 1;
-      // wider S-52 pens need quad geometry (a later refinement). Clamp to
-      // avoid the per-frame "line widths other than 1" warning.
-      geo->setLineWidth(1.0f);
-      QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
-      for (qsizetype i = 0; i < prim.verts.size(); ++i)
-        v[i] = worldPoint(prim.verts[i]);
-
+      auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 0);
+      geo->setDrawingMode(QSGGeometry::DrawTriangles);
       auto* mat = new QSGFlatColorMaterial();
       mat->setColor(prim.color);
       auto* node = new QSGGeometryNode();
@@ -238,6 +287,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       node->setMaterial(mat);
       node->setFlag(QSGNode::OwnsMaterial);
       root->appendChildNode(node);
+
+      LineGeom lg;
+      lg.node = node;
+      lg.widthPx = prim.width;
+      lg.worldPts.reserve(prim.verts.size());
+      for (const QPointF& p : prim.verts)
+        lg.worldPts.append(QPointF(p.x(), -p.y()));  // world (x=lon, y=-lat)
+      m_lines.append(lg);
       continue;
     }
 
@@ -264,10 +321,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // Billboarded point items: one QSGTransformNode (placed at the world
   // anchor, counter-scaled per viewport) wrapping a textured quad. Built
   // once with their textures; updateBillboards only touches the transform.
-  // Real per-monitor density for the SCAMIN scale denominator.
+  // Logical pixels per millimetre, for both the SCAMIN scale denominator
+  // and physical-size line widths. logicalDotsPerInch gives a consistent
+  // physical scale independent of raw pixel density (Qt applies the device
+  // pixel ratio on top), so a given S-52 width renders the same physical
+  // thickness on any monitor.
   if (window && window->screen() &&
-      window->screen()->physicalDotsPerInch() > 1.0) {
-    m_screen_ppmm = window->screen()->physicalDotsPerInch() / 25.4;
+      window->screen()->logicalDotsPerInch() > 1.0) {
+    m_screen_ppmm = window->screen()->logicalDotsPerInch() / 25.4;
   }
 
   m_billboards.clear();

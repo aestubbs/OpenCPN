@@ -38,6 +38,7 @@
 
 QT_BEGIN_NAMESPACE
 class QSGTransformNode;
+class QSGGeometryNode;
 QT_END_NAMESPACE
 
 namespace ocpn::qtui {
@@ -76,12 +77,26 @@ private:
     float depth = 0.0f;       // sounding depth (metres) for shallowest-wins
   };
 
+  // A line feature rendered as screen-fixed-width quad geometry. Qt RHI
+  // backends only support line width 1, so wider S-52 pens are drawn as
+  // triangle strips whose world-space half-width = widthPx / (2*scale).
+  // The world geometry doesn't change on pan -- only the scale changes
+  // the world-width -- so these are rebuilt only when the scale changes.
+  struct LineGeom {
+    QSGGeometryNode* node = nullptr;
+    QList<QPointF> worldPts;  // (x=lon, y=-lat) polyline
+    float widthPx = 1.0f;
+  };
+
   void updateBillboards(const Viewport& viewport);
+  void rebuildLines(double scale);
 
   // Pixels per millimetre of the display, for the 1:N chart-scale
   // denominator used by SCAMIN. Set from the window's QScreen each build;
   // falls back to a 96-dpi nominal until then.
   double m_screen_ppmm = 3.8;
+  QList<LineGeom> m_lines;
+  double m_last_line_scale = -1.0;
 
   QString m_id;
   s52sg::Buffer m_buffer;
