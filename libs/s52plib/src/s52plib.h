@@ -29,6 +29,7 @@
 #include <functional>
 #include <vector>
 #include "s52s57.h"  //types
+#include "s52_sg.h"  // scene-graph geometry buffer (P2.8c)
 
 class wxGLContext;
 
@@ -374,6 +375,12 @@ public:
   int RenderAreaToGL(const wxGLContext &glcc, ObjRazRules *rzRules);
   int RenderObjectToGLText(const wxGLContext &glcc, ObjRazRules *rzRules);
 
+  //    For the Qt scene graph (P2.8c) -- emit world-coordinate geometry
+  //    into `out` instead of rasterising. Mirrors the GL dispatch but
+  //    keeps vertices in lon/lat; the consumer projects on the GPU.
+  //    Areas first; lines/symbols/text follow in later sub-steps.
+  int RenderAreaToSG(s52sg::Buffer &out, ObjRazRules *rzRules);
+
   bool EnableGLLS(bool benable);
 
   bool IsObjNoshow(const char *objcl);
@@ -503,6 +510,11 @@ private:
 
   int RenderToGLAP(ObjRazRules *rzRules, Rules *rules);
   int RenderToGLAP_GLSL(ObjRazRules *rzRules, Rules *rules);
+
+  // Scene-graph emit (P2.8c). RenderToSGAC resolves an AC (area colour)
+  // rule and appends the object's tessellated triangles -- converted
+  // from SM back to lon/lat -- to `out`.
+  int RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules, Rules *rules);
 
   //    Object Renderers
   int RenderTX(ObjRazRules *rzRules, Rules *rules);

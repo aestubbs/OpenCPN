@@ -32,6 +32,8 @@ qt_add_qml_module(opencpn-qt
     test_chart.cpp
     s52_engine.h
     s52_engine.cpp
+    s52_vector_chart_provider.h
+    s52_vector_chart_provider.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its

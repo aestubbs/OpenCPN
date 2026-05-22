@@ -36,6 +36,8 @@
 #include <QObject>
 #include <QString>
 
+#include "s52_sg.h"  // s52sg::Buffer -- Qt-free world-coord geometry
+
 namespace ocpn::qtui {
 
 class S52Engine : public QObject {
@@ -60,6 +62,14 @@ public:
    *  v3.4 loaded from ..." or "S-52: init failed (could not load
    *  S52RAZDS.RLE from ...)". */
   QString status() const;
+
+  /** Build a small synthetic S-57 chart covering [north,south]x[west,east]
+   *  and decode it through s52plib into world-coordinate geometry (P2.8c).
+   *  Returns an empty buffer if the engine is not initialised. This is the
+   *  proof-of-pipeline for the scene-graph vector path -- real chart-cell
+   *  loading replaces the synthetic feature construction later. */
+  s52sg::Buffer buildDemoChart(double north, double south, double east,
+                               double west);
 
 Q_SIGNALS:
   void changed();

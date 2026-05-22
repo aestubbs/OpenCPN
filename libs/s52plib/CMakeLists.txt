@@ -12,6 +12,8 @@ SET(SRC
     src/s52shaders.cpp
     src/s57obj.cpp              # relocated from gui/src/ in P2.8.0b
     src/render_canvas_parms.cpp # relocated from gui/src/ in P2.8.0c
+    src/s52_sg.h                # scene-graph geometry buffer (P2.8c)
+    src/s52plib_sg.cpp          # RenderObjectToSG emit path (P2.8c)
     src/TexFont.cpp
     src/DepthFont.cpp
     src/mygeom.cpp

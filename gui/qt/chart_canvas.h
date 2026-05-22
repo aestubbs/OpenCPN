@@ -37,6 +37,8 @@
 #include <QPointF>
 #include <QQuickItem>
 
+#include "s52_engine.h"  // S52Engine -- complete type needed for Q_PROPERTY
+
 QT_BEGIN_NAMESPACE
 class QSGNode;
 class QSGTransformNode;
@@ -53,9 +55,22 @@ class ChartCanvas : public QQuickItem {
   Q_OBJECT
   QML_ELEMENT
 
+  // The S-52 vector-chart engine. Bound from QML (`s52Engine: s52`). When
+  // set and initialised, the canvas decodes a demo S-57 chart through it
+  // and adds the vector layer (P2.8c). Optional -- without it the canvas
+  // shows only the raster test chart.
+  Q_PROPERTY(ocpn::qtui::S52Engine* s52Engine READ s52Engine WRITE
+                 setS52Engine NOTIFY s52EngineChanged)
+
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
   ~ChartCanvas() override;
+
+  S52Engine* s52Engine() const { return m_s52_engine; }
+  void setS52Engine(S52Engine* engine);
+
+Q_SIGNALS:
+  void s52EngineChanged();
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
@@ -75,6 +90,9 @@ private:
 
   std::unique_ptr<LayerCompositor> m_compositor;
   std::unique_ptr<Viewport> m_viewport;
+
+  // Non-owning; set from QML. nullptr until bound.
+  S52Engine* m_s52_engine = nullptr;
 
   // Drag state.
   bool m_dragging = false;

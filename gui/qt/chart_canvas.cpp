@@ -32,6 +32,8 @@
 #include "chart_layer.h"
 #include "layer_compositor.h"
 #include "raster_chart_provider.h"
+#include "s52_engine.h"
+#include "s52_vector_chart_provider.h"
 #include "test_chart.h"
 #include "viewport.h"
 
@@ -80,6 +82,28 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
 }
 
 ChartCanvas::~ChartCanvas() = default;
+
+void ChartCanvas::setS52Engine(S52Engine* engine) {
+  if (m_s52_engine == engine) return;
+  m_s52_engine = engine;
+  Q_EMIT s52EngineChanged();
+
+  // Decode the demo S-57 chart through s52plib into world-coordinate
+  // geometry and add it as a vector layer above the raster test chart.
+  // Geometry is static in world space; the viewport transform projects
+  // it, so this happens once -- not per frame.
+  if (m_s52_engine && m_s52_engine->isOk()) {
+    s52sg::Buffer buf = m_s52_engine->buildDemoChart(kTestNorth, kTestSouth,
+                                                     kTestEast, kTestWest);
+    if (!buf.empty()) {
+      auto* provider = new S52VectorChartProvider(
+          "demo.s52-chart", std::move(buf), kTestNorth, kTestSouth, kTestWest,
+          kTestEast);
+      m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
+      update();
+    }
+  }
+}
 
 QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,
                                       UpdatePaintNodeData* /*update_data*/) {

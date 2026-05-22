@@ -25,6 +25,10 @@ ApplicationWindow {
     ChartCanvas {
         id: chart
         anchors.fill: parent
+        // Hand the S-52 engine to the canvas so it decodes the demo
+        // vector chart through s52plib (P2.8c). `s52` is the context
+        // property set in main.cpp.
+        s52Engine: s52
     }
 
     // Tier 3: QML HUD. Two text items: the prototype label and a live
