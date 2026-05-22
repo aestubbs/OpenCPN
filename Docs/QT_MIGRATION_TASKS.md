@@ -807,12 +807,24 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
   - [x] **P2.8e** Point features: raster symbols (buoys/beacons from the
         S-52 atlas, billboarded) + soundings/labels (system font). SCAMIN
         + screen-density decluttering on zoom.
-  - [ ] **P2.8 follow-ups** (deferred refinements): vector (HPGL/SVG)
-        symbols instead of the raster atlas; wide S-52 line pens (Qt RHI
-        only supports width-1 lines → need quad geometry); shallowest-
-        sounding-per-cell selection; calibrate the 1:N scale denominator
-        with real per-monitor DPI; complex-line (LC) symbol patterns;
-        area pattern fills (AP). *(several overlap P2.9 below)*
+  - [x] **P2.8 follow-ups** — mostly done:
+    - [x] Wide S-52 line pens: parallel 1px strips (Qt RHI caps width 1)
+          + 4x MSAA; DPI-aware physical widths (0.32mm pen unit).
+    - [x] Shallowest-sounding-per-cell density declutter.
+    - [x] Real per-monitor DPI (logicalDotsPerInch) for the 1:N scale
+          denominator + line/pattern sizing.
+    - [x] AP area-pattern fills (raster patterns tiled screen-fixed via
+          QSGTextureMaterial Repeat; UVs rebuilt on zoom).
+    - [x] LC complex lines — **fallback only**: plain line in the LC
+          colour. True symbol-along-line needs the vector path.
+    - [x] Multi-cell loading: merge adjacent ENC cells into one surface
+          (S52Engine::loadEncCells; ChartCanvas scans a directory).
+    - [ ] **Still deferred:** vector (HPGL/SVG) symbols + true LC symbol
+          patterns (need an HPGL→geometry translator; the S-52 vector
+          symbols already exist in chartsymbols.xml — no external assets);
+          GPU line shader (cosmeticStroke-style) for top-tier fidelity;
+          async/background chart load + chart-DB (load is synchronous on
+          the main thread — fine for a handful of cells).
 - [ ] **P2.9** Expose S52 display categories (Base / Standard / Other /
       Mariner) and viewing groups as chart sub-layers in the same
       compositor — surfacing what `s52plib` already tracks.
