@@ -77,15 +77,17 @@ private:
     float depth = 0.0f;       // sounding depth (metres) for shallowest-wins
   };
 
-  // A line feature rendered as screen-fixed-width quad geometry. Qt RHI
-  // backends only support line width 1, so wider S-52 pens are drawn as
-  // triangle strips whose world-space half-width = widthPx / (2*scale).
-  // The world geometry doesn't change on pan -- only the scale changes
-  // the world-width -- so these are rebuilt only when the scale changes.
+  // A line feature rendered as N parallel 1px polylines offset from the
+  // centreline. Qt RHI backends only support line width 1, but thin
+  // polylines rasterise cleanly (proper joins, MSAA edges), so stacking a
+  // few 1px strips offset perpendicular by ~1px each gives a smooth thick
+  // line without triangle-tessellation joint artifacts. The strip count is
+  // fixed by the physical pen width; only the per-zoom offset distance
+  // (offset_px / scale) changes, so the strips are created once and their
+  // vertices rebuilt when the scale changes.
   struct LineGeom {
-    QSGGeometryNode* node = nullptr;
-    QList<QPointF> worldPts;  // (x=lon, y=-lat) polyline
-    float widthPx = 1.0f;
+    QList<QSGGeometryNode*> strips;  // one DrawLineStrip per parallel offset
+    QList<QPointF> worldPts;         // (x=lon, y=-lat) centreline
   };
 
   void updateBillboards(const Viewport& viewport);

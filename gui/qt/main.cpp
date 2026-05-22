@@ -40,9 +40,15 @@
 #endif
 
 int main(int argc, char* argv[]) {
-  // Default to the platform's preferred surface; on macOS that's Metal via
-  // RHI, on Windows D3D11, on Linux Vulkan/OpenGL. No explicit RHI backend
-  // set here -- let Qt pick.
+  // Enable 4x MSAA for the scene graph so chart geometry edges -- line
+  // quads and area-fill boundaries alike -- are anti-aliased by the GPU.
+  // Must be set before the QQuickWindow is created. Default to the
+  // platform's preferred surface otherwise (Metal via RHI on macOS,
+  // D3D11 on Windows, Vulkan/OpenGL on Linux).
+  QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
+  fmt.setSamples(4);
+  QSurfaceFormat::setDefaultFormat(fmt);
+
   QGuiApplication app(argc, argv);
   app.setOrganizationName("OpenCPN");
   app.setApplicationName("opencpn-qt");

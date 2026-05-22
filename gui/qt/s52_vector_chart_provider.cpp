@@ -142,47 +142,59 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
 
 void S52VectorChartProvider::rebuildLines(double scale) {
   if (scale <= 0.0) return;
-  // S-52 line widths are in units of ~0.32 mm (the nominal pen unit).
-  // Convert width -> physical mm -> logical pixels (via m_screen_ppmm) ->
-  // world-space half-width (/scale). Screen-fixed physical thickness on
-  // any monitor. Each segment becomes two triangles offset by the segment
-  // normal; per-segment quads avoid miter-joint math (slight gaps at sharp
-  // bends are not noticeable at chart line widths).
-  constexpr double kS52PenWidthMM = 0.32;
+  // Each line feature is N parallel 1px polylines offset perpendicular from
+  // the centreline. The strip count N (= rounded physical pen width in
+  // logical px) is fixed; only the world-space offset distance changes with
+  // scale, so here we just recompute each strip's vertices:
+  //   offset_world = (j - (N-1)/2) px / scale, along the per-vertex bisector
+  //   normal of the centreline.
+  // Stacking ~1px-spaced thin polylines (each rasterised with clean joins +
+  // MSAA) yields a smooth thick line without triangle-tessellation joints.
   for (const LineGeom& lg : m_lines) {
     const QList<QPointF>& p = lg.worldPts;
-    if (p.size() < 2 || !lg.node) {
-      if (lg.node && lg.node->geometry())
-        lg.node->geometry()->allocate(0);
+    const int n = static_cast<int>(lg.strips.size());
+    if (n == 0) continue;
+
+    if (p.size() < 2) {
+      for (QSGGeometryNode* s : lg.strips)
+        if (s && s->geometry()) {
+          s->geometry()->allocate(0);
+          s->markDirty(QSGNode::DirtyGeometry);
+        }
       continue;
     }
-    const double widthLogicalPx = lg.widthPx * kS52PenWidthMM * m_screen_ppmm;
-    const double halfW = (widthLogicalPx / scale) / 2.0;
 
-    QList<QSGGeometry::Point2D> tris;
-    tris.reserve((p.size() - 1) * 6);
-    for (qsizetype i = 0; i + 1 < p.size(); ++i) {
-      const QPointF a = p[i], b = p[i + 1];
+    // Per-vertex unit bisector normals (averaged adjacent segment normals).
+    QList<QPointF> normal;
+    normal.reserve(p.size());
+    const auto segN = [](const QPointF& a, const QPointF& b, bool& ok) {
       double dx = b.x() - a.x(), dy = b.y() - a.y();
-      const double len = std::hypot(dx, dy);
-      if (len <= 0.0) continue;
-      // Perpendicular unit normal * half-width.
-      const double nx = -dy / len * halfW;
-      const double ny = dx / len * halfW;
-      QSGGeometry::Point2D a0, a1, b0, b1;
-      a0.set(a.x() + nx, a.y() + ny);
-      a1.set(a.x() - nx, a.y() - ny);
-      b0.set(b.x() + nx, b.y() + ny);
-      b1.set(b.x() - nx, b.y() - ny);
-      tris.append(a0); tris.append(a1); tris.append(b0);  // tri 1
-      tris.append(b0); tris.append(a1); tris.append(b1);  // tri 2
+      double len = std::hypot(dx, dy);
+      ok = len > 0.0;
+      return ok ? QPointF(-dy / len, dx / len) : QPointF(0, 0);
+    };
+    for (qsizetype i = 0; i < p.size(); ++i) {
+      QPointF nIn, nOut;
+      bool okIn = false, okOut = false;
+      if (i > 0) nIn = segN(p[i - 1], p[i], okIn);
+      if (i + 1 < p.size()) nOut = segN(p[i], p[i + 1], okOut);
+      QPointF nm = (okIn && okOut) ? (nIn + nOut) : (okOut ? nOut : nIn);
+      const double l = std::hypot(nm.x(), nm.y());
+      normal.append(l > 1e-9 ? nm / l : QPointF(0, 0));
     }
 
-    QSGGeometry* geo = lg.node->geometry();
-    geo->allocate(static_cast<int>(tris.size()));
-    QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
-    for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
-    lg.node->markDirty(QSGNode::DirtyGeometry);
+    for (int j = 0; j < n; ++j) {
+      const double offsetPx = j - (n - 1) / 2.0;
+      const double offsetWorld = offsetPx / scale;
+      QSGGeometry* geo = lg.strips[j]->geometry();
+      geo->allocate(static_cast<int>(p.size()));
+      QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
+      for (qsizetype i = 0; i < p.size(); ++i) {
+        v[i].set(static_cast<float>(p[i].x() + normal[i].x() * offsetWorld),
+                 static_cast<float>(p[i].y() + normal[i].y() * offsetWorld));
+      }
+      lg.strips[j]->markDirty(QSGNode::DirtyGeometry);
+    }
   }
 }
 
@@ -269,31 +281,49 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   m_lines.clear();
   m_last_line_scale = -1.0;
 
+  // Logical pixels per millimetre, for both physical-size line widths and
+  // the SCAMIN scale denominator. logicalDotsPerInch gives a consistent
+  // physical scale independent of raw pixel density (Qt applies the device
+  // pixel ratio on top). Computed before the prim loop so line strip counts
+  // are known.
+  if (window && window->screen() &&
+      window->screen()->logicalDotsPerInch() > 1.0) {
+    m_screen_ppmm = window->screen()->logicalDotsPerInch() / 25.4;
+  }
+  // S-52 pen unit ~0.32mm -> logical px.
+  constexpr double kS52PenWidthMM = 0.32;
+
   for (const s52sg::Prim& prim : m_buffer.prims) {
     if (prim.verts.isEmpty()) continue;
 
-    // Line features: screen-fixed-width quad geometry (Qt RHI caps real
-    // line width at 1). Create the node now with its colour; the quad
-    // vertices are (re)built from the polyline by rebuildLines() once the
-    // scale is known, and again whenever the scale changes.
+    // Line features: N parallel 1px polylines (Qt RHI caps real line width
+    // at 1). N is fixed by the physical pen width; create the strips now
+    // with their colour, and let rebuildLines() lay out the offset vertices
+    // once the scale is known and again whenever it changes.
     if (prim.type == s52sg::PrimType::LineStrip) {
-      auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 0);
-      geo->setDrawingMode(QSGGeometry::DrawTriangles);
-      auto* mat = new QSGFlatColorMaterial();
-      mat->setColor(prim.color);
-      auto* node = new QSGGeometryNode();
-      node->setGeometry(geo);
-      node->setFlag(QSGNode::OwnsGeometry);
-      node->setMaterial(mat);
-      node->setFlag(QSGNode::OwnsMaterial);
-      root->appendChildNode(node);
+      const double widthLogicalPx =
+          prim.width * kS52PenWidthMM * m_screen_ppmm;
+      const int n = std::max(1, static_cast<int>(std::lround(widthLogicalPx)));
 
       LineGeom lg;
-      lg.node = node;
-      lg.widthPx = prim.width;
       lg.worldPts.reserve(prim.verts.size());
       for (const QPointF& p : prim.verts)
         lg.worldPts.append(QPointF(p.x(), -p.y()));  // world (x=lon, y=-lat)
+      for (int j = 0; j < n; ++j) {
+        auto* geo =
+            new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 0);
+        geo->setDrawingMode(QSGGeometry::DrawLineStrip);
+        geo->setLineWidth(1.0f);
+        auto* mat = new QSGFlatColorMaterial();
+        mat->setColor(prim.color);
+        auto* node = new QSGGeometryNode();
+        node->setGeometry(geo);
+        node->setFlag(QSGNode::OwnsGeometry);
+        node->setMaterial(mat);
+        node->setFlag(QSGNode::OwnsMaterial);
+        root->appendChildNode(node);
+        lg.strips.append(node);
+      }
       m_lines.append(lg);
       continue;
     }
@@ -321,16 +351,6 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // Billboarded point items: one QSGTransformNode (placed at the world
   // anchor, counter-scaled per viewport) wrapping a textured quad. Built
   // once with their textures; updateBillboards only touches the transform.
-  // Logical pixels per millimetre, for both the SCAMIN scale denominator
-  // and physical-size line widths. logicalDotsPerInch gives a consistent
-  // physical scale independent of raw pixel density (Qt applies the device
-  // pixel ratio on top), so a given S-52 width renders the same physical
-  // thickness on any monitor.
-  if (window && window->screen() &&
-      window->screen()->logicalDotsPerInch() > 1.0) {
-    m_screen_ppmm = window->screen()->logicalDotsPerInch() / 25.4;
-  }
-
   m_billboards.clear();
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
                           QPointF pivotPx, int scamin, bool isSounding,
