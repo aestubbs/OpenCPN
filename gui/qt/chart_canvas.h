@@ -113,10 +113,17 @@ private:
   void onExtentsScanned(const QList<CellExtent>& cells);
   void onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
                     double north, double south, double east, double west);
-  // Find catalogued cells overlapping the current view (and large enough on
-  // screen to be worth decoding) that aren't loaded yet, and ask the worker
-  // to decode them. Debounced off Viewport::changed.
-  void requestVisibleCells();
+  // Reconcile the set of loaded cells with the current view: request
+  // catalogued cells that have come into view (and grown large enough on
+  // screen to be worth decoding), and evict loaded cells that have left the
+  // view or shrunk too small. Debounced off Viewport::changed.
+  void updateVisibleCells();
+  // True if a cell at the given extent should be resident at `scale` for a
+  // view rectangle [lat/lon]. `margin` widens the rect (eviction uses a
+  // wider rect than loading, for hysteresis against pan/zoom thrash).
+  bool cellWanted(const CellExtent& c, double scale, double lat_min,
+                  double lat_max, double lon_min, double lon_max,
+                  double min_px) const;
 
   // Top transform nodes — non-owning pointers into the scene-graph tree
   // (which is owned by Qt's scene graph); the LayerCompositor attaches
@@ -129,11 +136,20 @@ private:
 
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;
-  // Non-owning (owned by the compositor's ChartLayers). Every active vector
-  // chart provider (one per loaded cell, or one for the demo chart), for
-  // forwarding display-category changes.
-  QList<S52VectorChartProvider*> m_chart_providers;
   int m_display_category = 1;  // 0 Base, 1 Standard, 2 All
+
+  // A decoded, on-screen cell. The provider is owned by its ChartLayer in
+  // the compositor (removeLayer deletes both); we keep the pointer only to
+  // forward display-category changes, and the extent to re-test visibility
+  // for eviction.
+  struct LoadedCell {
+    CellExtent extent;
+    QString layerId;
+    S52VectorChartProvider* provider = nullptr;
+  };
+  // Currently-resident cells, keyed by cell name ("demo" for the synthetic
+  // chart, which is never evicted as it has no catalog entry).
+  QHash<QString, LoadedCell> m_loaded;
 
   // --- Async chart loading (P2.x) ---
   // The worker + its thread (owned: thread parented to this; worker

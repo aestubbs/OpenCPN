@@ -93,7 +93,7 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_load_debounce->setSingleShot(true);
   m_load_debounce->setInterval(250);
   connect(m_load_debounce, &QTimer::timeout, this,
-          [this]() { requestVisibleCells(); });
+          [this]() { updateVisibleCells(); });
 
   connect(m_compositor.get(), &LayerCompositor::changed, this,
           [this]() { update(); });
@@ -158,8 +158,11 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
         "demo.s52-chart", std::move(buf), kTestNorth, kTestSouth, kTestWest,
         kTestEast, m_viewport.get());
     provider->setDisplayCategory(m_display_category);
-    m_chart_providers.append(provider);
     m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
+    LoadedCell lc;
+    lc.layerId = "demo.s52-chart";
+    lc.provider = provider;  // no extent -> never evicted (not in catalog)
+    m_loaded.insert("demo", lc);
     update();
   }
 }
@@ -215,23 +218,54 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
   update();
 
   // Pull in whatever's already big enough on screen.
-  requestVisibleCells();
+  updateVisibleCells();
 }
 
 void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
                                double north, double south, double east,
                                double west) {
-  if (buffer.empty()) return;
-  auto* provider =
-      new S52VectorChartProvider("enc." + id, buffer, north, south, west, east,
-                                 m_viewport.get());
+  // A quick pan/zoom while this cell was decoding may have moved it out of
+  // view; drop the result rather than add an off-screen layer.
+  CellExtent c;
+  c.north = north; c.south = south; c.east = east; c.west = west;
+  c.name = id;
+  const double scale = m_viewport->scale();
+  const double cw = width() > 0 ? width() : 1024.0;
+  const double ch = height() > 0 ? height() : 720.0;
+  const double hlon = (cw / 2.0) / scale, hlat = (ch / 2.0) / scale;
+  const bool wanted =
+      !buffer.empty() &&
+      cellWanted(c, scale, m_viewport->centerLat() - hlat,
+                 m_viewport->centerLat() + hlat,
+                 m_viewport->centerLon() - hlon,
+                 m_viewport->centerLon() + hlon, 90.0 /* evict threshold */);
+  if (!wanted) {
+    m_requested.remove(id);  // allow a future re-request when back in view
+    return;
+  }
+
+  const QString layerId = "enc." + id;
+  auto* provider = new S52VectorChartProvider(layerId, buffer, north, south,
+                                              west, east, m_viewport.get());
   provider->setDisplayCategory(m_display_category);
-  m_chart_providers.append(provider);
   m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
+  LoadedCell lc;
+  lc.extent = c;
+  lc.layerId = layerId;
+  lc.provider = provider;
+  m_loaded.insert(id, lc);
   update();
 }
 
-void ChartCanvas::requestVisibleCells() {
+bool ChartCanvas::cellWanted(const CellExtent& c, double scale, double lat_min,
+                             double lat_max, double lon_min, double lon_max,
+                             double min_px) const {
+  if (!c.intersects(lat_min, lat_max, lon_min, lon_max)) return false;
+  if ((c.east - c.west) * scale < min_px) return false;
+  return true;
+}
+
+void ChartCanvas::updateVisibleCells() {
   if (!m_worker || m_catalog.isEmpty()) return;
 
   const double scale = m_viewport->scale();
@@ -239,25 +273,45 @@ void ChartCanvas::requestVisibleCells() {
   const double ch = height() > 0 ? height() : 720.0;
   const double half_lon = (cw / 2.0) / scale;
   const double half_lat = (ch / 2.0) / scale;
-  const double lon_min = m_viewport->centerLon() - half_lon;
-  const double lon_max = m_viewport->centerLon() + half_lon;
-  const double lat_min = m_viewport->centerLat() - half_lat;
-  const double lat_max = m_viewport->centerLat() + half_lat;
+  const double c_lon = m_viewport->centerLon();
+  const double c_lat = m_viewport->centerLat();
 
-  // Don't decode a cell until it's at least this wide on screen -- when
-  // zoomed out over the whole set we show boundaries only; the content
-  // streams in as the user zooms into an area.
-  constexpr double kMinCellPx = 120.0;
+  // Loading uses the exact view + a 120px floor. Eviction uses a 50% wider
+  // rect + a lower 90px floor, so a cell hovering at the boundary isn't
+  // loaded/evicted on every jitter (hysteresis).
+  constexpr double kLoadPx = 120.0;
+  constexpr double kEvictPx = 90.0;
+  constexpr double kEvictMargin = 1.5;
 
+  // --- Load: catalogued, in view, big enough, not already requested. ---
   for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
     const CellExtent& c = it.value();
     if (m_requested.contains(c.name)) continue;
-    if (!c.intersects(lat_min, lat_max, lon_min, lon_max)) continue;
-    if ((c.east - c.west) * scale < kMinCellPx) continue;
+    if (!cellWanted(c, scale, c_lat - half_lat, c_lat + half_lat,
+                    c_lon - half_lon, c_lon + half_lon, kLoadPx))
+      continue;
     m_requested.insert(c.name);
     QMetaObject::invokeMethod(m_worker, "loadCell", Qt::QueuedConnection,
                               Q_ARG(ocpn::qtui::CellExtent, c));
   }
+
+  // --- Evict: loaded cells now outside the (widened) view or too small. ---
+  const double e_hlon = half_lon * kEvictMargin;
+  const double e_hlat = half_lat * kEvictMargin;
+  QList<QString> evict;
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it) {
+    const LoadedCell& lc = it.value();
+    if (!lc.extent.valid()) continue;  // demo chart -- never evict
+    if (!cellWanted(lc.extent, scale, c_lat - e_hlat, c_lat + e_hlat,
+                    c_lon - e_hlon, c_lon + e_hlon, kEvictPx))
+      evict.append(it.key());
+  }
+  for (const QString& name : evict) {
+    m_compositor->removeLayer(m_loaded.value(name).layerId);
+    m_loaded.remove(name);
+    m_requested.remove(name);  // eligible to reload when back in view
+  }
+  if (!evict.isEmpty()) update();
 }
 
 void ChartCanvas::zoomIn() {
@@ -288,7 +342,8 @@ void ChartCanvas::fitWorld() {
 void ChartCanvas::setDisplayCategory(int cat) {
   if (cat == m_display_category) return;
   m_display_category = cat;
-  for (S52VectorChartProvider* p : m_chart_providers) p->setDisplayCategory(cat);
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().provider) it.value().provider->setDisplayCategory(cat);
   Q_EMIT displayCategoryChanged();
   update();
 }
