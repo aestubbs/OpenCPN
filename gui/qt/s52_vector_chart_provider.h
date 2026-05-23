@@ -73,6 +73,15 @@ public:
   void setDisplayCategory(int cat);
   int displayCategory() const { return m_displayCategory; }
 
+  // S-52 viewing-group toggles (mirror s52plib's GetShowSoundings /
+  // GetShowS57Text). Applied as a post-decode filter on the cached buffer's
+  // labels -- no re-decode -- so toggling is cheap. Changing forces a
+  // rebuild (emits changed()).
+  void setShowSoundings(bool on);
+  bool showSoundings() const { return m_showSoundings; }
+  void setShowText(bool on);
+  bool showText() const { return m_showText; }
+
 private:
   // One billboarded point item (symbol or text): a transform node placed at
   // the world anchor whose scale counters the viewport scale so the content
@@ -139,6 +148,8 @@ private:
   // stays smooth and the CPU work happens once at the end.
   QTimer* m_zoom_timer = nullptr;
   int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All
+  bool m_showSoundings = true;
+  bool m_showText = true;
 
   QString m_id;
   s52sg::Buffer m_buffer;

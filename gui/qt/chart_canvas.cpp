@@ -172,7 +172,7 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
     auto* provider = new S52VectorChartProvider(
         "demo.s52-chart", std::move(buf), kTestNorth, kTestSouth, kTestWest,
         kTestEast, m_viewport.get());
-    provider->setDisplayCategory(m_display_category);
+    applyDisplaySettings(provider);
     m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
     LoadedCell lc;
     lc.layerId = "demo.s52-chart";
@@ -276,7 +276,7 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   const QString layerId = "enc." + id;
   auto* provider = new S52VectorChartProvider(layerId, buffer, north, south,
                                               west, east, m_viewport.get());
-  provider->setDisplayCategory(m_display_category);
+  applyDisplaySettings(provider);
   auto* layer = new ChartLayer(provider, m_viewport.get());
   layer->setZOrder(zOrderForScale(cat.nativeScale));
   m_compositor->addLayer(layer);
@@ -454,12 +454,38 @@ void ChartCanvas::fitWorld() {
   m_viewport->setScale(std::min(cw / (e - w), ch / (n - s)) * 0.9);
 }
 
+void ChartCanvas::applyDisplaySettings(
+    S52VectorChartProvider* provider) const {
+  if (!provider) return;
+  provider->setDisplayCategory(m_display_category);
+  provider->setShowSoundings(m_show_soundings);
+  provider->setShowText(m_show_text);
+}
+
 void ChartCanvas::setDisplayCategory(int cat) {
   if (cat == m_display_category) return;
   m_display_category = cat;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setDisplayCategory(cat);
   Q_EMIT displayCategoryChanged();
+  update();
+}
+
+void ChartCanvas::setShowSoundings(bool on) {
+  if (on == m_show_soundings) return;
+  m_show_soundings = on;
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().provider) it.value().provider->setShowSoundings(on);
+  Q_EMIT showSoundingsChanged();
+  update();
+}
+
+void ChartCanvas::setShowText(bool on) {
+  if (on == m_show_text) return;
+  m_show_text = on;
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().provider) it.value().provider->setShowText(on);
+  Q_EMIT showTextChanged();
   update();
 }
 

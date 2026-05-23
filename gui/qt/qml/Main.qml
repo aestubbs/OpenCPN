@@ -80,6 +80,22 @@ ApplicationWindow {
                 }
             }
 
+            ToolSeparator {}
+
+            // S-52 viewing-group toggles (post-decode filters).
+            ToolButton {
+                text: qsTr("Soundings")
+                checkable: true
+                checked: chart.showSoundings
+                onClicked: chart.showSoundings = checked
+            }
+            ToolButton {
+                text: qsTr("Text")
+                checkable: true
+                checked: chart.showText
+                onClicked: chart.showText = checked
+            }
+
             Item { Layout.fillWidth: true }  // spacer
 
             Label {

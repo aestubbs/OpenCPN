@@ -76,6 +76,13 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(int displayCategory READ displayCategory WRITE setDisplayCategory
                  NOTIFY displayCategoryChanged)
 
+  // S-52 viewing-group toggles (soundings, text). Bound from QML controls;
+  // forwarded to every loaded vector provider as a post-decode filter.
+  Q_PROPERTY(bool showSoundings READ showSoundings WRITE setShowSoundings
+                 NOTIFY showSoundingsChanged)
+  Q_PROPERTY(bool showText READ showText WRITE setShowText NOTIFY
+                 showTextChanged)
+
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
   ~ChartCanvas() override;
@@ -86,6 +93,11 @@ public:
   int displayCategory() const { return m_display_category; }
   void setDisplayCategory(int cat);
 
+  bool showSoundings() const { return m_show_soundings; }
+  void setShowSoundings(bool on);
+  bool showText() const { return m_show_text; }
+  void setShowText(bool on);
+
   // Toolbar actions (bound from the QML chrome). Zoom about the canvas
   // centre; fitWorld zooms out to show the whole scanned chart set.
   Q_INVOKABLE void zoomIn();
@@ -95,6 +107,8 @@ public:
 Q_SIGNALS:
   void s52EngineChanged();
   void displayCategoryChanged();
+  void showSoundingsChanged();
+  void showTextChanged();
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
@@ -138,6 +152,11 @@ private:
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;
   int m_display_category = 1;  // 0 Base, 1 Standard, 2 All
+  bool m_show_soundings = true;
+  bool m_show_text = true;
+  // Push the current display category + viewing-group toggles onto a newly
+  // created provider (called at both provider-creation sites).
+  void applyDisplaySettings(S52VectorChartProvider* provider) const;
 
   // A decoded, on-screen cell. The provider is owned by its ChartLayer in
   // the compositor (removeLayer deletes both); we keep the pointer only to

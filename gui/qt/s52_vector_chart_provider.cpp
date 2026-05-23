@@ -169,6 +169,20 @@ void S52VectorChartProvider::setDisplayCategory(int cat) {
   Q_EMIT changed();
 }
 
+void S52VectorChartProvider::setShowSoundings(bool on) {
+  if (on == m_showSoundings) return;
+  m_showSoundings = on;
+  m_built = false;  // re-emit the subtree with soundings filtered in/out
+  Q_EMIT changed();
+}
+
+void S52VectorChartProvider::setShowText(bool on) {
+  if (on == m_showText) return;
+  m_showText = on;
+  m_built = false;
+  Q_EMIT changed();
+}
+
 void S52VectorChartProvider::rebuildLines(double scale) {
   if (scale <= 0.0) return;
   // Each line feature is N parallel 1px polylines offset perpendicular from
@@ -534,6 +548,10 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // the point symbols / dots they annotate.
   for (const s52sg::Label& lab : m_buffer.labels) {
     if (lab.dispCat > m_displayCategory) continue;
+    // Viewing-group filter: soundings vs. other text (names), each
+    // independently toggleable (mirrors s52plib's ShowSoundings /
+    // ShowS57Text).
+    if (lab.isSounding ? !m_showSoundings : !m_showText) continue;
     QImage img = renderLabelImage(lab);
     const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
     addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
