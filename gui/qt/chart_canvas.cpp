@@ -335,11 +335,11 @@ void ChartCanvas::updateVisibleCells() {
   // under-zoom (showing a finer chart than strictly needed) is cheap
   // (kUnderWeight). So where a slightly-finer chart is available it wins, and
   // a whole area renders at a consistent finer level instead of leaving a
-  // coarse cell's "blank" patch (e.g. an unfilled harbour). A hard cap skips
-  // charts absurdly finer than the display so we don't pull berthing cells in
-  // at coastal zoom.
+  // coarse cell's "blank" patch (e.g. an unfilled harbour). No hard cap: a
+  // point covered only by a far-finer cell still gets it (the cost just makes
+  // it lose wherever a better-matched cell also covers), so we never drop to
+  // the world backdrop while ANY ENC cell covers the spot.
   constexpr double kUnderWeight = 0.4;
-  const double kMaxUnderLog = std::log(12.0);
   constexpr int kGrid = 24;
   m_needed.clear();
   for (int gy = 0; gy < kGrid; ++gy) {
@@ -355,11 +355,19 @@ void ChartCanvas::updateVisibleCells() {
         // r > 0: cell coarser than display (over-zoom); r < 0: finer.
         const double r =
             std::log(static_cast<double>(c->nativeScale)) - logTargetN;
-        if (r < -kMaxUnderLog) continue;  // far too detailed for this zoom
         const double cost = (r >= 0.0) ? r : (-r) * kUnderWeight;
-        if (cost < best_cost - 1e-9 ||
-            (std::abs(cost - best_cost) <= 1e-9 && best &&
-             c->nativeScale < best->nativeScale)) {
+        // Lower cost wins. On a near-tie (overlapping same-scale cells, e.g.
+        // two overview cells covering the same coast) prefer the one with
+        // more chart content -- so we don't pick a sparse overview where a
+        // richer one overlaps -- then the finer scale.
+        bool better = cost < best_cost - 1e-9;
+        if (!better && best && std::abs(cost - best_cost) <= 1e-9) {
+          if (c->navFeatures != best->navFeatures)
+            better = c->navFeatures > best->navFeatures;
+          else
+            better = c->nativeScale < best->nativeScale;
+        }
+        if (better) {
           best_cost = cost;
           best = c;
         }
