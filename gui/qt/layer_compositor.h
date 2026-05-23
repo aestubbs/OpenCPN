@@ -37,6 +37,8 @@
 
 #include "layer.h"
 
+class OcpnConfig;
+
 QT_BEGIN_NAMESPACE
 class QQuickWindow;
 class QSGOpacityNode;
@@ -69,6 +71,20 @@ public:
   /** Layers attached to a given anchor, in registration order. */
   QList<Layer*> layersFor(Layer::Anchor anchor) const;
 
+  // --- Per-layer state persistence (P2.10) -----------------------------
+  /**
+   * Attach a config store backing per-Layer visible / zOrder / opacity.
+   * Non-owning; must outlive the compositor. Once set, addLayer() restores
+   * a persistable Layer's saved state on registration (so async-added
+   * Layers still pick up their preferences), and saveState() writes the
+   * current state back. Layers with persistState() == false are ignored.
+   */
+  void setConfig(OcpnConfig* config) { m_config = config; }
+
+  /** Write every persistable Layer's visible / zOrder / opacity to the
+   *  configured store (no-op without setConfig). Call on shutdown. */
+  void saveState() const;
+
   /**
    * Synchronise the scene graph: rebuild the children of each transform
    * root from the current Layer state. Called from ChartCanvas::update
@@ -100,9 +116,13 @@ private:
   void onLayerDirty(Layer* l);
   void syncOneRoot(QSGTransformNode* root, Layer::Anchor anchor,
                    QQuickWindow* window);
+  // Apply a persistable Layer's saved state from m_config (no-op if there's
+  // no config or no stored entry for this Layer).
+  void restoreLayerState(Layer* l) const;
 
   QList<Layer*> m_layers;                  // registration order
   QHash<QString, Entry> m_entries_by_id;
+  OcpnConfig* m_config = nullptr;          // non-owning; per-layer persistence
 };
 
 }  // namespace ocpn::qtui

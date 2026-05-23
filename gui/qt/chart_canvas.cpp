@@ -26,8 +26,10 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QStandardPaths>
 #include <QVarLengthArray>
 #include <QMouseEvent>
 #include <QQuickWindow>
@@ -42,6 +44,7 @@
 #include "chart_worker.h"
 #include "gshhs_world_provider.h"
 #include "layer_compositor.h"
+#include "model/ocpn_config.h"
 #include "raster_chart_provider.h"
 #include "s52_engine.h"
 #include "s52_vector_chart_provider.h"
@@ -73,6 +76,15 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
                         (kTestWest + kTestEast) / 2.0);
 
   m_compositor = std::make_unique<LayerCompositor>();
+
+  // Per-Layer state store (visible/zOrder/opacity), an INI file under the
+  // app config dir. Hand it to the compositor before any layer is added so
+  // persistable layers restore their saved state on registration (P2.10).
+  const QString cfg_dir =
+      QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+  if (!cfg_dir.isEmpty()) QDir().mkpath(cfg_dir);
+  m_layer_config = std::make_unique<OcpnConfig>(cfg_dir + "/layers.ini");
+  m_compositor->setConfig(m_layer_config.get());
 
   // World background -- the bundled GSHHS crude coastline, always present
   // under everything (lowest z) so the canvas shows a land/sea world map at
@@ -122,6 +134,9 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
 }
 
 ChartCanvas::~ChartCanvas() {
+  // Persist per-Layer state while the compositor (and its config) are still
+  // alive (P2.10).
+  if (m_compositor) m_compositor->saveState();
   // Stop the worker thread before the QObject teardown chain runs.
   if (m_worker_thread) {
     m_worker_thread->quit();

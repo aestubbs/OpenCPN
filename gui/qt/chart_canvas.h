@@ -43,6 +43,8 @@
 #include "chart_extent.h"  // CellExtent -- catalog entry (value type)
 #include "s52_engine.h"    // S52Engine -- complete type needed for Q_PROPERTY
 
+class OcpnConfig;
+
 QT_BEGIN_NAMESPACE
 class QSGNode;
 class QSGTransformNode;
@@ -148,6 +150,9 @@ private:
 
   std::unique_ptr<LayerCompositor> m_compositor;
   std::unique_ptr<Viewport> m_viewport;
+  // Backs per-Layer visible/zOrder/opacity persistence (P2.10). Handed to
+  // the compositor; saved on destruction.
+  std::unique_ptr<OcpnConfig> m_layer_config;
 
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;

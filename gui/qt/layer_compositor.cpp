@@ -21,6 +21,8 @@
 #include <QSGOpacityNode>
 #include <QSGTransformNode>
 
+#include "model/ocpn_config.h"
+
 namespace ocpn::qtui {
 
 LayerCompositor::LayerCompositor(QObject* parent) : QObject(parent) {}
@@ -46,6 +48,10 @@ void LayerCompositor::addLayer(Layer* layer) {
   e.layer = layer;
   m_entries_by_id.insert(id, e);
   m_layers.append(layer);
+
+  // Restore any persisted visible / zOrder / opacity before wiring signals
+  // and the first sync, so the Layer appears in its saved state.
+  restoreLayerState(layer);
 
   connect(layer, &Layer::dirty, this, [this, layer]() {
     onLayerDirty(layer);
@@ -87,6 +93,35 @@ QList<Layer*> LayerCompositor::layersFor(Layer::Anchor anchor) const {
   for (Layer* l : m_layers)
     if (l->anchor() == anchor) out.append(l);
   return out;
+}
+
+void LayerCompositor::saveState() const {
+  if (!m_config) return;
+  m_config->beginGroup(QStringLiteral("layers"));
+  for (Layer* l : m_layers) {
+    if (!l->persistState()) continue;
+    m_config->beginGroup(l->id());
+    m_config->setValue(QStringLiteral("visible"), l->visible());
+    m_config->setValue(QStringLiteral("zOrder"), l->zOrder());
+    m_config->setValue(QStringLiteral("opacity"), l->opacity());
+    m_config->endGroup();
+  }
+  m_config->endGroup();
+  m_config->sync();
+}
+
+void LayerCompositor::restoreLayerState(Layer* l) const {
+  if (!m_config || !l || !l->persistState()) return;
+  m_config->beginGroup(QStringLiteral("layers"));
+  m_config->beginGroup(l->id());
+  if (m_config->contains(QStringLiteral("visible")))
+    l->setVisible(m_config->value(QStringLiteral("visible")).toBool());
+  if (m_config->contains(QStringLiteral("zOrder")))
+    l->setZOrder(m_config->value(QStringLiteral("zOrder")).toInt());
+  if (m_config->contains(QStringLiteral("opacity")))
+    l->setOpacity(m_config->value(QStringLiteral("opacity")).toReal());
+  m_config->endGroup();
+  m_config->endGroup();
 }
 
 void LayerCompositor::onLayerDirty(Layer* l) {

@@ -45,6 +45,9 @@ public:
   QString name() const override;
   Anchor anchor() const override { return WorldAnchored; }
   QSGNode* updateSubtree(QSGNode* old, QQuickWindow* window) override;
+  // Chart cells are data-driven: their id is transient and z-order is
+  // computed from native scale, so they are not persisted (P2.10).
+  bool persistState() const override { return false; }
 
   ChartProvider* provider() const { return m_provider.get(); }
 

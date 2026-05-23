@@ -112,6 +112,13 @@ public:
   QString owner() const { return m_owner; }
   void setOwner(const QString& o) { m_owner = o; }
 
+  /** Whether the compositor should persist this Layer's visible / zOrder /
+   *  opacity across runs (P2.10). True for stable, user-arranged Layers
+   *  (AIS, routes, plugin overlays). Transient or data-driven Layers whose
+   *  id / z-order is computed (e.g. dynamically loaded chart cells) override
+   *  to false so they don't clutter config or fight their computed state. */
+  virtual bool persistState() const { return true; }
+
 Q_SIGNALS:
   /** Emit when the subtree needs rebuilding (data changed, properties
    *  changed). The compositor connects and schedules an update. */
