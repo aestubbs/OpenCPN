@@ -28,6 +28,7 @@
 
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QVarLengthArray>
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSGNode>
@@ -339,38 +340,66 @@ void ChartCanvas::updateVisibleCells() {
   // location only falls through to the GSHHS world backdrop when NO ENC cell
   // covers it.
   //
-  // Pick the FINEST chart that isn't over-detailed for this zoom (mirrors
-  // ECDIS quilting: show the most detailed appropriate chart, fall back to
-  // coarser only where finer is absent). A chart is "eligible" if it's no
-  // more than kMaxUnderzoom times finer than the display -- so we don't pull
-  // a harbour cell in at coastal zoom -- but coarser charts are always
-  // eligible. Among eligible cells covering a point we take the finest
-  // (smallest 1:N), tie-broken toward MORE content; this beats a sparse
-  // scale-matched chart (e.g. an offshore General cell with few features)
-  // whenever a finer, denser one overlaps. If a point's only cover is finer
-  // than the threshold (zoomed right out past every chart there), the
-  // coarsest available is used so it still shows something rather than the
-  // bare world backdrop.
+  // Pick the chart for each sampled location (mirrors ECDIS quilting: show
+  // the most detailed *useful* chart, fall back to coarser where finer is
+  // absent). A chart is "eligible" if it's no more than kMaxUnderzoom times
+  // finer than the display -- so we don't pull a harbour cell in at coastal
+  // zoom -- but coarser charts are always eligible.
+  //
+  // Among eligible cells covering the point we take the FINEST, except: where
+  // several overlap at *comparable* scale (within kComparable x of the finest)
+  // we prefer the one with the higher chart-content DENSITY (features per
+  // square degree -- not raw count, which would favour a coarser cell merely
+  // for spanning more area). That stops a finer-but-sparse cell (e.g. a deep
+  // channel cell with few soundings) being chosen over a comparably-scaled
+  // neighbour that's rich with soundings, while still favouring detail. If a
+  // point's only cover is finer than the threshold (zoomed right out past
+  // every chart there), the coarsest is used so it still shows something.
   constexpr double kMaxUnderzoom = 8.0;
+  constexpr double kComparable = 4.0;  // scale ratio treated as "same detail"
   const double threshold = displayScaleN(scale) / kMaxUnderzoom;
+  const auto density = [](const CellExtent* c) -> double {
+    const double a = (c->north - c->south) * (c->east - c->west);
+    return a > 0.0 ? c->navFeatures / a : 0.0;
+  };
   constexpr int kGrid = 24;
   m_needed.clear();
   for (int gy = 0; gy < kGrid; ++gy) {
     const double plat = lat0 + (gy + 0.5) / kGrid * (lat1 - lat0);
     for (int gx = 0; gx < kGrid; ++gx) {
       const double plon = lon0 + (gx + 0.5) / kGrid * (lon1 - lon0);
-      const CellExtent* best = nullptr;      // finest eligible (preferred)
-      const CellExtent* coarsest = nullptr;  // fallback if none eligible
+      // Gather cells whose actual coverage contains the point.
+      QVarLengthArray<const CellExtent*, 16> cov;
+      int finestEligible = 0;        // smallest 1:N among eligible
+      const CellExtent* coarsest = nullptr;
       for (const CellExtent* c : cands) {
-        if (!c->covers(plat, plon)) continue;  // not in actual coverage
+        if (!c->covers(plat, plon)) continue;
+        cov.append(c);
         if (!coarsest || c->nativeScale > coarsest->nativeScale) coarsest = c;
-        if (c->nativeScale < threshold) continue;  // too detailed for zoom
-        if (!best || c->nativeScale < best->nativeScale ||
-            (c->nativeScale == best->nativeScale &&
-             c->navFeatures > best->navFeatures))
-          best = c;
+        if (c->nativeScale >= threshold &&
+            (finestEligible == 0 || c->nativeScale < finestEligible))
+          finestEligible = c->nativeScale;
       }
-      const CellExtent* pick = best ? best : coarsest;
+      if (cov.isEmpty()) continue;  // no chart here -> GSHHS backdrop
+
+      const CellExtent* pick = nullptr;
+      if (finestEligible > 0) {
+        // Among eligible cells within kComparable x of the finest, the
+        // densest (richest per area); tie-break finer.
+        const double band = finestEligible * kComparable;
+        double bestDensity = -1.0;
+        for (const CellExtent* c : cov) {
+          if (c->nativeScale < threshold || c->nativeScale > band) continue;
+          const double d = density(c);
+          if (d > bestDensity + 1e-12 ||
+              (std::abs(d - bestDensity) <= 1e-12 && pick &&
+               c->nativeScale < pick->nativeScale)) {
+            bestDensity = d;
+            pick = c;
+          }
+        }
+      }
+      if (!pick) pick = coarsest;  // zoomed past every chart -> coarsest
       if (pick) m_needed.insert(pick->name);
     }
   }
