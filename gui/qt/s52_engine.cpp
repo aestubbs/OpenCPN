@@ -551,6 +551,9 @@ CellExtent S52Engine::scanOneCellExtent(const QString& path_000,
   // straight from the reader module (as the loader does).
   S57Reader* reader = ds.GetModule(0);
   if (reader) {
+    // Native compilation scale (DSPM:CSCL), populated during ingest -- the
+    // 1:N the cell was drawn at. Drives the quilt's per-zoom tier choice.
+    ce.nativeScale = reader->GetCSCL();
     reader->Rewind();
     OGRFeature* feat;
     while ((feat = reader->ReadNextFeature()) != nullptr) {

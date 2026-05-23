@@ -24,6 +24,7 @@
 #include "chart_canvas.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <QDirIterator>
 #include <QFileInfo>
@@ -235,20 +236,21 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   CellExtent c;
   c.north = north; c.south = south; c.east = east; c.west = west;
   c.name = id;
-  const double scale = m_viewport->scale();
+  // Use the catalog entry (it carries the native scale + accurate extent);
+  // fall back to the loaded bounds if somehow absent.
+  CellExtent cat = m_catalog.value(id, c);
   const double cw = width() > 0 ? width() : 1024.0;
   const double ch = height() > 0 ? height() : 720.0;
-  const double hlon = (cw / 2.0) / scale, hlat = (ch / 2.0) / scale;
-  c.band = CellExtent::bandFromName(id);
-  const int pb = primaryBand(scale);
-  // Eviction window (also the "still wanted" test on arrival): one band
-  // either side of the reference band, within a widened view.
+  const double scale = m_viewport->scale();
+  const double hlon = (cw / 2.0) / scale * 1.5, hlat = (ch / 2.0) / scale * 1.5;
+  // Dropped if the view moved off it, or the selected tier changed, while it
+  // was decoding.
   const bool wanted =
-      !buffer.empty() &&
-      cellWanted(c, m_viewport->centerLat() - hlat * 1.5,
-                 m_viewport->centerLat() + hlat * 1.5,
-                 m_viewport->centerLon() - hlon * 1.5,
-                 m_viewport->centerLon() + hlon * 1.5, pb - 1, pb + 1);
+      !buffer.empty() && cat.nativeScale == m_target_scale &&
+      cat.intersects(m_viewport->centerLat() - hlat,
+                     m_viewport->centerLat() + hlat,
+                     m_viewport->centerLon() - hlon,
+                     m_viewport->centerLon() + hlon);
   if (!wanted) {
     m_requested.remove(id);  // allow a future re-request when back in view
     return;
@@ -258,40 +260,22 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   auto* provider = new S52VectorChartProvider(layerId, buffer, north, south,
                                               west, east, m_viewport.get());
   provider->setDisplayCategory(m_display_category);
-  auto* layer = new ChartLayer(provider, m_viewport.get());
-  // Quilt z-order: coarser bands under finer (band 1 overview at the bottom,
-  // band 6 berthing on top), all under the boundary grid (100). So where a
-  // finer cell covers a coarser one the coarse is hidden -- no cross-band
-  // stacking / seam show-through.
-  layer->setZOrder(c.band > 0 ? c.band : 1);
-  m_compositor->addLayer(layer);
+  m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
   LoadedCell lc;
-  lc.extent = c;
+  lc.extent = cat;
   lc.layerId = layerId;
   lc.provider = provider;
   m_loaded.insert(id, lc);
   update();
 }
 
-int ChartCanvas::primaryBand(double scale) {
-  // Map the viewport scale (pixels per degree) to an approximate 1:N display
-  // scale (nominal ~96 dpi) and pick the NOAA usage band whose compilation
-  // scale that's closest to. Zooming in steps the reference band 1 -> 6.
-  if (scale <= 0.0) return 1;
-  const double n = 4.23e8 / scale;  // ~ 1:n display-scale denominator
-  if (n > 1000000.0) return 1;      // overview
-  if (n > 350000.0) return 2;       // general
-  if (n > 90000.0) return 3;        // coastal
-  if (n > 30000.0) return 4;        // approach
-  if (n > 8000.0) return 5;         // harbour
-  return 6;                         // berthing
-}
-
-bool ChartCanvas::cellWanted(const CellExtent& c, double lat_min,
-                             double lat_max, double lon_min, double lon_max,
-                             int lo_band, int hi_band) const {
-  if (c.band < lo_band || c.band > hi_band) return false;
-  return c.intersects(lat_min, lat_max, lon_min, lon_max);
+double ChartCanvas::displayScaleN(double scale) {
+  // ~1:N display-scale denominator at a nominal 96 dpi (3.78 px/mm):
+  //   N = (ground metres per degree) / (screen metres per pixel)
+  //     = (111320 / scale) / (1 / (ppmm*1000))
+  if (scale <= 0.0) return 1.0e12;
+  constexpr double kPpmm = 3.78;
+  return 111320.0 * kPpmm * 1000.0 / scale;  // ~ 4.21e8 / scale
 }
 
 void ChartCanvas::updateVisibleCells() {
@@ -304,36 +288,60 @@ void ChartCanvas::updateVisibleCells() {
   const double half_lat = (ch / 2.0) / scale;
   const double c_lon = m_viewport->centerLon();
   const double c_lat = m_viewport->centerLat();
-  const int pb = primaryBand(scale);
 
-  // Quilting: show ONLY the reference band -- gaps fall through to the GSHHS
-  // world backdrop rather than a coarser ENC band, so overlap zones don't
-  // stack two bands of geometry/symbols (the big over-draw cost the user
-  // hit). Eviction keeps a one-band-either-side window + a 50%-widened view
-  // so a small zoom/pan across a band boundary doesn't immediately unload
-  // (hysteresis; the debounce smooths the rest).
-  // --- Load: in view, reference band, not already requested. ---
+  // Quilting by native scale: among the cells in view, pick the single scale
+  // TIER whose compilation scale best matches the current zoom (nearest in
+  // log space), and render ONLY that tier. NOAA cells within a tier tile, so
+  // each location is covered by one cell and no coarser/finer cell overdraws
+  // it -- gaps fall through to the GSHHS world backdrop. This is the big
+  // perf + clarity lever (mirrors the wx Quilt's reference-scale choice,
+  // minus per-pixel region clipping).
+  const double targetN = displayScaleN(scale);
+  int best_scale = 0;
+  double best_dist = 1.0e30;
   for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
     const CellExtent& c = it.value();
-    if (m_requested.contains(c.name)) continue;
-    if (!cellWanted(c, c_lat - half_lat, c_lat + half_lat, c_lon - half_lon,
-                    c_lon + half_lon, pb, pb))
+    if (c.nativeScale <= 0) continue;
+    if (!c.intersects(c_lat - half_lat, c_lat + half_lat, c_lon - half_lon,
+                      c_lon + half_lon))
       continue;
-    m_requested.insert(c.name);
-    QMetaObject::invokeMethod(m_worker, "loadCell", Qt::QueuedConnection,
-                              Q_ARG(ocpn::qtui::CellExtent, c));
+    const double d = std::abs(std::log(static_cast<double>(c.nativeScale)) -
+                              std::log(targetN));
+    if (d < best_dist) {
+      best_dist = d;
+      best_scale = c.nativeScale;
+    }
+  }
+  m_target_scale = best_scale;
+
+  // --- Load: in view, the chosen tier, not already requested. ---
+  if (best_scale > 0) {
+    for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
+      const CellExtent& c = it.value();
+      if (c.nativeScale != best_scale) continue;
+      if (m_requested.contains(c.name)) continue;
+      if (!c.intersects(c_lat - half_lat, c_lat + half_lat, c_lon - half_lon,
+                        c_lon + half_lon))
+        continue;
+      m_requested.insert(c.name);
+      QMetaObject::invokeMethod(m_worker, "loadCell", Qt::QueuedConnection,
+                                Q_ARG(ocpn::qtui::CellExtent, c));
+    }
   }
 
-  // --- Evict: loaded cells now outside the widened view / band window. ---
+  // --- Evict: loaded cells of a different tier, or outside the widened
+  //     view (50% margin for pan hysteresis). ---
   const double e_hlon = half_lon * 1.5;
   const double e_hlat = half_lat * 1.5;
   QList<QString> evict;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it) {
     const LoadedCell& lc = it.value();
     if (!lc.extent.valid()) continue;  // demo chart -- never evict
-    if (!cellWanted(lc.extent, c_lat - e_hlat, c_lat + e_hlat, c_lon - e_hlon,
-                    c_lon + e_hlon, pb - 1, pb + 1))
-      evict.append(it.key());
+    const bool keep =
+        lc.extent.nativeScale == best_scale &&
+        lc.extent.intersects(c_lat - e_hlat, c_lat + e_hlat, c_lon - e_hlon,
+                             c_lon + e_hlon);
+    if (!keep) evict.append(it.key());
   }
   for (const QString& name : evict) {
     m_compositor->removeLayer(m_loaded.value(name).layerId);

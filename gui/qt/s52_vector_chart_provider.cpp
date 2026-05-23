@@ -502,18 +502,9 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     m_billboards.append(b);
   };
 
-  // Text labels (soundings, names) -- centred on the anchor for now.
-  for (const s52sg::Label& lab : m_buffer.labels) {
-    if (lab.dispCat > m_displayCategory) continue;
-    QImage img = renderLabelImage(lab);
-    const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
-    addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
-                 QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0),
-                 lab.scamin, lab.isSounding ? BbKind::Sounding : BbKind::Label,
-                 lab.depth);
-  }
-
-  // Point symbols (buoys/beacons) -- pivot is the symbol's hot-spot.
+  // Point symbols (buoys/beacons) -- pivot is the symbol's hot-spot. Drawn
+  // BEFORE text labels so a town/feature dot sits UNDER its name (e.g. the
+  // "East Oakland" POPL dot), not over it.
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
     if (sym.dispCat > m_displayCategory) continue;
     addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot,
@@ -560,6 +551,18 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     b.scamin = vs.scamin;
     b.kind = BbKind::Vector;
     m_billboards.append(b);
+  }
+
+  // Text labels (soundings, names) -- appended LAST so they draw on top of
+  // the point symbols / dots they annotate.
+  for (const s52sg::Label& lab : m_buffer.labels) {
+    if (lab.dispCat > m_displayCategory) continue;
+    QImage img = renderLabelImage(lab);
+    const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
+    addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
+                 QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0),
+                 lab.scamin, lab.isSounding ? BbKind::Sounding : BbKind::Label,
+                 lab.depth);
   }
 
   updateBillboards(viewport);

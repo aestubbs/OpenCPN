@@ -42,10 +42,13 @@ struct CellExtent {
   double east = -180.0;
   double west = 180.0;
   // S-57 usage band (1 overview .. 6 berthing), the 3rd char of an S-57
-  // cell name (e.g. US**5**CA1EJ). 0 if it can't be determined. Drives
-  // scale-based quilting: only the band(s) appropriate to the current zoom
-  // are shown, finer over coarser.
+  // cell name (e.g. US**5**CA1EJ). 0 if it can't be determined.
   int band = 0;
+  // Native compilation scale (the DSPM:CSCL field, i.e. the 1:N the cell was
+  // compiled at). Drives quilting: at a given zoom we render only the cells
+  // whose native scale tier best matches, so each location is covered by one
+  // cell and no coarser/finer cell overdraws it. 0 if unknown.
+  int nativeScale = 0;
 
   /** A box is valid once it has been grown by at least one feature. */
   bool valid() const { return east > west && north > south; }

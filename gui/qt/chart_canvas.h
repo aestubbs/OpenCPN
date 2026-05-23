@@ -118,16 +118,10 @@ private:
   // screen to be worth decoding), and evict loaded cells that have left the
   // view or shrunk too small. Debounced off Viewport::changed.
   void updateVisibleCells();
-  // The S-57 usage band appropriate to the given viewport scale (px/degree)
-  // -- the "reference" band for quilting. Finer detail shows as you zoom in.
-  static int primaryBand(double scale);
-  // True if a cell should be resident: it intersects the [lat/lon] view rect
-  // and its usage band is within [lo_band, hi_band] (the scale-appropriate
-  // window). Eviction passes a wider rect + band window than loading, for
-  // hysteresis against pan/zoom thrash.
-  bool cellWanted(const CellExtent& c, double lat_min, double lat_max,
-                  double lon_min, double lon_max, int lo_band,
-                  int hi_band) const;
+  // The ~1:N display-scale denominator for a viewport scale (px/degree), at
+  // a nominal display density. Compared against cells' native CSCL to pick
+  // the quilt tier.
+  static double displayScaleN(double scale);
 
   // Top transform nodes — non-owning pointers into the scene-graph tree
   // (which is owned by Qt's scene graph); the LayerCompositor attaches
@@ -172,6 +166,10 @@ private:
   // The catalog scan publishes progressively; fit the viewport to the set
   // only on the first batch (refitting each batch would jump the view).
   bool m_world_fitted = false;
+  // The native-scale tier currently selected for display (the CSCL value
+  // whose cells are loaded). Cells of any other tier are evicted, so each
+  // location is covered by a single best-scale cell. 0 = none chosen yet.
+  int m_target_scale = 0;
 
   // Drag state.
   bool m_dragging = false;
