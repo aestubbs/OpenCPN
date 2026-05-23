@@ -26,6 +26,8 @@ qt_add_qml_module(opencpn-qt
     sg_helpers.h
     sg_helpers.cpp
     sg_texture_cache.h
+    sg_dc.h
+    sg_dc.cpp
     chart_provider.h
     chart_layer.h
     chart_layer.cpp
