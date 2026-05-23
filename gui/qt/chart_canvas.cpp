@@ -239,20 +239,9 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   // Use the catalog entry (it carries the native scale + accurate extent);
   // fall back to the loaded bounds if somehow absent.
   CellExtent cat = m_catalog.value(id, c);
-  const double cw = width() > 0 ? width() : 1024.0;
-  const double ch = height() > 0 ? height() : 720.0;
-  const double scale = m_viewport->scale();
-  const double hlon = (cw / 2.0) / scale * 1.5, hlat = (ch / 2.0) / scale * 1.5;
-  // Dropped if the view moved off it, or the selected tier changed, while it
-  // was decoding.
-  const bool wanted =
-      !buffer.empty() && cat.nativeScale == m_target_scale &&
-      cat.intersects(m_viewport->centerLat() - hlat,
-                     m_viewport->centerLat() + hlat,
-                     m_viewport->centerLon() - hlon,
-                     m_viewport->centerLon() + hlon);
-  if (!wanted) {
-    m_requested.remove(id);  // allow a future re-request when back in view
+  // Dropped if the per-location selection moved off it while it was decoding.
+  if (buffer.empty() || !m_needed.contains(id)) {
+    m_requested.remove(id);  // allow a future re-request when needed again
     return;
   }
 
@@ -260,7 +249,9 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   auto* provider = new S52VectorChartProvider(layerId, buffer, north, south,
                                               west, east, m_viewport.get());
   provider->setDisplayCategory(m_display_category);
-  m_compositor->addLayer(new ChartLayer(provider, m_viewport.get()));
+  auto* layer = new ChartLayer(provider, m_viewport.get());
+  layer->setZOrder(zOrderForScale(cat.nativeScale));
+  m_compositor->addLayer(layer);
   LoadedCell lc;
   lc.extent = cat;
   lc.layerId = layerId;
@@ -278,75 +269,92 @@ double ChartCanvas::displayScaleN(double scale) {
   return 111320.0 * kPpmm * 1000.0 / scale;  // ~ 4.21e8 / scale
 }
 
+int ChartCanvas::zOrderForScale(int native_scale) {
+  // Finer (smaller 1:N) draws on top of coarser, so where they overlap the
+  // coarse is hidden. Keep within [0, 90] -- under the boundary grid (100),
+  // above the GSHHS world backdrop (-1000).
+  if (native_scale <= 0) return 0;
+  const double z = 90.0 - 10.0 * (std::log(static_cast<double>(native_scale)) -
+                                  std::log(1000.0));
+  return std::max(0, std::min(90, static_cast<int>(std::lround(z))));
+}
+
 void ChartCanvas::updateVisibleCells() {
   if (!m_worker || m_catalog.isEmpty()) return;
 
   const double scale = m_viewport->scale();
   const double cw = width() > 0 ? width() : 1024.0;
   const double ch = height() > 0 ? height() : 720.0;
-  const double half_lon = (cw / 2.0) / scale;
-  const double half_lat = (ch / 2.0) / scale;
-  const double c_lon = m_viewport->centerLon();
-  const double c_lat = m_viewport->centerLat();
+  // Widen the working view by 30% so cells just off-screen stay resident
+  // (pan hysteresis) and decode ahead of being scrolled into view.
+  const double half_lon = (cw / 2.0) / scale * 1.3;
+  const double half_lat = (ch / 2.0) / scale * 1.3;
+  const double lat0 = m_viewport->centerLat() - half_lat;
+  const double lat1 = m_viewport->centerLat() + half_lat;
+  const double lon0 = m_viewport->centerLon() - half_lon;
+  const double lon1 = m_viewport->centerLon() + half_lon;
+  const double logTargetN = std::log(displayScaleN(scale));
 
-  // Quilting by native scale: among the cells in view, pick the single scale
-  // TIER whose compilation scale best matches the current zoom (nearest in
-  // log space), and render ONLY that tier. NOAA cells within a tier tile, so
-  // each location is covered by one cell and no coarser/finer cell overdraws
-  // it -- gaps fall through to the GSHHS world backdrop. This is the big
-  // perf + clarity lever (mirrors the wx Quilt's reference-scale choice,
-  // minus per-pixel region clipping).
-  const double targetN = displayScaleN(scale);
-  int best_scale = 0;
-  double best_dist = 1.0e30;
+  // Candidate cells: every catalogued cell overlapping the working view.
+  QList<const CellExtent*> cands;
   for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
     const CellExtent& c = it.value();
-    if (c.nativeScale <= 0) continue;
-    if (!c.intersects(c_lat - half_lat, c_lat + half_lat, c_lon - half_lon,
-                      c_lon + half_lon))
-      continue;
-    const double d = std::abs(std::log(static_cast<double>(c.nativeScale)) -
-                              std::log(targetN));
-    if (d < best_dist) {
-      best_dist = d;
-      best_scale = c.nativeScale;
-    }
-  }
-  m_target_scale = best_scale;
-
-  // --- Load: in view, the chosen tier, not already requested. ---
-  if (best_scale > 0) {
-    for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
-      const CellExtent& c = it.value();
-      if (c.nativeScale != best_scale) continue;
-      if (m_requested.contains(c.name)) continue;
-      if (!c.intersects(c_lat - half_lat, c_lat + half_lat, c_lon - half_lon,
-                        c_lon + half_lon))
-        continue;
-      m_requested.insert(c.name);
-      QMetaObject::invokeMethod(m_worker, "loadCell", Qt::QueuedConnection,
-                                Q_ARG(ocpn::qtui::CellExtent, c));
-    }
+    if (c.nativeScale > 0 && c.intersects(lat0, lat1, lon0, lon1))
+      cands.append(&c);
   }
 
-  // --- Evict: loaded cells of a different tier, or outside the widened
-  //     view (50% margin for pan hysteresis). ---
-  const double e_hlon = half_lon * 1.5;
-  const double e_hlat = half_lat * 1.5;
+  // Per-location quilt: sample the view on a grid; at each sample point pick
+  // the candidate cell COVERING that point whose native scale is nearest the
+  // zoom (preferring the finer one on a tie). The union of per-point winners
+  // is the needed set. This guarantees a location only falls through to the
+  // GSHHS world backdrop when NO ENC cell covers it -- otherwise it always
+  // gets its best-scale cell, even where the dominant tier has a hole.
+  constexpr int kGrid = 24;
+  m_needed.clear();
+  for (int gy = 0; gy < kGrid; ++gy) {
+    const double plat = lat0 + (gy + 0.5) / kGrid * (lat1 - lat0);
+    for (int gx = 0; gx < kGrid; ++gx) {
+      const double plon = lon0 + (gx + 0.5) / kGrid * (lon1 - lon0);
+      const CellExtent* best = nullptr;
+      double best_cost = 1.0e30;
+      for (const CellExtent* c : cands) {
+        if (plat < c->south || plat > c->north || plon < c->west ||
+            plon > c->east)
+          continue;  // doesn't cover this point
+        const double cost =
+            std::abs(std::log(static_cast<double>(c->nativeScale)) - logTargetN);
+        if (cost < best_cost - 1e-9 ||
+            (std::abs(cost - best_cost) <= 1e-9 && best &&
+             c->nativeScale < best->nativeScale)) {
+          best_cost = cost;
+          best = c;
+        }
+      }
+      if (best) m_needed.insert(best->name);
+    }
+  }
+
+  // --- Load: needed cells not already requested. ---
+  for (const QString& name : m_needed) {
+    if (m_requested.contains(name)) continue;
+    auto it = m_catalog.constFind(name);
+    if (it == m_catalog.cend()) continue;
+    m_requested.insert(name);
+    QMetaObject::invokeMethod(m_worker, "loadCell", Qt::QueuedConnection,
+                              Q_ARG(ocpn::qtui::CellExtent, it.value()));
+  }
+
+  // --- Evict: loaded cells no longer in the needed set. ---
   QList<QString> evict;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it) {
     const LoadedCell& lc = it.value();
     if (!lc.extent.valid()) continue;  // demo chart -- never evict
-    const bool keep =
-        lc.extent.nativeScale == best_scale &&
-        lc.extent.intersects(c_lat - e_hlat, c_lat + e_hlat, c_lon - e_hlon,
-                             c_lon + e_hlon);
-    if (!keep) evict.append(it.key());
+    if (!m_needed.contains(it.key())) evict.append(it.key());
   }
   for (const QString& name : evict) {
     m_compositor->removeLayer(m_loaded.value(name).layerId);
     m_loaded.remove(name);
-    m_requested.remove(name);  // eligible to reload when back in view
+    m_requested.remove(name);  // eligible to reload when needed again
   }
   if (!evict.isEmpty()) update();
 }

@@ -122,6 +122,9 @@ private:
   // a nominal display density. Compared against cells' native CSCL to pick
   // the quilt tier.
   static double displayScaleN(double scale);
+  // Layer z-order for a cell of the given native scale: finer (smaller 1:N)
+  // draws over coarser, so overlaps hide the coarse cell.
+  static int zOrderForScale(int native_scale);
 
   // Top transform nodes — non-owning pointers into the scene-graph tree
   // (which is owned by Qt's scene graph); the LayerCompositor attaches
@@ -166,10 +169,12 @@ private:
   // The catalog scan publishes progressively; fit the viewport to the set
   // only on the first batch (refitting each batch would jump the view).
   bool m_world_fitted = false;
-  // The native-scale tier currently selected for display (the CSCL value
-  // whose cells are loaded). Cells of any other tier are evicted, so each
-  // location is covered by a single best-scale cell. 0 = none chosen yet.
-  int m_target_scale = 0;
+  // The set of cell names currently selected for display. Computed per
+  // location: each spot in view is covered by the candidate cell whose
+  // native scale best matches the zoom (so a location never drops to the
+  // world backdrop while any ENC cell covers it). Cells not in this set are
+  // evicted. Recomputed on every updateVisibleCells.
+  QSet<QString> m_needed;
 
   // Drag state.
   bool m_dragging = false;
