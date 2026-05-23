@@ -107,8 +107,17 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
     // Only chase visible cells once a catalog exists (async ENC path).
     if (!m_catalog.isEmpty()) m_load_debounce->start();
   });
-  connect(this, &QQuickItem::widthChanged, this, [this]() { update(); });
-  connect(this, &QQuickItem::heightChanged, this, [this]() { update(); });
+  // On resize, repaint AND re-evaluate visible cells: the initial fit +
+  // selection can run before the canvas has its real size (the catalog scan
+  // starts at launch), sampling a too-small view rect and missing cells in
+  // the part of the real window beyond it. Re-running on the real size fills
+  // them in without waiting for a user pan/zoom.
+  auto onResize = [this]() {
+    update();
+    if (!m_catalog.isEmpty()) m_load_debounce->start();
+  };
+  connect(this, &QQuickItem::widthChanged, this, onResize);
+  connect(this, &QQuickItem::heightChanged, this, onResize);
 }
 
 ChartCanvas::~ChartCanvas() {
@@ -231,12 +240,13 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
     if (c.east > e) e = c.east;
     if (c.west < w) w = c.west;
   }
-  if (!m_world_fitted && e > w && n > s) {
+  // Defer the one-time fit until the canvas has its real size, so the
+  // initial scale (and the view rect the selection samples) is correct.
+  if (!m_world_fitted && width() > 0 && height() > 0 && e > w && n > s) {
     m_world_fitted = true;
     m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
-    const double cw = width() > 0 ? width() : 1024.0;
-    const double ch = height() > 0 ? height() : 720.0;
-    const double fit = std::min(cw / (e - w), ch / (n - s)) * 0.9;
+    const double fit =
+        std::min(width() / (e - w), height() / (n - s)) * 0.9;
     m_viewport->setScale(fit);
   }
   update();
@@ -310,7 +320,6 @@ void ChartCanvas::updateVisibleCells() {
   const double lat1 = m_viewport->centerLat() + half_lat;
   const double lon0 = m_viewport->centerLon() - half_lon;
   const double lon1 = m_viewport->centerLon() + half_lon;
-  const double logTargetN = std::log(displayScaleN(scale));
 
   // Candidate cells: every catalogued cell overlapping the working view that
   // has a known scale and actual chart content (administrative coverage-only
@@ -330,49 +339,41 @@ void ChartCanvas::updateVisibleCells() {
   // location only falls through to the GSHHS world backdrop when NO ENC cell
   // covers it.
   //
-  // "Best suits the zoom" is biased toward MORE DETAIL: over-zoom (stretching
-  // a chart coarser than the display) is penalised at full weight, but
-  // under-zoom (showing a finer chart than strictly needed) is cheap
-  // (kUnderWeight). So where a slightly-finer chart is available it wins, and
-  // a whole area renders at a consistent finer level instead of leaving a
-  // coarse cell's "blank" patch (e.g. an unfilled harbour). No hard cap: a
-  // point covered only by a far-finer cell still gets it (the cost just makes
-  // it lose wherever a better-matched cell also covers), so we never drop to
-  // the world backdrop while ANY ENC cell covers the spot.
-  constexpr double kUnderWeight = 0.4;
+  // Pick the FINEST chart that isn't over-detailed for this zoom (mirrors
+  // ECDIS quilting: show the most detailed appropriate chart, fall back to
+  // coarser only where finer is absent). A chart is "eligible" if it's no
+  // more than kMaxUnderzoom times finer than the display -- so we don't pull
+  // a harbour cell in at coastal zoom -- but coarser charts are always
+  // eligible. Among eligible cells covering a point we take the finest
+  // (smallest 1:N), tie-broken toward MORE content; this beats a sparse
+  // scale-matched chart (e.g. an offshore General cell with few features)
+  // whenever a finer, denser one overlaps. If a point's only cover is finer
+  // than the threshold (zoomed right out past every chart there), the
+  // coarsest available is used so it still shows something rather than the
+  // bare world backdrop.
+  constexpr double kMaxUnderzoom = 8.0;
+  const double threshold = displayScaleN(scale) / kMaxUnderzoom;
   constexpr int kGrid = 24;
   m_needed.clear();
   for (int gy = 0; gy < kGrid; ++gy) {
     const double plat = lat0 + (gy + 0.5) / kGrid * (lat1 - lat0);
     for (int gx = 0; gx < kGrid; ++gx) {
       const double plon = lon0 + (gx + 0.5) / kGrid * (lon1 - lon0);
-      const CellExtent* best = nullptr;
-      double best_cost = 1.0e30;
+      const CellExtent* best = nullptr;      // finest eligible (preferred)
+      const CellExtent* coarsest = nullptr;  // fallback if none eligible
       for (const CellExtent* c : cands) {
         if (plat < c->south || plat > c->north || plon < c->west ||
             plon > c->east)
           continue;  // doesn't cover this point
-        // r > 0: cell coarser than display (over-zoom); r < 0: finer.
-        const double r =
-            std::log(static_cast<double>(c->nativeScale)) - logTargetN;
-        const double cost = (r >= 0.0) ? r : (-r) * kUnderWeight;
-        // Lower cost wins. On a near-tie (overlapping same-scale cells, e.g.
-        // two overview cells covering the same coast) prefer the one with
-        // more chart content -- so we don't pick a sparse overview where a
-        // richer one overlaps -- then the finer scale.
-        bool better = cost < best_cost - 1e-9;
-        if (!better && best && std::abs(cost - best_cost) <= 1e-9) {
-          if (c->navFeatures != best->navFeatures)
-            better = c->navFeatures > best->navFeatures;
-          else
-            better = c->nativeScale < best->nativeScale;
-        }
-        if (better) {
-          best_cost = cost;
+        if (!coarsest || c->nativeScale > coarsest->nativeScale) coarsest = c;
+        if (c->nativeScale < threshold) continue;  // too detailed for zoom
+        if (!best || c->nativeScale < best->nativeScale ||
+            (c->nativeScale == best->nativeScale &&
+             c->navFeatures > best->navFeatures))
           best = c;
-        }
       }
-      if (best) m_needed.insert(best->name);
+      const CellExtent* pick = best ? best : coarsest;
+      if (pick) m_needed.insert(pick->name);
     }
   }
 
