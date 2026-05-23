@@ -362,9 +362,7 @@ void ChartCanvas::updateVisibleCells() {
       const CellExtent* best = nullptr;      // finest eligible (preferred)
       const CellExtent* coarsest = nullptr;  // fallback if none eligible
       for (const CellExtent* c : cands) {
-        if (plat < c->south || plat > c->north || plon < c->west ||
-            plon > c->east)
-          continue;  // doesn't cover this point
+        if (!c->covers(plat, plon)) continue;  // not in actual coverage
         if (!coarsest || c->nativeScale > coarsest->nativeScale) coarsest = c;
         if (c->nativeScale < threshold) continue;  // too detailed for zoom
         if (!best || c->nativeScale < best->nativeScale ||

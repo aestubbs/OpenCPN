@@ -30,6 +30,8 @@
 
 #include <QList>
 #include <QMetaType>
+#include <QPointF>
+#include <QPolygonF>
 #include <QString>
 
 namespace ocpn::qtui {
@@ -54,9 +56,27 @@ struct CellExtent {
   // (e.g. EEZ / coverage-only cells) -- excluded from the quilt so they don't
   // win a location and render nothing useful.
   int navFeatures = 0;
+  // Actual data-coverage polygons (the S-57 M_COVR/CATCOV=1 meta objects),
+  // in (lon, lat). A cell's bounding box is often much bigger than the area
+  // it really charts, so the quilt tests against these regions -- like the wx
+  // quilt -- instead of the bbox, to avoid selecting a cell for a sub-area it
+  // doesn't actually cover (which would render blank). Empty -> fall back to
+  // the bbox.
+  QList<QPolygonF> coverage;
 
   /** A box is valid once it has been grown by at least one feature. */
   bool valid() const { return east > west && north > south; }
+
+  /** True if (lat, lon) lies within the cell's actual coverage (M_COVR), or
+   *  -- if no coverage polygons were captured -- within its bounding box. */
+  bool covers(double lat, double lon) const {
+    if (coverage.isEmpty())
+      return lon >= west && lon <= east && lat >= south && lat <= north;
+    const QPointF p(lon, lat);
+    for (const QPolygonF& poly : coverage)
+      if (poly.containsPoint(p, Qt::OddEvenFill)) return true;
+    return false;
+  }
 
   /** Parse the S-57 usage band from a cell name (3rd character). Returns 0
    *  if the name doesn't look like a standard S-57 cell name. */

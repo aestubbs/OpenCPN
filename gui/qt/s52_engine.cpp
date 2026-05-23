@@ -22,6 +22,8 @@
 #include <vector>
 
 #include <QFileInfo>
+#include <QPointF>
+#include <QPolygonF>
 
 #include <wx/init.h>
 #include <wx/image.h>
@@ -565,17 +567,46 @@ CellExtent S52Engine::scanOneCellExtent(const QString& path_000,
         if (env.MaxX > ce.east) ce.east = env.MaxX;
         if (env.MinX < ce.west) ce.west = env.MinX;
       }
-      // Substantive chart-surface objects: depth area/contour, soundings,
-      // land/coastline. A cell with none is administrative (EEZ / coverage
-      // only) and is excluded from the quilt.
       if (OGRFeatureDefn* fd = feat->GetDefnRef()) {
         const char* cn = fd->GetName();
+        // Substantive chart-surface objects: depth area/contour, soundings,
+        // land/coastline. A cell with none is administrative (EEZ / coverage
+        // only) and is excluded from the quilt.
         if (cn && (strncmp(cn, "DEPARE", 6) == 0 ||
                    strncmp(cn, "DEPCNT", 6) == 0 ||
                    strncmp(cn, "SOUNDG", 6) == 0 ||
                    strncmp(cn, "LNDARE", 6) == 0 ||
                    strncmp(cn, "COALNE", 6) == 0))
           ++ce.navFeatures;
+        // M_COVR with CATCOV=1 is the cell's actual data-coverage polygon(s).
+        else if (cn && strcmp(cn, "M_COVR") == 0) {
+          const int ci = feat->GetFieldIndex("CATCOV");
+          const int catcov =
+              (ci >= 0 && feat->IsFieldSet(ci)) ? feat->GetFieldAsInteger(ci)
+                                                : 0;
+          if (catcov == 1) {
+            auto addPoly = [&](OGRPolygon* poly) {
+              OGRLinearRing* r = poly ? poly->getExteriorRing() : nullptr;
+              if (!r) return;
+              const int np = r->getNumPoints();
+              QPolygonF qp;
+              qp.reserve(np);
+              for (int i = 0; i < np; ++i)
+                qp << QPointF(r->getX(i), r->getY(i));  // (lon, lat)
+              if (qp.size() >= 3) ce.coverage.append(qp);
+            };
+            if (OGRGeometry* cg = feat->GetGeometryRef()) {
+              const OGRwkbGeometryType gt = wkbFlatten(cg->getGeometryType());
+              if (gt == wkbPolygon) {
+                addPoly(static_cast<OGRPolygon*>(cg));
+              } else if (gt == wkbMultiPolygon) {
+                auto* mp = static_cast<OGRMultiPolygon*>(cg);
+                for (int k = 0; k < mp->getNumGeometries(); ++k)
+                  addPoly(static_cast<OGRPolygon*>(mp->getGeometryRef(k)));
+              }
+            }
+          }
+        }
       }
       OGRFeature::DestroyFeature(feat);
     }
