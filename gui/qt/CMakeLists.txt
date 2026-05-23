@@ -23,6 +23,8 @@ qt_add_qml_module(opencpn-qt
     layer_compositor.h
     layer_compositor.cpp
     viewport.h
+    sg_helpers.h
+    sg_helpers.cpp
     chart_provider.h
     chart_layer.h
     chart_layer.cpp

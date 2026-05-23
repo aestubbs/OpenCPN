@@ -29,11 +29,11 @@
 
 #include <QElapsedTimer>
 #include <QFile>
-#include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSGNode>
 
+#include "sg_helpers.h"
 #include "tesselator.h"
 #include "viewport.h"
 
@@ -171,39 +171,23 @@ QSGNode* GshhsWorldProvider::renderChart(QSGNode* old_subtree,
   // 1. Sea backdrop: a single quad over the whole world rect, drawn first
   //    (bottom of this subtree) so land + coastline sit on top.
   {
-    auto* sea = new QSGGeometryNode();
-    auto* g = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 6);
-    g->setDrawingMode(QSGGeometry::DrawTriangles);
-    QSGGeometry::Point2D* v = g->vertexDataAsPoint2D();
+    auto* sea = sg::makeFlatColorNode(m_sea, QSGGeometry::DrawTriangles, 6);
+    QSGGeometry::Point2D* v = sea->geometry()->vertexDataAsPoint2D();
     // World rect: x in [-180,180], y=-lat in [-90,90].
     const float xl = -180, xr = 180, yt = -90, yb = 90;
     v[0].set(xl, yt); v[1].set(xr, yt); v[2].set(xr, yb);
     v[3].set(xl, yt); v[4].set(xr, yb); v[5].set(xl, yb);
-    auto* m = new QSGFlatColorMaterial();
-    m->setColor(m_sea);
-    sea->setGeometry(g);
-    sea->setMaterial(m);
-    sea->setFlag(QSGNode::OwnsGeometry);
-    sea->setFlag(QSGNode::OwnsMaterial);
     root->appendChildNode(sea);
   }
 
   // 2. Land fill: the tessellated triangle list.
   {
-    auto* land = new QSGGeometryNode();
-    auto* g = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(),
-                              m_land_tris.size());
-    g->setDrawingMode(QSGGeometry::DrawTriangles);
-    QSGGeometry::Point2D* v = g->vertexDataAsPoint2D();
+    auto* land = sg::makeFlatColorNode(m_land, QSGGeometry::DrawTriangles,
+                                       m_land_tris.size());
+    QSGGeometry::Point2D* v = land->geometry()->vertexDataAsPoint2D();
     for (int i = 0; i < m_land_tris.size(); ++i)
       v[i].set(static_cast<float>(m_land_tris[i].x()),
                static_cast<float>(m_land_tris[i].y()));
-    auto* m = new QSGFlatColorMaterial();
-    m->setColor(m_land);
-    land->setGeometry(g);
-    land->setMaterial(m);
-    land->setFlag(QSGNode::OwnsGeometry);
-    land->setFlag(QSGNode::OwnsMaterial);
     root->appendChildNode(land);
   }
 
@@ -214,12 +198,9 @@ QSGNode* GshhsWorldProvider::renderChart(QSGNode* old_subtree,
     for (const auto& c : m_coastlines)
       if (c.size() >= 2) seg_verts += c.size() * 2;  // closed loop
     if (seg_verts > 0) {
-      auto* coast = new QSGGeometryNode();
-      auto* g =
-          new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), seg_verts);
-      g->setDrawingMode(QSGGeometry::DrawLines);
-      g->setLineWidth(1.0f);
-      QSGGeometry::Point2D* v = g->vertexDataAsPoint2D();
+      auto* coast =
+          sg::makeFlatColorNode(m_coast, QSGGeometry::DrawLines, seg_verts);
+      QSGGeometry::Point2D* v = coast->geometry()->vertexDataAsPoint2D();
       int k = 0;
       for (const auto& c : m_coastlines) {
         const int n = c.size();
@@ -231,12 +212,6 @@ QSGNode* GshhsWorldProvider::renderChart(QSGNode* old_subtree,
           v[k++].set(static_cast<float>(b.x()), static_cast<float>(b.y()));
         }
       }
-      auto* m = new QSGFlatColorMaterial();
-      m->setColor(m_coast);
-      coast->setGeometry(g);
-      coast->setMaterial(m);
-      coast->setFlag(QSGNode::OwnsGeometry);
-      coast->setFlag(QSGNode::OwnsMaterial);
       root->appendChildNode(coast);
     }
   }

@@ -28,15 +28,14 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QScreen>
-#include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSGImageNode>
 #include <QSGNode>
 #include <QSGOpacityNode>
-#include <QSGTextureMaterial>
 #include <QSGTransformNode>
 
+#include "sg_helpers.h"
 #include "viewport.h"
 
 namespace ocpn::qtui {
@@ -398,17 +397,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       for (const QPointF& p : prim.verts)
         lg.worldPts.append(QPointF(p.x(), -p.y()));  // world (x=lon, y=-lat)
       for (int j = 0; j < n; ++j) {
-        auto* geo =
-            new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 0);
-        geo->setDrawingMode(QSGGeometry::DrawLineStrip);
-        geo->setLineWidth(1.0f);
-        auto* mat = new QSGFlatColorMaterial();
-        mat->setColor(prim.color);
-        auto* node = new QSGGeometryNode();
-        node->setGeometry(geo);
-        node->setFlag(QSGNode::OwnsGeometry);
-        node->setMaterial(mat);
-        node->setFlag(QSGNode::OwnsMaterial);
+        auto* node = sg::makeFlatColorNode(prim.color,
+                                           QSGGeometry::DrawLineStrip, 0);
         root->appendChildNode(node);
         lg.strips.append(node);
       }
@@ -419,20 +409,10 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     QList<QSGGeometry::Point2D> tris = expandToTriangles(prim);
     if (tris.isEmpty()) continue;
 
-    auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(),
-                                static_cast<int>(tris.size()));
-    geo->setDrawingMode(QSGGeometry::DrawTriangles);
-    QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
+    auto* node = sg::makeFlatColorNode(prim.color, QSGGeometry::DrawTriangles,
+                                       static_cast<int>(tris.size()));
+    QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
     for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
-
-    auto* mat = new QSGFlatColorMaterial();
-    mat->setColor(prim.color);
-
-    auto* node = new QSGGeometryNode();
-    node->setGeometry(geo);
-    node->setFlag(QSGNode::OwnsGeometry);
-    node->setMaterial(mat);
-    node->setFlag(QSGNode::OwnsMaterial);
     root->appendChildNode(node);
   }
 
@@ -451,17 +431,10 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     tex->setHorizontalWrapMode(QSGTexture::Repeat);
     tex->setVerticalWrapMode(QSGTexture::Repeat);
     tex->setFiltering(QSGTexture::Linear);
-    auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(),
-                                static_cast<int>(pf.tris.size()));
-    geo->setDrawingMode(QSGGeometry::DrawTriangles);
-    auto* mat = new QSGTextureMaterial();
-    mat->setTexture(tex);
-    mat->setFlag(QSGMaterial::Blending);  // patterns have transparent gaps
-    auto* node = new QSGGeometryNode();
-    node->setGeometry(geo);
-    node->setFlag(QSGNode::OwnsGeometry);
-    node->setMaterial(mat);
-    node->setFlag(QSGNode::OwnsMaterial);
+    // patterns have transparent gaps -> blending
+    auto* node = sg::makeTextureNode(tex, QSGGeometry::DrawTriangles,
+                                     static_cast<int>(pf.tris.size()),
+                                     /*blending=*/true);
     root->appendChildNode(node);
 
     const qreal dpr =
@@ -529,21 +502,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     for (const s52sg::VectorOp& op : vs.ops) {
       const int need = op.filled ? 3 : 2;
       if (op.verts.size() < need) continue;
-      auto* geo = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(),
-                                  static_cast<int>(op.verts.size()));
-      geo->setDrawingMode(op.filled ? QSGGeometry::DrawTriangles
-                                    : QSGGeometry::DrawLines);
-      QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
+      auto* node = sg::makeFlatColorNode(
+          op.color,
+          op.filled ? QSGGeometry::DrawTriangles : QSGGeometry::DrawLines,
+          static_cast<int>(op.verts.size()));
+      QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
       for (qsizetype i = 0; i < op.verts.size(); ++i)
         v[i].set(static_cast<float>(op.verts[i].x()),
                  static_cast<float>(op.verts[i].y()));
-      auto* mat = new QSGFlatColorMaterial();
-      mat->setColor(op.color);
-      auto* node = new QSGGeometryNode();
-      node->setGeometry(geo);
-      node->setFlag(QSGNode::OwnsGeometry);
-      node->setMaterial(mat);
-      node->setFlag(QSGNode::OwnsMaterial);
       xform->appendChildNode(node);
     }
     if (xform->childCount() == 0) {

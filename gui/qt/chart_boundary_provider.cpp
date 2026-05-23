@@ -15,10 +15,10 @@
 
 #include "chart_boundary_provider.h"
 
-#include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 
+#include "sg_helpers.h"
 #include "viewport.h"
 
 namespace ocpn::qtui {
@@ -50,25 +50,18 @@ QSGNode* ChartBoundaryProvider::renderChart(QSGNode* old_subtree,
   // Rebuild from scratch each time we're dirtied (the catalog only changes
   // when a fresh scan completes -- not per frame).
   auto* node = static_cast<QSGGeometryNode*>(old_subtree);
-  if (!node) {
-    node = new QSGGeometryNode();
-    auto* material = new QSGFlatColorMaterial();
-    material->setColor(m_color);
-    node->setMaterial(material);
-    node->setFlag(QSGNode::OwnsMaterial);
-    node->setFlag(QSGNode::OwnsGeometry);
-  }
+  if (!node)
+    node = sg::makeFlatColorNode(m_color, QSGGeometry::DrawLines, 0);
 
   int valid = 0;
   for (const CellExtent& c : m_extents)
     if (c.valid()) ++valid;
 
-  // 4 edges * 2 endpoints per cell.
+  // 4 edges * 2 endpoints per cell. Re-allocate the existing geometry in
+  // place rather than swapping in a fresh QSGGeometry each rebuild.
   const int vcount = valid * 8;
-  auto* geom =
-      new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), vcount);
-  geom->setDrawingMode(QSGGeometry::DrawLines);
-  geom->setLineWidth(1.0f);
+  QSGGeometry* geom = node->geometry();
+  geom->allocate(vcount);
   QSGGeometry::Point2D* v = geom->vertexDataAsPoint2D();
 
   int i = 0;
@@ -89,7 +82,6 @@ QSGNode* ChartBoundaryProvider::renderChart(QSGNode* old_subtree,
     edge(xl, yb, xl, yt);  // west edge
   }
 
-  node->setGeometry(geom);
   node->markDirty(QSGNode::DirtyGeometry);
   return node;
 }
