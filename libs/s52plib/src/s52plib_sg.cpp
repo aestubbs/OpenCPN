@@ -26,6 +26,9 @@
 
 #include <wx/wx.h>
 
+#include <QHash>
+#include <QString>
+
 #include "model/wx_qt_ui_types.h"  // WxImageToQImage
 
 #include "bbox.h"  // LLBBox, required transitively by mygeom.h
@@ -37,6 +40,27 @@
 // SM -> lon/lat inverse projection (declared in s52plib.h).
 extern void fromSM_plib(double x, double y, double lat0, double lon0,
                         double *lat, double *lon);
+
+// Memoise atlas bitmaps by S-52 symbol/pattern name. Every feature that
+// uses the same symbol (e.g. dozens of lateral buoys) or AP pattern shares
+// one implicitly-shared QImage: this skips the repeated wxImage->QImage deep
+// copy AND gives all instances an identical QImage::cacheKey(), which the
+// Qt-side TextureCacheNode keys on so the bitmap uploads to the GPU exactly
+// once per cell subtree (P2.5). `name` is a fixed-width field (char[8],
+// space/NUL padded); the raw bytes form a stable key.
+//
+// Thread note: chart load + emit is synchronous on the main thread, so the
+// static cache needs no lock today. Guard it if emit ever moves to a worker.
+static QImage cachedAtlasImage(ChartSymbols& symbols, const char* name) {
+  static QHash<QString, QImage> cache;
+  const QString key = QString::fromLatin1(name, 8);
+  auto it = cache.constFind(key);
+  if (it != cache.constEnd()) return it.value();
+  wxImage img = symbols.GetImage(name);
+  QImage q = img.IsOk() ? WxImageToQImage(img) : QImage();
+  cache.insert(key, q);
+  return q;
+}
 
 // Map an S-52 display category to the scene-graph rank used for the
 // Base/Standard/All filter.
@@ -219,11 +243,11 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     if (!prule) return;
 
     if (prule->definition.SYDF == 'R') {  // raster symbol from the atlas
-      wxImage img = m_chartSymbols.GetImage(prule->name.SYNM);
-      if (!img.IsOk()) return;
+      QImage qimg = cachedAtlasImage(m_chartSymbols, prule->name.SYNM);
+      if (qimg.isNull()) return;
       s52sg::Symbol sym;
       sym.pos = QPointF(anchor_lon, anchor_lat);
-      sym.image = WxImageToQImage(img);
+      sym.image = qimg;
       sym.pivot = QPointF(prule->pos.symb.pivot_x.SYCL,
                           prule->pos.symb.pivot_y.SYRW);
       sym.scamin = scamin;
@@ -377,14 +401,14 @@ int s52plib::RenderToSGAP(s52sg::Buffer &out, ObjRazRules *rzRules,
                           Rules *rules) {
   Rule *prule = rules->razRule;
   if (!prule || prule->definition.PADF != 'R') return 0;  // raster patterns
-  wxImage img = m_chartSymbols.GetImage(prule->name.PANM);
-  if (!img.IsOk()) return 0;
+  QImage qpat = cachedAtlasImage(m_chartSymbols, prule->name.PANM);
+  if (qpat.isNull()) return 0;
   if (!rzRules->obj->pPolyTessGeo) return 0;
 
   s52sg::PatternFill pf;
   pf.tris = tessLonLatTriangles(rzRules->obj->pPolyTessGeo);
   if (pf.tris.isEmpty()) return 0;
-  pf.pattern = WxImageToQImage(img);
+  pf.pattern = qpat;
   pf.dispCat = dispRank(rzRules->LUP->DISC);
   pf.scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
   out.patternFills.push_back(std::move(pf));

@@ -36,6 +36,7 @@
 #include <QSGTransformNode>
 
 #include "sg_helpers.h"
+#include "sg_texture_cache.h"
 #include "viewport.h"
 
 namespace ocpn::qtui {
@@ -362,7 +363,10 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     return old_subtree;
   }
 
-  auto* root = new QSGNode();
+  // The subtree root is a texture cache: it owns and de-duplicates every
+  // QSGTexture this chart's pattern fills / symbols / labels use, and frees
+  // them (on the render thread) when the compositor releases this subtree.
+  auto* root = new TextureCacheNode(window);
   m_lines.clear();
   m_patterns.clear();
   m_last_line_scale = -1.0;
@@ -425,8 +429,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     if (pf.dispCat > m_displayCategory || pf.tris.isEmpty() || pf.pattern.isNull() ||
         !window)
       continue;
-    QSGTexture* tex = window->createTextureFromImage(
-        pf.pattern, QQuickWindow::TextureHasAlphaChannel);
+    QSGTexture* tex = root->texture(pf.pattern);  // cache-owned, deduped
     if (!tex) continue;
     tex->setHorizontalWrapMode(QSGTexture::Repeat);
     tex->setVerticalWrapMode(QSGTexture::Repeat);
@@ -455,8 +458,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                           QPointF pivotPx, int scamin, BbKind kind,
                           float depth) {
     if (image.isNull() || !window) return;
-    QSGTexture* tex = window->createTextureFromImage(
-        image, QQuickWindow::TextureHasAlphaChannel);
+    QSGTexture* tex = root->texture(image);  // cache-owned, deduped by name
     if (!tex) return;
     const qreal dpr = image.devicePixelRatio() > 0 ? image.devicePixelRatio()
                                                     : 1.0;
@@ -464,7 +466,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     const qreal h = image.height() / dpr;
     auto* img = window->createImageNode();
     img->setTexture(tex);
-    img->setOwnsTexture(true);
+    img->setOwnsTexture(false);  // TextureCacheNode (root) owns it
     img->setRect(QRectF(-pivotPx.x(), -pivotPx.y(), w, h));
     img->setFiltering(QSGTexture::Linear);
     auto* xform = new QSGTransformNode();
