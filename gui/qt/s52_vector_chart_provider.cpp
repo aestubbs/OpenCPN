@@ -26,6 +26,7 @@
 #include <QHash>
 #include <QSet>
 #include <QQuickWindow>
+#include <QTimer>
 #include <QScreen>
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
@@ -140,12 +141,20 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
   // the (world-space) declutter grid is unchanged. So dirty the layer only
   // on a scale change; panning then costs zero provider work (the compositor
   // just reuses the cached subtree). This is the key pan-performance lever.
+  // Zoom rebuild is debounced: keep GPU-transforming the cached subtree
+  // during the gesture and re-lay-out (declutter + billboard counter-scale)
+  // once it settles. m_zoom_timer fires changed() ~110ms after the last
+  // scale change.
+  m_zoom_timer = new QTimer(this);
+  m_zoom_timer->setSingleShot(true);
+  m_zoom_timer->setInterval(110);
+  connect(m_zoom_timer, &QTimer::timeout, this, &ChartProvider::changed);
   if (m_viewport) {
     connect(m_viewport, &Viewport::changed, this, [this]() {
       const double s = m_viewport->scale();
       if (s != m_emit_scale) {
         m_emit_scale = s;
-        Q_EMIT changed();
+        m_zoom_timer->start();  // debounce; rebuild once zoom settles
       }
     });
   }

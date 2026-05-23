@@ -40,6 +40,7 @@ QT_BEGIN_NAMESPACE
 class QSGTransformNode;
 class QSGGeometryNode;
 class QSGOpacityNode;
+class QTimer;
 QT_END_NAMESPACE
 
 namespace ocpn::qtui {
@@ -131,6 +132,12 @@ private:
   // changed() (forcing a re-sync) when the scale actually changes, so a pan
   // never re-syncs this chart.
   double m_emit_scale = -1.0;
+  // Debounces the zoom rebuild: a scale change (re)starts this timer; the
+  // CPU re-layout (changed() -> renderChart -> updateBillboards) fires only
+  // once the zoom settles. During the gesture the cached subtree keeps being
+  // GPU-transformed (billboards momentarily scale with the zoom), so zooming
+  // stays smooth and the CPU work happens once at the end.
+  QTimer* m_zoom_timer = nullptr;
   int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All
 
   QString m_id;

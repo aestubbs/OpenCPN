@@ -207,13 +207,30 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
   }
   m_boundary_provider->setExtents(cells);
 
-  // Fit the viewport to the set once (on the first batch). The GSHHS world
-  // backdrop is always present, so the user can freely zoom back out to the
-  // whole globe from here.
-  const double n = m_boundary_provider->northLat();
-  const double s = m_boundary_provider->southLat();
-  const double e = m_boundary_provider->eastLon();
-  const double w = m_boundary_provider->westLon();
+  // Fit the viewport to the set once (on the first batch). Fit to the dense
+  // cluster of content cells, excluding area outliers: a few overview/ocean
+  // cells (e.g. US1PO02M Pacific, US1EEZ1M) cover enormous areas and would
+  // blow the fit out to a near-global view where every cell is too fine to
+  // show. We take the median content-cell area and ignore cells more than 8x
+  // larger. The GSHHS backdrop is always present, so the user can zoom out
+  // freely from here.
+  QList<double> areas;
+  for (const CellExtent& c : cells)
+    if (c.navFeatures > 0 && c.valid())
+      areas.append((c.north - c.south) * (c.east - c.west));
+  std::sort(areas.begin(), areas.end());
+  const double medianArea = areas.isEmpty() ? 0.0 : areas[areas.size() / 2];
+  const double areaCap = medianArea * 8.0;
+  double n = -90.0, s = 90.0, e = -180.0, w = 180.0;
+  for (const CellExtent& c : cells) {
+    if (c.navFeatures <= 0 || !c.valid()) continue;
+    if (areaCap > 0.0 && (c.north - c.south) * (c.east - c.west) > areaCap)
+      continue;  // area outlier (overview/ocean cell)
+    if (c.north > n) n = c.north;
+    if (c.south < s) s = c.south;
+    if (c.east > e) e = c.east;
+    if (c.west < w) w = c.west;
+  }
   if (!m_world_fitted && e > w && n > s) {
     m_world_fitted = true;
     m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
@@ -295,20 +312,34 @@ void ChartCanvas::updateVisibleCells() {
   const double lon1 = m_viewport->centerLon() + half_lon;
   const double logTargetN = std::log(displayScaleN(scale));
 
-  // Candidate cells: every catalogued cell overlapping the working view.
+  // Candidate cells: every catalogued cell overlapping the working view that
+  // has a known scale and actual chart content (administrative coverage-only
+  // cells -- no depth areas/soundings/land -- are excluded so they never win
+  // a location and render nothing useful).
   QList<const CellExtent*> cands;
   for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
     const CellExtent& c = it.value();
-    if (c.nativeScale > 0 && c.intersects(lat0, lat1, lon0, lon1))
+    if (c.nativeScale > 0 && c.navFeatures > 0 &&
+        c.intersects(lat0, lat1, lon0, lon1))
       cands.append(&c);
   }
 
   // Per-location quilt: sample the view on a grid; at each sample point pick
-  // the candidate cell COVERING that point whose native scale is nearest the
-  // zoom (preferring the finer one on a tie). The union of per-point winners
-  // is the needed set. This guarantees a location only falls through to the
-  // GSHHS world backdrop when NO ENC cell covers it -- otherwise it always
-  // gets its best-scale cell, even where the dominant tier has a hole.
+  // the candidate cell COVERING that point that best suits the zoom, then
+  // union the per-point winners into the needed set. This guarantees a
+  // location only falls through to the GSHHS world backdrop when NO ENC cell
+  // covers it.
+  //
+  // "Best suits the zoom" is biased toward MORE DETAIL: over-zoom (stretching
+  // a chart coarser than the display) is penalised at full weight, but
+  // under-zoom (showing a finer chart than strictly needed) is cheap
+  // (kUnderWeight). So where a slightly-finer chart is available it wins, and
+  // a whole area renders at a consistent finer level instead of leaving a
+  // coarse cell's "blank" patch (e.g. an unfilled harbour). A hard cap skips
+  // charts absurdly finer than the display so we don't pull berthing cells in
+  // at coastal zoom.
+  constexpr double kUnderWeight = 0.4;
+  const double kMaxUnderLog = std::log(12.0);
   constexpr int kGrid = 24;
   m_needed.clear();
   for (int gy = 0; gy < kGrid; ++gy) {
@@ -321,8 +352,11 @@ void ChartCanvas::updateVisibleCells() {
         if (plat < c->south || plat > c->north || plon < c->west ||
             plon > c->east)
           continue;  // doesn't cover this point
-        const double cost =
-            std::abs(std::log(static_cast<double>(c->nativeScale)) - logTargetN);
+        // r > 0: cell coarser than display (over-zoom); r < 0: finer.
+        const double r =
+            std::log(static_cast<double>(c->nativeScale)) - logTargetN;
+        if (r < -kMaxUnderLog) continue;  // far too detailed for this zoom
+        const double cost = (r >= 0.0) ? r : (-r) * kUnderWeight;
         if (cost < best_cost - 1e-9 ||
             (std::abs(cost - best_cost) <= 1e-9 && best &&
              c->nativeScale < best->nativeScale)) {

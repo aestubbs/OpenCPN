@@ -49,6 +49,11 @@ struct CellExtent {
   // whose native scale tier best matches, so each location is covered by one
   // cell and no coarser/finer cell overdraws it. 0 if unknown.
   int nativeScale = 0;
+  // Count of substantive "chart surface" features (depth areas/contours,
+  // soundings, land/coastline). Cells with zero of these are administrative
+  // (e.g. EEZ / coverage-only cells) -- excluded from the quilt so they don't
+  // win a location and render nothing useful.
+  int navFeatures = 0;
 
   /** A box is valid once it has been grown by at least one feature. */
   bool valid() const { return east > west && north > south; }

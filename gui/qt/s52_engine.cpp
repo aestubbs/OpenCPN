@@ -565,6 +565,18 @@ CellExtent S52Engine::scanOneCellExtent(const QString& path_000,
         if (env.MaxX > ce.east) ce.east = env.MaxX;
         if (env.MinX < ce.west) ce.west = env.MinX;
       }
+      // Substantive chart-surface objects: depth area/contour, soundings,
+      // land/coastline. A cell with none is administrative (EEZ / coverage
+      // only) and is excluded from the quilt.
+      if (OGRFeatureDefn* fd = feat->GetDefnRef()) {
+        const char* cn = fd->GetName();
+        if (cn && (strncmp(cn, "DEPARE", 6) == 0 ||
+                   strncmp(cn, "DEPCNT", 6) == 0 ||
+                   strncmp(cn, "SOUNDG", 6) == 0 ||
+                   strncmp(cn, "LNDARE", 6) == 0 ||
+                   strncmp(cn, "COALNE", 6) == 0))
+          ++ce.navFeatures;
+      }
       OGRFeature::DestroyFeature(feat);
     }
   }
