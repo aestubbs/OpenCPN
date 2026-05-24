@@ -24,120 +24,8 @@ ApplicationWindow {
     height: 720
     title: qsTr("OpenCPN (Qt prototype)")
 
-    // Minimum touch target (logical px) -- sizes the toolbar + drawer
-    // controls for finger use (P3.5).
-    readonly property int touchSize: 44
-
-    // --- Header: touch-friendly primary toolbar ---------------------------
-    header: ToolBar {
-        RowLayout {
-            anchors.fill: parent
-            spacing: 6
-
-            ToolButton {
-                text: "☰"  // hamburger
-                font.pointSize: 16
-                Layout.preferredHeight: root.touchSize
-                Layout.preferredWidth: root.touchSize
-                onClicked: controlsDrawer.open()
-            }
-
-            ToolSeparator {}
-
-            ToolButton {
-                text: "−"  // minus
-                font.pointSize: 18
-                Layout.preferredHeight: root.touchSize
-                Layout.preferredWidth: root.touchSize
-                onClicked: chart.zoomOut()
-            }
-            ToolButton {
-                text: "+"
-                font.pointSize: 18
-                Layout.preferredHeight: root.touchSize
-                Layout.preferredWidth: root.touchSize
-                onClicked: chart.zoomIn()
-            }
-            ToolButton {
-                text: qsTr("Fit")
-                font.pointSize: 13
-                Layout.preferredHeight: root.touchSize
-                onClicked: chart.fitWorld()
-            }
-
-            Item { Layout.fillWidth: true }  // spacer
-
-            ToolButton {
-                text: chart.demoMode ? qsTr("Demo: on") : qsTr("Demo: off")
-                font.pointSize: 13
-                checkable: true
-                checked: chart.demoMode
-                Layout.preferredHeight: root.touchSize
-                onClicked: chart.demoMode = checked
-            }
-        }
-    }
-
-    // --- Slide-out controls drawer (the shell's panel area) ---------------
-    Drawer {
-        id: controlsDrawer
-        width: Math.min(300, root.width * 0.85)
-        height: root.height
-        edge: Qt.LeftEdge
-
-        // Navigation menu -- destinations open dialogs/panels; the shell
-        // keeps the chart full-bleed behind.
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 8
-            spacing: 2
-
-            Label {
-                text: qsTr("OpenCPN")
-                font.pointSize: 16; font.bold: true
-                Layout.margins: 8
-            }
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
-
-            ItemDelegate {
-                text: qsTr("Display settings…")
-                font.pointSize: 14
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
-                onClicked: { settingsDialog.open(); controlsDrawer.close() }
-            }
-            ItemDelegate {
-                text: qsTr("Routes & marks…")
-                font.pointSize: 14
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
-                onClicked: { routeManagerDialog.open(); controlsDrawer.close() }
-            }
-
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
-
-            Switch {
-                text: qsTr("Demo mode"); font.pointSize: 14
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
-                leftPadding: 16
-                checked: chart.demoMode
-                onToggled: chart.demoMode = checked
-            }
-            ItemDelegate {
-                text: qsTr("Drop demo here")
-                font.pointSize: 14
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
-                onClicked: { chart.dropDemoHere(); controlsDrawer.close() }
-            }
-
-            Item { Layout.fillHeight: true }  // push Quit to the bottom
-
-            ItemDelegate {
-                text: qsTr("Quit")
-                font.pointSize: 14
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
-                onClicked: Qt.quit()
-            }
-        }
-    }
+    // Minimum touch target (logical px) for the on-chart controls.
+    readonly property int touchSize: 40
 
     // --- Display settings dialog (P3.6) -----------------------------------
     Dialog {
@@ -359,6 +247,19 @@ ApplicationWindow {
             }
         }
 
+        // S-52 engine + source status, bottom-left overlay (was the footer).
+        Label {
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            anchors.margins: 10
+            padding: 4
+            background: Rectangle { color: "#aa101418"; radius: 4 }
+            text: (s52 ? s52.status : qsTr("S-52: (no engine)")) +
+                  (chart.demoMode ? qsTr("   [DEMO]") : qsTr("   [LIVE]"))
+            color: s52 && s52.ok ? "#a8e0a8" : "#e0a0a0"
+            font.pointSize: 10
+        }
+
         // AIS target info popup (P3.9) -- shown when a target is picked
         // (ChartCanvas hit-tests a click against the AisTargetStore).
         Popup {
@@ -485,23 +386,72 @@ ApplicationWindow {
         }
     }
 
-    // --- Footer: status bar -----------------------------------------------
-    footer: ToolBar {
+    // --- Floating toolbar (mirrors OpenCPN's draggable toolbar) -----------
+    // A frameless native Pane floating over the full-bleed chart, draggable
+    // anywhere within the window. Icon buttons for the primary actions; the
+    // menu button opens the navigation / dialog menu.
+    Pane {
+        id: floatToolbar
+        x: 16
+        y: 16
+        padding: 4
+
         RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            Label {
-                text: s52 ? s52.status : qsTr("S-52: (no engine)")
-                color: s52 && s52.ok ? "#1f7a1f" : "#a00000"
-                font.pointSize: 11
+            spacing: 2
+            ToolButton {
+                text: "☰"; font.pointSize: 15
+                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+                onClicked: mainMenu.popup(floatToolbar, 0, floatToolbar.height)
             }
-            Item { Layout.fillWidth: true }
-            Label {
-                text: chart.demoMode ? qsTr("DEMO") : qsTr("LIVE")
-                font.pointSize: 11; font.bold: true
-                color: chart.demoMode ? "#b07000" : "#1f7a1f"
+            ToolSeparator {}
+            ToolButton {
+                text: "−"; font.pointSize: 18
+                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+                onClicked: chart.zoomOut()
+            }
+            ToolButton {
+                text: "+"; font.pointSize: 18
+                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+                onClicked: chart.zoomIn()
+            }
+            ToolButton {
+                text: "⤢"; font.pointSize: 14  // fit
+                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+                onClicked: chart.fitWorld()
             }
         }
+
+        // Drag the whole toolbar; clamp within the window.
+        DragHandler {
+            target: floatToolbar
+            xAxis.minimum: 0
+            xAxis.maximum: root.width - floatToolbar.width
+            yAxis.minimum: 0
+            yAxis.maximum: root.height - floatToolbar.height
+        }
+    }
+
+    Menu {
+        id: mainMenu
+        MenuItem {
+            text: qsTr("Display settings…")
+            onTriggered: settingsDialog.open()
+        }
+        MenuItem {
+            text: qsTr("Routes & marks…")
+            onTriggered: routeManagerDialog.open()
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("Demo mode"); checkable: true
+            checked: chart.demoMode
+            onTriggered: chart.demoMode = checked
+        }
+        MenuItem {
+            text: qsTr("Drop demo here")
+            onTriggered: chart.dropDemoHere()
+        }
+        MenuSeparator {}
+        MenuItem { text: qsTr("Quit"); onTriggered: Qt.quit() }
     }
 }
