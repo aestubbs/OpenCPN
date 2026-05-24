@@ -26,6 +26,8 @@
 #ifndef OCPN_QT_MODEL_NAV_DATA_PROVIDER_H_
 #define OCPN_QT_MODEL_NAV_DATA_PROVIDER_H_
 
+#include <memory>
+
 #include "nav_data_provider.h"
 
 QT_BEGIN_NAMESPACE
@@ -34,11 +36,14 @@ QT_END_NAMESPACE
 
 namespace ocpn::qtui {
 
+class AisTargetStore;
+
 class ModelNavDataProvider : public NavDataProvider {
   Q_OBJECT
 
 public:
   explicit ModelNavDataProvider(QObject* parent = nullptr);
+  ~ModelNavDataProvider() override;  // out-of-line for unique_ptr<incomplete>
 
   QList<AisTarget> aisTargets() const override;
   OwnShipState ownShip() const override;
@@ -50,10 +55,16 @@ public:
   void setRunning(bool run);
 
 private:
-  void poll();  // emit dynamicChanged; staticChanged on set-size change
+  void poll();  // mirror decoder -> store, prune; emit changed signals
+  // Copy the AIS decoder's current targets into the store (stamping
+  // last-seen) and prune stale ones. The store -- not g_pAIS -- is what
+  // aisTargets() reads, so the renderer is decoupled from the legacy class
+  // and a SQLite store can replace the in-memory one later.
+  void mirrorAisToStore();
 
   QTimer* m_timer = nullptr;
   int m_last_static_sig = -1;  // cheap change-detect for routes/tracks/wpts
+  std::unique_ptr<AisTargetStore> m_ais_store;
 };
 
 }  // namespace ocpn::qtui

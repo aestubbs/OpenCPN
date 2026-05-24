@@ -69,6 +69,9 @@ qt_add_qml_module(opencpn-qt
     own_ship_layer.cpp
     route_overlay_layers.h
     route_overlay_layers.cpp
+    ais_target_store.h
+    in_memory_ais_store.h
+    in_memory_ais_store.cpp
     model_nav_data_provider.h
     model_nav_data_provider.cpp
     switchable_nav_provider.h

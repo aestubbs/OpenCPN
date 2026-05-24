@@ -17,8 +17,10 @@
 
 #include <cmath>
 
+#include <QDateTime>
 #include <QTimer>
 
+#include "in_memory_ais_store.h"
 #include "model/ais_decoder.h"
 #include "model/ais_target_data.h"
 #include "model/own_ship.h"
@@ -34,14 +36,21 @@ inline bool finitePos(double lat, double lon) {
   return std::isfinite(lat) && std::isfinite(lon) && std::abs(lat) <= 90.0 &&
          std::abs(lon) <= 360.0 && !(lat == 0.0 && lon == 0.0);
 }
+// Drop a target this long after its last report (staleness). AIS reporting
+// intervals run from ~2 s (fast craft) to ~3 min (moored); 10 min is a safe
+// "lost" cutoff.
+constexpr qint64 kStaleMs = 10 * 60 * 1000;
 }  // namespace
 
 ModelNavDataProvider::ModelNavDataProvider(QObject* parent)
-    : NavDataProvider(parent) {
+    : NavDataProvider(parent),
+      m_ais_store(std::make_unique<InMemoryAisTargetStore>()) {
   m_timer = new QTimer(this);
   m_timer->setInterval(250);  // 4 Hz poll of the model
   connect(m_timer, &QTimer::timeout, this, &ModelNavDataProvider::poll);
 }
+
+ModelNavDataProvider::~ModelNavDataProvider() = default;
 
 void ModelNavDataProvider::setRunning(bool run) {
   if (run)
@@ -51,8 +60,13 @@ void ModelNavDataProvider::setRunning(bool run) {
 }
 
 QList<AisTarget> ModelNavDataProvider::aisTargets() const {
-  QList<AisTarget> out;
-  if (!g_pAIS) return out;
+  // Read through the store -- the renderer's decoupled AIS boundary.
+  return m_ais_store->snapshot();
+}
+
+void ModelNavDataProvider::mirrorAisToStore() {
+  if (!g_pAIS) return;
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
   for (const auto& [mmsi, td] : g_pAIS->GetTargetList()) {
     if (!td || td->b_lost || td->b_removed) continue;
     if (!finitePos(td->Lat, td->Lon)) continue;
@@ -64,9 +78,9 @@ QList<AisTarget> ModelNavDataProvider::aisTargets() const {
     t.sog = std::isfinite(td->SOG) ? td->SOG : 0.0;
     t.hdg = td->HDG;
     t.name = td->GetFullName().trimmed();
-    out.append(t);
+    m_ais_store->upsert(t, now);
   }
-  return out;
+  m_ais_store->prune(now, kStaleMs);
 }
 
 OwnShipState ModelNavDataProvider::ownShip() const {
@@ -129,6 +143,7 @@ QList<NavTrack> ModelNavDataProvider::tracks() const {
 }
 
 void ModelNavDataProvider::poll() {
+  mirrorAisToStore();
   Q_EMIT dynamicChanged();
 
   // Cheap static change-detect: route/waypoint/track counts.
