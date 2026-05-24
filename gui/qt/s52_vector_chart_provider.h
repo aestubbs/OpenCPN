@@ -101,19 +101,6 @@ private:
     float screenH = 0.0f;     // bounding-box declutter
   };
 
-  // A line feature rendered as N parallel 1px polylines offset from the
-  // centreline. Qt RHI backends only support line width 1, but thin
-  // polylines rasterise cleanly (proper joins, MSAA edges), so stacking a
-  // few 1px strips offset perpendicular by ~1px each gives a smooth thick
-  // line without triangle-tessellation joint artifacts. The strip count is
-  // fixed by the physical pen width; only the per-zoom offset distance
-  // (offset_px / scale) changes, so the strips are created once and their
-  // vertices rebuilt when the scale changes.
-  struct LineGeom {
-    QList<QSGGeometryNode*> strips;  // one DrawLineStrip per parallel offset
-    QList<QPointF> worldPts;         // (x=lon, y=-lat) centreline
-  };
-
   // An AP pattern fill: tessellated triangles (world coords) drawn with a
   // tiling texture. Positions are static; only the per-vertex UVs change
   // with zoom (screen-fixed tile size), so they rebuild on scale change.
@@ -125,14 +112,12 @@ private:
   };
 
   void updateBillboards(const Viewport& viewport);
-  void rebuildLines(double scale);
   void rebuildPatternUVs(double scale);
 
   // Pixels per millimetre of the display, for the 1:N chart-scale
   // denominator used by SCAMIN. Set from the window's QScreen each build;
   // falls back to a 96-dpi nominal until then.
   double m_screen_ppmm = 3.8;
-  QList<LineGeom> m_lines;
   QList<PatternGeom> m_patterns;
   // Scale at the last full billboard/line/pattern update; updates are
   // skipped while it's unchanged (so panning is free). Reset to -1 on build.

@@ -35,6 +35,7 @@
 #include <QSGOpacityNode>
 #include <QSGTransformNode>
 
+#include "aa_line.h"
 #include "sg_helpers.h"
 #include "sg_texture_cache.h"
 #include "viewport.h"
@@ -183,64 +184,6 @@ void S52VectorChartProvider::setShowText(bool on) {
   Q_EMIT changed();
 }
 
-void S52VectorChartProvider::rebuildLines(double scale) {
-  if (scale <= 0.0) return;
-  // Each line feature is N parallel 1px polylines offset perpendicular from
-  // the centreline. The strip count N (= rounded physical pen width in
-  // logical px) is fixed; only the world-space offset distance changes with
-  // scale, so here we just recompute each strip's vertices:
-  //   offset_world = (j - (N-1)/2) px / scale, along the per-vertex bisector
-  //   normal of the centreline.
-  // Stacking ~1px-spaced thin polylines (each rasterised with clean joins +
-  // MSAA) yields a smooth thick line without triangle-tessellation joints.
-  for (const LineGeom& lg : m_lines) {
-    const QList<QPointF>& p = lg.worldPts;
-    const int n = static_cast<int>(lg.strips.size());
-    if (n == 0) continue;
-
-    if (p.size() < 2) {
-      for (QSGGeometryNode* s : lg.strips)
-        if (s && s->geometry()) {
-          s->geometry()->allocate(0);
-          s->markDirty(QSGNode::DirtyGeometry);
-        }
-      continue;
-    }
-
-    // Per-vertex unit bisector normals (averaged adjacent segment normals).
-    QList<QPointF> normal;
-    normal.reserve(p.size());
-    const auto segN = [](const QPointF& a, const QPointF& b, bool& ok) {
-      double dx = b.x() - a.x(), dy = b.y() - a.y();
-      double len = std::hypot(dx, dy);
-      ok = len > 0.0;
-      return ok ? QPointF(-dy / len, dx / len) : QPointF(0, 0);
-    };
-    for (qsizetype i = 0; i < p.size(); ++i) {
-      QPointF nIn, nOut;
-      bool okIn = false, okOut = false;
-      if (i > 0) nIn = segN(p[i - 1], p[i], okIn);
-      if (i + 1 < p.size()) nOut = segN(p[i], p[i + 1], okOut);
-      QPointF nm = (okIn && okOut) ? (nIn + nOut) : (okOut ? nOut : nIn);
-      const double l = std::hypot(nm.x(), nm.y());
-      normal.append(l > 1e-9 ? nm / l : QPointF(0, 0));
-    }
-
-    for (int j = 0; j < n; ++j) {
-      const double offsetPx = j - (n - 1) / 2.0;
-      const double offsetWorld = offsetPx / scale;
-      QSGGeometry* geo = lg.strips[j]->geometry();
-      geo->allocate(static_cast<int>(p.size()));
-      QSGGeometry::Point2D* v = geo->vertexDataAsPoint2D();
-      for (qsizetype i = 0; i < p.size(); ++i) {
-        v[i].set(static_cast<float>(p[i].x() + normal[i].x() * offsetWorld),
-                 static_cast<float>(p[i].y() + normal[i].y() * offsetWorld));
-      }
-      lg.strips[j]->markDirty(QSGNode::DirtyGeometry);
-    }
-  }
-}
-
 void S52VectorChartProvider::rebuildPatternUVs(double scale) {
   if (scale <= 0.0) return;
   // Screen-fixed tiling: one pattern tile spans tileW/tileH logical px on
@@ -273,8 +216,7 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   // pan. Bail out if the scale hasn't changed since the last update so a
   // pan (or a redundant call) does no work.
   if (s == m_last_line_scale) return;
-  rebuildLines(s);
-  rebuildPatternUVs(s);
+  rebuildPatternUVs(s);  // lines are now zoom-invariant (AA-line shader)
   m_last_line_scale = s;
 
   // Current chart scale as a 1:N denominator, for SCAMIN decluttering.
@@ -381,15 +323,13 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // QSGTexture this chart's pattern fills / symbols / labels use, and frees
   // them (on the render thread) when the compositor releases this subtree.
   auto* root = new TextureCacheNode(window);
-  m_lines.clear();
   m_patterns.clear();
   m_last_line_scale = -1.0;
 
   // Logical pixels per millimetre, for both physical-size line widths and
   // the SCAMIN scale denominator. logicalDotsPerInch gives a consistent
   // physical scale independent of raw pixel density (Qt applies the device
-  // pixel ratio on top). Computed before the prim loop so line strip counts
-  // are known.
+  // pixel ratio on top).
   if (window && window->screen() &&
       window->screen()->logicalDotsPerInch() > 1.0) {
     m_screen_ppmm = window->screen()->logicalDotsPerInch() / 25.4;
@@ -401,26 +341,19 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     if (prim.verts.isEmpty()) continue;
     if (prim.dispCat > m_displayCategory) continue;  // display-category filter
 
-    // Line features: N parallel 1px polylines (Qt RHI caps real line width
-    // at 1). N is fixed by the physical pen width; create the strips now
-    // with their colour, and let rebuildLines() lay out the offset vertices
-    // once the scale is known and again whenever it changes.
+    // Line features: one anti-aliased line through the shared AA-line shader
+    // (aa_line.h). Width is the physical S-52 pen width in logical px, kept
+    // screen-fixed by the shader -- no per-zoom rebuild, no parallel strips.
     if (prim.type == s52sg::PrimType::LineStrip) {
-      const double widthLogicalPx =
-          prim.width * kS52PenWidthMM * m_screen_ppmm;
-      const int n = std::max(1, static_cast<int>(std::lround(widthLogicalPx)));
-
-      LineGeom lg;
-      lg.worldPts.reserve(prim.verts.size());
+      const double widthPx =
+          std::max(1.0, prim.width * kS52PenWidthMM * m_screen_ppmm);
+      QList<QPointF> world;
+      world.reserve(prim.verts.size());
       for (const QPointF& p : prim.verts)
-        lg.worldPts.append(QPointF(p.x(), -p.y()));  // world (x=lon, y=-lat)
-      for (int j = 0; j < n; ++j) {
-        auto* node = sg::makeFlatColorNode(prim.color,
-                                           QSGGeometry::DrawLineStrip, 0);
+        world.append(QPointF(p.x(), -p.y()));  // world (x=lon, y=-lat)
+      if (auto* node = makeAaLineNode(world, prim.color,
+                                      static_cast<float>(widthPx)))
         root->appendChildNode(node);
-        lg.strips.append(node);
-      }
-      m_lines.append(lg);
       continue;
     }
 
