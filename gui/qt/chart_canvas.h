@@ -181,6 +181,12 @@ public:
   // Re-seed the demo nav fleet around the current view centre (P2.11).
   Q_INVOKABLE void dropDemoHere();
 
+  // Right-click context-menu actions (operate on the world point recorded at
+  // the last right-click). centerViewHere recentres; queryObjectsHere fills
+  // the objectQuery view-model (the QML query window binds to it).
+  Q_INVOKABLE void centerViewHere();
+  Q_INVOKABLE void queryObjectsHere();
+
 Q_SIGNALS:
   void s52EngineChanged();
   void displayCategoryChanged();
@@ -192,6 +198,8 @@ Q_SIGNALS:
   void overlayVisibilityChanged();
   void viewChanged();
   void followOwnShipChanged();
+  // Right-click on the chart at item-local (x, y); QML pops the context menu.
+  void contextMenuRequested(qreal x, qreal y);
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
@@ -311,6 +319,12 @@ private:
   bool m_dragging = false;
   QPointF m_drag_last_pos;
   QPointF m_press_pos;  // to tell a click (AIS pick) from a drag (pan)
+
+  // World point + screen pos recorded at the last right-click, consumed by
+  // the context-menu actions (centerViewHere / queryObjectsHere).
+  QPointF m_ctx_pos;
+  double m_ctx_lat = 0.0;
+  double m_ctx_lon = 0.0;
 
   // Hit-test a click (item-local px) against the live AIS targets and select
   // the nearest within a small radius (P3.9). Returns true if one was hit.

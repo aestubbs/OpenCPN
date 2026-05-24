@@ -203,6 +203,74 @@ ApplicationWindow {
         }
     }
 
+    // --- Object query: a real dialog window (P3.9), opened from the chart
+    //     right-click "Object query here" menu item -- the wx S57Query flow.
+    //     Binds to ChartCanvas.objectQuery; steps through stacked features.
+    Window {
+        id: objectQueryWindow
+        title: qsTr("Object query")
+        flags: Qt.Dialog
+        width: 420
+        height: 480
+        color: oqPalette.window
+
+        SystemPalette { id: oqPalette }
+        readonly property var q: chart.objectQuery
+
+        onVisibleChanged: if (!visible) chart.objectQuery.clear()
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 6
+
+            Label {
+                text: objectQueryWindow.q ? objectQueryWindow.q.className : ""
+                font.pointSize: 15; font.bold: true
+            }
+            // Step through the stacked objects (specific -> containing).
+            RowLayout {
+                Layout.fillWidth: true
+                visible: objectQueryWindow.q && objectQueryWindow.q.count > 1
+                ToolButton {
+                    text: "‹"; font.pointSize: 15
+                    enabled: objectQueryWindow.q && objectQueryWindow.q.index > 0
+                    onClicked: chart.objectQuery.prev()
+                }
+                Label {
+                    text: objectQueryWindow.q
+                          ? (objectQueryWindow.q.index + 1) + " / " + objectQueryWindow.q.count
+                          : ""
+                    font.pointSize: 11
+                }
+                ToolButton {
+                    text: "›"; font.pointSize: 15
+                    enabled: objectQueryWindow.q &&
+                             objectQueryWindow.q.index < objectQueryWindow.q.count - 1
+                    onClicked: chart.objectQuery.next()
+                }
+                Item { Layout.fillWidth: true }
+            }
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                TextArea {
+                    readOnly: true
+                    wrapMode: TextEdit.Wrap
+                    font.pointSize: 11
+                    font.family: "monospace"
+                    text: objectQueryWindow.q ? objectQueryWindow.q.text : ""
+                }
+            }
+            DialogButtonBox {
+                Layout.fillWidth: true
+                standardButtons: DialogButtonBox.Close
+                onRejected: objectQueryWindow.close()
+            }
+        }
+    }
+
     // --- Central: world-anchored + display-anchored scene-graph subtrees,
     //     both inside the ChartCanvas QQuickItem.
     ChartCanvas {
@@ -317,78 +385,31 @@ ApplicationWindow {
             }
         }
 
-        // S-57 object-query popup (P3.9) -- the chart features under a click,
-        // bound to ChartCanvas.objectQuery.
-        Popup {
-            id: objInfo
-            readonly property var q: chart.objectQuery
-            visible: q && q.valid
-            closePolicy: Popup.NoAutoClose
-            x: 12
-            y: parent.height - height - 12
-            width: 360
-            height: Math.min(parent.height * 0.5, 360)
-            padding: 12
-            background: Rectangle {
-                color: "#ee101418"; radius: 8; border.color: "#5affffff"
+        // Right-click context menu (wx canvas-menu equivalent). Opened at the
+        // click point via the ChartCanvas.contextMenuRequested signal.
+        Menu {
+            id: chartContextMenu
+            MenuItem {
+                text: qsTr("Object query here")
+                onTriggered: {
+                    chart.queryObjectsHere()
+                    objectQueryWindow.show(); objectQueryWindow.raise()
+                }
             }
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 6
-                RowLayout {
-                    Layout.fillWidth: true
-                    Label {
-                        text: objInfo.q ? objInfo.q.className : ""
-                        color: "#cfe8ff"; font.pointSize: 14; font.bold: true
-                    }
-                    Item { Layout.fillWidth: true }
-                    ToolButton {
-                        text: "✕"; font.pointSize: 13
-                        onClicked: chart.objectQuery.clear()
-                    }
-                }
-                // Step through the stacked objects (specific -> containing).
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: objInfo.q && objInfo.q.count > 1
-                    ToolButton {
-                        text: "‹"; font.pointSize: 15
-                        enabled: objInfo.q && objInfo.q.index > 0
-                        onClicked: chart.objectQuery.prev()
-                    }
-                    Label {
-                        text: objInfo.q
-                              ? (objInfo.q.index + 1) + " / " + objInfo.q.count
-                              : ""
-                        color: "#a0c0e0"; font.pointSize: 11
-                    }
-                    ToolButton {
-                        text: "›"; font.pointSize: 15
-                        enabled: objInfo.q &&
-                                 objInfo.q.index < objInfo.q.count - 1
-                        onClicked: chart.objectQuery.next()
-                    }
-                    Item { Layout.fillWidth: true }
-                    Label {
-                        text: qsTr("up ↑")
-                        color: "#607080"; font.pointSize: 10
-                    }
-                }
-                ScrollView {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-                    TextArea {
-                        readOnly: true
-                        wrapMode: TextEdit.Wrap
-                        color: "#e0e0e0"
-                        font.pointSize: 11
-                        font.family: "monospace"
-                        text: objInfo.q ? objInfo.q.text : ""
-                        background: null
-                    }
-                }
+            MenuItem {
+                text: qsTr("Center view here")
+                onTriggered: chart.centerViewHere()
+            }
+            MenuSeparator {}
+            // wx canvas-menu items not yet wired (kept for layout parity).
+            MenuItem { text: qsTr("Create route"); enabled: false }
+            MenuItem { text: qsTr("Drop mark here"); enabled: false }
+            MenuItem { text: qsTr("Measure"); enabled: false }
+        }
+        Connections {
+            target: chart
+            function onContextMenuRequested(x, y) {
+                chartContextMenu.popup(x, y)
             }
         }
     }

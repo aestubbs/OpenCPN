@@ -78,7 +78,7 @@ constexpr double kTestEast = 10.0;
 
 ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   setFlag(ItemHasContents, true);
-  setAcceptedMouseButtons(Qt::LeftButton);
+  setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
 
   m_viewport = std::make_unique<Viewport>();
   // Centre on the test chart, with the scale ChartCanvas's QML host fits
@@ -693,9 +693,33 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
     m_drag_last_pos = event->position();
     m_press_pos = event->position();
     event->accept();
+  } else if (event->button() == Qt::RightButton) {
+    // Record the world point under the cursor for the context-menu actions
+    // (Center here / Object query here) and ask QML to pop the menu there.
+    m_ctx_pos = event->position();
+    if (m_viewport)
+      m_viewport->screenToLatLon(m_ctx_pos.x(), m_ctx_pos.y(),
+                                 static_cast<int>(width()),
+                                 static_cast<int>(height()), m_ctx_lat,
+                                 m_ctx_lon);
+    Q_EMIT contextMenuRequested(m_ctx_pos.x(), m_ctx_pos.y());
+    event->accept();
   } else {
     QQuickItem::mousePressEvent(event);
   }
+}
+
+void ChartCanvas::centerViewHere() {
+  if (!m_viewport) return;
+  m_viewport->setCenter(m_ctx_lat, m_ctx_lon);
+  Q_EMIT viewChanged();
+  update();
+}
+
+void ChartCanvas::queryObjectsHere() {
+  // Populate the object-query view-model from the chart objects under the
+  // right-click point; the QML object-query window binds to it.
+  pickObjectsAt(m_ctx_pos);
 }
 
 void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
@@ -713,15 +737,11 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
 void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton && m_dragging) {
     m_dragging = false;
-    // A press+release that barely moved is a click (a pick), not a pan. AIS
-    // targets take precedence; otherwise query the chart objects there.
+    // A press+release that barely moved is a click (a pick), not a pan. A
+    // left click picks an AIS target (contextual rollover); chart-object
+    // query is a right-click menu action (queryObjectsHere), the wx flow.
     const QPointF d = event->position() - m_press_pos;
-    if (d.manhattanLength() <= 6) {
-      if (pickAisAt(event->position()))
-        m_object_query->clear();
-      else
-        pickObjectsAt(event->position());
-    }
+    if (d.manhattanLength() <= 6) pickAisAt(event->position());
     event->accept();
   } else {
     QQuickItem::mouseReleaseEvent(event);
