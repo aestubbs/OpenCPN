@@ -91,20 +91,21 @@ ApplicationWindow {
         }
     }
 
-    // --- Route & mark manager dialog (P3.7) -------------------------------
-    Dialog {
-        id: routeManagerDialog
+    // --- Route & mark manager: a real (non-modal) dialog window (P3.7/C) --
+    Window {
+        id: routeManagerWindow
         title: qsTr("Routes & marks")
-        modal: true
-        anchors.centerIn: parent
-        width: Math.min(root.width * 0.9, 460)
-        height: Math.min(root.height * 0.85, 560)
-        standardButtons: Dialog.Close
+        flags: Qt.Dialog
+        width: 460
+        height: 560
+        color: sysPalette.window
 
+        SystemPalette { id: sysPalette }
         readonly property var rl: chart.routeList
 
         ColumnLayout {
             anchors.fill: parent
+            anchors.margins: 12
             spacing: 8
 
             // Layer visibility.
@@ -132,14 +133,14 @@ ApplicationWindow {
 
             Label {
                 text: qsTr("Routes (") +
-                      (routeManagerDialog.rl ? routeManagerDialog.rl.routes.length : 0) + ")"
+                      (routeManagerWindow.rl ? routeManagerWindow.rl.routes.length : 0) + ")"
                 font.pointSize: 13; font.bold: true
             }
             ListView {
                 Layout.fillWidth: true
                 Layout.preferredHeight: parent.height * 0.35
                 clip: true
-                model: routeManagerDialog.rl ? routeManagerDialog.rl.routes : []
+                model: routeManagerWindow.rl ? routeManagerWindow.rl.routes : []
                 delegate: ItemDelegate {
                     required property var modelData
                     width: ListView.view.width
@@ -155,7 +156,7 @@ ApplicationWindow {
                             onClicked: {
                                 chart.fitBounds(modelData.north, modelData.south,
                                                 modelData.east, modelData.west)
-                                routeManagerDialog.close()
+                                routeManagerWindow.close()
                             }
                         }
                     }
@@ -164,14 +165,14 @@ ApplicationWindow {
 
             Label {
                 text: qsTr("Marks (") +
-                      (routeManagerDialog.rl ? routeManagerDialog.rl.waypoints.length : 0) + ")"
+                      (routeManagerWindow.rl ? routeManagerWindow.rl.waypoints.length : 0) + ")"
                 font.pointSize: 13; font.bold: true
             }
             ListView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
-                model: routeManagerDialog.rl ? routeManagerDialog.rl.waypoints : []
+                model: routeManagerWindow.rl ? routeManagerWindow.rl.waypoints : []
                 delegate: ItemDelegate {
                     required property var modelData
                     width: ListView.view.width
@@ -187,11 +188,17 @@ ApplicationWindow {
                             onClicked: {
                                 chart.fitBounds(modelData.lat, modelData.lat,
                                                 modelData.lon, modelData.lon)
-                                routeManagerDialog.close()
+                                routeManagerWindow.close()
                             }
                         }
                     }
                 }
+            }
+
+            DialogButtonBox {
+                Layout.fillWidth: true
+                standardButtons: DialogButtonBox.Close
+                onRejected: routeManagerWindow.close()
             }
         }
     }
@@ -485,7 +492,7 @@ ApplicationWindow {
         }
         MenuItem {
             text: qsTr("Routes & marks…")
-            onTriggered: routeManagerDialog.open()
+            onTriggered: { routeManagerWindow.show(); routeManagerWindow.raise() }
         }
         MenuSeparator {}
         MenuItem {
