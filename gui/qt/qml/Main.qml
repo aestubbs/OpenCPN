@@ -271,6 +271,150 @@ ApplicationWindow {
         }
     }
 
+    // --- Options: the full tabbed settings dialog window (mirrors wx
+    //     options.cpp). Opened from the toolbar gear. Native TabBar +
+    //     StackLayout; the Charts tab carries the wired vector-display
+    //     controls, the rest are structured placeholders for now.
+    Window {
+        id: optionsWindow
+        title: qsTr("Options")
+        flags: Qt.Dialog
+        width: 640
+        height: 520
+        color: optPalette.window
+
+        SystemPalette { id: optPalette }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 0
+            spacing: 0
+
+            TabBar {
+                id: optTabs
+                Layout.fillWidth: true
+                TabButton { text: qsTr("Display") }
+                TabButton { text: qsTr("Charts") }
+                TabButton { text: qsTr("Connections") }
+                TabButton { text: qsTr("Ships") }
+                TabButton { text: qsTr("Plugins") }
+            }
+
+            StackLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                currentIndex: optTabs.currentIndex
+
+                // --- Display (general) ---
+                ColumnLayout {
+                    Layout.margins: 16
+                    spacing: 8
+                    Label { text: qsTr("General"); font.pointSize: 14; font.bold: true }
+                    Switch {
+                        text: qsTr("Auto-follow own ship")
+                        checked: chart.followOwnShip
+                        onToggled: chart.followOwnShip = checked
+                    }
+                    Switch {
+                        text: qsTr("Demo nav data")
+                        checked: chart.demoMode
+                        onToggled: chart.demoMode = checked
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+
+                // --- Charts (vector chart display) -- the wired controls ---
+                ColumnLayout {
+                    Layout.margins: 16
+                    spacing: 8
+                    Label {
+                        text: qsTr("Chart display category")
+                        font.pointSize: 14; font.bold: true
+                    }
+                    ButtonGroup { id: optCatGroup }
+                    Repeater {
+                        model: [ { label: qsTr("Base"), cat: 0 },
+                                 { label: qsTr("Standard"), cat: 1 },
+                                 { label: qsTr("All"), cat: 2 } ]
+                        delegate: RadioButton {
+                            required property var modelData
+                            text: modelData.label
+                            ButtonGroup.group: optCatGroup
+                            checked: chart.displayCategory === modelData.cat
+                            onClicked: chart.displayCategory = modelData.cat
+                        }
+                    }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
+                    Label { text: qsTr("Detail"); font.pointSize: 14; font.bold: true }
+                    Switch {
+                        text: qsTr("Soundings")
+                        checked: chart.showSoundings
+                        onToggled: chart.showSoundings = checked
+                    }
+                    Switch {
+                        text: qsTr("Text labels")
+                        checked: chart.showText
+                        onToggled: chart.showText = checked
+                    }
+                    Switch {
+                        text: qsTr("Lights")
+                        checked: chart.showLights
+                        onToggled: chart.showLights = checked
+                    }
+                    Switch {
+                        text: qsTr("Buoys & beacons")
+                        checked: chart.showBuoys
+                        onToggled: chart.showBuoys = checked
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+
+                // --- Connections (placeholder) ---
+                ColumnLayout {
+                    Layout.margins: 16
+                    spacing: 8
+                    Label { text: qsTr("Data connections"); font.pointSize: 14; font.bold: true }
+                    Label {
+                        text: qsTr("Serial / network connection management is not yet wired into this dialog.")
+                        wrapMode: Text.Wrap; Layout.fillWidth: true; opacity: 0.7
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+
+                // --- Ships (placeholder) ---
+                ColumnLayout {
+                    Layout.margins: 16
+                    spacing: 8
+                    Label { text: qsTr("Own ship & AIS"); font.pointSize: 14; font.bold: true }
+                    Label {
+                        text: qsTr("Own-ship dimensions, AIS display and CPA/TCPA settings are not yet wired in.")
+                        wrapMode: Text.Wrap; Layout.fillWidth: true; opacity: 0.7
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+
+                // --- Plugins (placeholder) ---
+                ColumnLayout {
+                    Layout.margins: 16
+                    spacing: 8
+                    Label { text: qsTr("Plugins"); font.pointSize: 14; font.bold: true }
+                    Label {
+                        text: qsTr("Plugin management is not yet available in the Qt build.")
+                        wrapMode: Text.Wrap; Layout.fillWidth: true; opacity: 0.7
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+            }
+
+            DialogButtonBox {
+                Layout.fillWidth: true
+                Layout.margins: 8
+                standardButtons: DialogButtonBox.Close
+                onRejected: optionsWindow.close()
+            }
+        }
+    }
+
     // --- Central: world-anchored + display-anchored scene-graph subtrees,
     //     both inside the ChartCanvas QQuickItem.
     ChartCanvas {
@@ -553,10 +697,10 @@ ApplicationWindow {
                 text: "☰"; ToolTip.text: qsTr("Menu")
                 onClicked: mainMenu.popup(floatToolbar, floatToolbar.width, 0)
             }
-            // 2. Options -> canvas display drawer.
+            // 2. Options -> full tabbed settings dialog (wx ID_SETTINGS).
             Tool {
                 text: "⚙"; ToolTip.text: qsTr("Options")
-                onClicked: canvasOptions.open()
+                onClicked: { optionsWindow.show(); optionsWindow.raise() }
             }
 
             ToolSeparator { Layout.fillWidth: true }
@@ -640,6 +784,15 @@ ApplicationWindow {
 
     Menu {
         id: mainMenu
+        MenuItem {
+            text: qsTr("Quick display…")
+            onTriggered: canvasOptions.open()
+        }
+        MenuItem {
+            text: qsTr("Options…")
+            onTriggered: { optionsWindow.show(); optionsWindow.raise() }
+        }
+        MenuSeparator {}
         MenuItem {
             text: qsTr("Demo mode"); checkable: true
             checked: chart.demoMode
