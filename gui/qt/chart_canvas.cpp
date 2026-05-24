@@ -52,8 +52,10 @@
 #include "model/track.h"  // g_pActiveTrack -- own-ship track recording
 #include "model_nav_data_provider.h"
 #include "nav_state_view_model.h"
+#include "layer.h"
 #include "object_query_view_model.h"
 #include "raster_chart_provider.h"
+#include "route_list_view_model.h"
 #include "switchable_nav_provider.h"
 #include "s52_engine.h"
 #include "s52_vector_chart_provider.h"
@@ -142,6 +144,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_ais_selection = std::make_unique<AisSelectionViewModel>();
   // S-57 object-query result model (P3.9).
   m_object_query = std::make_unique<ObjectQueryViewModel>();
+  // Route/waypoint list model for the manager (P3.7).
+  m_route_list = std::make_unique<RouteListViewModel>(m_nav_provider.get());
 
   m_ais_layer = new AisLayer(m_nav_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);
@@ -776,6 +780,68 @@ void ChartCanvas::pickObjectsAt(const QPointF& screen_pos) {
     }
   }
   m_object_query->setObjects(found);
+}
+
+// --- Overlay layer visibility (P3.7) ----------------------------------------
+namespace {
+bool layerVisible(LayerCompositor* c, const char* id) {
+  Layer* l = c ? c->layer(QString::fromLatin1(id)) : nullptr;
+  return l ? l->visible() : true;
+}
+void setLayerVisible(LayerCompositor* c, const char* id, bool on) {
+  if (Layer* l = c ? c->layer(QString::fromLatin1(id)) : nullptr)
+    l->setVisible(on);
+}
+}  // namespace
+
+bool ChartCanvas::showRoutes() const {
+  return layerVisible(m_compositor.get(), "core.routes");
+}
+void ChartCanvas::setShowRoutes(bool on) {
+  setLayerVisible(m_compositor.get(), "core.routes", on);
+  Q_EMIT overlayVisibilityChanged();
+  update();
+}
+bool ChartCanvas::showTracks() const {
+  return layerVisible(m_compositor.get(), "core.tracks");
+}
+void ChartCanvas::setShowTracks(bool on) {
+  setLayerVisible(m_compositor.get(), "core.tracks", on);
+  Q_EMIT overlayVisibilityChanged();
+  update();
+}
+bool ChartCanvas::showWaypoints() const {
+  return layerVisible(m_compositor.get(), "core.waypoints");
+}
+void ChartCanvas::setShowWaypoints(bool on) {
+  setLayerVisible(m_compositor.get(), "core.waypoints", on);
+  Q_EMIT overlayVisibilityChanged();
+  update();
+}
+
+void ChartCanvas::fitBounds(double north, double south, double east,
+                            double west) {
+  if (!m_viewport) return;
+  // Pad a near-zero span (single waypoint) so a "zoom to" lands at a sensible
+  // harbour scale rather than infinite zoom.
+  constexpr double kMinSpan = 0.05;  // degrees
+  if (north - south < kMinSpan) {
+    const double c = (north + south) / 2.0;
+    north = c + kMinSpan / 2.0;
+    south = c - kMinSpan / 2.0;
+  }
+  if (east - west < kMinSpan) {
+    const double c = (east + west) / 2.0;
+    east = c + kMinSpan / 2.0;
+    west = c - kMinSpan / 2.0;
+  }
+  m_viewport->setCenter((north + south) / 2.0, (east + west) / 2.0);
+  const double w = width() > 0 ? width() : 1000.0;
+  const double h = height() > 0 ? height() : 700.0;
+  const double sLon = w / ((east - west) * 1.25);
+  const double sLat = h / ((north - south) * 1.25);
+  m_viewport->setScale(std::min(sLon, sLat));
+  update();
 }
 
 void ChartCanvas::wheelEvent(QWheelEvent* event) {

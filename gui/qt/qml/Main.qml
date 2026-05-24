@@ -105,6 +105,12 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
                 onClicked: { settingsDialog.open(); controlsDrawer.close() }
             }
+            ItemDelegate {
+                text: qsTr("Routes & marks…")
+                font.pointSize: 14
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+                onClicked: { routeManagerDialog.open(); controlsDrawer.close() }
+            }
 
             Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
 
@@ -193,6 +199,111 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
                 checked: chart.showBuoys
                 onToggled: chart.showBuoys = checked
+            }
+        }
+    }
+
+    // --- Route & mark manager dialog (P3.7) -------------------------------
+    Dialog {
+        id: routeManagerDialog
+        title: qsTr("Routes & marks")
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(root.width * 0.9, 460)
+        height: Math.min(root.height * 0.85, 560)
+        standardButtons: Dialog.Close
+
+        readonly property var rl: chart.routeList
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 8
+
+            // Layer visibility.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                Switch {
+                    text: qsTr("Routes"); font.pointSize: 12
+                    checked: chart.showRoutes
+                    onToggled: chart.showRoutes = checked
+                }
+                Switch {
+                    text: qsTr("Tracks"); font.pointSize: 12
+                    checked: chart.showTracks
+                    onToggled: chart.showTracks = checked
+                }
+                Switch {
+                    text: qsTr("Marks"); font.pointSize: 12
+                    checked: chart.showWaypoints
+                    onToggled: chart.showWaypoints = checked
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
+
+            Label {
+                text: qsTr("Routes (") +
+                      (routeManagerDialog.rl ? routeManagerDialog.rl.routes.length : 0) + ")"
+                font.pointSize: 13; font.bold: true
+            }
+            ListView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: parent.height * 0.35
+                clip: true
+                model: routeManagerDialog.rl ? routeManagerDialog.rl.routes : []
+                delegate: ItemDelegate {
+                    required property var modelData
+                    width: ListView.view.width
+                    height: root.touchSize
+                    contentItem: RowLayout {
+                        Label {
+                            text: modelData.name + "  (" + modelData.points + ")"
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+                        ToolButton {
+                            text: qsTr("Zoom")
+                            onClicked: {
+                                chart.fitBounds(modelData.north, modelData.south,
+                                                modelData.east, modelData.west)
+                                routeManagerDialog.close()
+                            }
+                        }
+                    }
+                }
+            }
+
+            Label {
+                text: qsTr("Marks (") +
+                      (routeManagerDialog.rl ? routeManagerDialog.rl.waypoints.length : 0) + ")"
+                font.pointSize: 13; font.bold: true
+            }
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                model: routeManagerDialog.rl ? routeManagerDialog.rl.waypoints : []
+                delegate: ItemDelegate {
+                    required property var modelData
+                    width: ListView.view.width
+                    height: root.touchSize
+                    contentItem: RowLayout {
+                        Label {
+                            text: modelData.name
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+                        ToolButton {
+                            text: qsTr("Zoom")
+                            onClicked: {
+                                chart.fitBounds(modelData.lat, modelData.lat,
+                                                modelData.lon, modelData.lon)
+                                routeManagerDialog.close()
+                            }
+                        }
+                    }
+                }
             }
         }
     }

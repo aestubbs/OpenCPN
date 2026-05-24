@@ -44,6 +44,7 @@
 #include "chart_extent.h"  // CellExtent -- catalog entry (value type)
 #include "nav_state_view_model.h"  // complete type needed for Q_PROPERTY
 #include "object_query_view_model.h"  // complete type needed for Q_PROPERTY
+#include "route_list_view_model.h"    // complete type needed for Q_PROPERTY
 #include "s52_engine.h"    // S52Engine -- complete type needed for Q_PROPERTY
 
 class OcpnConfig;
@@ -114,6 +115,16 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(ocpn::qtui::ObjectQueryViewModel* objectQuery READ objectQuery
                  CONSTANT)
 
+  // Route & mark manager (P3.7): the route/waypoint lists + per-layer
+  // visibility toggles.
+  Q_PROPERTY(ocpn::qtui::RouteListViewModel* routeList READ routeList CONSTANT)
+  Q_PROPERTY(bool showRoutes READ showRoutes WRITE setShowRoutes NOTIFY
+                 overlayVisibilityChanged)
+  Q_PROPERTY(bool showTracks READ showTracks WRITE setShowTracks NOTIFY
+                 overlayVisibilityChanged)
+  Q_PROPERTY(bool showWaypoints READ showWaypoints WRITE setShowWaypoints
+                 NOTIFY overlayVisibilityChanged)
+
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
   ~ChartCanvas() override;
@@ -139,6 +150,19 @@ public:
   NavStateViewModel* navState() const { return m_nav_state.get(); }
   AisSelectionViewModel* selectedAis() const { return m_ais_selection.get(); }
   ObjectQueryViewModel* objectQuery() const { return m_object_query.get(); }
+  RouteListViewModel* routeList() const { return m_route_list.get(); }
+
+  bool showRoutes() const;
+  void setShowRoutes(bool on);
+  bool showTracks() const;
+  void setShowTracks(bool on);
+  bool showWaypoints() const;
+  void setShowWaypoints(bool on);
+
+  // Center + zoom the viewport to a lat/lon bounding box (route/mark "zoom
+  // to"). A near-zero span zooms in to a sensible harbour scale.
+  Q_INVOKABLE void fitBounds(double north, double south, double east,
+                             double west);
 
   // Toolbar actions (bound from the QML chrome). Zoom about the canvas
   // centre; fitWorld zooms out to show the whole scanned chart set.
@@ -156,6 +180,7 @@ Q_SIGNALS:
   void showLightsChanged();
   void showBuoysChanged();
   void demoModeChanged();
+  void overlayVisibilityChanged();
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
@@ -206,6 +231,8 @@ private:
   std::unique_ptr<AisSelectionViewModel> m_ais_selection;
   // S-57 object-query result for the query popup (P3.9).
   std::unique_ptr<ObjectQueryViewModel> m_object_query;
+  // Route/waypoint lists for the route & mark manager (P3.7).
+  std::unique_ptr<RouteListViewModel> m_route_list;
 
   std::unique_ptr<LayerCompositor> m_compositor;
   std::unique_ptr<Viewport> m_viewport;
