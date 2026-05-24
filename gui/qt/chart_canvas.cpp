@@ -49,6 +49,8 @@
 #include "route_overlay_layers.h"
 #include "layer_compositor.h"
 #include "model/ais_decoder.h"
+#include "model/base_platform.h"
+#include "model/select.h"
 #include "model/ocpn_config.h"
 #include "model_nav_data_provider.h"
 #include "nmea_log_replay.h"
@@ -113,6 +115,12 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // AisDecoder (g_pAIS) + own-ship globals via NmeaLogReplay; swapping in a
   // real CommDriver later changes only the source. (Routes/tracks/waypoints
   // come from the model managers + navobj DB -- wired in a later slice.)
+  // The AisDecoder registers each target in pSelectAIS (for click/hit-test),
+  // and Select needs g_BasePlatform (for the selection radius); both are
+  // dereferenced unconditionally on decode, so boot them first. BasePlatform
+  // falls back to a nominal DPI without a wxApp, which is fine here.
+  if (!g_BasePlatform) g_BasePlatform = new BasePlatform();
+  if (!pSelectAIS) pSelectAIS = new Select();
   if (!g_pAIS) g_pAIS = new AisDecoder(AisDecoderCallbacks());
   m_demo_provider = std::make_unique<DemoNavDataProvider>(m_viewport.get());
   m_model_provider = std::make_unique<ModelNavDataProvider>();
