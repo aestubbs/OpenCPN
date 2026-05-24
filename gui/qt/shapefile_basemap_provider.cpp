@@ -1,0 +1,162 @@
+/***************************************************************************
+ *   Copyright (C) 2026 by the OpenCPN Development Team                    *
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ **************************************************************************/
+
+/**
+ * \file
+ *
+ * Implement shapefile_basemap_provider.h.
+ */
+
+#include "shapefile_basemap_provider.h"
+
+#include <QElapsedTimer>
+#include <QSGGeometry>
+#include <QSGGeometryNode>
+#include <QSGNode>
+
+#include "Feature.hpp"
+#include "Polygon.hpp"
+#include "Ring.hpp"
+#include "ShapefileReader.hpp"
+#include "sg_helpers.h"
+#include "tesselator.h"
+#include "viewport.h"
+
+namespace ocpn::qtui {
+
+ShapefileBasemapProvider::ShapefileBasemapProvider(const QString& shp_path,
+                                                   QObject* parent)
+    : ChartProvider(parent) {
+  load(shp_path);
+}
+
+void ShapefileBasemapProvider::load(const QString& shp_path) {
+  shp::ShapefileReader reader(shp_path.toStdString());
+  if (!reader.isOpen()) {
+    qWarning("Basemap: cannot open %s", qPrintable(shp_path));
+    return;
+  }
+  QElapsedTimer timer;
+  timer.start();
+
+  TESStesselator* tess = tessNewTess(nullptr);
+  QList<float> contour;  // scratch: interleaved x,y for one ring
+  int rings = 0;
+
+  for (const auto& feature : reader) {
+    auto* poly = static_cast<shp::Polygon*>(feature.getGeometry());
+    if (!poly) continue;
+
+    // Add every ring of this polygon as a tess contour (outer + holes),
+    // then tessellate the feature together so lakes punch through.
+    bool any = false;
+    for (const shp::Ring& ring : poly->getRings()) {
+      const std::vector<shp::Point>& pts = ring.getPoints();
+      if (pts.size() < 3) continue;
+      contour.clear();
+      contour.reserve(static_cast<int>(pts.size()) * 2);
+      QList<QPointF> world;
+      world.reserve(static_cast<int>(pts.size()));
+      for (const shp::Point& p : pts) {
+        const float wx = static_cast<float>(p.getX());   // lon
+        const float wy = static_cast<float>(-p.getY());  // -lat
+        contour.append(wx);
+        contour.append(wy);
+        world.append(QPointF(wx, wy));
+      }
+      tessAddContour(tess, 2, contour.constData(), sizeof(float) * 2,
+                     static_cast<int>(pts.size()));
+      m_coastlines.append(std::move(world));
+      any = true;
+      ++rings;
+    }
+    if (!any) continue;
+
+    // Even-odd fill so holes (lakes) subtract regardless of ring direction.
+    if (tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr)) {
+      const float* verts = tessGetVertices(tess);
+      const TESSindex* elems = tessGetElements(tess);
+      const int ne = tessGetElementCount(tess);
+      for (int i = 0; i < ne; ++i) {
+        for (int j = 0; j < 3; ++j) {
+          const TESSindex idx = elems[i * 3 + j];
+          if (idx == TESS_UNDEF) break;
+          m_land_tris.append(QPointF(verts[idx * 2], verts[idx * 2 + 1]));
+        }
+      }
+    }
+    tessDeleteTess(tess);  // accumulates contours; reset per feature
+    tess = tessNewTess(nullptr);
+  }
+  tessDeleteTess(tess);
+
+  m_loaded = !m_land_tris.isEmpty();
+  qWarning("Basemap: %d rings, %lld triangles in %lld ms", rings,
+           (long long)(m_land_tris.size() / 3), (long long)timer.elapsed());
+}
+
+QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
+                                               const Viewport& /*viewport*/,
+                                               QQuickWindow* /*window*/) {
+  // Static geometry -- build once; the viewport transform reprojects it.
+  if (old_subtree) return old_subtree;
+  if (!m_loaded) return nullptr;
+
+  auto* root = new QSGNode();
+
+  // 1. Sea backdrop quad over the whole world (drawn first).
+  {
+    auto* sea = sg::makeFlatColorNode(m_sea, QSGGeometry::DrawTriangles, 6);
+    QSGGeometry::Point2D* v = sea->geometry()->vertexDataAsPoint2D();
+    const float xl = -180, xr = 180, yt = -90, yb = 90;
+    v[0].set(xl, yt); v[1].set(xr, yt); v[2].set(xr, yb);
+    v[3].set(xl, yt); v[4].set(xr, yb); v[5].set(xl, yb);
+    root->appendChildNode(sea);
+  }
+
+  // 2. Land fill: the tessellated triangle list.
+  {
+    auto* land = sg::makeFlatColorNode(m_land, QSGGeometry::DrawTriangles,
+                                       m_land_tris.size());
+    QSGGeometry::Point2D* v = land->geometry()->vertexDataAsPoint2D();
+    for (int i = 0; i < m_land_tris.size(); ++i)
+      v[i].set(static_cast<float>(m_land_tris[i].x()),
+               static_cast<float>(m_land_tris[i].y()));
+    root->appendChildNode(land);
+  }
+
+  // 3. Coastline outlines: every ring as a closed 1px line loop, batched
+  //    into one DrawLines geometry (segment pairs).
+  {
+    int seg_verts = 0;
+    for (const auto& c : m_coastlines)
+      if (c.size() >= 2) seg_verts += c.size() * 2;  // closed loop
+    if (seg_verts > 0) {
+      auto* coast =
+          sg::makeFlatColorNode(m_coast, QSGGeometry::DrawLines, seg_verts);
+      QSGGeometry::Point2D* v = coast->geometry()->vertexDataAsPoint2D();
+      int k = 0;
+      for (const auto& c : m_coastlines) {
+        const int n = c.size();
+        if (n < 2) continue;
+        for (int i = 0; i < n; ++i) {
+          const QPointF& a = c[i];
+          const QPointF& b = c[(i + 1) % n];  // wrap to close
+          v[k++].set(static_cast<float>(a.x()), static_cast<float>(a.y()));
+          v[k++].set(static_cast<float>(b.x()), static_cast<float>(b.y()));
+        }
+      }
+      root->appendChildNode(coast);
+    }
+  }
+
+  return root;
+}
+
+}  // namespace ocpn::qtui

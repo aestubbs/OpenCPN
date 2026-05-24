@@ -56,8 +56,8 @@ qt_add_qml_module(opencpn-qt
     chart_boundary_provider.cpp
     chart_worker.h
     chart_worker.cpp
-    gshhs_world_provider.h
-    gshhs_world_provider.cpp
+    shapefile_basemap_provider.h
+    shapefile_basemap_provider.cpp
     nav_data.h
     nav_data_provider.h
     demo_nav_data_provider.h
@@ -93,12 +93,13 @@ qt_add_qml_module(opencpn-qt
 # Production installs will discover via QStandardPaths::AppDataLocation.
 target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_S57DATA_DIR="${CMAKE_SOURCE_DIR}/data/s57data"
-  # GSHHS crude world coastline (poly-c-1.dat) -- the always-on world
-  # background chart, read directly by GshhsWorldProvider.
-  OCPN_QT_GSHHS_DIR="${CMAKE_SOURCE_DIR}/data/gshhs"
+  # OpenCPN shapefile basemap -- the always-on world background chart, read
+  # by ShapefileBasemapProvider. basemap_low is the better default map;
+  # basemap_crude_10x10 is the fallback.
+  OCPN_QT_BASEMAP_SHP="${CMAKE_SOURCE_DIR}/data/basemap_shp/basemap_low.shp"
 )
 
-# libtess2: GshhsWorldProvider tessellates the GSHHS land polygons.
+# libtess2: the basemap provider tessellates the land polygons.
 target_include_directories(opencpn-qt PRIVATE
   ${CMAKE_SOURCE_DIR}/libs/libtess2/Include
 )
@@ -146,6 +147,8 @@ target_link_libraries(opencpn-qt PRIVATE
   ocpn::s52plib
   # OGR S-57 driver -- reads .000 ENC cells into OGR features (P2.8d).
   ocpn::s57-charts
+  # Shapefile reader for the world basemap (data/basemap_shp/*.shp).
+  ocpn::shapefile_cpp
   ${wxWidgets_LIBRARIES}
 )
 

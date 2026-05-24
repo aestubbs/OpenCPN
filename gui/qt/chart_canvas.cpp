@@ -44,7 +44,7 @@
 #include "chart_layer.h"
 #include "chart_worker.h"
 #include "demo_nav_data_provider.h"
-#include "gshhs_world_provider.h"
+#include "shapefile_basemap_provider.h"
 #include "own_ship_layer.h"
 #include "route_overlay_layers.h"
 #include "layer_compositor.h"
@@ -59,8 +59,8 @@
 #include "test_chart.h"
 #include "viewport.h"
 
-#ifndef OCPN_QT_GSHHS_DIR
-#define OCPN_QT_GSHHS_DIR ""
+#ifndef OCPN_QT_BASEMAP_SHP
+#define OCPN_QT_BASEMAP_SHP ""
 #endif
 
 namespace ocpn::qtui {
@@ -94,11 +94,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_layer_config = std::make_unique<OcpnConfig>(cfg_dir + "/layers.ini");
   m_compositor->setConfig(m_layer_config.get());
 
-  // World background -- the bundled GSHHS crude coastline, always present
-  // under everything (lowest z) so the canvas shows a land/sea world map at
-  // any zoom. ENC cells and overlays composite on top.
-  auto* world = new GshhsWorldProvider(
-      QString::fromUtf8(OCPN_QT_GSHHS_DIR) + "/poly-c-1.dat");
+  // World background -- OpenCPN's shapefile basemap, always present under
+  // everything (lowest z) so the canvas shows a land/sea world map at any
+  // zoom. ENC cells and overlays composite on top.
+  auto* world =
+      new ShapefileBasemapProvider(QString::fromUtf8(OCPN_QT_BASEMAP_SHP));
   auto* world_layer = new ChartLayer(world, m_viewport.get());
   world_layer->setZOrder(-1000);
   m_compositor->addLayer(world_layer);
