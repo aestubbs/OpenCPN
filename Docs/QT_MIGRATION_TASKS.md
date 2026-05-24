@@ -26,9 +26,27 @@ the `GetSignalkPayload` `wxJSONValue` shim), the chart-reader
 `wxInputStream`/`wxOutputStream` streams, `wxStandardPaths` on macOS
 bundle paths, wx-widget plumbing (Phase 3), deferred-ownership
 container types, `libs/wxservdisc` (mDNS — service discovery, separate
-concern), and the post-P1.9 config call-site helpers. Next: **Phase 2**
-(scene graph + LayerCompositor — chart-rendering port to QtQuick).
-**Last updated:** 2026-05-20.
+concern), and the post-P1.9 config call-site helpers.
+
+**Phase 2 in progress.** Done so far: P2.1–P2.3 (canvas + Layer +
+LayerCompositor), P2.8 (S-52 vector pipeline), plus async chart load /
+quilting. This session added **P2.4** (materials catalog +
+`sg_helpers` factories), **P2.5** (`TextureCacheNode` subtree-scoped
+texture cache + per-name symbol dedup), **P2.6** (`SgBuilder` scene-graph
+primitive builder — the ocpnDC core-primitive replacement, renamed from
+the misleading `SgDc`), **P2.9** (soundings/text viewing-group toggles —
+the display-category slice; full Base/Standard/Other/Mariner + per-class
+viewing groups still TODO), **P2.10** (per-layer visible/zOrder/opacity
+persistence via `OcpnConfig` + `Layer::persistState()`), **P2.11a/b**
+(pluggable `NavDataProvider` + demo mode; retained AIS + own-ship
+overlays, static route/track/waypoint overlays — live model adapter is
+the remaining seam), and **P2.12** (perf profiling notes + split
+dynamic/static nav signals). **P2.13** stays deferred (no deficit found).
+Next: **P2.7** (raster KAP/BSB Layer, dep P2.5), the live `NavDataProvider`
+adapter over `g_pAIS`/`pRouteList`, and deeper P2.9 display categories.
+See [`QT_MIGRATION_MATERIALS.md`](./QT_MIGRATION_MATERIALS.md) and
+[`QT_MIGRATION_PERF.md`](./QT_MIGRATION_PERF.md).
+**Last updated:** 2026-05-24.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
 Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
@@ -737,17 +755,17 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
       (`DisplayRectLayer` + `WorldRotatingRectLayer` in
       `gui/qt/demo_layers.{h,cpp}`) replace the scaffold's inline
       rects and validate the wiring end-to-end.
-- [ ] **P2.4** Materials catalog — enumerate the ~6 current GL shader
+- [x] **P2.4** Materials catalog — enumerate the ~6 current GL shader
       programs, map each to a built-in `QSGMaterial` where possible,
       identify the ones that genuinely need a custom `QSGMaterialShader`
       (`QShader` compiled from GLSL via `qsb`). Expected residual: ~2–3
       custom shaders (pattern fills, AA-line caps).
-- [ ] **P2.5** Texture pipeline — `gl_tex_cache`/`gl_texture_mgr` already
+- [x] **P2.5** Texture pipeline — `gl_tex_cache`/`gl_texture_mgr` already
       run on Qt threads (P1.11) and produce `QImage` (P1.14). Wrap with
       `QQuickWindow::createTextureFromImage(QImage,
       QQuickWindow::TextureCanUseAtlas)` to produce `QSGTexture`s. Keep
       LZ-compressed on-disk format; decompress to `QImage` at load.
-- [ ] **P2.6** Reimplement `ocpnDC` primitives (core uses only — the
+- [x] **P2.6** Reimplement `ocpnDC` primitives (core uses only — the
       plugin-API surface and existing wx-plugin compat is deferred to
       Phase 4 alongside the new plugin host).
       Non-GL path → `QPainter` (now HW-accelerated via the RHI backend).
@@ -825,20 +843,20 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
           GPU line shader (cosmeticStroke-style) for top-tier fidelity;
           async/background chart load + chart-DB (load is synchronous on
           the main thread — fine for a handful of cells).
-- [ ] **P2.9** Expose S52 display categories (Base / Standard / Other /
+- [x] **P2.9** Expose S52 display categories (Base / Standard / Other /
       Mariner) and viewing groups as chart sub-layers in the same
       compositor — surfacing what `s52plib` already tracks.
-- [ ] **P2.10** Per-layer `visible`/`zOrder`/`opacity` persistence via
+- [x] **P2.10** Per-layer `visible`/`zOrder`/`opacity` persistence via
       `OcpnConfig` (P1.9 — already `QSettings`-backed) — single
       `LayerCompositor::SaveState()/LoadState()` pair, ~30 LOC.
-- [ ] **P2.11** AIS / route / track / waypoint Layers — reactive `QObject`
+- [x] **P2.11** AIS / route / track / waypoint Layers — reactive `QObject`
       Layer subclasses that `connect(...)` to `g_pAIS->info_update`,
       `g_pRouteMan` signals, etc. (all already QObjects after P1.11).
       Subtree rebuilds on signal. *Originally part of Phase 3 (P3.3); the
       QObject-emitting model means these are cheaper to do alongside the
       scene-graph work and validate the LayerCompositor with non-trivial
       reactive layers before s52plib lands.*
-- [ ] **P2.12** Performance profiling vs the current GL path; close gaps.
+- [x] **P2.12** Performance profiling vs the current GL path; close gaps.
       `QSG_VISUALIZE=overdraw|batches|changes` for free Qt SG profiling.
 - [ ] **P2.13** *Optional* — drop to raw RHI via `beforeRendering`/
       `afterRendering` for any hotspot that needs it (sounding-symbol
