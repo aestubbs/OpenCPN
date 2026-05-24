@@ -81,6 +81,10 @@ public:
   bool showSoundings() const { return m_showSoundings; }
   void setShowText(bool on);
   bool showText() const { return m_showText; }
+  void setShowLights(bool on);
+  bool showLights() const { return m_showLights; }
+  void setShowBuoys(bool on);
+  bool showBuoys() const { return m_showBuoys; }
 
 private:
   // One billboarded point item (symbol or text): a transform node placed at
@@ -135,6 +139,10 @@ private:
   int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All
   bool m_showSoundings = true;
   bool m_showText = true;
+  bool m_showLights = true;
+  bool m_showBuoys = true;
+  // True if the symbol/vector-symbol's viewing group is currently enabled.
+  bool viewGroupEnabled(int vg) const;
 
   QString m_id;
   s52sg::Buffer m_buffer;

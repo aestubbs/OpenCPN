@@ -95,6 +95,18 @@ ApplicationWindow {
                 checked: chart.showText
                 onClicked: chart.showText = checked
             }
+            ToolButton {
+                text: qsTr("Lights")
+                checkable: true
+                checked: chart.showLights
+                onClicked: chart.showLights = checked
+            }
+            ToolButton {
+                text: qsTr("Buoys")
+                checkable: true
+                checked: chart.showBuoys
+                onClicked: chart.showBuoys = checked
+            }
 
             ToolSeparator {}
 

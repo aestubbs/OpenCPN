@@ -26,6 +26,8 @@
 
 #include <wx/wx.h>
 
+#include <cstring>
+
 #include <QHash>
 #include <QString>
 
@@ -60,6 +62,17 @@ static QImage cachedAtlasImage(ChartSymbols& symbols, const char* name) {
   QImage q = img.IsOk() ? WxImageToQImage(img) : QImage();
   cache.insert(key, q);
   return q;
+}
+
+// Map an S-57 object class (FeatureName, e.g. "LIGHTS", "BOYLAT", "BCNCAR")
+// to a viewing group for the mariner display toggles (P2.9).
+static int viewGroupFor(const char* featureName) {
+  if (!featureName) return s52sg::VgOther;
+  if (std::strncmp(featureName, "LIGHTS", 6) == 0) return s52sg::VgLights;
+  if (std::strncmp(featureName, "BOY", 3) == 0 ||
+      std::strncmp(featureName, "BCN", 3) == 0)
+    return s52sg::VgBuoysBeacons;
+  return s52sg::VgOther;
 }
 
 // Map an S-52 display category to the scene-graph rank used for the
@@ -237,6 +250,8 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
   if (!rzRules || !rzRules->LUP) return 0;
   const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
   const int dc = dispRank(rzRules->LUP->DISC);
+  const int vg =
+      rzRules->obj ? viewGroupFor(rzRules->obj->FeatureName) : s52sg::VgOther;
 
   auto emitSY = [&](Rules *rules) {
     Rule *prule = rules->razRule;
@@ -252,6 +267,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                           prule->pos.symb.pivot_y.SYRW);
       sym.scamin = scamin;
       sym.dispCat = dc;
+      sym.viewGroup = vg;
       out.symbols.push_back(std::move(sym));
     } else if (prule->definition.SYDF == 'V' && prule->vector.SVCT) {
       // Vector (HPGL) symbol -> billboard geometry. Render with r=(0,0),
@@ -264,6 +280,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
       vsym.pos = QPointF(anchor_lon, anchor_lat);
       vsym.scamin = scamin;
       vsym.dispCat = dc;
+      vsym.viewGroup = vg;
       HPGL->SetVP(&vp_plib);
       HPGL->SetTargetSG(&vsym);
       wxPoint r0(0, 0);

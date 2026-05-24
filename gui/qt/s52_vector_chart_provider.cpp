@@ -184,6 +184,28 @@ void S52VectorChartProvider::setShowText(bool on) {
   Q_EMIT changed();
 }
 
+void S52VectorChartProvider::setShowLights(bool on) {
+  if (on == m_showLights) return;
+  m_showLights = on;
+  m_built = false;
+  Q_EMIT changed();
+}
+
+void S52VectorChartProvider::setShowBuoys(bool on) {
+  if (on == m_showBuoys) return;
+  m_showBuoys = on;
+  m_built = false;
+  Q_EMIT changed();
+}
+
+bool S52VectorChartProvider::viewGroupEnabled(int vg) const {
+  switch (vg) {
+    case s52sg::VgLights: return m_showLights;
+    case s52sg::VgBuoysBeacons: return m_showBuoys;
+    default: return true;
+  }
+}
+
 void S52VectorChartProvider::rebuildPatternUVs(double scale) {
   if (scale <= 0.0) return;
   // Screen-fixed tiling: one pattern tile spans tileW/tileH logical px on
@@ -438,6 +460,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // "East Oakland" POPL dot), not over it.
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
     if (sym.dispCat > m_displayCategory) continue;
+    if (!viewGroupEnabled(sym.viewGroup)) continue;  // Lights/Buoys toggle
     addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot,
                  sym.scamin, BbKind::Symbol, /*depth=*/0.0f);
   }
@@ -447,6 +470,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // + screen-fixes them like the raster symbols.
   for (const s52sg::VectorSymbol& vs : m_buffer.vectorSymbols) {
     if (vs.dispCat > m_displayCategory) continue;
+    if (!viewGroupEnabled(vs.viewGroup)) continue;  // Lights/Buoys toggle
     auto* xform = new QSGTransformNode();
     for (const s52sg::VectorOp& op : vs.ops) {
       const int need = op.filled ? 3 : 2;

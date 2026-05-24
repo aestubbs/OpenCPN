@@ -55,6 +55,12 @@ enum class PrimType { Triangles, TriangleStrip, TriangleFan, LineStrip };
 // (Base / Standard / All).
 enum DisplayCat { CatBase = 0, CatStandard = 1, CatOther = 2 };
 
+// Per-feature-class viewing group, for the mariner-selectable display
+// toggles (P2.9). Derived from the object's S-57 class (FeatureName) at emit
+// time; the consumer can hide whole groups independently of the display
+// category. VgOther is everything not separately toggleable.
+enum ViewGroup { VgOther = 0, VgLights, VgBuoysBeacons };
+
 struct Prim {
   PrimType type = PrimType::Triangles;
   QList<QPointF> verts;  // (lon, lat) per point
@@ -95,6 +101,7 @@ struct VectorSymbol {
   QList<VectorOp> ops;
   int scamin = 100000002;
   int dispCat = CatStandard;
+  int viewGroup = VgOther;
 };
 
 /** A point symbol placement (buoy, beacon, ...). `image` is the symbol
@@ -110,6 +117,7 @@ struct Symbol {
   // item is hidden. The s52plib "unset" sentinel (~1e8) means always show.
   int scamin = 100000002;
   int dispCat = CatStandard;
+  int viewGroup = VgOther;
 };
 
 /** A text label (sounding, feature name, ...). Rendered by the consumer

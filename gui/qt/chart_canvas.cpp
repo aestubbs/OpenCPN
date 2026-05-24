@@ -504,6 +504,8 @@ void ChartCanvas::applyDisplaySettings(
   provider->setDisplayCategory(m_display_category);
   provider->setShowSoundings(m_show_soundings);
   provider->setShowText(m_show_text);
+  provider->setShowLights(m_show_lights);
+  provider->setShowBuoys(m_show_buoys);
 }
 
 void ChartCanvas::setDisplayCategory(int cat) {
@@ -530,6 +532,24 @@ void ChartCanvas::setShowText(bool on) {
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowText(on);
   Q_EMIT showTextChanged();
+  update();
+}
+
+void ChartCanvas::setShowLights(bool on) {
+  if (on == m_show_lights) return;
+  m_show_lights = on;
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().provider) it.value().provider->setShowLights(on);
+  Q_EMIT showLightsChanged();
+  update();
+}
+
+void ChartCanvas::setShowBuoys(bool on) {
+  if (on == m_show_buoys) return;
+  m_show_buoys = on;
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().provider) it.value().provider->setShowBuoys(on);
+  Q_EMIT showBuoysChanged();
   update();
 }
 

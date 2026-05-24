@@ -87,6 +87,10 @@ class ChartCanvas : public QQuickItem {
                  NOTIFY showSoundingsChanged)
   Q_PROPERTY(bool showText READ showText WRITE setShowText NOTIFY
                  showTextChanged)
+  Q_PROPERTY(bool showLights READ showLights WRITE setShowLights NOTIFY
+                 showLightsChanged)
+  Q_PROPERTY(bool showBuoys READ showBuoys WRITE setShowBuoys NOTIFY
+                 showBuoysChanged)
 
   // Demo mode: feed the nav overlays (AIS / own-ship) from the synthetic
   // DemoNavDataProvider (animated). When off, the demo animation freezes;
@@ -108,6 +112,10 @@ public:
   void setShowSoundings(bool on);
   bool showText() const { return m_show_text; }
   void setShowText(bool on);
+  bool showLights() const { return m_show_lights; }
+  void setShowLights(bool on);
+  bool showBuoys() const { return m_show_buoys; }
+  void setShowBuoys(bool on);
 
   bool demoMode() const { return m_demo_mode; }
   void setDemoMode(bool on);
@@ -125,6 +133,8 @@ Q_SIGNALS:
   void displayCategoryChanged();
   void showSoundingsChanged();
   void showTextChanged();
+  void showLightsChanged();
+  void showBuoysChanged();
   void demoModeChanged();
 
 protected:
@@ -184,6 +194,8 @@ private:
   int m_display_category = 1;  // 0 Base, 1 Standard, 2 All
   bool m_show_soundings = true;
   bool m_show_text = true;
+  bool m_show_lights = true;
+  bool m_show_buoys = true;
   // Push the current display category + viewing-group toggles onto a newly
   // created provider (called at both provider-creation sites).
   void applyDisplaySettings(S52VectorChartProvider* provider) const;
