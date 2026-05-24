@@ -15,11 +15,14 @@
 
 #include "coast_shade.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
 
 #include <QSGGeometry>
+#include <QVector2D>
+#include <QVector4D>
 #include <QSGGeometryNode>
 
 namespace ocpn::qtui {
@@ -44,6 +47,17 @@ const QSGGeometry::AttributeSet& shadeAttributeSet() {
 }
 
 constexpr int kUboSize = 112;  // std140, matches coastshade.{vert,frag}
+
+// Zoom-adaptive shade width: the full band is fine zoomed in but obscures
+// detail zoomed out, so ramp it from 1px (world/regional) up to the material
+// width (harbour detail), keyed on logical pixels-per-degree.
+constexpr double kLoScale = 40.0;   // <= this px/deg -> 1px
+constexpr double kHiScale = 800.0;  // >= this px/deg -> full width
+float smoothstep(double a, double b, double x) {
+  if (b <= a) return x >= b ? 1.0f : 0.0f;
+  double t = std::clamp((x - a) / (b - a), 0.0, 1.0);
+  return static_cast<float>(t * t * (3.0 - 2.0 * t));
+}
 
 // Twice the signed area of a closed contour; sign gives the winding.
 double signedArea2(const QList<QPointF>& c) {
@@ -93,7 +107,20 @@ public:
     std::memcpy(p + 88, &opacity, 4);
 
     const float dpr = state.devicePixelRatio();
-    const float width = mat->widthPx * dpr;
+
+    // Derive logical pixels-per-degree from the MVP + viewport, and ramp the
+    // shade width 1px -> material width with zoom so it doesn't swamp detail
+    // when zoomed out.
+    const QVector4D o = m.map(QVector4D(0, 0, 0, 1));
+    const QVector4D x = m.map(QVector4D(1, 0, 0, 1));
+    const QVector2D on(o.x() / o.w(), o.y() / o.w());
+    const QVector2D xn(x.x() / x.w(), x.y() / x.w());
+    const double pxPerWorldDev = (xn - on).length() * 0.5 * vp.width();
+    const double pxPerWorldLog = dpr > 0.0 ? pxPerWorldDev / dpr : pxPerWorldDev;
+    const float effLogical =
+        1.0f + (mat->widthPx - 1.0f) *
+                   smoothstep(kLoScale, kHiScale, pxPerWorldLog);
+    const float width = effLogical * dpr;
     std::memcpy(p + 92, &width, 4);
     std::memcpy(p + 96, &mat->maxAlpha, 4);
     return true;
