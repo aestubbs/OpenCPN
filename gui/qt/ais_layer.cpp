@@ -25,6 +25,7 @@
 #include <QSGTransformNode>
 #include <QSet>
 
+#include "aa_line.h"
 #include "sg_builder.h"  // SgBuilder::renderText
 #include "sg_helpers.h"
 
@@ -37,16 +38,7 @@ const QColor kAisColor(0, 140, 0);
 // COG/SOG predictor: how far ahead, in minutes. World length =
 // sog_knots * (minutes/60) / 60 degrees.
 constexpr double kPredictMinutes = 6.0;
-
-// Set a 2-vertex line geometry from (0,0) to `end` (world units).
-void setVector(QSGGeometryNode* node, const QPointF& end) {
-  QSGGeometry* g = node->geometry();
-  g->allocate(2);
-  QSGGeometry::Point2D* v = g->vertexDataAsPoint2D();
-  v[0].set(0.0f, 0.0f);
-  v[1].set(static_cast<float>(end.x()), static_cast<float>(end.y()));
-  node->markDirty(QSGNode::DirtyGeometry);
-}
+constexpr float kVectorPx = 2.0f;  // COG/SOG predictor line width
 }  // namespace
 
 AisLayer::TargetNode AisLayer::buildTarget(const AisTarget& t,
@@ -68,10 +60,9 @@ AisLayer::TargetNode AisLayer::buildTarget(const AisTarget& t,
   }
   tn.pos->appendChildNode(tn.symbolXf);
 
-  // COG/SOG predictor vector, in world units (length scales with zoom, as a
-  // real predicted-distance should). Geometry filled in updateTarget.
-  tn.predictor = sg::makeFlatColorNode(kAisColor, QSGGeometry::DrawLines, 0);
-  tn.pos->appendChildNode(tn.predictor);
+  // COG/SOG predictor vector is built (and rebuilt on course change) in
+  // updateTarget via the AA-line shader -- length in world units (scales
+  // with zoom, as a real predicted distance should), width screen-fixed.
 
   // Name label: rendered once to a texture, screen-fixed via labelXf scale.
   if (window && !t.name.isEmpty()) {
@@ -121,10 +112,21 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
     tn.symbolXf->setMatrix(m);
   }
 
-  // Predictor vector (world units) -- on course/speed change.
+  // Predictor vector (world units, AA-line) -- rebuilt on course/speed
+  // change. Drawn UNDER the symbol triangle so the marker stays on top.
   if (course_changed) {
+    if (tn.predictor) {
+      tn.pos->removeChildNode(tn.predictor);
+      delete tn.predictor;
+      tn.predictor = nullptr;
+    }
     const double len_deg = t.sog * (kPredictMinutes / 60.0) / 60.0;
-    setVector(tn.predictor, headingVec(t.cog) * len_deg);
+    if (len_deg > 0.0) {
+      tn.predictor = makeAaLineNode({QPointF(0, 0), headingVec(t.cog) * len_deg},
+                                    kAisColor, kVectorPx);
+      if (tn.predictor)
+        tn.pos->insertChildNodeBefore(tn.predictor, tn.symbolXf);
+    }
   }
 
   // Label screen-fixed scale -- on zoom change.

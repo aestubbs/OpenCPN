@@ -22,6 +22,7 @@
 #include <QSGOpacityNode>
 #include <QSGTransformNode>
 
+#include "aa_line.h"
 #include "sg_helpers.h"
 
 namespace ocpn::qtui {
@@ -33,6 +34,8 @@ const QColor kLaylineColor(120, 120, 120);
 constexpr double kPredictMinutes = 6.0;    // COG/SOG vector look-ahead
 constexpr double kLaylineDeg = 40.0;       // tacking half-angle off COG
 constexpr double kLaylineLenDeg = 0.6;     // layline length (world degrees)
+constexpr float kVectorPx = 2.0f;          // COG/SOG predictor line width
+constexpr float kLaylinePx = 1.5f;         // layline width
 }  // namespace
 
 void OwnShipLayer::buildOnce() {
@@ -44,13 +47,9 @@ void OwnShipLayer::buildOnce() {
   m_pos = new QSGTransformNode();
   m_opacity->appendChildNode(m_pos);
 
-  // Laylines first (under the symbol), then predictor, then the symbol on top.
-  m_laylines = sg::makeFlatColorNode(kLaylineColor, QSGGeometry::DrawLines, 0);
-  m_pos->appendChildNode(m_laylines);
-
-  m_predictor = sg::makeFlatColorNode(kOwnColor, QSGGeometry::DrawLines, 0);
-  m_pos->appendChildNode(m_predictor);
-
+  // Laylines + COG/SOG predictor are AA-line nodes rebuilt on course change
+  // (in updateSubtree); they're inserted UNDER the symbol so the marker
+  // stays on top.
   m_symbolXf = new QSGTransformNode();
   {
     // A slim bow-heavy triangle pointing north (local -y), in logical px.
@@ -93,27 +92,35 @@ QSGNode* OwnShipLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* /*window*/)
   }
 
   if (course_changed) {
-    // COG/SOG predictor (world units).
-    const double len = s.sog * (kPredictMinutes / 60.0) / 60.0;
-    const QPointF cogEnd = headingVec(s.cog) * len;
-    QSGGeometry* pg = m_predictor->geometry();
-    pg->allocate(2);
-    QSGGeometry::Point2D* pv = pg->vertexDataAsPoint2D();
-    pv[0].set(0.0f, 0.0f);
-    pv[1].set(static_cast<float>(cogEnd.x()), static_cast<float>(cogEnd.y()));
-    m_predictor->markDirty(QSGNode::DirtyGeometry);
+    // Rebuild the AA-line vectors (world units; widths screen-fixed by the
+    // shader). Laylines are dashed (cartographic convention). Re-insert
+    // before the symbol so the marker draws on top: laylines first, then the
+    // predictor just under the symbol.
+    if (m_laylines) {
+      m_pos->removeChildNode(m_laylines);
+      delete m_laylines;
+      m_laylines = nullptr;
+    }
+    if (m_predictor) {
+      m_pos->removeChildNode(m_predictor);
+      delete m_predictor;
+      m_predictor = nullptr;
+    }
 
-    // Port + starboard laylines: two segments at cog +/- kLaylineDeg.
-    const QPointF p = headingVec(s.cog - kLaylineDeg) * kLaylineLenDeg;
+    const QPointF port = headingVec(s.cog - kLaylineDeg) * kLaylineLenDeg;
     const QPointF stbd = headingVec(s.cog + kLaylineDeg) * kLaylineLenDeg;
-    QSGGeometry* lg = m_laylines->geometry();
-    lg->allocate(4);
-    QSGGeometry::Point2D* lv = lg->vertexDataAsPoint2D();
-    lv[0].set(0.0f, 0.0f);
-    lv[1].set(static_cast<float>(p.x()), static_cast<float>(p.y()));
-    lv[2].set(0.0f, 0.0f);
-    lv[3].set(static_cast<float>(stbd.x()), static_cast<float>(stbd.y()));
-    m_laylines->markDirty(QSGNode::DirtyGeometry);
+    // Port -> origin -> starboard as one dashed V.
+    m_laylines = makeAaLineNode({port, QPointF(0, 0), stbd}, kLaylineColor,
+                                kLaylinePx, /*closed=*/false,
+                                /*dash_on_px=*/8.0f, /*dash_off_px=*/6.0f);
+    if (m_laylines) m_pos->insertChildNodeBefore(m_laylines, m_symbolXf);
+
+    const double len = s.sog * (kPredictMinutes / 60.0) / 60.0;
+    if (len > 0.0) {
+      m_predictor = makeAaLineNode({QPointF(0, 0), headingVec(s.cog) * len},
+                                   kOwnColor, kVectorPx);
+      if (m_predictor) m_pos->insertChildNodeBefore(m_predictor, m_symbolXf);
+    }
   }
 
   m_cog = s.cog;
