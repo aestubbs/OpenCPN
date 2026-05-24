@@ -51,6 +51,7 @@
 #include "model/ocpn_config.h"
 #include "model/track.h"  // g_pActiveTrack -- own-ship track recording
 #include "model_nav_data_provider.h"
+#include "nav_state_view_model.h"
 #include "raster_chart_provider.h"
 #include "switchable_nav_provider.h"
 #include "s52_engine.h"
@@ -124,6 +125,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
       QString::fromUtf8(OCPN_QT_NMEA_LOG), live_host, live_port);
   m_nav_provider = std::make_unique<SwitchableNavDataProvider>(
       m_demo_provider.get(), m_model_provider.get());
+  // View-model over the active provider for the QML HUD (P3.2/P3.4).
+  m_nav_state = std::make_unique<NavStateViewModel>(m_nav_provider.get());
 
   m_ais_layer = new AisLayer(m_nav_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);

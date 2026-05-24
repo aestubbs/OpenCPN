@@ -41,6 +41,7 @@
 #include <QSet>
 
 #include "chart_extent.h"  // CellExtent -- catalog entry (value type)
+#include "nav_state_view_model.h"  // complete type needed for Q_PROPERTY
 #include "s52_engine.h"    // S52Engine -- complete type needed for Q_PROPERTY
 
 class OcpnConfig;
@@ -100,6 +101,9 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(bool demoMode READ demoMode WRITE setDemoMode NOTIFY
                  demoModeChanged)
 
+  // Live nav state (own ship + AIS count) for the QML HUD (P3.2/P3.4).
+  Q_PROPERTY(ocpn::qtui::NavStateViewModel* navState READ navState CONSTANT)
+
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
   ~ChartCanvas() override;
@@ -121,6 +125,8 @@ public:
 
   bool demoMode() const { return m_demo_mode; }
   void setDemoMode(bool on);
+
+  NavStateViewModel* navState() const { return m_nav_state.get(); }
 
   // Toolbar actions (bound from the QML chrome). Zoom about the canvas
   // centre; fitWorld zooms out to show the whole scanned chart set.
@@ -182,6 +188,8 @@ private:
   std::unique_ptr<DemoNavDataProvider> m_demo_provider;
   std::unique_ptr<ModelNavDataProvider> m_model_provider;
   std::unique_ptr<SwitchableNavDataProvider> m_nav_provider;
+  // View-model over m_nav_provider, exposed to the QML HUD (P3.2).
+  std::unique_ptr<NavStateViewModel> m_nav_state;
 
   std::unique_ptr<LayerCompositor> m_compositor;
   std::unique_ptr<Viewport> m_viewport;

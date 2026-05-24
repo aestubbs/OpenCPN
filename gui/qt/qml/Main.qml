@@ -153,4 +153,45 @@ ApplicationWindow {
         font.pointSize: 11
         color: s52 && s52.ok ? "#006400" : "#a00000"
     }
+
+    // Tier 3: nav-data HUD (P3.4) -- own-ship SOG/COG/position + AIS count,
+    // bound to the ChartCanvas NavStateViewModel (Q_PROPERTY auto-rebind).
+    Rectangle {
+        id: navHud
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 12
+        width: hudCol.implicitWidth + 24
+        height: hudCol.implicitHeight + 16
+        radius: 6
+        color: "#cc101418"
+        border.color: "#3affffff"
+
+        readonly property var nav: chart.navState
+
+        Column {
+            id: hudCol
+            anchors.centerIn: parent
+            spacing: 2
+
+            Text {
+                text: qsTr("SOG  ") + (navHud.nav ? navHud.nav.sogText : "--")
+                color: "#e0e0e0"; font.pointSize: 13; font.bold: true
+            }
+            Text {
+                text: qsTr("COG  ") + (navHud.nav ? navHud.nav.cogText : "--")
+                color: "#e0e0e0"; font.pointSize: 13; font.bold: true
+            }
+            Text {
+                text: navHud.nav ? navHud.nav.positionText : "---"
+                color: "#b0d0ff"; font.pointSize: 11
+            }
+            Text {
+                text: qsTr("AIS  ") +
+                      (navHud.nav ? navHud.nav.aisTargetCount : 0) +
+                      qsTr(" targets")
+                color: "#90ee90"; font.pointSize: 11
+            }
+        }
+    }
 }
