@@ -15,6 +15,10 @@
 
 #include "shapefile_basemap_provider.h"
 
+#include <cmath>
+#include <cstring>
+#include <vector>
+
 #include <QElapsedTimer>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
@@ -30,6 +34,24 @@
 #include "viewport.h"
 
 namespace ocpn::qtui {
+
+namespace {
+// The basemap polygons are clipped to a lat/lon grid (on integer degrees);
+// those clip edges are axis-aligned segments lying on a grid line and are
+// NOT real coastline. Detect them so we can skip outlining + shading them
+// (the wx app sidesteps this by only filling, never stroking the rings).
+// World coords: x = lon, y = -lat (integer lat -> integer -lat).
+inline bool isGridEdge(const QPointF& a, const QPointF& b) {
+  constexpr double kAxis = 1e-4;   // treat as axis-aligned
+  constexpr double kGrid = 3e-3;   // distance to a whole-degree grid line
+  const auto nearInt = [](double v) {
+    return std::abs(v - std::round(v)) < kGrid;
+  };
+  if (std::abs(a.x() - b.x()) < kAxis && nearInt(a.x())) return true;
+  if (std::abs(a.y() - b.y()) < kAxis && nearInt(a.y())) return true;
+  return false;
+}
+}  // namespace
 
 ShapefileBasemapProvider::ShapefileBasemapProvider(const QString& shp_path,
                                                    QObject* parent)
@@ -134,31 +156,35 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
 
   // 3. Inland shade: a soft gradient band just inside the coast (darkening
   //    fading to transparent ~6px inland) so land lifts off the water.
-  if (auto* shade = makeCoastShadeNode(m_coastlines, QColor(0, 0, 0),
-                                       /*width_px=*/6.0f, /*max_alpha=*/0.38f))
+  //    Skip grid clip edges so the tile boundaries aren't shaded.
+  if (auto* shade = makeCoastShadeNode(
+          m_coastlines, QColor(0, 0, 0), /*width_px=*/6.0f, /*max_alpha=*/0.38f,
+          [](const QPointF& a, const QPointF& b) { return !isGridEdge(a, b); }))
     root->appendChildNode(shade);
 
-  // 4. Coastline outlines: every ring as a closed 1px line loop, batched
-  //    into one DrawLines geometry (segment pairs).
+  // 4. Coastline outline: real-coast segments only (grid clip edges skipped),
+  //    so the basemap shows a clean coast and no tile grid.
   {
-    int seg_verts = 0;
-    for (const auto& c : m_coastlines)
-      if (c.size() >= 2) seg_verts += c.size() * 2;  // closed loop
-    if (seg_verts > 0) {
-      auto* coast =
-          sg::makeFlatColorNode(m_coast, QSGGeometry::DrawLines, seg_verts);
-      QSGGeometry::Point2D* v = coast->geometry()->vertexDataAsPoint2D();
-      int k = 0;
-      for (const auto& c : m_coastlines) {
-        const int n = c.size();
-        if (n < 2) continue;
-        for (int i = 0; i < n; ++i) {
-          const QPointF& a = c[i];
-          const QPointF& b = c[(i + 1) % n];  // wrap to close
-          v[k++].set(static_cast<float>(a.x()), static_cast<float>(a.y()));
-          v[k++].set(static_cast<float>(b.x()), static_cast<float>(b.y()));
-        }
+    std::vector<QSGGeometry::Point2D> seg;
+    for (const auto& c : m_coastlines) {
+      const int n = c.size();
+      if (n < 2) continue;
+      for (int i = 0; i < n; ++i) {
+        const QPointF& a = c[i];
+        const QPointF& b = c[(i + 1) % n];  // wrap to close
+        if (isGridEdge(a, b)) continue;     // skip tile-grid clip edges
+        QSGGeometry::Point2D pa, pb;
+        pa.set(static_cast<float>(a.x()), static_cast<float>(a.y()));
+        pb.set(static_cast<float>(b.x()), static_cast<float>(b.y()));
+        seg.push_back(pa);
+        seg.push_back(pb);
       }
+    }
+    if (!seg.empty()) {
+      auto* coast = sg::makeFlatColorNode(m_coast, QSGGeometry::DrawLines,
+                                          static_cast<int>(seg.size()));
+      std::memcpy(coast->geometry()->vertexData(), seg.data(),
+                  seg.size() * sizeof(QSGGeometry::Point2D));
       root->appendChildNode(coast);
     }
   }

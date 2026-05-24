@@ -403,8 +403,24 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       for (const QPointF& p : c) w.append(QPointF(p.x(), -p.y()));
       rings.append(std::move(w));
     }
-    if (auto* shade = makeCoastShadeNode(rings, QColor(0, 0, 0),
-                                         /*width_px=*/6.0f, /*max_alpha=*/0.35f))
+    // Skip segments lying on the cell boundary: LNDARE is clipped to the
+    // ENC cell, so those are artificial cuts (often along a chart boundary),
+    // not real coastline. World coords: x = lon, y = -lat.
+    const double west = m_west, east = m_east;
+    const double ytop = -m_north, ybot = -m_south;
+    const auto onSameBoundary = [=](const QPointF& a, const QPointF& b) {
+      constexpr double t = 1e-4;
+      auto both = [&](double av, double bv, double line) {
+        return std::abs(av - line) < t && std::abs(bv - line) < t;
+      };
+      return both(a.x(), b.x(), west) || both(a.x(), b.x(), east) ||
+             both(a.y(), b.y(), ytop) || both(a.y(), b.y(), ybot);
+    };
+    if (auto* shade = makeCoastShadeNode(
+            rings, QColor(0, 0, 0), /*width_px=*/6.0f, /*max_alpha=*/0.35f,
+            [&](const QPointF& a, const QPointF& b) {
+              return !onSameBoundary(a, b);
+            }))
       root->appendChildNode(shade);
   }
 

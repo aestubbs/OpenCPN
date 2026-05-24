@@ -17,6 +17,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include <QSGGeometry>
 #include <QSGGeometryNode>
@@ -122,34 +123,24 @@ int CoastShadeMaterial::compare(const QSGMaterial* other) const {
 
 QSGGeometryNode* makeCoastShadeNode(const QList<QList<QPointF>>& contours,
                                     const QColor& color, float width_px,
-                                    float max_alpha) {
-  // Count quad-triangles (6 verts per edge) across all usable contours.
-  int total = 0;
-  for (const QList<QPointF>& c : contours)
-    if (c.size() >= 3) total += c.size() * 6;
-  if (total == 0) return nullptr;
-
-  auto* geo = new QSGGeometry(shadeAttributeSet(), total);
-  geo->setDrawingMode(QSGGeometry::DrawTriangles);
-  auto* v = static_cast<ShadeVertex*>(geo->vertexData());
-  int k = 0;
-
+                                    float max_alpha,
+                                    const ShadeEdgeFilter& keep) {
+  std::vector<ShadeVertex> verts;  // accumulate; clip edges are skipped
   for (const QList<QPointF>& c : contours) {
     const int n = c.size();
     if (n < 3) continue;
 
     // Inward normal sign from winding: left normal (-dy, dx) points to the
     // interior for a positive-signed-area (CCW) ring, else the right normal.
+    // Computed from the FULL ring so normals stay correct where we skip
+    // segments.
     const double sgn = signedArea2(c) >= 0.0 ? 1.0 : -1.0;
-
-    // Per-vertex unit inward bisector normals.
     QList<QPointF> inward;
     inward.reserve(n);
     const auto edgeNormal = [&](const QPointF& a, const QPointF& b, bool& ok) {
       const double dx = b.x() - a.x(), dy = b.y() - a.y();
       const double len = std::hypot(dx, dy);
       ok = len > 0.0;
-      // left normal (-dy,dx) scaled by winding sign -> inward.
       return ok ? QPointF(sgn * -dy / len, sgn * dx / len) : QPointF(0, 0);
     };
     for (int i = 0; i < n; ++i) {
@@ -162,20 +153,28 @@ QSGGeometryNode* makeCoastShadeNode(const QList<QList<QPointF>>& contours,
     }
 
     const auto put = [&](int i, float t) {
-      v[k].cx = static_cast<float>(c[i].x());
-      v[k].cy = static_cast<float>(c[i].y());
-      v[k].nx = static_cast<float>(inward[i].x());
-      v[k].ny = static_cast<float>(inward[i].y());
-      v[k].t = t;
-      ++k;
+      ShadeVertex sv;
+      sv.cx = static_cast<float>(c[i].x());
+      sv.cy = static_cast<float>(c[i].y());
+      sv.nx = static_cast<float>(inward[i].x());
+      sv.ny = static_cast<float>(inward[i].y());
+      sv.t = t;
+      verts.push_back(sv);
     };
     for (int i = 0; i < n; ++i) {
       const int j = (i + 1) % n;
+      if (keep && !keep(c[i], c[j])) continue;  // skip clip edges
       // quad: (i,0)(i,1)(j,0)(j,1) -> tris (i0,j0,j1)(i0,j1,i1)
       put(i, 0.0f); put(j, 0.0f); put(j, 1.0f);
       put(i, 0.0f); put(j, 1.0f); put(i, 1.0f);
     }
   }
+  if (verts.empty()) return nullptr;
+
+  auto* geo = new QSGGeometry(shadeAttributeSet(), static_cast<int>(verts.size()));
+  geo->setDrawingMode(QSGGeometry::DrawTriangles);
+  std::memcpy(geo->vertexData(), verts.data(),
+              verts.size() * sizeof(ShadeVertex));
 
   auto* mat = new CoastShadeMaterial();
   mat->color = color;

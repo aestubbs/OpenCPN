@@ -24,6 +24,8 @@
 #ifndef OCPN_QT_COAST_SHADE_H_
 #define OCPN_QT_COAST_SHADE_H_
 
+#include <functional>
+
 #include <QColor>
 #include <QList>
 #include <QPointF>
@@ -52,15 +54,26 @@ public:
 };
 
 /**
+ * Predicate: keep (shade) the segment a->b? Used to skip artificial polygon
+ * clip edges (basemap tile-grid lines, ENC cell-boundary cuts) so only real
+ * coastline is shaded. Both points are in world coords (x = lon, y = -lat).
+ * A null predicate keeps every segment.
+ */
+using ShadeEdgeFilter = std::function<bool(const QPointF&, const QPointF&)>;
+
+/**
  * Build a QSGGeometryNode rendering an inland shade band along `contours`
  * (each a closed land-ring in world coords: x = lon, y = -lat). `width_px`
  * is the inland fade distance and `max_alpha` the darkness at the coast.
- * The land side of each ring is derived from its winding. Returns nullptr if
- * there's nothing to draw. The node owns its geometry + material.
+ * The land side of each ring is derived from its winding (so the inward
+ * normals are correct even where segments are skipped). `keep`, if set,
+ * suppresses clip-edge segments. Returns nullptr if there's nothing to draw.
+ * The node owns its geometry + material.
  */
 QSGGeometryNode* makeCoastShadeNode(const QList<QList<QPointF>>& contours,
                                     const QColor& color, float width_px,
-                                    float max_alpha);
+                                    float max_alpha,
+                                    const ShadeEdgeFilter& keep = {});
 
 }  // namespace ocpn::qtui
 
