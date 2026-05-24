@@ -10,10 +10,10 @@
 /**
  * \file
  *
- * Implement sg_dc.h.
+ * Implement sg_builder.h.
  */
 
-#include "sg_dc.h"
+#include "sg_builder.h"
 
 #include <cmath>
 
@@ -49,22 +49,22 @@ inline QPointF segNormal(const QPointF& a, const QPointF& b, bool& ok) {
 }
 }  // namespace
 
-SgDc::SgDc(QSGNode* parent, QQuickWindow* window)
+SgBuilder::SgBuilder(QSGNode* parent, QQuickWindow* window)
     : m_parent(parent), m_window(window) {}
 
-void SgDc::setPen(const QColor& color, float width) {
+void SgBuilder::setPen(const QColor& color, float width) {
   m_pen_color = color;
   m_pen_width = width > 0.0f ? width : 1.0f;
   m_has_pen = color.isValid();
 }
-void SgDc::noPen() { m_has_pen = false; }
-void SgDc::setBrush(const QColor& color) {
+void SgBuilder::noPen() { m_has_pen = false; }
+void SgBuilder::setBrush(const QColor& color) {
   m_brush_color = color;
   m_has_brush = color.isValid();
 }
-void SgDc::noBrush() { m_has_brush = false; }
+void SgBuilder::noBrush() { m_has_brush = false; }
 
-TextureCacheNode* SgDc::textureRoot() {
+TextureCacheNode* SgBuilder::textureRoot() {
   if (!m_tex_root && m_parent && m_window) {
     m_tex_root = new TextureCacheNode(m_window);
     m_parent->appendChildNode(m_tex_root);
@@ -76,7 +76,7 @@ TextureCacheNode* SgDc::textureRoot() {
 // centred on the segment. This gives a true thick line on every RHI backend
 // (the GL line primitive caps width at 1). Joints are simple overlaps -- good
 // enough for routes/tracks; mitred joins are a later refinement.
-void SgDc::appendThickPolyline(const QList<QPointF>& pts, const QColor& color,
+void SgBuilder::appendThickPolyline(const QList<QPointF>& pts, const QColor& color,
                                float width, bool closed) {
   if (!m_parent || pts.size() < 2) return;
 
@@ -116,17 +116,17 @@ void SgDc::appendThickPolyline(const QList<QPointF>& pts, const QColor& color,
   m_parent->appendChildNode(node);
 }
 
-void SgDc::drawLine(const QPointF& a, const QPointF& b) {
+void SgBuilder::drawLine(const QPointF& a, const QPointF& b) {
   if (!m_has_pen) return;
   appendThickPolyline({a, b}, m_pen_color, m_pen_width, /*closed=*/false);
 }
 
-void SgDc::drawPolyline(const QList<QPointF>& pts) {
+void SgBuilder::drawPolyline(const QList<QPointF>& pts) {
   if (!m_has_pen) return;
   appendThickPolyline(pts, m_pen_color, m_pen_width, /*closed=*/false);
 }
 
-void SgDc::drawPolygon(const QList<QPointF>& pts) {
+void SgBuilder::drawPolygon(const QList<QPointF>& pts) {
   if (!m_parent || pts.size() < 3) return;
 
   // Fill: tessellate with libtess2 (NONZERO winding) into a triangle list so
@@ -176,7 +176,7 @@ void SgDc::drawPolygon(const QList<QPointF>& pts) {
     appendThickPolyline(pts, m_pen_color, m_pen_width, /*closed=*/true);
 }
 
-void SgDc::drawRect(const QRectF& rect) {
+void SgBuilder::drawRect(const QRectF& rect) {
   if (m_has_brush && m_parent) {
     auto* node = sg::makeFlatColorNode(m_brush_color, QSGGeometry::DrawTriangles, 6);
     QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
@@ -194,7 +194,7 @@ void SgDc::drawRect(const QRectF& rect) {
                         m_pen_color, m_pen_width, /*closed=*/true);
 }
 
-void SgDc::drawCircle(const QPointF& center, float radius, int segments) {
+void SgBuilder::drawCircle(const QPointF& center, float radius, int segments) {
   if (radius <= 0.0f || !m_parent) return;
   int n = segments;
   if (n <= 0) n = std::max(12, static_cast<int>(radius * 0.5f));  // LOD by size
@@ -226,7 +226,7 @@ void SgDc::drawCircle(const QPointF& center, float radius, int segments) {
     appendThickPolyline(ring, m_pen_color, m_pen_width, /*closed=*/true);
 }
 
-void SgDc::drawImage(const QRectF& dest, const QImage& image) {
+void SgBuilder::drawImage(const QRectF& dest, const QImage& image) {
   TextureCacheNode* root = textureRoot();
   if (!root || image.isNull()) return;
   QSGTexture* tex = root->texture(image);
@@ -240,10 +240,9 @@ void SgDc::drawImage(const QRectF& dest, const QImage& image) {
   m_parent->appendChildNode(node);
 }
 
-void SgDc::drawText(const QString& text, const QPointF& top_left,
-                    const QColor& color, float point_size) {
-  if (text.isEmpty() || !m_window || !m_parent) return;
-
+QImage SgBuilder::renderText(const QString& text, const QColor& color,
+                             float point_size) {
+  if (text.isEmpty()) return QImage();
   QFont font;  // default system font (the Qt-native replacement for TexFont)
   if (point_size > 0.0f) font.setPointSizeF(point_size);
   const qreal dpr = 2.0;  // render at 2x for crispness on hi-DPI
@@ -255,15 +254,25 @@ void SgDc::drawText(const QString& text, const QPointF& top_left,
              QImage::Format_RGBA8888_Premultiplied);
   img.setDevicePixelRatio(dpr);
   img.fill(Qt::transparent);
-  {
-    QPainter p(&img);
-    p.setRenderHint(QPainter::TextAntialiasing, true);
-    p.setFont(font);
-    p.setPen(color.isValid() ? color : m_pen_color);
-    p.drawText(QRectF(0, 0, w, h), Qt::AlignCenter, text);
-  }
+  QPainter p(&img);
+  p.setRenderHint(QPainter::TextAntialiasing, true);
+  p.setFont(font);
+  p.setPen(color.isValid() ? color : QColor(0, 0, 0));
+  p.drawText(QRectF(0, 0, w, h), Qt::AlignCenter, text);
+  p.end();
+  return img;
+}
+
+void SgBuilder::drawText(const QString& text, const QPointF& top_left,
+                    const QColor& color, float point_size) {
+  if (text.isEmpty() || !m_window || !m_parent) return;
+  const QImage img =
+      renderText(text, color.isValid() ? color : m_pen_color, point_size);
+  if (img.isNull()) return;
+  const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
   // Destination rect sized from the rendered logical extent, at top_left.
-  drawImage(QRectF(top_left, QSizeF(w, h)), img);
+  drawImage(QRectF(top_left, QSizeF(img.width() / dpr, img.height() / dpr)),
+            img);
 }
 
 }  // namespace ocpn::qtui

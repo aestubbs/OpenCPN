@@ -96,6 +96,16 @@ ApplicationWindow {
                 onClicked: chart.showText = checked
             }
 
+            ToolSeparator {}
+
+            // Nav overlays demo mode (synthetic animated AIS / own-ship).
+            ToolButton {
+                text: qsTr("Demo")
+                checkable: true
+                checked: chart.demoMode
+                onClicked: chart.demoMode = checked
+            }
+
             Item { Layout.fillWidth: true }  // spacer
 
             Label {

@@ -26,8 +26,8 @@ qt_add_qml_module(opencpn-qt
     sg_helpers.h
     sg_helpers.cpp
     sg_texture_cache.h
-    sg_dc.h
-    sg_dc.cpp
+    sg_builder.h
+    sg_builder.cpp
     chart_provider.h
     chart_layer.h
     chart_layer.cpp
@@ -46,6 +46,15 @@ qt_add_qml_module(opencpn-qt
     chart_worker.cpp
     gshhs_world_provider.h
     gshhs_world_provider.cpp
+    nav_data.h
+    nav_data_provider.h
+    demo_nav_data_provider.h
+    demo_nav_data_provider.cpp
+    nav_layer.h
+    ais_layer.h
+    ais_layer.cpp
+    own_ship_layer.h
+    own_ship_layer.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its

@@ -10,12 +10,12 @@
 /**
  * \file
  *
- * SgDc -- a scene-graph drawing context (P2.6 ocpnDC port, core paths).
+ * SgBuilder -- a scene-graph drawing context (P2.6 ocpnDC port, core paths).
  *
  * The legacy renderer drew through `ocpnDC` (gui/src/ocpndc.cpp), which
  * wrapped either a wxDC (CPU) or raw OpenGL (GPU). In the Qt renderer the
  * core no longer rasterises into a device: each Layer emits a retained
- * scene-graph subtree that the GPU composites. SgDc is the Qt-native
+ * scene-graph subtree that the GPU composites. SgBuilder is the Qt-native
  * equivalent of ocpnDC's *primitive* surface -- it builds QSGNodes for the
  * core's line / polyline / polygon / rectangle / circle / text / bitmap
  * primitives and appends them to a parent node.
@@ -28,7 +28,7 @@
  * **Coordinate-space agnostic.** Coordinates are whatever the caller's Layer
  * works in: pass world coordinates (x = lon, y = -lat) for a WorldAnchored
  * Layer, or screen pixels for a DisplayAnchored one. The owning Layer
- * attaches the parent node under the matching transform root; SgDc neither
+ * attaches the parent node under the matching transform root; SgBuilder neither
  * knows nor cares which. (So world-anchored thick lines / circles are sized
  * in world units, display-anchored ones in pixels -- the caller chooses.)
  *
@@ -42,8 +42,8 @@
  * here does not change when that lands.
  */
 
-#ifndef OCPN_QT_SG_DC_H_
-#define OCPN_QT_SG_DC_H_
+#ifndef OCPN_QT_SG_BUILDER_H_
+#define OCPN_QT_SG_BUILDER_H_
 
 #include <QColor>
 #include <QList>
@@ -61,15 +61,15 @@ namespace ocpn::qtui {
 
 class TextureCacheNode;
 
-class SgDc {
+class SgBuilder {
 public:
   /**
    * @param parent node to append emitted primitives to (owned by the caller
-   *               / compositor). Must outlive this SgDc's draw calls.
+   *               / compositor). Must outlive this SgBuilder's draw calls.
    * @param window the QQuickWindow -- required for drawImage / drawText
    *               (texture upload); may be nullptr for geometry-only use.
    */
-  explicit SgDc(QSGNode* parent, QQuickWindow* window = nullptr);
+  explicit SgBuilder(QSGNode* parent, QQuickWindow* window = nullptr);
 
   // --- Pen / brush state (mirrors ocpnDC::SetPen / SetBrush) -------------
   // An invalid colour disables that part: noPen() draws fills only, noBrush()
@@ -115,6 +115,17 @@ public:
   void drawText(const QString& text, const QPointF& top_left,
                 const QColor& color = QColor(), float point_size = 0.0f);
 
+  /**
+   * Render `text` to a premultiplied-RGBA image with a transparent
+   * background, using the system font. Rendered at 2x (devicePixelRatio 2)
+   * for hi-DPI crispness, so the image's logical size is its on-screen
+   * extent. Shared by drawText and by retained-node layers that build their
+   * own label QSGImageNodes (e.g. AIS / own-ship). `point_size` 0 -> default
+   * application font size.
+   */
+  static QImage renderText(const QString& text, const QColor& color,
+                           float point_size = 0.0f);
+
 private:
   // Lazily create (once) a TextureCacheNode child of m_parent that owns the
   // textures for drawImage / drawText.
@@ -137,4 +148,4 @@ private:
 
 }  // namespace ocpn::qtui
 
-#endif  // OCPN_QT_SG_DC_H_
+#endif  // OCPN_QT_SG_BUILDER_H_

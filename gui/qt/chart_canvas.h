@@ -61,6 +61,9 @@ class Viewport;
 class S52VectorChartProvider;
 class ChartBoundaryProvider;
 class ChartWorker;
+class DemoNavDataProvider;
+class AisLayer;
+class OwnShipLayer;
 
 class ChartCanvas : public QQuickItem {
   Q_OBJECT
@@ -85,6 +88,12 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(bool showText READ showText WRITE setShowText NOTIFY
                  showTextChanged)
 
+  // Demo mode: feed the nav overlays (AIS / own-ship) from the synthetic
+  // DemoNavDataProvider (animated). When off, the demo animation freezes;
+  // the same NavDataProvider seam will host the live model adapter later.
+  Q_PROPERTY(bool demoMode READ demoMode WRITE setDemoMode NOTIFY
+                 demoModeChanged)
+
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
   ~ChartCanvas() override;
@@ -100,6 +109,9 @@ public:
   bool showText() const { return m_show_text; }
   void setShowText(bool on);
 
+  bool demoMode() const { return m_demo_mode; }
+  void setDemoMode(bool on);
+
   // Toolbar actions (bound from the QML chrome). Zoom about the canvas
   // centre; fitWorld zooms out to show the whole scanned chart set.
   Q_INVOKABLE void zoomIn();
@@ -111,6 +123,7 @@ Q_SIGNALS:
   void displayCategoryChanged();
   void showSoundingsChanged();
   void showTextChanged();
+  void demoModeChanged();
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
@@ -148,11 +161,21 @@ private:
   QSGTransformNode* m_world_anchored_root = nullptr;
   QSGTransformNode* m_display_anchored_root = nullptr;
 
+  // Declared before the compositor so it outlives the overlay Layers that
+  // reference it (members destroy in reverse declaration order).
+  std::unique_ptr<DemoNavDataProvider> m_demo_provider;
+
   std::unique_ptr<LayerCompositor> m_compositor;
   std::unique_ptr<Viewport> m_viewport;
   // Backs per-Layer visible/zOrder/opacity persistence (P2.10). Handed to
   // the compositor; saved on destruction.
   std::unique_ptr<OcpnConfig> m_layer_config;
+
+  // Nav overlays (owned by their ChartLayer-less Layer entries in the
+  // compositor; pointers kept only to forward state). World-anchored, on top.
+  AisLayer* m_ais_layer = nullptr;
+  OwnShipLayer* m_own_ship_layer = nullptr;
+  bool m_demo_mode = true;
 
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;

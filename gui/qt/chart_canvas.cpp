@@ -39,10 +39,13 @@
 #include <QTimer>
 #include <QWheelEvent>
 
+#include "ais_layer.h"
 #include "chart_boundary_provider.h"
 #include "chart_layer.h"
 #include "chart_worker.h"
+#include "demo_nav_data_provider.h"
 #include "gshhs_world_provider.h"
+#include "own_ship_layer.h"
 #include "layer_compositor.h"
 #include "model/ocpn_config.h"
 #include "raster_chart_provider.h"
@@ -94,6 +97,19 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   auto* world_layer = new ChartLayer(world, m_viewport.get());
   world_layer->setZOrder(-1000);
   m_compositor->addLayer(world_layer);
+
+  // Nav overlays (P2.11): AIS targets + own ship, world-anchored, on top of
+  // the charts. Fed from the synthetic demo provider for now; the same
+  // NavDataProvider seam will host a live model adapter later. Each is a
+  // stable-id Layer, so it also exercises P2.10 persistence.
+  m_demo_provider = std::make_unique<DemoNavDataProvider>();
+  m_ais_layer = new AisLayer(m_demo_provider.get(), m_viewport.get());
+  m_ais_layer->setZOrder(2000);
+  m_compositor->addLayer(m_ais_layer);
+  m_own_ship_layer = new OwnShipLayer(m_demo_provider.get(), m_viewport.get());
+  m_own_ship_layer->setZOrder(2001);
+  m_compositor->addLayer(m_own_ship_layer);
+  m_demo_provider->setRunning(m_demo_mode);
 
   // Repaint when:
   //   - any Layer dirties (data change, visibility/z-order/opacity).
@@ -501,6 +517,16 @@ void ChartCanvas::setShowText(bool on) {
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowText(on);
   Q_EMIT showTextChanged();
+  update();
+}
+
+void ChartCanvas::setDemoMode(bool on) {
+  if (on == m_demo_mode) return;
+  m_demo_mode = on;
+  // Demo mode animates the synthetic provider. When off it freezes (and,
+  // once a live model adapter exists, the overlays would switch to it here).
+  if (m_demo_provider) m_demo_provider->setRunning(on);
+  Q_EMIT demoModeChanged();
   update();
 }
 
