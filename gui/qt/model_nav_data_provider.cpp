@@ -18,6 +18,7 @@
 #include <QThread>
 
 #include "in_memory_ais_store.h"
+#include "model/own_ship.h"
 #include "model/route.h"
 #include "model/route_point.h"
 #include "model/routeman.h"
@@ -117,6 +118,17 @@ QList<NavTrack> ModelNavDataProvider::tracks() const {
 }
 
 void ModelNavDataProvider::onWorkerUpdated() {
+  // Publish the worker's own-ship fix to the model own-ship globals on the
+  // GUI thread, so consumers that read them directly (ActiveTrack's recorder
+  // timer) see a consistent value written from a single thread.
+  const OwnShipState s = m_own->get();
+  if (s.valid) {
+    gLat = s.lat;
+    gLon = s.lon;
+    gCog = s.cog;
+    gSog = s.sog;
+  }
+
   Q_EMIT dynamicChanged();
 
   // Cheap static change-detect: route/waypoint/track counts.

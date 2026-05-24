@@ -25,7 +25,6 @@
 #include "ais_target_store.h"
 #include "model/ais_decoder.h"
 #include "model/ais_target_data.h"
-#include "model/own_ship.h"
 #include "own_ship_holder.h"
 
 namespace ocpn::qtui {
@@ -83,16 +82,22 @@ void NavFeedWorker::decodeLine(const QString& line) {
       line.contains(QLatin1String("VDO"))) {
     if (g_pAIS) g_pAIS->DecodeN0183(line);
   } else if (line.contains(QLatin1String("RMC"))) {
-    // $..RMC,time,status,lat,N/S,lon,E/W,sog,cog,date,...
+    // $..RMC,time,status,lat,N/S,lon,E/W,sog,cog,date,... -> own-ship state.
+    // Accumulated locally (no model globals from this thread); published to
+    // the thread-safe OwnShipHolder once per tick.
     const QStringList fld = line.split(QLatin1Char(','));
     if (fld.size() >= 9 && fld[2] == QLatin1String("A")) {
-      gLat = nmeaCoord(fld[3], fld[4]);
-      gLon = nmeaCoord(fld[5], fld[6]);
+      m_own_state.valid = true;
+      m_own_state.lat = nmeaCoord(fld[3], fld[4]);
+      m_own_state.lon = nmeaCoord(fld[5], fld[6]);
       bool ok = false;
       const double sog = fld[7].toDouble(&ok);
-      if (ok) gSog = sog;
+      if (ok) m_own_state.sog = sog;
       const double cog = fld[8].toDouble(&ok);
-      if (ok) gCog = cog;
+      if (ok) {
+        m_own_state.cog = cog;
+        m_own_state.hdg = kHeadingUnavailable;  // RMC has no heading
+      }
     }
   }
 }
@@ -125,19 +130,10 @@ void NavFeedWorker::tick() {
     m_store->prune(now, kStaleMs);
   }
 
-  // Own ship from the RMC-updated globals.
-  if (m_own) {
-    OwnShipState s;
-    if (finitePos(gLat, gLon)) {
-      s.valid = true;
-      s.lat = gLat;
-      s.lon = gLon;
-      s.cog = std::isfinite(gCog) ? gCog : 0.0;
-      s.sog = std::isfinite(gSog) ? gSog : 0.0;
-      s.hdg = std::isfinite(gHdt) ? gHdt : kHeadingUnavailable;
-    }
-    m_own->set(s);
-  }
+  // Publish own ship to the thread-safe holder (the GUI thread mirrors it to
+  // the model globals for ActiveTrack -- no two threads touch gLat).
+  if (m_own && m_own_state.valid && finitePos(m_own_state.lat, m_own_state.lon))
+    m_own->set(m_own_state);
 
   Q_EMIT updated();  // one coalesced wake-up per tick
 }

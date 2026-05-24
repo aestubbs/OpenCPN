@@ -29,6 +29,8 @@
 #include <QObject>
 #include <QStringList>
 
+#include "nav_data.h"
+
 QT_BEGIN_NAMESPACE
 class QTimer;
 QT_END_NAMESPACE
@@ -62,6 +64,7 @@ private:
 
   AisTargetStore* m_store;
   OwnShipHolder* m_own;
+  OwnShipState m_own_state;  // accumulated from RMC; published to m_own per tick
   QStringList m_lines;
   int m_pos = 0;
   QTimer* m_timer = nullptr;
