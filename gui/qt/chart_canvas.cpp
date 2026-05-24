@@ -204,9 +204,17 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
           [this]() { update(); });
   connect(m_viewport.get(), &Viewport::changed, this, [this]() {
     update();
+    Q_EMIT viewChanged();  // refresh the MUIBar scale readout
     // Only chase visible cells once a catalog exists (async ENC path).
     if (!m_catalog.isEmpty()) m_load_debounce->start();
   });
+  // Follow mode: recentre on the own-ship fix as it updates.
+  connect(m_nav_provider.get(), &NavDataProvider::dynamicChanged, this,
+          [this]() {
+            if (!m_follow_own_ship) return;
+            const OwnShipState s = m_nav_provider->ownShip();
+            if (s.valid) m_viewport->setCenter(s.lat, s.lon);
+          });
   // On resize, repaint AND re-evaluate visible cells: the initial fit +
   // selection can run before the canvas has its real size (the catalog scan
   // starts at launch), sampling a too-small view rect and missing cells in
@@ -816,6 +824,23 @@ bool ChartCanvas::showWaypoints() const {
 void ChartCanvas::setShowWaypoints(bool on) {
   setLayerVisible(m_compositor.get(), "core.waypoints", on);
   Q_EMIT overlayVisibilityChanged();
+  update();
+}
+
+QString ChartCanvas::scaleText() const {
+  if (!m_viewport || m_viewport->scale() <= 0.0) return QString();
+  const double n = displayScaleN(m_viewport->scale());
+  return QStringLiteral("1:%1").arg(static_cast<qlonglong>(n));
+}
+
+void ChartCanvas::setFollowOwnShip(bool on) {
+  if (on == m_follow_own_ship) return;
+  m_follow_own_ship = on;
+  if (on && m_nav_provider) {  // jump to the ship immediately
+    const OwnShipState s = m_nav_provider->ownShip();
+    if (s.valid) m_viewport->setCenter(s.lat, s.lon);
+  }
+  Q_EMIT followOwnShipChanged();
   update();
 }
 

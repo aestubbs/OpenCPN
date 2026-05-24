@@ -125,6 +125,11 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(bool showWaypoints READ showWaypoints WRITE setShowWaypoints
                  NOTIFY overlayVisibilityChanged)
 
+  // MUIBar (P3.x): current chart scale "1:N" + follow-own-ship mode.
+  Q_PROPERTY(QString scaleText READ scaleText NOTIFY viewChanged)
+  Q_PROPERTY(bool followOwnShip READ followOwnShip WRITE setFollowOwnShip
+                 NOTIFY followOwnShipChanged)
+
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
   ~ChartCanvas() override;
@@ -159,6 +164,10 @@ public:
   bool showWaypoints() const;
   void setShowWaypoints(bool on);
 
+  QString scaleText() const;
+  bool followOwnShip() const { return m_follow_own_ship; }
+  void setFollowOwnShip(bool on);
+
   // Center + zoom the viewport to a lat/lon bounding box (route/mark "zoom
   // to"). A near-zero span zooms in to a sensible harbour scale.
   Q_INVOKABLE void fitBounds(double north, double south, double east,
@@ -181,6 +190,8 @@ Q_SIGNALS:
   void showBuoysChanged();
   void demoModeChanged();
   void overlayVisibilityChanged();
+  void viewChanged();
+  void followOwnShipChanged();
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,
@@ -246,6 +257,7 @@ private:
   OwnShipLayer* m_own_ship_layer = nullptr;
   bool m_demo_mode = true;
   bool m_live_centered = false;  // recentre on own ship once per live session
+  bool m_follow_own_ship = false;  // MUIBar follow mode
 
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;

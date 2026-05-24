@@ -27,17 +27,17 @@ ApplicationWindow {
     // Minimum touch target (logical px) for the on-chart controls.
     readonly property int touchSize: 40
 
-    // --- Display settings dialog (P3.6) -----------------------------------
-    Dialog {
-        id: settingsDialog
-        title: qsTr("Display settings")
-        modal: true
-        anchors.centerIn: parent
-        width: Math.min(root.width * 0.9, 420)
-        standardButtons: Dialog.Close
+    // --- Canvas options: slide-out display panel from the right (mirrors
+    //     OpenCPN's MUIBar CanvasOptions). Native right-edge Drawer.
+    Drawer {
+        id: canvasOptions
+        edge: Qt.RightEdge
+        width: Math.min(320, root.width * 0.85)
+        height: root.height
 
         ColumnLayout {
-            width: parent.width
+            anchors.fill: parent
+            anchors.margins: 16
             spacing: 8
 
             Label {
@@ -431,11 +431,57 @@ ApplicationWindow {
         }
     }
 
+    // --- MUIBar: bottom-right canvas controls (mirrors OpenCPN's MUIBar) --
+    Pane {
+        id: muiBar
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 16
+        padding: 4
+
+        ColumnLayout {
+            spacing: 2
+            ToolButton {
+                text: "+"; font.pointSize: 18
+                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+                Layout.alignment: Qt.AlignHCenter
+                onClicked: chart.zoomIn()
+            }
+            ToolButton {
+                text: "−"; font.pointSize: 18
+                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+                Layout.alignment: Qt.AlignHCenter
+                onClicked: chart.zoomOut()
+            }
+            ToolButton {
+                text: "⊙"; font.pointSize: 15  // follow own ship
+                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+                Layout.alignment: Qt.AlignHCenter
+                checkable: true
+                checked: chart.followOwnShip
+                onClicked: chart.followOwnShip = checked
+            }
+            ToolButton {
+                text: "⚙"; font.pointSize: 15  // canvas options
+                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+                Layout.alignment: Qt.AlignHCenter
+                onClicked: canvasOptions.open()
+            }
+            Label {
+                text: chart.scaleText
+                font.pointSize: 9
+                horizontalAlignment: Text.AlignHCenter
+                Layout.alignment: Qt.AlignHCenter
+                Layout.fillWidth: true
+            }
+        }
+    }
+
     Menu {
         id: mainMenu
         MenuItem {
             text: qsTr("Display settings…")
-            onTriggered: settingsDialog.open()
+            onTriggered: canvasOptions.open()
         }
         MenuItem {
             text: qsTr("Routes & marks…")
