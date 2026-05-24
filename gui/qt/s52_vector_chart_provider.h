@@ -67,6 +67,12 @@ public:
   QSGNode* renderChart(QSGNode* old_subtree, const Viewport& viewport,
                        QQuickWindow* window) override;
 
+  /** Object query: the feature snapshots whose geometry is hit by a click at
+   *  (lat, lon), within `margin_deg` for points/lines (areas use
+   *  point-in-polygon). For the S-57 object-query popup (P3.9). */
+  QList<s52sg::QueryObject> objectsAt(double lat, double lon,
+                                      double margin_deg) const;
+
   /** S-52 display category to show: 0 = Base, 1 = Standard, 2 = All
    *  (Other). Items with a higher category rank are filtered out. Changing
    *  it forces a rebuild (emits changed()). */

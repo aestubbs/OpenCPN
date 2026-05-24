@@ -141,6 +141,26 @@ struct Label {
   int dispCat = CatStandard;
 };
 
+/** One S-57 attribute (acronym + value as text), for object query. */
+struct QueryAttr {
+  QString name;
+  QString value;
+};
+
+enum class QueryGeom { Area, Line, Point };
+
+/** A queryable S-57 feature snapshot (object query). Built at decode time
+ *  straight from the OGR feature -- class, attributes, and enough geometry
+ *  (bbox + shape in lon/lat) to hit-test a click. Independent of the
+ *  (discarded) S57Obj objects. */
+struct QueryObject {
+  QString className;          // S-57 class acronym, e.g. "DEPARE"
+  QList<QueryAttr> attrs;
+  QueryGeom geom = QueryGeom::Area;
+  double minLon = 0, minLat = 0, maxLon = 0, maxLat = 0;  // bbox
+  QList<QPointF> shape;       // (lon, lat): area exterior ring / line / point
+};
+
 /** A decoded chart's geometry, ready for the consumer to upload. */
 class Buffer {
 public:
@@ -152,6 +172,8 @@ public:
   // Land-area (LNDARE) exterior rings, (lon, lat), closed -- for the
   // coastline land-shade pass. Not symbology; a cartographic emphasis.
   QList<QList<QPointF>> landContours;
+  // Queryable feature snapshots (object query); all feature classes.
+  QList<QueryObject> queryObjects;
   void clear() {
     prims.clear();
     patternFills.clear();
@@ -159,6 +181,7 @@ public:
     vectorSymbols.clear();
     labels.clear();
     landContours.clear();
+    queryObjects.clear();
   }
   bool empty() const {
     return prims.isEmpty() && patternFills.isEmpty() && symbols.isEmpty() &&

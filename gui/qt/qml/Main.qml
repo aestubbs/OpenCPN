@@ -269,6 +269,55 @@ ApplicationWindow {
                 }
             }
         }
+
+        // S-57 object-query popup (P3.9) -- the chart features under a click,
+        // bound to ChartCanvas.objectQuery.
+        Popup {
+            id: objInfo
+            readonly property var q: chart.objectQuery
+            visible: q && q.valid
+            closePolicy: Popup.NoAutoClose
+            x: 12
+            y: parent.height - height - 12
+            width: 360
+            height: Math.min(parent.height * 0.5, 360)
+            padding: 12
+            background: Rectangle {
+                color: "#ee101418"; radius: 8; border.color: "#5affffff"
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 6
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label {
+                        text: qsTr("Objects here (") +
+                              (objInfo.q ? objInfo.q.count : 0) + ")"
+                        color: "#cfe8ff"; font.pointSize: 13; font.bold: true
+                    }
+                    Item { Layout.fillWidth: true }
+                    ToolButton {
+                        text: "✕"; font.pointSize: 13
+                        onClicked: chart.objectQuery.clear()
+                    }
+                }
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    TextArea {
+                        readOnly: true
+                        wrapMode: TextEdit.Wrap
+                        color: "#e0e0e0"
+                        font.pointSize: 11
+                        font.family: "monospace"
+                        text: objInfo.q ? objInfo.q.text : ""
+                        background: null
+                    }
+                }
+            }
+        }
     }
 
     // --- Footer: status bar -----------------------------------------------

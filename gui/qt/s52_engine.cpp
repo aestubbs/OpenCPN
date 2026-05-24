@@ -325,6 +325,62 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
         if (env.MinX < w) w = env.MinX;
 
         const OGRwkbGeometryType gt = wkbFlatten(geom->getGeometryType());
+
+        // Object-query snapshot: class + set attributes + bbox + a
+        // representative shape (first part) for the click hit-test.
+        {
+          s52sg::QueryObject qo;
+          qo.className = QString::fromUtf8(className);
+          qo.minLon = env.MinX;
+          qo.minLat = env.MinY;
+          qo.maxLon = env.MaxX;
+          qo.maxLat = env.MaxY;
+          if (OGRFeatureDefn* fd = feat->GetDefnRef()) {
+            const int nf = fd->GetFieldCount();
+            for (int fi = 0; fi < nf; ++fi) {
+              if (!feat->IsFieldSet(fi)) continue;
+              const char* an = fd->GetFieldDefn(fi)->GetNameRef();
+              const char* av = feat->GetFieldAsString(fi);
+              if (an && av && av[0])
+                qo.attrs.append(
+                    {QString::fromUtf8(an), QString::fromUtf8(av).trimmed()});
+            }
+          }
+          if (gt == wkbPolygon || gt == wkbMultiPolygon) {
+            qo.geom = s52sg::QueryGeom::Area;
+            OGRPolygon* poly =
+                gt == wkbPolygon
+                    ? static_cast<OGRPolygon*>(geom)
+                    : static_cast<OGRPolygon*>(
+                          static_cast<OGRMultiPolygon*>(geom)->getGeometryRef(
+                              0));
+            OGRLinearRing* r = poly ? poly->getExteriorRing() : nullptr;
+            if (r)
+              for (int i = 0; i < r->getNumPoints(); ++i)
+                qo.shape.append(QPointF(r->getX(i), r->getY(i)));
+          } else if (gt == wkbLineString || gt == wkbMultiLineString) {
+            qo.geom = s52sg::QueryGeom::Line;
+            OGRLineString* ls =
+                gt == wkbLineString
+                    ? static_cast<OGRLineString*>(geom)
+                    : static_cast<OGRLineString*>(
+                          static_cast<OGRMultiLineString*>(geom)
+                              ->getGeometryRef(0));
+            if (ls)
+              for (int i = 0; i < ls->getNumPoints(); ++i)
+                qo.shape.append(QPointF(ls->getX(i), ls->getY(i)));
+          } else if (gt == wkbPoint || gt == wkbMultiPoint) {
+            qo.geom = s52sg::QueryGeom::Point;
+            OGRPoint* p =
+                gt == wkbPoint ? static_cast<OGRPoint*>(geom)
+                               : static_cast<OGRPoint*>(
+                                     static_cast<OGRMultiPoint*>(geom)
+                                         ->getGeometryRef(0));
+            if (p) qo.shape.append(QPointF(p->getX(), p->getY()));
+          }
+          buf.queryObjects.append(std::move(qo));
+        }
+
         if (gt == wkbPolygon || gt == wkbMultiPolygon) {
           auto emitOne = [&](OGRPolygon* poly) {
             OGRLinearRing* ext = poly->getExteriorRing();

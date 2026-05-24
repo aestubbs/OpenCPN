@@ -113,6 +113,14 @@ public:
   static inline double lonToWorldX(double lon) { return lon; }
   static inline double latToWorldY(double lat) { return -lat; }
 
+  /** Inverse of the world->screen mapping: the geographic position under a
+   *  screen-pixel point (item-local coords). */
+  void screenToLatLon(double sx, double sy, int canvas_w, int canvas_h,
+                      double& lat, double& lon) const {
+    lon = m_center_lon + (sx - canvas_w / 2.0) / m_scale;
+    lat = m_center_lat - (sy - canvas_h / 2.0) / m_scale;
+  }
+
 Q_SIGNALS:
   void changed();
 

@@ -15,6 +15,7 @@
 
 #include "s52_vector_chart_provider.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include <QColor>
@@ -169,6 +170,55 @@ void S52VectorChartProvider::setDisplayCategory(int cat) {
   // renderChart construct a fresh subtree (the compositor frees the old).
   m_built = false;
   Q_EMIT changed();
+}
+
+namespace {
+// Ray-casting point-in-polygon (ring in lon/lat; test point lon/lat).
+bool pointInPoly(const QList<QPointF>& ring, double lon, double lat) {
+  bool in = false;
+  const int n = ring.size();
+  for (int i = 0, j = n - 1; i < n; j = i++) {
+    const double xi = ring[i].x(), yi = ring[i].y();
+    const double xj = ring[j].x(), yj = ring[j].y();
+    if (((yi > lat) != (yj > lat)) &&
+        (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi))
+      in = !in;
+  }
+  return in;
+}
+// Distance (deg) from point p to segment a-b.
+double distToSeg(double px, double py, double ax, double ay, double bx,
+                 double by) {
+  const double dx = bx - ax, dy = by - ay;
+  const double len2 = dx * dx + dy * dy;
+  double t = len2 > 0.0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0.0;
+  t = std::clamp(t, 0.0, 1.0);
+  const double cx = ax + t * dx, cy = ay + t * dy;
+  return std::hypot(px - cx, py - cy);
+}
+}  // namespace
+
+QList<s52sg::QueryObject> S52VectorChartProvider::objectsAt(
+    double lat, double lon, double margin_deg) const {
+  QList<s52sg::QueryObject> out;
+  const double m = margin_deg;
+  for (const s52sg::QueryObject& qo : m_buffer.queryObjects) {
+    if (lon < qo.minLon - m || lon > qo.maxLon + m || lat < qo.minLat - m ||
+        lat > qo.maxLat + m)
+      continue;  // bbox reject
+    bool hit = false;
+    if (qo.geom == s52sg::QueryGeom::Area && qo.shape.size() >= 3) {
+      hit = pointInPoly(qo.shape, lon, lat);
+    } else if (qo.geom == s52sg::QueryGeom::Point && !qo.shape.isEmpty()) {
+      hit = std::hypot(qo.shape[0].x() - lon, qo.shape[0].y() - lat) < m;
+    } else if (qo.geom == s52sg::QueryGeom::Line) {
+      for (int i = 0; i + 1 < qo.shape.size() && !hit; ++i)
+        hit = distToSeg(lon, lat, qo.shape[i].x(), qo.shape[i].y(),
+                        qo.shape[i + 1].x(), qo.shape[i + 1].y()) < m;
+    }
+    if (hit) out.append(qo);
+  }
+  return out;
 }
 
 void S52VectorChartProvider::setShowSoundings(bool on) {

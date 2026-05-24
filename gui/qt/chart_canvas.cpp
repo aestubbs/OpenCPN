@@ -52,6 +52,7 @@
 #include "model/track.h"  // g_pActiveTrack -- own-ship track recording
 #include "model_nav_data_provider.h"
 #include "nav_state_view_model.h"
+#include "object_query_view_model.h"
 #include "raster_chart_provider.h"
 #include "switchable_nav_provider.h"
 #include "s52_engine.h"
@@ -129,6 +130,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_nav_state = std::make_unique<NavStateViewModel>(m_nav_provider.get());
   // Selected-AIS-target model for the info popup (P3.9).
   m_ais_selection = std::make_unique<AisSelectionViewModel>();
+  // S-57 object-query result model (P3.9).
+  m_object_query = std::make_unique<ObjectQueryViewModel>();
 
   m_ais_layer = new AisLayer(m_nav_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);
@@ -683,17 +686,23 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
 void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton && m_dragging) {
     m_dragging = false;
-    // A press+release that barely moved is a click (a pick), not a pan.
+    // A press+release that barely moved is a click (a pick), not a pan. AIS
+    // targets take precedence; otherwise query the chart objects there.
     const QPointF d = event->position() - m_press_pos;
-    if (d.manhattanLength() <= 6) pickAisAt(event->position());
+    if (d.manhattanLength() <= 6) {
+      if (pickAisAt(event->position()))
+        m_object_query->clear();
+      else
+        pickObjectsAt(event->position());
+    }
     event->accept();
   } else {
     QQuickItem::mouseReleaseEvent(event);
   }
 }
 
-void ChartCanvas::pickAisAt(const QPointF& screen_pos) {
-  if (!m_ais_selection || !m_nav_provider || !m_viewport) return;
+bool ChartCanvas::pickAisAt(const QPointF& screen_pos) {
+  if (!m_ais_selection || !m_nav_provider || !m_viewport) return false;
   // World->screen transform the canvas applies to the world-anchored root,
   // so target screen px = transform.map(world(lon, -lat)).
   const QMatrix4x4 m = m_viewport->transformMatrix(static_cast<int>(width()),
@@ -712,10 +721,29 @@ void ChartCanvas::pickAisAt(const QPointF& screen_pos) {
       hit = &t;
     }
   }
-  if (hit)
+  if (hit) {
     m_ais_selection->select(*hit);
-  else
-    m_ais_selection->clear();
+    return true;
+  }
+  m_ais_selection->clear();
+  return false;
+}
+
+void ChartCanvas::pickObjectsAt(const QPointF& screen_pos) {
+  if (!m_object_query || !m_viewport) return;
+  double lat = 0, lon = 0;
+  m_viewport->screenToLatLon(screen_pos.x(), screen_pos.y(),
+                             static_cast<int>(width()),
+                             static_cast<int>(height()), lat, lon);
+  // ~10px pick radius in degrees at the current zoom (px/degree).
+  const double margin =
+      m_viewport->scale() > 0.0 ? 10.0 / m_viewport->scale() : 0.0;
+  QList<s52sg::QueryObject> found;
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it) {
+    if (!it.value().provider) continue;
+    found.append(it.value().provider->objectsAt(lat, lon, margin));
+  }
+  m_object_query->setObjects(found);
 }
 
 void ChartCanvas::wheelEvent(QWheelEvent* event) {
