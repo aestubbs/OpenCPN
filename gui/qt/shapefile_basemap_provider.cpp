@@ -68,38 +68,50 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
   QElapsedTimer timer;
   timer.start();
 
-  TESStesselator* tess = tessNewTess(nullptr);
-  QList<float> contour;  // scratch: interleaved x,y for one ring
   int rings = 0;
+
+  // libtess2 consumes (and frees) its mesh inside each tessTesselate() call,
+  // so a single tessellator cannot be asked for both the filled polygons and
+  // the boundary contours -- the second pass would run on a NULL mesh and
+  // produce nothing (or stale garbage). Keep the feature's rings and run each
+  // pass on its own freshly-fed tessellator, from the SAME even-odd contours,
+  // so the fill triangles and the boundary loops describe the identical
+  // region and the shade/outline ride the tan land/sea edge exactly.
+  std::vector<QList<float>> feature_contours;  // interleaved x,y per ring
 
   for (const auto& feature : reader) {
     auto* poly = static_cast<shp::Polygon*>(feature.getGeometry());
     if (!poly) continue;
 
-    // Add every ring of this polygon as a tess contour (outer + holes),
-    // then tessellate the feature together so lakes punch through.
-    bool any = false;
+    // Collect every ring of this polygon (outer + holes) as interleaved
+    // world coords; tessellate the feature together so lakes punch through.
+    feature_contours.clear();
     for (const shp::Ring& ring : poly->getRings()) {
       const std::vector<shp::Point>& pts = ring.getPoints();
       if (pts.size() < 3) continue;
-      contour.clear();
+      QList<float> contour;
       contour.reserve(static_cast<int>(pts.size()) * 2);
       for (const shp::Point& p : pts) {
         contour.append(static_cast<float>(p.getX()));    // lon
         contour.append(static_cast<float>(-p.getY()));   // -lat
       }
-      tessAddContour(tess, 2, contour.constData(), sizeof(float) * 2,
-                     static_cast<int>(pts.size()));
-      any = true;
+      feature_contours.push_back(std::move(contour));
       ++rings;
     }
-    if (!any) continue;
+    if (feature_contours.empty()) continue;
+
+    const auto addContours = [&](TESStesselator* t) {
+      for (const QList<float>& c : feature_contours)
+        tessAddContour(t, 2, c.constData(), sizeof(float) * 2, c.size() / 2);
+    };
 
     // Even-odd fill so holes (lakes) subtract regardless of ring direction.
-    if (tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr)) {
-      const float* verts = tessGetVertices(tess);
-      const TESSindex* elems = tessGetElements(tess);
-      const int ne = tessGetElementCount(tess);
+    TESStesselator* fill = tessNewTess(nullptr);
+    addContours(fill);
+    if (tessTesselate(fill, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr)) {
+      const float* verts = tessGetVertices(fill);
+      const TESSindex* elems = tessGetElements(fill);
+      const int ne = tessGetElementCount(fill);
       for (int i = 0; i < ne; ++i) {
         for (int j = 0; j < 3; ++j) {
           const TESSindex idx = elems[i * 3 + j];
@@ -108,6 +120,7 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
         }
       }
     }
+    tessDeleteTess(fill);
 
     // Single source of truth for the coast outline + shade: ask libtess2 for
     // the BOUNDARY CONTOURS of the *filled* region under the SAME even-odd
@@ -115,11 +128,15 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
     // (holes punched, overlapping/shared ring edges merged), so the outline
     // and the inland shade ride the tan land/sea boundary precisely instead
     // of the raw input rings, which can diverge from the merged fill edge.
-    if (tessTesselate(tess, TESS_WINDING_ODD, TESS_BOUNDARY_CONTOURS, 0, 2,
+    // A separate tessellator is required because the fill pass already
+    // destroyed its mesh.
+    TESStesselator* bound = tessNewTess(nullptr);
+    addContours(bound);
+    if (tessTesselate(bound, TESS_WINDING_ODD, TESS_BOUNDARY_CONTOURS, 0, 2,
                       nullptr)) {
-      const float* verts = tessGetVertices(tess);
-      const TESSindex* elems = tessGetElements(tess);
-      const int nc = tessGetElementCount(tess);
+      const float* verts = tessGetVertices(bound);
+      const TESSindex* elems = tessGetElements(bound);
+      const int nc = tessGetElementCount(bound);
       for (int i = 0; i < nc; ++i) {
         const TESSindex base = elems[i * 2];
         const TESSindex count = elems[i * 2 + 1];
@@ -131,11 +148,8 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
         m_coastlines.append(std::move(loop));
       }
     }
-
-    tessDeleteTess(tess);  // accumulates contours; reset per feature
-    tess = tessNewTess(nullptr);
+    tessDeleteTess(bound);
   }
-  tessDeleteTess(tess);
 
   m_loaded = !m_land_tris.isEmpty();
   qWarning("Basemap: %d rings, %lld triangles in %lld ms", rings,

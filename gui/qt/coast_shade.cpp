@@ -58,18 +58,6 @@ float smoothstep(double a, double b, double x) {
   double t = std::clamp((x - a) / (b - a), 0.0, 1.0);
   return static_cast<float>(t * t * (3.0 - 2.0 * t));
 }
-
-// Twice the signed area of a closed contour; sign gives the winding.
-double signedArea2(const QList<QPointF>& c) {
-  double a = 0.0;
-  const int n = c.size();
-  for (int i = 0; i < n; ++i) {
-    const QPointF& p = c[i];
-    const QPointF& q = c[(i + 1) % n];
-    a += p.x() * q.y() - q.x() * p.y();
-  }
-  return a;
-}
 }  // namespace
 
 // ---- shader ---------------------------------------------------------------
@@ -157,19 +145,20 @@ QSGGeometryNode* makeCoastShadeNode(const QList<QList<QPointF>>& contours,
     const int n = c.size();
     if (n < 3) continue;
 
-    // Inward normal sign from winding: left normal (-dy, dx) points to the
-    // interior for a positive-signed-area (CCW) ring, else the right normal.
-    // Computed from the FULL ring so normals stay correct where we skip
-    // segments.
-    const double sgn = signedArea2(c) >= 0.0 ? 1.0 : -1.0;
-    QList<QPointF> inward;
-    inward.reserve(n);
+    // libtess2 emits boundary contours with the filled (land) region always
+    // on the LEFT of each directed edge -- outer coastlines come out CCW and
+    // holes/lakes CW, but in both cases the left normal (-dy, dx) points into
+    // the land. So the landward normal is the left normal for every loop; a
+    // winding-based sign flip would be correct for outer rings but invert
+    // holes, shading the water around lakes/islands instead of the land.
     const auto edgeNormal = [&](const QPointF& a, const QPointF& b, bool& ok) {
       const double dx = b.x() - a.x(), dy = b.y() - a.y();
       const double len = std::hypot(dx, dy);
       ok = len > 0.0;
-      return ok ? QPointF(sgn * -dy / len, sgn * dx / len) : QPointF(0, 0);
+      return ok ? QPointF(-dy / len, dx / len) : QPointF(0, 0);
     };
+    QList<QPointF> inward;
+    inward.reserve(n);
     for (int i = 0; i < n; ++i) {
       bool okIn = false, okOut = false;
       const QPointF nIn = edgeNormal(c[(i - 1 + n) % n], c[i], okIn);
