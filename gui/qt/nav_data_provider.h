@@ -50,9 +50,15 @@ public:
   virtual QList<NavTrack> tracks() const = 0;
 
 Q_SIGNALS:
-  /** Emitted when any of the above has changed and the overlay Layers should
-   *  rebuild. */
-  void changed();
+  /** High-frequency data changed (AIS targets / own ship moving). The
+   *  dynamic, retained overlays (AisLayer, OwnShipLayer) connect to this and
+   *  update transforms cheaply. */
+  void dynamicChanged();
+
+  /** Low-frequency data changed (routes / tracks / waypoints edited). The
+   *  static overlays connect to this so they rebuild only when their data
+   *  actually changes -- not on every AIS tick (P2.12). */
+  void staticChanged();
 };
 
 }  // namespace ocpn::qtui

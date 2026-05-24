@@ -96,7 +96,9 @@ void DemoNavDataProvider::tick() {
   for (AisTarget& tgt : m_targets)
     advance(tgt.lat, tgt.lon, tgt.cog, tgt.sog, dt);
 
-  Q_EMIT changed();
+  // Only the dynamic data moves; the demo route/track/waypoints are static,
+  // so we never emit staticChanged() (those layers build once).
+  Q_EMIT dynamicChanged();
 }
 
 }  // namespace ocpn::qtui

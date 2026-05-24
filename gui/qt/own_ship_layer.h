@@ -42,6 +42,7 @@ public:
                QObject* parent = nullptr)
       : NavLayer(provider, viewport, parent) {
     setOwner(QStringLiteral("core.ownship"));
+    connectData(&NavDataProvider::dynamicChanged);
   }
 
   QString id() const override { return QStringLiteral("core.ownship"); }

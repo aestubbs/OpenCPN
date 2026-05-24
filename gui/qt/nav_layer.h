@@ -50,8 +50,8 @@ public:
   NavLayer(NavDataProvider* provider, const Viewport* viewport,
            QObject* parent = nullptr)
       : Layer(parent), m_provider(provider), m_viewport(viewport) {
-    if (m_provider)
-      connect(m_provider, &NavDataProvider::changed, this, &Layer::dirty);
+    // Data subscription is chosen by the subclass via connectData() (dynamic
+    // vs static signal, P2.12) -- the base wires only the viewport.
     // Re-render on zoom so screen-fixed symbol sizes track the scale; a pure
     // pan needs no rebuild (the world-anchored root transform moves us).
     if (m_viewport) {
@@ -70,6 +70,14 @@ public:
 
 protected:
   const NavDataProvider* provider() const { return m_provider; }
+
+  /** Subscribe this layer to a provider data signal (dynamicChanged for the
+   *  moving overlays, staticChanged for routes/tracks/waypoints) so it
+   *  rebuilds only when its kind of data changes. Call once from a
+   *  subclass ctor. */
+  void connectData(void (NavDataProvider::*signal)()) {
+    if (m_provider) connect(m_provider, signal, this, &Layer::dirty);
+  }
 
   /** Current viewport scale (pixels per degree); 1.0 if unavailable. */
   double currentScale() const {
@@ -112,7 +120,11 @@ private:
  */
 class StaticNavLayer : public NavLayer {
 public:
-  using NavLayer::NavLayer;
+  StaticNavLayer(NavDataProvider* provider, const Viewport* viewport,
+                 QObject* parent = nullptr)
+      : NavLayer(provider, viewport, parent) {
+    connectData(&NavDataProvider::staticChanged);  // not the AIS tick rate
+  }
 
   QSGNode* updateSubtree(QSGNode* /*old*/, QQuickWindow* window) override {
     // Rebuild wholesale and return a fresh root; the compositor frees the

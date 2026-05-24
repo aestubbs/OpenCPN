@@ -44,6 +44,7 @@ public:
            QObject* parent = nullptr)
       : NavLayer(provider, viewport, parent) {
     setOwner(QStringLiteral("core.ais"));
+    connectData(&NavDataProvider::dynamicChanged);
   }
 
   QString id() const override { return QStringLiteral("core.ais"); }
