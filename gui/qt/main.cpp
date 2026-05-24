@@ -87,6 +87,9 @@ int main(int argc, char* argv[]) {
 
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty("s52", &s52);
+  // Runtime Qt version string for the About dialog.
+  engine.rootContext()->setContextProperty(
+      "qtRuntimeVersion", QString::fromLatin1(qVersion()));
   // QML module URI declared in CMakeLists qt_add_qml_module(URI opencpn.qt).
   engine.loadFromModule("opencpn.qt", "Main");
   if (engine.rootObjects().isEmpty()) return -1;

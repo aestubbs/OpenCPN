@@ -415,6 +415,54 @@ ApplicationWindow {
         }
     }
 
+    // --- About: a small native dialog window (wx ID_ABOUT). --------------
+    Window {
+        id: aboutWindow
+        title: qsTr("About OpenCPN")
+        flags: Qt.Dialog
+        width: 420
+        height: 260
+        color: aboutPalette.window
+
+        SystemPalette { id: aboutPalette }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 10
+
+            Label {
+                text: qsTr("OpenCPN")
+                font.pointSize: 22; font.bold: true
+                Layout.alignment: Qt.AlignHCenter
+            }
+            Label {
+                text: qsTr("Qt / QtQuick prototype")
+                opacity: 0.8
+                Layout.alignment: Qt.AlignHCenter
+            }
+            Label {
+                text: qsTr("A chart plotter and marine GPS navigation display.\n" +
+                           "This build renders S-57/S-52 vector charts through a " +
+                           "Qt Quick scene graph.")
+                wrapMode: Text.Wrap
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+            }
+            Label {
+                text: qsTr("Running on Qt ") + qtRuntimeVersion
+                opacity: 0.7; font.pointSize: 10
+                Layout.alignment: Qt.AlignHCenter
+            }
+            Item { Layout.fillHeight: true }
+            DialogButtonBox {
+                Layout.fillWidth: true
+                standardButtons: DialogButtonBox.Close
+                onRejected: aboutWindow.close()
+            }
+        }
+    }
+
     // --- Central: world-anchored + display-anchored scene-graph subtrees,
     //     both inside the ChartCanvas QQuickItem.
     ChartCanvas {
@@ -751,9 +799,10 @@ ApplicationWindow {
             Tool {
                 text: "⎙"; ToolTip.text: qsTr("Print chart (not yet implemented)")
             }
-            // 8. About OpenCPN (wx ID_ABOUT) -- not wired yet.
+            // 8. About OpenCPN (wx ID_ABOUT).
             Tool {
-                text: "ⓘ"; ToolTip.text: qsTr("About OpenCPN (not yet implemented)")
+                text: "ⓘ"; ToolTip.text: qsTr("About OpenCPN")
+                onClicked: { aboutWindow.show(); aboutWindow.raise() }
             }
             // 9. Drop MOB Marker (wx ID_MOB) -- not wired yet.
             Tool {
