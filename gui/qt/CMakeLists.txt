@@ -19,6 +19,8 @@ qt_add_shaders(opencpn-qt "opencpn_qt_shaders"
   FILES
     shaders/aaline.vert
     shaders/aaline.frag
+    shaders/coastshade.vert
+    shaders/coastshade.frag
 )
 
 qt_add_qml_module(opencpn-qt
@@ -40,6 +42,8 @@ qt_add_qml_module(opencpn-qt
     sg_builder.cpp
     aa_line.h
     aa_line.cpp
+    coast_shade.h
+    coast_shade.cpp
     chart_provider.h
     chart_layer.h
     chart_layer.cpp

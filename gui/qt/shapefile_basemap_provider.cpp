@@ -24,6 +24,7 @@
 #include "Polygon.hpp"
 #include "Ring.hpp"
 #include "ShapefileReader.hpp"
+#include "coast_shade.h"
 #include "sg_helpers.h"
 #include "tesselator.h"
 #include "viewport.h"
@@ -131,7 +132,13 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
     root->appendChildNode(land);
   }
 
-  // 3. Coastline outlines: every ring as a closed 1px line loop, batched
+  // 3. Inland shade: a soft gradient band just inside the coast (darkening
+  //    fading to transparent ~6px inland) so land lifts off the water.
+  if (auto* shade = makeCoastShadeNode(m_coastlines, QColor(0, 0, 0),
+                                       /*width_px=*/6.0f, /*max_alpha=*/0.38f))
+    root->appendChildNode(shade);
+
+  // 4. Coastline outlines: every ring as a closed 1px line loop, batched
   //    into one DrawLines geometry (segment pairs).
   {
     int seg_verts = 0;
