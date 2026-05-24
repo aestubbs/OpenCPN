@@ -149,12 +149,16 @@ public:
   QList<Symbol> symbols;
   QList<VectorSymbol> vectorSymbols;
   QList<Label> labels;
+  // Land-area (LNDARE) exterior rings, (lon, lat), closed -- for the
+  // coastline land-shade pass. Not symbology; a cartographic emphasis.
+  QList<QList<QPointF>> landContours;
   void clear() {
     prims.clear();
     patternFills.clear();
     symbols.clear();
     vectorSymbols.clear();
     labels.clear();
+    landContours.clear();
   }
   bool empty() const {
     return prims.isEmpty() && patternFills.isEmpty() && symbols.isEmpty() &&

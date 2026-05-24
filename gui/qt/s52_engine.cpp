@@ -333,6 +333,16 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             CopyFeatureAttributes(feat, obj);
             EmitAreaPoly(plib, buf, className, poly, 0.0, 0.0, obj, ctx);
             ++n_areas;
+            // Capture land-area exterior rings (lon, lat) for the coastline
+            // land-shade pass.
+            if (strncmp(className, "LNDARE", 6) == 0) {
+              const int np = ext->getNumPoints();
+              QList<QPointF> ring;
+              ring.reserve(np);
+              for (int i = 0; i < np; ++i)
+                ring.append(QPointF(ext->getX(i), ext->getY(i)));
+              buf.landContours.append(std::move(ring));
+            }
           };
           if (gt == wkbPolygon) {
             emitOne(static_cast<OGRPolygon*>(geom));

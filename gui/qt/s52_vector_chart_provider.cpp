@@ -36,6 +36,7 @@
 #include <QSGTransformNode>
 
 #include "aa_line.h"
+#include "coast_shade.h"
 #include "sg_helpers.h"
 #include "sg_texture_cache.h"
 #include "viewport.h"
@@ -387,6 +388,24 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
     for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
     root->appendChildNode(node);
+  }
+
+  // Coastline land-shade: an inland gradient just inside LNDARE boundaries
+  // (over the land fill), matching the world basemap effect so detailed-chart
+  // land lifts off the water too. landContours are (lon, lat) -> world
+  // (x=lon, y=-lat).
+  if (!m_buffer.landContours.isEmpty()) {
+    QList<QList<QPointF>> rings;
+    rings.reserve(m_buffer.landContours.size());
+    for (const QList<QPointF>& c : m_buffer.landContours) {
+      QList<QPointF> w;
+      w.reserve(c.size());
+      for (const QPointF& p : c) w.append(QPointF(p.x(), -p.y()));
+      rings.append(std::move(w));
+    }
+    if (auto* shade = makeCoastShadeNode(rings, QColor(0, 0, 0),
+                                         /*width_px=*/6.0f, /*max_alpha=*/0.35f))
+      root->appendChildNode(shade);
   }
 
   // AP pattern fills: tessellated triangles drawn with a tiling texture.
