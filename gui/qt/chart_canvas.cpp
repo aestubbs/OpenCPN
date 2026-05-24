@@ -48,9 +48,6 @@
 #include "own_ship_layer.h"
 #include "route_overlay_layers.h"
 #include "layer_compositor.h"
-#include "model/ais_decoder.h"
-#include "model/base_platform.h"
-#include "model/select.h"
 #include "model/ocpn_config.h"
 #include "model_nav_data_provider.h"
 #include "raster_chart_provider.h"
@@ -110,17 +107,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // rebuild. Each is a stable-id Layer, so it also exercises P2.10.
   //
   // Live source mirrors the wx app: the comm/decoder pipeline feeds the model
-  // and the canvas reads it. Here a recorded NMEA log feeds the real
-  // AisDecoder (g_pAIS) + own-ship globals via NmeaLogReplay; swapping in a
-  // real CommDriver later changes only the source. (Routes/tracks/waypoints
-  // come from the model managers + navobj DB -- wired in a later slice.)
-  // The AisDecoder registers each target in pSelectAIS (for click/hit-test),
-  // and Select needs g_BasePlatform (for the selection radius); both are
-  // dereferenced unconditionally on decode, so boot them first. BasePlatform
-  // falls back to a nominal DPI without a wxApp, which is fine here.
-  if (!g_BasePlatform) g_BasePlatform = new BasePlatform();
-  if (!pSelectAIS) pSelectAIS = new Select();
-  if (!g_pAIS) g_pAIS = new AisDecoder(AisDecoderCallbacks());
+  // and the canvas reads it. The nav-core singletons (g_pAIS, route/waypoint
+  // managers, own-ship track, navobj DB) are brought up by initNavCore() in
+  // main() before this canvas exists. A recorded NMEA log feeds the real
+  // AisDecoder via the worker thread; swapping in a real CommDriver later
+  // changes only the source.
   m_demo_provider = std::make_unique<DemoNavDataProvider>(m_viewport.get());
   m_model_provider =
       std::make_unique<ModelNavDataProvider>(QString::fromUtf8(OCPN_QT_NMEA_LOG));

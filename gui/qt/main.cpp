@@ -33,6 +33,7 @@
 #include <QString>
 #include <QSurfaceFormat>
 
+#include "nav_core.h"
 #include "s52_engine.h"
 
 #ifndef OCPN_QT_S57DATA_DIR
@@ -52,6 +53,11 @@ int main(int argc, char* argv[]) {
   QGuiApplication app(argc, argv);
   app.setOrganizationName("OpenCPN");
   app.setApplicationName("opencpn-qt");
+
+  // Bring up the model nav-core singletons (AIS decoder, route/waypoint
+  // managers, own-ship track, navobj DB) before the QML/ChartCanvas loads,
+  // in dependency order. The live overlays read these.
+  ocpn::qtui::initNavCore();
 
   // Initialise the S-52 engine before loading the QML so the status
   // binding is current the moment Main.qml's HUD reads it.
