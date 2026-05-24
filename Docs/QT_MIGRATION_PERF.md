@@ -66,10 +66,11 @@ These were built in as the renderer was written, not bolted on:
   is its own `QSGGeometryNode`. `QSG_VISUALIZE=batches` on-screen will show
   how much the SG auto-batches; merging same-material geometry into shared
   buffers is the optimisation if it doesn't. (The API surface won't change.)
-- **AA-line shader** (P2.4 #5 / P2.13): only if on-screen profiling shows the
-  MSAA + parallel-strip lines are insufficient or too costly.
-- **Sub-pixel line widths.** Overlay pen widths are world units (`px * world
-  /px`); below 1 they fall to a 1-px line strip — fine visually, but worth a
-  look under overdraw.
+- **AA-line shader** (P2.4 #5): **done** — the parallel-strip lines were
+  replaced by a shared custom `QSGMaterialShader` (`aa_line.{h,cpp}`) with
+  screen-space (zoom-invariant) width, distance-feather AA, and dashes. This
+  also removed the S-52 per-zoom `rebuildLines` vertex rebuild. Lines are now
+  one node per feature (`NoBatching`); watch the draw-call count under
+  `QSG_VISUALIZE=batches`. Bulk 1px coastline/boundary stay batched.
 - **Head-to-head vs legacy GL** on an identical chart/AIS load — the
   acceptance check for "close gaps"; needs the on-screen benchmark above.

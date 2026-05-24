@@ -32,7 +32,7 @@ and no `qsb` step**:
 | 2 | `texture_2D` | **`QSGTextureMaterial`** / `QSGOpaqueTextureMaterial`; `QSGImageNode` for a single quad | no — built-in (`sg::makeTextureNode`, `QQuickWindow::createImageNode`) |
 | 3 | `circle_filled` | **tessellated triangle-fan geometry** + `QSGFlatColorMaterial`, edges smoothed by 4× MSAA | no for the core path; optional DF shader later |
 | 4 | `texture_2DA` | **pre-modulate the `QImage` on the CPU** (`QPainter`), then `QSGTextureMaterial`; pure-alpha fades via `QSGOpacityNode` | no in practice — the label/symbol path already paints colour into the image |
-| 5 | `AALine` | **parallel 1-px strips + MSAA** (already shipped, see P2.8 line work) | **deferred candidate** — a `cosmeticStroke`-style `QSGMaterialShader` is the only genuine top-tier-fidelity upgrade, gated on P2.12 |
+| 5 | `AALine` | **custom `QSGMaterialShader`** — `aa_line.{h,cpp}` + `shaders/aaline.{vert,frag}` (baked via qsb). Screen-space quad expansion (width as a px uniform, zoom-invariant), distance-feather AA, dash via arc length | **DONE** — this is now the single shared line path for S-52 chart lines + all overlays, replacing the parallel-strip workaround |
 | 6 | `ring` | **line-loop / annulus-triangle geometry** + `QSGFlatColorMaterial` (display-anchored), built by the P2.6 scene-graph DC | no for the core path; optional DF shader later |
 
 ## Conclusion
@@ -52,7 +52,10 @@ and no `qsb` step**:
   need a custom shader for crisp distance-field anti-aliasing at extreme
   zoom — not a baseline requirement.
 
-So the residual **genuinely-required** custom shader count is **0–1**
-(AA-line, conditional on P2.12), below the original "~2–3" estimate. Raw RHI /
-custom `QSGMaterialShader` therefore stays an escape hatch (**P2.13**), not a
-Phase-2 baseline dependency.
+So the residual **genuinely-required** custom shader count was **0–1**
+(AA-line), below the original "~2–3" estimate. The **AA-line shader has now
+been implemented** (`aa_line.{h,cpp}`) — the parallel-strip technique didn't
+give clean lines at arbitrary widths, so it was replaced with one shared
+custom `QSGMaterialShader` used by both the S-52 chart-line path and every
+overlay. Raw RHI (`beforeRendering`/`afterRendering`, **P2.13**) remains an
+unused escape hatch.
