@@ -84,18 +84,12 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
       if (pts.size() < 3) continue;
       contour.clear();
       contour.reserve(static_cast<int>(pts.size()) * 2);
-      QList<QPointF> world;
-      world.reserve(static_cast<int>(pts.size()));
       for (const shp::Point& p : pts) {
-        const float wx = static_cast<float>(p.getX());   // lon
-        const float wy = static_cast<float>(-p.getY());  // -lat
-        contour.append(wx);
-        contour.append(wy);
-        world.append(QPointF(wx, wy));
+        contour.append(static_cast<float>(p.getX()));    // lon
+        contour.append(static_cast<float>(-p.getY()));   // -lat
       }
       tessAddContour(tess, 2, contour.constData(), sizeof(float) * 2,
                      static_cast<int>(pts.size()));
-      m_coastlines.append(std::move(world));
       any = true;
       ++rings;
     }
@@ -114,6 +108,30 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
         }
       }
     }
+
+    // Single source of truth for the coast outline + shade: ask libtess2 for
+    // the BOUNDARY CONTOURS of the *filled* region under the SAME even-odd
+    // rule used for the fill above. These loops are exactly the fill's edge
+    // (holes punched, overlapping/shared ring edges merged), so the outline
+    // and the inland shade ride the tan land/sea boundary precisely instead
+    // of the raw input rings, which can diverge from the merged fill edge.
+    if (tessTesselate(tess, TESS_WINDING_ODD, TESS_BOUNDARY_CONTOURS, 0, 2,
+                      nullptr)) {
+      const float* verts = tessGetVertices(tess);
+      const TESSindex* elems = tessGetElements(tess);
+      const int nc = tessGetElementCount(tess);
+      for (int i = 0; i < nc; ++i) {
+        const TESSindex base = elems[i * 2];
+        const TESSindex count = elems[i * 2 + 1];
+        if (count < 3) continue;
+        QList<QPointF> loop;
+        loop.reserve(count);
+        for (TESSindex j = 0; j < count; ++j)
+          loop.append(QPointF(verts[(base + j) * 2], verts[(base + j) * 2 + 1]));
+        m_coastlines.append(std::move(loop));
+      }
+    }
+
     tessDeleteTess(tess);  // accumulates contours; reset per feature
     tess = tessNewTess(nullptr);
   }
@@ -155,8 +173,10 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
   }
 
   // 3. Inland shade: a soft gradient band just inside the coast (darkening
-  //    fading to transparent ~6px inland) so land lifts off the water.
-  //    Skip grid clip edges so the tile boundaries aren't shaded.
+  //    fading to transparent ~6px inland) so land lifts off the water. Built
+  //    from the same fill-boundary loops as the outline (and the fill), so its
+  //    coastal edge sits exactly on the land/sea boundary. Skip grid clip
+  //    edges so the tile boundaries aren't shaded.
   if (auto* shade = makeCoastShadeNode(
           m_coastlines, QColor(0, 0, 0), /*width_px=*/6.0f, /*max_alpha=*/0.38f,
           [](const QPointF& a, const QPointF& b) { return !isGridEdge(a, b); }))

@@ -57,15 +57,18 @@ public:
   QSGNode* renderChart(QSGNode* old_subtree, const Viewport& viewport,
                        QQuickWindow* window) override;
 
-  /** Land-polygon ring contours (world coords, x=lon y=-lat), each closed.
-   *  Used by the land-shade pass. */
+  /** Land fill-boundary contours (world coords, x=lon y=-lat), each a closed
+   *  loop. These are libtess2's BOUNDARY_CONTOURS of the filled region (same
+   *  even-odd rule as the fill), so they coincide exactly with the land/sea
+   *  fill edge -- the single source of truth shared by the coast outline and
+   *  the inland-shade pass. */
   const QList<QList<QPointF>>& coastlines() const { return m_coastlines; }
 
 private:
   void load(const QString& shp_path);
 
   QList<QPointF> m_land_tris;            // (x=lon, y=-lat) triangle list
-  QList<QList<QPointF>> m_coastlines;    // closed ring contours, world coords
+  QList<QList<QPointF>> m_coastlines;    // fill-boundary loops, world coords
   QColor m_sea{170, 195, 220};
   QColor m_land{225, 213, 180};
   QColor m_coast{120, 110, 90};
