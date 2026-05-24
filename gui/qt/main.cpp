@@ -30,6 +30,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickStyle>
 #include <QString>
 #include <QSurfaceFormat>
 
@@ -53,6 +54,25 @@ int main(int argc, char* argv[]) {
   QGuiApplication app(argc, argv);
   app.setOrganizationName("OpenCPN");
   app.setApplicationName("opencpn-qt");
+
+  // Use the platform-native Qt Quick Controls style so the chrome (toolbar,
+  // drawer, dialogs, switches) renders natively instead of the generic
+  // "Basic" fallback. macOS / Windows get their native styles; Fusion is a
+  // polished cross-platform default elsewhere. An explicit
+  // QT_QUICK_CONTROLS_STYLE env var still overrides this.
+  if (QQuickStyle::name().isEmpty()) {
+#if defined(Q_OS_MACOS)
+    QQuickStyle::setStyle(QStringLiteral("macOS"));
+#elif defined(Q_OS_WIN)
+    QQuickStyle::setStyle(QStringLiteral("Windows"));
+#elif defined(Q_OS_IOS)
+    QQuickStyle::setStyle(QStringLiteral("iOS"));
+#elif defined(Q_OS_ANDROID)
+    QQuickStyle::setStyle(QStringLiteral("Material"));
+#else
+    QQuickStyle::setStyle(QStringLiteral("Fusion"));
+#endif
+  }
 
   // Bring up the model nav-core singletons (AIS decoder, route/waypoint
   // managers, own-ship track, navobj DB) before the QML/ChartCanvas loads,

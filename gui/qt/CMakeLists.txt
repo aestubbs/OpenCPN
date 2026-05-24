@@ -151,6 +151,8 @@ target_link_libraries(opencpn-qt PRIVATE
   Qt6::Gui
   Qt6::Quick
   Qt6::Qml
+  # QQuickStyle (selects the native Quick Controls style in main.cpp).
+  Qt6::QuickControls2
   # libs/s52plib transitively brings ocpn::model, ocpn::geoprim,
   # ocpn::gl-headers, ocpn::pugixml, ocpn::gdal, ocpn::tess2 -- the
   # full set s52plib needs after the P2.8.0 standalone-link refactor.
