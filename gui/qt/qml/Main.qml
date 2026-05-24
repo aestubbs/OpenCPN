@@ -1,12 +1,14 @@
-// Main.qml -- top-level window for opencpn-qt.
+// Main.qml -- top-level application shell for opencpn-qt (P3.1 / P3.5).
 //
-// Hosts the ChartCanvas QQuickItem (the new Qt-Quick chart renderer) plus
-// the QML HUD tier layered above it, and the application chrome (menu bar
-// + toolbar). HUD items are bound to the Phase 1 QObject model classes
-// (AisDecoder, comm_bridge, etc.) via Q_PROPERTY -- declarative bindings,
-// animations for free.
+// Structure: a touch-friendly header ToolBar with the primary navigation
+// controls + a menu button that opens a slide-out Drawer holding the S-52
+// display / detail / demo controls; the ChartCanvas QQuickItem fills the
+// central area; a footer status bar shows engine + nav status. The QML HUD
+// tier (nav readouts) is layered above the chart. All controls bind to the
+// ChartCanvas Q_PROPERTYs / the nav view-model -- declarative, no imperative
+// plumbing.
 //
-// See docs/QT_MIGRATION_TASKS.md Phase 2 for the architecture.
+// See docs/QT_MIGRATION_TASKS.md Phase 3 for the architecture.
 
 import QtQuick
 import QtQuick.Window
@@ -22,175 +24,219 @@ ApplicationWindow {
     height: 720
     title: qsTr("OpenCPN (Qt prototype)")
 
-    // --- Application menu bar (skeleton; actions wired incrementally) ---
-    menuBar: MenuBar {
-        Menu {
-            title: qsTr("File")
-            MenuItem { text: qsTr("Quit"); onTriggered: Qt.quit() }
-        }
-        Menu {
-            title: qsTr("View")
-            MenuItem { text: qsTr("Zoom In"); onTriggered: chart.zoomIn() }
-            MenuItem { text: qsTr("Zoom Out"); onTriggered: chart.zoomOut() }
-            MenuItem { text: qsTr("Fit World"); onTriggered: chart.fitWorld() }
-        }
-        Menu {
-            title: qsTr("Charts")
-            MenuItem {
-                text: qsTr("Base"); checkable: true
-                checked: chart.displayCategory === 0
-                onTriggered: chart.displayCategory = 0
+    // Minimum touch target (logical px) -- sizes the toolbar + drawer
+    // controls for finger use (P3.5).
+    readonly property int touchSize: 44
+
+    // --- Header: touch-friendly primary toolbar ---------------------------
+    header: ToolBar {
+        RowLayout {
+            anchors.fill: parent
+            spacing: 6
+
+            ToolButton {
+                text: "☰"  // hamburger
+                font.pointSize: 16
+                Layout.preferredHeight: root.touchSize
+                Layout.preferredWidth: root.touchSize
+                onClicked: controlsDrawer.open()
             }
-            MenuItem {
-                text: qsTr("Standard"); checkable: true
-                checked: chart.displayCategory === 1
-                onTriggered: chart.displayCategory = 1
+
+            ToolSeparator {}
+
+            ToolButton {
+                text: "−"  // minus
+                font.pointSize: 18
+                Layout.preferredHeight: root.touchSize
+                Layout.preferredWidth: root.touchSize
+                onClicked: chart.zoomOut()
             }
-            MenuItem {
-                text: qsTr("All"); checkable: true
-                checked: chart.displayCategory === 2
-                onTriggered: chart.displayCategory = 2
+            ToolButton {
+                text: "+"
+                font.pointSize: 18
+                Layout.preferredHeight: root.touchSize
+                Layout.preferredWidth: root.touchSize
+                onClicked: chart.zoomIn()
+            }
+            ToolButton {
+                text: qsTr("Fit")
+                font.pointSize: 13
+                Layout.preferredHeight: root.touchSize
+                onClicked: chart.fitWorld()
+            }
+
+            Item { Layout.fillWidth: true }  // spacer
+
+            ToolButton {
+                text: chart.demoMode ? qsTr("Demo: on") : qsTr("Demo: off")
+                font.pointSize: 13
+                checkable: true
+                checked: chart.demoMode
+                Layout.preferredHeight: root.touchSize
+                onClicked: chart.demoMode = checked
             }
         }
     }
 
-    // --- Toolbar: navigation + S-52 display category ---
-    header: ToolBar {
-        RowLayout {
+    // --- Slide-out controls drawer (the shell's panel area) ---------------
+    Drawer {
+        id: controlsDrawer
+        width: Math.min(300, root.width * 0.85)
+        height: root.height
+        edge: Qt.LeftEdge
+
+        ColumnLayout {
             anchors.fill: parent
-            spacing: 4
+            anchors.margins: 16
+            spacing: 10
 
-            ToolButton { text: qsTr("−"); onClicked: chart.zoomOut() }
-            ToolButton { text: qsTr("+"); onClicked: chart.zoomIn() }
-            ToolButton { text: qsTr("Fit"); onClicked: chart.fitWorld() }
+            Label {
+                text: qsTr("Chart display")
+                font.pointSize: 15; font.bold: true
+            }
 
-            ToolSeparator {}
-
-            // S-52 display-category control (Base / Standard / All).
+            // S-52 display category (exclusive).
+            ButtonGroup { id: catGroup }
             Repeater {
                 model: [ { label: qsTr("Base"), cat: 0 },
                          { label: qsTr("Standard"), cat: 1 },
                          { label: qsTr("All"), cat: 2 } ]
-                delegate: ToolButton {
+                delegate: RadioButton {
                     required property var modelData
                     text: modelData.label
-                    checkable: true
+                    font.pointSize: 13
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.touchSize
+                    ButtonGroup.group: catGroup
                     checked: chart.displayCategory === modelData.cat
                     onClicked: chart.displayCategory = modelData.cat
                 }
             }
 
-            ToolSeparator {}
+            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
 
-            // S-52 viewing-group toggles (post-decode filters).
-            ToolButton {
-                text: qsTr("Soundings")
-                checkable: true
+            Label { text: qsTr("Detail"); font.pointSize: 15; font.bold: true }
+
+            Switch {
+                text: qsTr("Soundings"); font.pointSize: 13
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
                 checked: chart.showSoundings
-                onClicked: chart.showSoundings = checked
+                onToggled: chart.showSoundings = checked
             }
-            ToolButton {
-                text: qsTr("Text")
-                checkable: true
+            Switch {
+                text: qsTr("Text labels"); font.pointSize: 13
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
                 checked: chart.showText
-                onClicked: chart.showText = checked
+                onToggled: chart.showText = checked
             }
-            ToolButton {
-                text: qsTr("Lights")
-                checkable: true
+            Switch {
+                text: qsTr("Lights"); font.pointSize: 13
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
                 checked: chart.showLights
-                onClicked: chart.showLights = checked
+                onToggled: chart.showLights = checked
             }
-            ToolButton {
-                text: qsTr("Buoys")
-                checkable: true
+            Switch {
+                text: qsTr("Buoys & beacons"); font.pointSize: 13
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
                 checked: chart.showBuoys
-                onClicked: chart.showBuoys = checked
+                onToggled: chart.showBuoys = checked
             }
 
-            ToolSeparator {}
+            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
 
-            // Nav overlays demo mode (synthetic animated AIS / own-ship).
-            ToolButton {
-                text: qsTr("Demo")
-                checkable: true
+            Label { text: qsTr("Demo"); font.pointSize: 15; font.bold: true }
+            Switch {
+                text: qsTr("Demo mode"); font.pointSize: 13
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
                 checked: chart.demoMode
-                onClicked: chart.demoMode = checked
+                onToggled: chart.demoMode = checked
             }
-            ToolButton {
+            Button {
                 text: qsTr("Drop demo here")
-                onClicked: chart.dropDemoHere()
+                font.pointSize: 13
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+                onClicked: { chart.dropDemoHere(); controlsDrawer.close() }
             }
 
-            Item { Layout.fillWidth: true }  // spacer
+            Item { Layout.fillHeight: true }  // push Quit to the bottom
 
-            Label {
-                text: qsTr("Phase 2 prototype")
-                color: "#404040"
+            Button {
+                text: qsTr("Quit")
+                font.pointSize: 13
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+                onClicked: Qt.quit()
             }
         }
     }
 
-    // Tier 1 + 2: world-anchored + display-anchored scene-graph subtrees,
-    // both inside the ChartCanvas QQuickItem.
+    // --- Central: world-anchored + display-anchored scene-graph subtrees,
+    //     both inside the ChartCanvas QQuickItem.
     ChartCanvas {
         id: chart
         anchors.fill: parent
         // Hand the S-52 engine to the canvas so it scans the chart set's
-        // boundaries and streams cell content on demand (P2.x). `s52` is
-        // the context property set in main.cpp.
+        // boundaries and streams cell content on demand. `s52` is the
+        // context property set in main.cpp.
         s52Engine: s52
+
+        // Tier 3: nav-data HUD (P3.4) -- own-ship SOG/COG/position + AIS
+        // count, bound to the ChartCanvas NavStateViewModel.
+        Rectangle {
+            id: navHud
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 12
+            width: hudCol.implicitWidth + 24
+            height: hudCol.implicitHeight + 16
+            radius: 6
+            color: "#cc101418"
+            border.color: "#3affffff"
+
+            readonly property var nav: chart.navState
+
+            Column {
+                id: hudCol
+                anchors.centerIn: parent
+                spacing: 2
+
+                Text {
+                    text: qsTr("SOG  ") + (navHud.nav ? navHud.nav.sogText : "--")
+                    color: "#e0e0e0"; font.pointSize: 13; font.bold: true
+                }
+                Text {
+                    text: qsTr("COG  ") + (navHud.nav ? navHud.nav.cogText : "--")
+                    color: "#e0e0e0"; font.pointSize: 13; font.bold: true
+                }
+                Text {
+                    text: navHud.nav ? navHud.nav.positionText : "---"
+                    color: "#b0d0ff"; font.pointSize: 11
+                }
+                Text {
+                    text: qsTr("AIS  ") +
+                          (navHud.nav ? navHud.nav.aisTargetCount : 0) +
+                          qsTr(" targets")
+                    color: "#90ee90"; font.pointSize: 11
+                }
+            }
+        }
     }
 
-    // Tier 3: QML HUD -- live binding to the S-52 engine status
-    // (Q_PROPERTY -> QML auto-rebinds on changed()).
-    Text {
-        id: s52Status
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        anchors.margins: 12
-        text: s52 ? s52.status : qsTr("S-52: (no engine)")
-        font.pointSize: 11
-        color: s52 && s52.ok ? "#006400" : "#a00000"
-    }
-
-    // Tier 3: nav-data HUD (P3.4) -- own-ship SOG/COG/position + AIS count,
-    // bound to the ChartCanvas NavStateViewModel (Q_PROPERTY auto-rebind).
-    Rectangle {
-        id: navHud
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 12
-        width: hudCol.implicitWidth + 24
-        height: hudCol.implicitHeight + 16
-        radius: 6
-        color: "#cc101418"
-        border.color: "#3affffff"
-
-        readonly property var nav: chart.navState
-
-        Column {
-            id: hudCol
-            anchors.centerIn: parent
-            spacing: 2
-
-            Text {
-                text: qsTr("SOG  ") + (navHud.nav ? navHud.nav.sogText : "--")
-                color: "#e0e0e0"; font.pointSize: 13; font.bold: true
+    // --- Footer: status bar -----------------------------------------------
+    footer: ToolBar {
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            Label {
+                text: s52 ? s52.status : qsTr("S-52: (no engine)")
+                color: s52 && s52.ok ? "#1f7a1f" : "#a00000"
+                font.pointSize: 11
             }
-            Text {
-                text: qsTr("COG  ") + (navHud.nav ? navHud.nav.cogText : "--")
-                color: "#e0e0e0"; font.pointSize: 13; font.bold: true
-            }
-            Text {
-                text: navHud.nav ? navHud.nav.positionText : "---"
-                color: "#b0d0ff"; font.pointSize: 11
-            }
-            Text {
-                text: qsTr("AIS  ") +
-                      (navHud.nav ? navHud.nav.aisTargetCount : 0) +
-                      qsTr(" targets")
-                color: "#90ee90"; font.pointSize: 11
+            Item { Layout.fillWidth: true }
+            Label {
+                text: chart.demoMode ? qsTr("DEMO") : qsTr("LIVE")
+                font.pointSize: 11; font.bold: true
+                color: chart.demoMode ? "#b07000" : "#1f7a1f"
             }
         }
     }
