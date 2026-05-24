@@ -1479,7 +1479,7 @@ bool AisDecoder::HandleN2K_129038(const N2000MsgPtr &n2k_msg) {
     pTargetData->LastPositionReportTicks = pTargetData->PositionReportTicks;
     pTargetData->PositionReportTicks = now.toSecsSinceEpoch();
 
-    pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
+    if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
     CommitAISTarget(pTargetData, "", true, bnewtarget);
 
     touch_state.Notify();
@@ -1569,7 +1569,7 @@ bool AisDecoder::HandleN2K_129039(const N2000MsgPtr &n2k_msg) {
         AISTransceiverInformation ==
         tN2kAISTransceiverInformation::N2kaisown_information_not_broadcast;
 
-    pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
+    if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
     CommitAISTarget(pTargetData, "", true, bnewtarget);
 
     touch_state.Notify();
@@ -1667,7 +1667,7 @@ bool AisDecoder::HandleN2K_129041(const N2000MsgPtr &n2k_msg) {
 
     // FIXME (dave) Populate more fiddly static data
 
-    pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
+    if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
     CommitAISTarget(pTargetData, "", true, bnewtarget);
 
     touch_state.Notify();
@@ -1760,7 +1760,7 @@ bool AisDecoder::HandleN2K_129794(const N2000MsgPtr &n2k_msg) {
       }
     }
 
-    pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
+    if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
     CommitAISTarget(pTargetData, "", true, bnewtarget);
 
     touch_state.Notify();
@@ -1804,7 +1804,7 @@ bool AisDecoder::HandleN2K_129809(const N2000MsgPtr &n2k_msg) {
     pTargetData->b_nameValid = true;
     pTargetData->MID = 124;  // Indicates a name from n2k
 
-    pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
+    if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
     CommitAISTarget(pTargetData, "", true, bnewtarget);
 
     touch_state.Notify();
@@ -1862,7 +1862,7 @@ bool AisDecoder::HandleN2K_129810(const N2000MsgPtr &n2k_msg) {
     pTargetData->CallSign[sizeof(pTargetData->CallSign) - 1] = '\0';
     pTargetData->ShipType = (unsigned char)VesselType;
 
-    pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
+    if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
     CommitAISTarget(pTargetData, "", true, bnewtarget);
 
     touch_state.Notify();
@@ -1916,7 +1916,7 @@ bool AisDecoder::HandleN2K_129793(const N2000MsgPtr &n2k_msg) {
 
     // FIXME (dave) Populate more fiddly static data
 
-    pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
+    if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)(long)mmsi, SELTYPE_AISTARGET);
     CommitAISTarget(pTargetData, "", true, bnewtarget);
 
     touch_state.Notify();
@@ -2086,10 +2086,12 @@ void AisDecoder::handleUpdate(const std::shared_ptr<AisTargetData> &pTargetData,
 
   if (pTargetData->b_positionOnceValid) {
     long mmsi_long = pTargetData->MMSI;
-    SelectItem *pSel =
-        pSelectAIS->AddSelectablePoint(pTargetData->Lat, pTargetData->Lon,
-                                       (void *)mmsi_long, SELTYPE_AISTARGET);
-    pSel->SetUserData(pTargetData->MMSI);
+    if (pSelectAIS) {
+      SelectItem *pSel =
+          pSelectAIS->AddSelectablePoint(pTargetData->Lat, pTargetData->Lon,
+                                         (void *)mmsi_long, SELTYPE_AISTARGET);
+      pSel->SetUserData(pTargetData->MMSI);
+    }
   }
   UpdateOneCPA(pTargetData.get());
   if (pTargetData->b_show_track) UpdateOneTrack(pTargetData.get());
@@ -3138,7 +3140,7 @@ AisError AisDecoder::DecodeN0183(const QString &str) {
 
     // Delete the stale AIS Target selectable point
     if (pStaleTarget)
-      pSelectAIS->DeleteSelectablePoint((void *)mmsi_long, SELTYPE_AISTARGET);
+      if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)mmsi_long, SELTYPE_AISTARGET);
 
     if (pTargetData) {
       if (gpsg_mmsi) {
@@ -3320,7 +3322,7 @@ void AisDecoder::CommitAISTarget(
     //  If this is not an ownship message, update the AIS Target in the
     //  Selectable list, and update the CPA info
     if (!pTargetData->b_OwnShip) {
-      if (pTargetData->b_positionOnceValid) {
+      if (pTargetData->b_positionOnceValid && pSelectAIS) {
         long mmsi_long = pTargetData->MMSI;
         SelectItem *pSel = pSelectAIS->AddSelectablePoint(
             pTargetData->Lat, pTargetData->Lon, (void *)mmsi_long,
@@ -3346,7 +3348,7 @@ void AisDecoder::CommitAISTarget(
       //  If this is not an ownship message, update the AIS Target in the
       //  Selectable list even if the message type was not recognized
       if (!pTargetData->b_OwnShip) {
-        if (pTargetData->b_positionOnceValid) {
+        if (pTargetData->b_positionOnceValid && pSelectAIS) {
           long mmsi_long = pTargetData->MMSI;
           SelectItem *pSel = pSelectAIS->AddSelectablePoint(
               pTargetData->Lat, pTargetData->Lon, (void *)mmsi_long,
@@ -3385,7 +3387,7 @@ void AisDecoder::getAISTarget(long mmsi,
 
   // Delete the stale AIS Target selectable point
   if (pStaleTarget)
-    pSelectAIS->DeleteSelectablePoint((void *)mmsi, SELTYPE_AISTARGET);
+    if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)mmsi, SELTYPE_AISTARGET);
 }
 
 std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const QString &str,
@@ -3659,12 +3661,14 @@ std::shared_ptr<AisTargetData> AisDecoder::ProcessDSx(const QString &str,
 
       // Delete any stale Target selectable point
       if (pStaleTarget)
-        pSelectAIS->DeleteSelectablePoint((void *)mmsi_long, SELTYPE_AISTARGET);
+        if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)mmsi_long, SELTYPE_AISTARGET);
       //  And add the updated target
-      SelectItem *pSel =
-          pSelectAIS->AddSelectablePoint(pTargetData->Lat, pTargetData->Lon,
-                                         (void *)mmsi_long, SELTYPE_AISTARGET);
-      pSel->SetUserData(pTargetData->MMSI);
+      if (pSelectAIS) {
+        SelectItem *pSel =
+            pSelectAIS->AddSelectablePoint(pTargetData->Lat, pTargetData->Lon,
+                                           (void *)mmsi_long, SELTYPE_AISTARGET);
+        pSel->SetUserData(pTargetData->MMSI);
+      }
 
       //    Calculate CPA info for this target immediately
       UpdateOneCPA(pTargetData.get());
@@ -3784,7 +3788,7 @@ void AisDecoder::UpdateOneTrack(AisTargetData *ptarget) {
           point, QDateTime::fromSecsSinceEpoch(
                      static_cast<qint64>(ptrackpoint.m_time), Qt::UTC));
 
-      if (tp)
+      if (tp && pSelect)
         pSelect->AddSelectableTrackSegment(tp->m_lat, tp->m_lon, tp1->m_lat,
                                            tp1->m_lon, tp, tp1, t);
 
@@ -4207,7 +4211,7 @@ void AisDecoder::OnTimerAIS() {
         plugin_msg.Notify(xtd, "");
 
         long mmsi_long = xtd->MMSI;
-        pSelectAIS->DeleteSelectablePoint((void *)mmsi_long, SELTYPE_AISTARGET);
+        if (pSelectAIS) pSelectAIS->DeleteSelectablePoint((void *)mmsi_long, SELTYPE_AISTARGET);
 
         //      If we have not seen a static report in 3 times the removal spec,
         //      then remove the target from all lists

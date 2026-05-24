@@ -34,10 +34,12 @@ void initNavCore() {
   // navobj loader needs pSelect / pRouteList / pWayPointMan / g_pRouteMan.
   if (!g_BasePlatform) g_BasePlatform = new BasePlatform();
 
-  // Two selection registries: pSelect (routes/tracks/marks) and pSelectAIS
-  // (AIS targets). Both are written unconditionally by their owners.
+  // pSelect backs routes/tracks/marks hit-testing (navobj load + the track
+  // recorder need it). The AisDecoder no longer requires a Select at all
+  // (its pSelectAIS / pSelect uses are now guarded) -- AIS hit-testing will
+  // be done Qt-natively against the AisTargetStore -- so we leave pSelectAIS
+  // null to keep the AIS subsystem self-contained.
   if (!pSelect) pSelect = new Select();
-  if (!pSelectAIS) pSelectAIS = new Select();
 
   if (!g_pRouteMan)
     g_pRouteMan = new Routeman(RoutePropDlgCtx(), RoutemanDlgCtx());
