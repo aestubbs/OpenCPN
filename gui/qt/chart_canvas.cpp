@@ -95,6 +95,16 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_layer_config = std::make_unique<OcpnConfig>(cfg_dir + "/layers.ini");
   m_compositor->setConfig(m_layer_config.get());
 
+  // Restore persisted chart-display preferences (P3.6) before the providers
+  // are created, so the initial render reflects them.
+  m_display_category =
+      m_layer_config->value("display/category", m_display_category).toInt();
+  m_show_soundings =
+      m_layer_config->value("display/soundings", m_show_soundings).toBool();
+  m_show_text = m_layer_config->value("display/text", m_show_text).toBool();
+  m_show_lights = m_layer_config->value("display/lights", m_show_lights).toBool();
+  m_show_buoys = m_layer_config->value("display/buoys", m_show_buoys).toBool();
+
   // World background -- OpenCPN's shapefile basemap, always present under
   // everything (lowest z) so the canvas shows a land/sea world map at any
   // zoom. ENC cells and overlays composite on top.
@@ -557,6 +567,7 @@ void ChartCanvas::setDisplayCategory(int cat) {
   m_display_category = cat;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setDisplayCategory(cat);
+  if (m_layer_config) m_layer_config->setValue("display/category", cat);
   Q_EMIT displayCategoryChanged();
   update();
 }
@@ -566,6 +577,7 @@ void ChartCanvas::setShowSoundings(bool on) {
   m_show_soundings = on;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowSoundings(on);
+  if (m_layer_config) m_layer_config->setValue("display/soundings", on);
   Q_EMIT showSoundingsChanged();
   update();
 }
@@ -575,6 +587,7 @@ void ChartCanvas::setShowText(bool on) {
   m_show_text = on;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowText(on);
+  if (m_layer_config) m_layer_config->setValue("display/text", on);
   Q_EMIT showTextChanged();
   update();
 }
@@ -584,6 +597,7 @@ void ChartCanvas::setShowLights(bool on) {
   m_show_lights = on;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowLights(on);
+  if (m_layer_config) m_layer_config->setValue("display/lights", on);
   Q_EMIT showLightsChanged();
   update();
 }
@@ -593,6 +607,7 @@ void ChartCanvas::setShowBuoys(bool on) {
   m_show_buoys = on;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowBuoys(on);
+  if (m_layer_config) m_layer_config->setValue("display/buoys", on);
   Q_EMIT showBuoysChanged();
   update();
 }

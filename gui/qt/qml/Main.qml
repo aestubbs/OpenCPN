@@ -85,17 +85,71 @@ ApplicationWindow {
         height: root.height
         edge: Qt.LeftEdge
 
+        // Navigation menu -- destinations open dialogs/panels; the shell
+        // keeps the chart full-bleed behind.
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 10
+            anchors.margins: 8
+            spacing: 2
 
             Label {
-                text: qsTr("Chart display")
-                font.pointSize: 15; font.bold: true
+                text: qsTr("OpenCPN")
+                font.pointSize: 16; font.bold: true
+                Layout.margins: 8
+            }
+            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
+
+            ItemDelegate {
+                text: qsTr("Display settings…")
+                font.pointSize: 14
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+                onClicked: { settingsDialog.open(); controlsDrawer.close() }
             }
 
-            // S-52 display category (exclusive).
+            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
+
+            Switch {
+                text: qsTr("Demo mode"); font.pointSize: 14
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+                leftPadding: 16
+                checked: chart.demoMode
+                onToggled: chart.demoMode = checked
+            }
+            ItemDelegate {
+                text: qsTr("Drop demo here")
+                font.pointSize: 14
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+                onClicked: { chart.dropDemoHere(); controlsDrawer.close() }
+            }
+
+            Item { Layout.fillHeight: true }  // push Quit to the bottom
+
+            ItemDelegate {
+                text: qsTr("Quit")
+                font.pointSize: 14
+                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+                onClicked: Qt.quit()
+            }
+        }
+    }
+
+    // --- Display settings dialog (P3.6) -----------------------------------
+    Dialog {
+        id: settingsDialog
+        title: qsTr("Display settings")
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(root.width * 0.9, 420)
+        standardButtons: Dialog.Close
+
+        ColumnLayout {
+            width: parent.width
+            spacing: 8
+
+            Label {
+                text: qsTr("Chart display category")
+                font.pointSize: 14; font.bold: true
+            }
             ButtonGroup { id: catGroup }
             Repeater {
                 model: [ { label: qsTr("Base"), cat: 0 },
@@ -115,8 +169,7 @@ ApplicationWindow {
 
             Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
 
-            Label { text: qsTr("Detail"); font.pointSize: 15; font.bold: true }
-
+            Label { text: qsTr("Detail"); font.pointSize: 14; font.bold: true }
             Switch {
                 text: qsTr("Soundings"); font.pointSize: 13
                 Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
@@ -140,31 +193,6 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
                 checked: chart.showBuoys
                 onToggled: chart.showBuoys = checked
-            }
-
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
-
-            Label { text: qsTr("Demo"); font.pointSize: 15; font.bold: true }
-            Switch {
-                text: qsTr("Demo mode"); font.pointSize: 13
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
-                checked: chart.demoMode
-                onToggled: chart.demoMode = checked
-            }
-            Button {
-                text: qsTr("Drop demo here")
-                font.pointSize: 13
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
-                onClicked: { chart.dropDemoHere(); controlsDrawer.close() }
-            }
-
-            Item { Layout.fillHeight: true }  // push Quit to the bottom
-
-            Button {
-                text: qsTr("Quit")
-                font.pointSize: 13
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
-                onClicked: Qt.quit()
             }
         }
     }
