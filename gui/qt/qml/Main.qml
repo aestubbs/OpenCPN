@@ -393,38 +393,110 @@ ApplicationWindow {
         }
     }
 
-    // --- Floating toolbar (mirrors OpenCPN's draggable toolbar) -----------
-    // A frameless native Pane floating over the full-bleed chart, draggable
-    // anywhere within the window. Icon buttons for the primary actions; the
-    // menu button opens the navigation / dialog menu.
+    // --- Floating master toolbar (mirrors OpenCPN's single vertical wx
+    //     floating toolbar) ----------------------------------------------
+    // One frameless native Pane floating over the full-bleed chart, oriented
+    // vertically on the left edge and draggable anywhere within the window.
+    // Carries the full wx master-toolbar tool set in wx order; tools we have
+    // not wired up yet are present but inert (tooltip only, no action) so the
+    // layout matches wx and the actions can be connected incrementally.
     Pane {
         id: floatToolbar
         x: 16
         y: 16
         padding: 4
 
-        RowLayout {
+        // Reusable vertical tool factory so every button is sized / tooltipped
+        // identically. Inert tools just omit an onClicked handler.
+        component Tool: ToolButton {
+            font.pointSize: 16
+            implicitWidth: root.touchSize
+            implicitHeight: root.touchSize
+            Layout.alignment: Qt.AlignHCenter
+            ToolTip.visible: hovered && ToolTip.text.length > 0
+            ToolTip.delay: 400
+        }
+
+        ColumnLayout {
             spacing: 2
-            ToolButton {
-                text: "☰"; font.pointSize: 15
-                implicitWidth: root.touchSize; implicitHeight: root.touchSize
-                onClicked: mainMenu.popup(floatToolbar, 0, floatToolbar.height)
+
+            // 1. Menu (wx "Hide Toolbar" master button).
+            Tool {
+                text: "☰"; ToolTip.text: qsTr("Menu")
+                onClicked: mainMenu.popup(floatToolbar, floatToolbar.width, 0)
             }
-            ToolSeparator {}
-            ToolButton {
-                text: "−"; font.pointSize: 18
-                implicitWidth: root.touchSize; implicitHeight: root.touchSize
-                onClicked: chart.zoomOut()
+            // 2. Options -> canvas display drawer.
+            Tool {
+                text: "⚙"; ToolTip.text: qsTr("Options")
+                onClicked: canvasOptions.open()
             }
-            ToolButton {
-                text: "+"; font.pointSize: 18
-                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+
+            ToolSeparator { Layout.fillWidth: true }
+
+            // Zoom / fit / follow -- our wired navigation controls (wx keeps
+            // these on the per-canvas MUIBar; consolidated here for now).
+            Tool {
+                text: "+"; font.pointSize: 19; ToolTip.text: qsTr("Zoom in")
                 onClicked: chart.zoomIn()
             }
-            ToolButton {
-                text: "⤢"; font.pointSize: 14  // fit
-                implicitWidth: root.touchSize; implicitHeight: root.touchSize
+            Tool {
+                text: "−"; font.pointSize: 19; ToolTip.text: qsTr("Zoom out")
+                onClicked: chart.zoomOut()
+            }
+            Tool {
+                text: "⤢"; font.pointSize: 14; ToolTip.text: qsTr("Fit / zoom to world")
                 onClicked: chart.fitWorld()
+            }
+            Tool {
+                text: "⊙"; ToolTip.text: qsTr("Auto-follow own ship")
+                checkable: true
+                checked: chart.followOwnShip
+                onClicked: chart.followOwnShip = checked
+            }
+
+            ToolSeparator { Layout.fillWidth: true }
+
+            // 3. Create Route (wx ID_MENU_ROUTE_NEW) -- not wired yet.
+            Tool {
+                text: "✚"; checkable: true
+                ToolTip.text: qsTr("Create route (not yet implemented)")
+            }
+            // 4. Route & Mark Manager -> the dialog window.
+            Tool {
+                text: "▤"; ToolTip.text: qsTr("Route && mark manager")
+                onClicked: { routeManagerWindow.show(); routeManagerWindow.raise() }
+            }
+            // 5. Enable Tracking (wx ID_TRACK) -- not wired yet.
+            Tool {
+                text: "⊚"; checkable: true
+                ToolTip.text: qsTr("Enable tracking (not yet implemented)")
+            }
+            // 6. Change Color Scheme (wx ID_COLSCHEME) -- not wired yet.
+            Tool {
+                text: "◑"; ToolTip.text: qsTr("Change color scheme (not yet implemented)")
+            }
+            // 7. Print Chart (wx ID_PRINT) -- not wired yet.
+            Tool {
+                text: "⎙"; ToolTip.text: qsTr("Print chart (not yet implemented)")
+            }
+            // 8. About OpenCPN (wx ID_ABOUT) -- not wired yet.
+            Tool {
+                text: "ⓘ"; ToolTip.text: qsTr("About OpenCPN (not yet implemented)")
+            }
+            // 9. Drop MOB Marker (wx ID_MOB) -- not wired yet.
+            Tool {
+                text: "⚓"; ToolTip.text: qsTr("Drop MOB marker (not yet implemented)")
+            }
+
+            ToolSeparator { Layout.fillWidth: true }
+
+            // Live chart-scale readout (was on the MUIBar).
+            Label {
+                text: chart.scaleText
+                font.pointSize: 9
+                horizontalAlignment: Text.AlignHCenter
+                Layout.alignment: Qt.AlignHCenter
+                Layout.fillWidth: true
             }
         }
 
@@ -438,63 +510,8 @@ ApplicationWindow {
         }
     }
 
-    // --- MUIBar: bottom-right canvas controls (mirrors OpenCPN's MUIBar) --
-    Pane {
-        id: muiBar
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 16
-        padding: 4
-
-        ColumnLayout {
-            spacing: 2
-            ToolButton {
-                text: "+"; font.pointSize: 18
-                implicitWidth: root.touchSize; implicitHeight: root.touchSize
-                Layout.alignment: Qt.AlignHCenter
-                onClicked: chart.zoomIn()
-            }
-            ToolButton {
-                text: "−"; font.pointSize: 18
-                implicitWidth: root.touchSize; implicitHeight: root.touchSize
-                Layout.alignment: Qt.AlignHCenter
-                onClicked: chart.zoomOut()
-            }
-            ToolButton {
-                text: "⊙"; font.pointSize: 15  // follow own ship
-                implicitWidth: root.touchSize; implicitHeight: root.touchSize
-                Layout.alignment: Qt.AlignHCenter
-                checkable: true
-                checked: chart.followOwnShip
-                onClicked: chart.followOwnShip = checked
-            }
-            ToolButton {
-                text: "⚙"; font.pointSize: 15  // canvas options
-                implicitWidth: root.touchSize; implicitHeight: root.touchSize
-                Layout.alignment: Qt.AlignHCenter
-                onClicked: canvasOptions.open()
-            }
-            Label {
-                text: chart.scaleText
-                font.pointSize: 9
-                horizontalAlignment: Text.AlignHCenter
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillWidth: true
-            }
-        }
-    }
-
     Menu {
         id: mainMenu
-        MenuItem {
-            text: qsTr("Display settings…")
-            onTriggered: canvasOptions.open()
-        }
-        MenuItem {
-            text: qsTr("Routes & marks…")
-            onTriggered: { routeManagerWindow.show(); routeManagerWindow.raise() }
-        }
-        MenuSeparator {}
         MenuItem {
             text: qsTr("Demo mode"); checkable: true
             checked: chart.demoMode
