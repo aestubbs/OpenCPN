@@ -19,6 +19,8 @@
 
 #include <QSet>
 
+#include "s57_dictionary.h"
+
 namespace ocpn::qtui {
 
 namespace {
@@ -57,13 +59,19 @@ void ObjectQueryViewModel::setObjects(const QList<s52sg::QueryObject>& objs) {
                      return bboxArea(a) < bboxArea(b);  // smaller = more specific
                    });
 
+  const S57Dictionary& dict = S57Dictionary::instance();
   m_items.clear();
   for (const s52sg::QueryObject& o : sorted) {
     Item it;
-    it.className = o.className;
+    // Human-readable class description (fall back to the acronym).
+    const QString desc = dict.className(o.className);
+    it.className = desc.isEmpty() ? o.className : desc;
     for (const s52sg::QueryAttr& a : o.attrs) {
       if (isInternalAttr(a.name)) continue;
-      it.attrs += QStringLiteral("%1: %2\n").arg(a.name, a.value);
+      const QString name = dict.attrName(a.name);
+      const QString value = dict.decodeValue(a.name, a.value);
+      it.attrs += QStringLiteral("%1: %2\n")
+                      .arg(name.isEmpty() ? a.name : name, value);
     }
     it.attrs = it.attrs.trimmed();
     m_items.append(it);
