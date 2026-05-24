@@ -34,6 +34,7 @@
 
 QT_BEGIN_NAMESPACE
 class QThread;
+class QTimer;
 QT_END_NAMESPACE
 
 namespace ocpn::qtui {
@@ -46,10 +47,13 @@ class ModelNavDataProvider : public NavDataProvider {
   Q_OBJECT
 
 public:
-  // `log_path` is the NMEA log the worker replays (stand-in for a live
-  // CommDriver, which would plug in at the same point later).
-  explicit ModelNavDataProvider(const QString& log_path,
-                                QObject* parent = nullptr);
+  // Two live sources, chosen at construction:
+  //   - if `net_host` is non-empty, a real TCP NMEA-0183 CommDriver feeds the
+  //     model via the comm framework (NavMsgBus -> AisDecoder + CommBridge),
+  //     event-driven on the GUI thread; this provider mirrors it on a timer.
+  //   - otherwise the NavFeedWorker replays `log_path` on its own thread.
+  ModelNavDataProvider(const QString& log_path, const QString& net_host,
+                       int net_port, QObject* parent = nullptr);
   ~ModelNavDataProvider() override;
 
   QList<AisTarget> aisTargets() const override;
@@ -62,12 +66,26 @@ public:
   void setRunning(bool run);
 
 private:
-  void onWorkerUpdated();  // GUI thread: re-emit dynamic/static changed
+  void onWorkerUpdated();  // replay path: publish own-ship globals + re-emit
+  void pollNetwork();      // network path (GUI thread): mirror model + re-emit
+  void ensureNetDriver();  // create the TCP driver + CommBridge once
+  void mirrorTargets();    // g_pAIS targets -> store (+ prune)
+  void emitChanges();      // dynamicChanged + staticChanged on set-size change
 
   std::unique_ptr<AisTargetStore> m_ais_store;
   std::unique_ptr<OwnShipHolder> m_own;
+
+  // Replay source (used when m_net_host is empty).
   QThread* m_thread = nullptr;       // owns the worker's thread of execution
   NavFeedWorker* m_worker = nullptr; // lives on m_thread
+
+  // Network source (used when m_net_host is non-empty).
+  QString m_net_host;
+  int m_net_port = 0;
+  bool m_use_network = false;
+  bool m_driver_made = false;
+  QTimer* m_net_timer = nullptr;     // GUI-thread mirror tick
+
   int m_last_static_sig = -1;        // cheap change-detect for routes/wpts
 };
 

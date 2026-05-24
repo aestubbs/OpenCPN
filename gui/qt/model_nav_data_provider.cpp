@@ -15,9 +15,16 @@
 
 #include "model_nav_data_provider.h"
 
+#include <QDateTime>
 #include <QThread>
+#include <QTimer>
 
 #include "in_memory_ais_store.h"
+#include "model/ais_decoder.h"
+#include "model/ais_target_data.h"
+#include "model/comm_bridge.h"
+#include "model/comm_drv_factory.h"
+#include "model/conn_params.h"
 #include "model/own_ship.h"
 #include "model/route.h"
 #include "model/route_point.h"
@@ -25,21 +32,43 @@
 #include "model/track.h"
 #include "nav_feed_worker.h"
 #include "own_ship_holder.h"
+#include "wx/string.h"
 
 namespace ocpn::qtui {
 
+namespace {
+constexpr qint64 kStaleMs = 10 * 60 * 1000;  // drop targets unseen 10 min
+inline bool finitePos(double lat, double lon) {
+  return std::isfinite(lat) && std::isfinite(lon) && std::abs(lat) <= 90.0 &&
+         std::abs(lon) <= 360.0 && !(lat == 0.0 && lon == 0.0);
+}
+}  // namespace
+
 ModelNavDataProvider::ModelNavDataProvider(const QString& log_path,
-                                           QObject* parent)
+                                           const QString& net_host,
+                                           int net_port, QObject* parent)
     : NavDataProvider(parent),
       m_ais_store(std::make_unique<InMemoryAisTargetStore>()),
-      m_own(std::make_unique<OwnShipHolder>()) {
-  m_thread = new QThread(this);
-  m_worker = new NavFeedWorker(m_ais_store.get(), m_own.get(), log_path);
-  m_worker->moveToThread(m_thread);
-  // Worker tick -> GUI-thread refresh (queued across the thread boundary).
-  connect(m_worker, &NavFeedWorker::updated, this,
-          &ModelNavDataProvider::onWorkerUpdated);
-  connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+      m_own(std::make_unique<OwnShipHolder>()),
+      m_net_host(net_host),
+      m_net_port(net_port),
+      m_use_network(!net_host.isEmpty()) {
+  if (m_use_network) {
+    // Real TCP feed: the comm framework decodes on the GUI thread (async
+    // QTcpSocket); we just mirror the model into the store on a timer.
+    m_net_timer = new QTimer(this);
+    m_net_timer->setInterval(250);  // 4 Hz mirror
+    connect(m_net_timer, &QTimer::timeout, this,
+            &ModelNavDataProvider::pollNetwork);
+  } else {
+    // Log-replay source: decode on a worker thread.
+    m_thread = new QThread(this);
+    m_worker = new NavFeedWorker(m_ais_store.get(), m_own.get(), log_path);
+    m_worker->moveToThread(m_thread);
+    connect(m_worker, &NavFeedWorker::updated, this,
+            &ModelNavDataProvider::onWorkerUpdated);
+    connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+  }
 }
 
 ModelNavDataProvider::~ModelNavDataProvider() {
@@ -50,13 +79,75 @@ ModelNavDataProvider::~ModelNavDataProvider() {
   }
 }
 
+void ModelNavDataProvider::ensureNetDriver() {
+  if (m_driver_made) return;
+  m_driver_made = true;
+  // CommBridge subscribes to NavMsgBus and updates the own-ship globals from
+  // position sentences; AisDecoder's own listeners decode VDM into targets.
+  CommBridge::GetInstance();
+  ConnectionParams params;
+  params.Type = NETWORK;
+  params.NetProtocol = TCP;
+  params.NetworkAddress = wxString(m_net_host.toUtf8().constData());
+  params.NetworkPort = m_net_port;
+  params.Protocol = PROTO_NMEA0183;
+  params.IOSelect = DS_TYPE_INPUT;
+  params.bEnabled = true;
+  MakeCommDriver(&params);  // creates + registers + starts (async, retries)
+}
+
 void ModelNavDataProvider::setRunning(bool run) {
+  if (m_use_network) {
+    if (run) {
+      ensureNetDriver();
+      m_net_timer->start();
+    } else {
+      m_net_timer->stop();
+    }
+    return;
+  }
   if (run) {
     if (!m_thread->isRunning()) m_thread->start();
     QMetaObject::invokeMethod(m_worker, "start", Qt::QueuedConnection);
   } else if (m_worker) {
     QMetaObject::invokeMethod(m_worker, "stop", Qt::QueuedConnection);
   }
+}
+
+void ModelNavDataProvider::mirrorTargets() {
+  if (!g_pAIS) return;
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  for (const auto& [mmsi, td] : g_pAIS->GetTargetList()) {
+    if (!td || td->b_lost || td->b_removed) continue;
+    if (!finitePos(td->Lat, td->Lon)) continue;
+    AisTarget t;
+    t.mmsi = td->MMSI;
+    t.lat = td->Lat;
+    t.lon = td->Lon;
+    t.cog = std::isfinite(td->COG) ? td->COG : 0.0;
+    t.sog = std::isfinite(td->SOG) ? td->SOG : 0.0;
+    t.hdg = td->HDG;
+    t.name = td->GetFullName().trimmed();
+    m_ais_store->upsert(t, now);
+  }
+  m_ais_store->prune(now, kStaleMs);
+}
+
+void ModelNavDataProvider::pollNetwork() {
+  // GUI thread: the framework already decoded into g_pAIS + the own-ship
+  // globals (CommBridge). Mirror targets into the store and snapshot own ship.
+  mirrorTargets();
+  OwnShipState s;
+  if (finitePos(gLat, gLon)) {
+    s.valid = true;
+    s.lat = gLat;
+    s.lon = gLon;
+    s.cog = std::isfinite(gCog) ? gCog : 0.0;
+    s.sog = std::isfinite(gSog) ? gSog : 0.0;
+    s.hdg = std::isfinite(gHdt) ? gHdt : kHeadingUnavailable;
+  }
+  m_own->set(s);
+  emitChanges();
 }
 
 QList<AisTarget> ModelNavDataProvider::aisTargets() const {
@@ -118,9 +209,11 @@ QList<NavTrack> ModelNavDataProvider::tracks() const {
 }
 
 void ModelNavDataProvider::onWorkerUpdated() {
-  // Publish the worker's own-ship fix to the model own-ship globals on the
-  // GUI thread, so consumers that read them directly (ActiveTrack's recorder
-  // timer) see a consistent value written from a single thread.
+  // Replay path: the worker (other thread) wrote the holder; publish the
+  // own-ship fix to the model globals here on the GUI thread, so consumers
+  // that read them directly (ActiveTrack's recorder timer) see a value
+  // written from a single thread. (Network path: CommBridge already sets the
+  // globals on the GUI thread.)
   const OwnShipState s = m_own->get();
   if (s.valid) {
     gLat = s.lat;
@@ -128,18 +221,20 @@ void ModelNavDataProvider::onWorkerUpdated() {
     gCog = s.cog;
     gSog = s.sog;
   }
+  emitChanges();
+}
 
+void ModelNavDataProvider::emitChanges() {
   Q_EMIT dynamicChanged();
 
-  // Cheap static change-detect: route/waypoint/track counts.
+  // Cheap static change-detect: route/waypoint/track counts (+ the live
+  // own-ship track length, so it re-renders as it grows a point at a time).
   const int sig =
       (pRouteList ? static_cast<int>(pRouteList->size()) : 0) * 73 +
       static_cast<int>(g_TrackList.size()) * 17 +
       (pWayPointMan && pWayPointMan->GetWaypointList()
            ? static_cast<int>(pWayPointMan->GetWaypointList()->size())
            : 0) +
-      // The live own-ship track grows a point at a time; include its length
-      // so the track re-renders as it extends.
       (g_pActiveTrack ? g_pActiveTrack->GetnPoints() : 0);
   if (sig != m_last_static_sig) {
     m_last_static_sig = sig;

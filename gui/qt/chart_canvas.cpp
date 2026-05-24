@@ -114,8 +114,14 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // AisDecoder via the worker thread; swapping in a real CommDriver later
   // changes only the source.
   m_demo_provider = std::make_unique<DemoNavDataProvider>(m_viewport.get());
-  m_model_provider =
-      std::make_unique<ModelNavDataProvider>(QString::fromUtf8(OCPN_QT_NMEA_LOG));
+  // Live source config: if a TCP NMEA host is set (config INI keys
+  // live/nmeaHost + live/nmeaPort), use a real CommDriver; else replay the
+  // bundled log. Edit the INI to point at a real AIS feed.
+  const QString live_host =
+      m_layer_config->value("live/nmeaHost", QString()).toString();
+  const int live_port = m_layer_config->value("live/nmeaPort", 0).toInt();
+  m_model_provider = std::make_unique<ModelNavDataProvider>(
+      QString::fromUtf8(OCPN_QT_NMEA_LOG), live_host, live_port);
   m_nav_provider = std::make_unique<SwitchableNavDataProvider>(
       m_demo_provider.get(), m_model_provider.get());
 
