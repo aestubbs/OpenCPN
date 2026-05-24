@@ -187,6 +187,12 @@ public:
   Q_INVOKABLE void centerViewHere();
   Q_INVOKABLE void queryObjectsHere();
 
+  // Chart bar / "Piano" (P3.8): the catalogued ENC cells whose coverage
+  // intersects the current view, each a QVariantMap { name, band, scale,
+  // displayed } ordered coarse->fine. The QML chart bar binds to this and
+  // refreshes on chartCoverageChanged. "displayed" = currently in the quilt.
+  Q_INVOKABLE QVariantList chartBarCells() const;
+
 Q_SIGNALS:
   void s52EngineChanged();
   void displayCategoryChanged();
@@ -200,6 +206,8 @@ Q_SIGNALS:
   void followOwnShipChanged();
   // Right-click on the chart at item-local (x, y); QML pops the context menu.
   void contextMenuRequested(qreal x, qreal y);
+  // The set of in-view / displayed ENC cells changed (chart bar refresh).
+  void chartCoverageChanged();
 
 protected:
   QSGNode* updatePaintNode(QSGNode* old_node,

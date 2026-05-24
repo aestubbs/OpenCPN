@@ -37,6 +37,8 @@
 #include <QSGTransformNode>
 #include <QThread>
 #include <QTimer>
+#include <QVariantList>
+#include <QVariantMap>
 #include <QWheelEvent>
 
 #include "ais_layer.h"
@@ -395,6 +397,7 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   lc.layerId = layerId;
   lc.provider = provider;
   m_loaded.insert(id, lc);
+  Q_EMIT chartCoverageChanged();
   update();
 }
 
@@ -537,6 +540,50 @@ void ChartCanvas::updateVisibleCells() {
     m_requested.remove(name);  // eligible to reload when needed again
   }
   if (!evict.isEmpty()) update();
+  // The needed set (and possibly the loaded set) just changed -- refresh the
+  // chart bar's coverage list.
+  Q_EMIT chartCoverageChanged();
+}
+
+QVariantList ChartCanvas::chartBarCells() const {
+  QVariantList out;
+  if (!m_viewport || m_catalog.isEmpty()) return out;
+  // Current view bounds (equirectangular: degrees = px / scale).
+  const double s = m_viewport->scale();
+  if (s <= 0.0) return out;
+  const double halfLon = (width() / 2.0) / s;
+  const double halfLat = (height() / 2.0) / s;
+  const double cLat = m_viewport->centerLat();
+  const double cLon = m_viewport->centerLon();
+  const double latMin = cLat - halfLat, latMax = cLat + halfLat;
+  const double lonMin = cLon - halfLon, lonMax = cLon + halfLon;
+
+  // Collect real chart cells (skip admin/coverage-only) intersecting the view.
+  QList<const CellExtent*> cells;
+  for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
+    const CellExtent& c = it.value();
+    if (c.navFeatures <= 0) continue;  // administrative cell -- not a chart
+    if (!c.intersects(latMin, latMax, lonMin, lonMax)) continue;
+    cells.append(&c);
+  }
+  // Coarse -> fine (largest 1:N first), like the wx chart bar.
+  std::sort(cells.begin(), cells.end(),
+            [](const CellExtent* a, const CellExtent* b) {
+              if (a->nativeScale != b->nativeScale)
+                return a->nativeScale > b->nativeScale;
+              return a->name < b->name;
+            });
+  for (const CellExtent* c : cells) {
+    QVariantMap m;
+    m["name"] = c->name;
+    m["band"] = c->band;
+    m["scale"] = c->nativeScale;
+    m["displayed"] = m_needed.contains(c->name);
+    m["north"] = c->north; m["south"] = c->south;
+    m["east"] = c->east; m["west"] = c->west;
+    out.append(m);
+  }
+  return out;
 }
 
 void ChartCanvas::zoomIn() {

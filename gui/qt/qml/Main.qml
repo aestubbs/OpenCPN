@@ -281,11 +281,65 @@ ApplicationWindow {
         // context property set in main.cpp.
         s52Engine: s52
 
+        // Compass rose (mirrors wx's ocpnCompass overlay). The chart is
+        // north-up, so the rose is fixed N-up; the red needle shows own-ship
+        // COG. Top-right corner.
+        Rectangle {
+            id: compass
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 12
+            width: 72; height: 72; radius: width / 2
+            color: "#cc101418"
+            border.color: "#3affffff"
+
+            readonly property var nav: chart.navState
+
+            Canvas {
+                id: rose
+                anchors.fill: parent
+                anchors.margins: 6
+                // Repaint when COG changes.
+                property real cog: compass.nav && compass.nav.ownShipValid
+                                   ? compass.nav.cog : -1
+                onCogChanged: requestPaint()
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.reset()
+                    var cx = width / 2, cy = height / 2
+                    var r = Math.min(cx, cy) - 2
+                    // Outer ring.
+                    ctx.strokeStyle = "#80c0d0e0"; ctx.lineWidth = 1.5
+                    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke()
+                    // North marker (top) -- a small triangle + "N".
+                    ctx.fillStyle = "#e0e0e0"
+                    ctx.beginPath()
+                    ctx.moveTo(cx, cy - r); ctx.lineTo(cx - 4, cy - r + 8)
+                    ctx.lineTo(cx + 4, cy - r + 8); ctx.closePath(); ctx.fill()
+                    // COG needle (red), 0 deg = up, clockwise.
+                    if (cog >= 0) {
+                        var a = (cog - 90) * Math.PI / 180
+                        ctx.strokeStyle = "#ff5050"; ctx.lineWidth = 2.5
+                        ctx.beginPath(); ctx.moveTo(cx, cy)
+                        ctx.lineTo(cx + r * 0.8 * Math.cos(a),
+                                   cy + r * 0.8 * Math.sin(a))
+                        ctx.stroke()
+                    }
+                }
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 7
+                text: "N"; color: "#e0e0e0"; font.pointSize: 9; font.bold: true
+            }
+        }
+
         // Tier 3: nav-data HUD (P3.4) -- own-ship SOG/COG/position + AIS
         // count, bound to the ChartCanvas NavStateViewModel.
         Rectangle {
             id: navHud
-            anchors.top: parent.top
+            anchors.top: compass.bottom
             anchors.right: parent.right
             anchors.margins: 12
             width: hudCol.implicitWidth + 24
@@ -318,6 +372,59 @@ ApplicationWindow {
                           (navHud.nav ? navHud.nav.aisTargetCount : 0) +
                           qsTr(" targets")
                     color: "#90ee90"; font.pointSize: 11
+                }
+            }
+        }
+
+        // Chart bar / "Piano" (P3.8) -- one segment per ENC cell covering the
+        // view, coarse->fine, mirroring wx's chart-selector bar. Displayed
+        // (quilted) cells are highlighted; click a segment to zoom to it.
+        Rectangle {
+            id: chartBar
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottomMargin: 10
+            height: 26
+            width: Math.min(barRow.implicitWidth + 8, chart.width - 24)
+            visible: barRow.count > 0
+            radius: 4
+            color: "#cc101418"
+            border.color: "#3affffff"
+            clip: true
+
+            property var cells: chart.chartBarCells()
+            Connections {
+                target: chart
+                function onChartCoverageChanged() { chartBar.cells = chart.chartBarCells() }
+            }
+
+            Row {
+                id: barRow
+                anchors.centerIn: parent
+                spacing: 2
+                property int count: chartBar.cells ? chartBar.cells.length : 0
+                Repeater {
+                    model: chartBar.cells
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: 44; height: 20; radius: 3
+                        // Highlight cells currently in the quilt.
+                        color: modelData.displayed ? "#3573b9" : "#33ffffff"
+                        border.color: modelData.displayed ? "#7fbfff" : "#55ffffff"
+                        Text {
+                            anchors.centerIn: parent
+                            text: "B" + modelData.band
+                            color: "#f0f0f0"; font.pointSize: 9
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: chart.fitBounds(modelData.north, modelData.south,
+                                                       modelData.east, modelData.west)
+                            ToolTip.visible: containsMouse
+                            ToolTip.text: modelData.name + "  (1:" + modelData.scale + ")"
+                        }
+                    }
                 }
             }
         }
