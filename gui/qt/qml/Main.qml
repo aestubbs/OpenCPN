@@ -292,14 +292,40 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     Label {
-                        text: qsTr("Objects here (") +
-                              (objInfo.q ? objInfo.q.count : 0) + ")"
-                        color: "#cfe8ff"; font.pointSize: 13; font.bold: true
+                        text: objInfo.q ? objInfo.q.className : ""
+                        color: "#cfe8ff"; font.pointSize: 14; font.bold: true
                     }
                     Item { Layout.fillWidth: true }
                     ToolButton {
                         text: "✕"; font.pointSize: 13
                         onClicked: chart.objectQuery.clear()
+                    }
+                }
+                // Step through the stacked objects (specific -> containing).
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: objInfo.q && objInfo.q.count > 1
+                    ToolButton {
+                        text: "‹"; font.pointSize: 15
+                        enabled: objInfo.q && objInfo.q.index > 0
+                        onClicked: chart.objectQuery.prev()
+                    }
+                    Label {
+                        text: objInfo.q
+                              ? (objInfo.q.index + 1) + " / " + objInfo.q.count
+                              : ""
+                        color: "#a0c0e0"; font.pointSize: 11
+                    }
+                    ToolButton {
+                        text: "›"; font.pointSize: 15
+                        enabled: objInfo.q &&
+                                 objInfo.q.index < objInfo.q.count - 1
+                        onClicked: chart.objectQuery.next()
+                    }
+                    Item { Layout.fillWidth: true }
+                    Label {
+                        text: qsTr("up ↑")
+                        color: "#607080"; font.pointSize: 10
                     }
                 }
                 ScrollView {

@@ -738,10 +738,27 @@ void ChartCanvas::pickObjectsAt(const QPointF& screen_pos) {
   // ~10px pick radius in degrees at the current zoom (px/degree).
   const double margin =
       m_viewport->scale() > 0.0 ? 10.0 / m_viewport->scale() : 0.0;
+  // The quilt loads several overlapping cells (usage bands), each holding the
+  // same features, so de-duplicate by LNAM (the S-57 unique feature id) --
+  // the same real-world object across cells collapses to one result.
   QList<s52sg::QueryObject> found;
+  QSet<QString> seen;
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it) {
     if (!it.value().provider) continue;
-    found.append(it.value().provider->objectsAt(lat, lon, margin));
+    for (const s52sg::QueryObject& qo :
+         it.value().provider->objectsAt(lat, lon, margin)) {
+      QString lnam;
+      for (const s52sg::QueryAttr& a : qo.attrs)
+        if (a.name == QLatin1String("LNAM")) {
+          lnam = a.value;
+          break;
+        }
+      if (!lnam.isEmpty()) {
+        if (seen.contains(lnam)) continue;  // same feature, another cell
+        seen.insert(lnam);
+      }
+      found.append(qo);
+    }
   }
   m_object_query->setObjects(found);
 }

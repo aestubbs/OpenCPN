@@ -11,9 +11,14 @@
  * \file
  *
  * ObjectQueryViewModel -- the S-57 features found under a click, exposed to
- * QML for the object-query popup (P3.9). ChartCanvas hit-tests the click
- * against the loaded chart providers and calls setObjects(); QML binds a
- * scrollable text view to the formatted result.
+ * QML for the object-query popup (P3.9).
+ *
+ * A click stacks every feature whose geometry is hit: the specific object
+ * (a buoy / sounding) plus every AREA containing the point (depth area, sea
+ * area, ... up to the cell coverage). Rather than dump them all, the popup
+ * shows ONE at a time, ordered most-specific -> most-general, with prev/next
+ * to step "up" toward the containing objects -- so the thing you clicked is
+ * front and centre.
  */
 
 #ifndef OCPN_QT_OBJECT_QUERY_VIEW_MODEL_H_
@@ -21,6 +26,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include "s52_sg.h"
 
@@ -30,26 +36,38 @@ class ObjectQueryViewModel : public QObject {
   Q_OBJECT
   Q_PROPERTY(bool valid READ valid NOTIFY changed)
   Q_PROPERTY(int count READ count NOTIFY changed)
-  Q_PROPERTY(QString text READ text NOTIFY changed)
+  Q_PROPERTY(int index READ index NOTIFY changed)        // 0-based current
+  Q_PROPERTY(QString className READ className NOTIFY changed)  // current
+  Q_PROPERTY(QString text READ text NOTIFY changed)      // current attrs
 
 public:
   using QObject::QObject;
 
-  bool valid() const { return m_count > 0; }
-  int count() const { return m_count; }
-  QString text() const { return m_text; }
+  bool valid() const { return !m_items.isEmpty(); }
+  int count() const { return static_cast<int>(m_items.size()); }
+  int index() const { return m_index; }
+  QString className() const;
+  QString text() const;
 
-  /** Set the queried features (formats them into the display text). */
+  /** Set the queried features (ordered specific->general; current = first). */
   void setObjects(const QList<s52sg::QueryObject>& objs);
-  /** Clear the result (close the popup). Invokable from QML. */
+  /** Step toward the more-general (containing) object. */
+  Q_INVOKABLE void next();
+  /** Step toward the more-specific object. */
+  Q_INVOKABLE void prev();
+  /** Clear the result (close the popup). */
   Q_INVOKABLE void clear();
 
 Q_SIGNALS:
   void changed();
 
 private:
-  QString m_text;
-  int m_count = 0;
+  struct Item {
+    QString className;
+    QString attrs;  // pre-formatted attribute lines
+  };
+  QList<Item> m_items;  // ordered most-specific -> most-general
+  int m_index = 0;
 };
 
 }  // namespace ocpn::qtui
