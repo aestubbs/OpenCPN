@@ -49,6 +49,7 @@
 #include "route_overlay_layers.h"
 #include "layer_compositor.h"
 #include "model/ocpn_config.h"
+#include "model/track.h"  // g_pActiveTrack -- own-ship track recording
 #include "model_nav_data_provider.h"
 #include "raster_chart_provider.h"
 #include "switchable_nav_provider.h"
@@ -596,6 +597,14 @@ void ChartCanvas::setDemoMode(bool on) {
     m_demo_provider->setRunning(on);
   }
   if (m_model_provider) m_model_provider->setRunning(!on);
+  // Record the own-ship track only in live mode (demo own-ship isn't in the
+  // model globals the recorder reads).
+  if (g_pActiveTrack) {
+    if (on)
+      g_pActiveTrack->Stop();
+    else if (!g_pActiveTrack->IsRunning())
+      g_pActiveTrack->Start();
+  }
   if (!on) m_live_centered = false;  // re-centre on own ship next live fix
   Q_EMIT demoModeChanged();
   update();

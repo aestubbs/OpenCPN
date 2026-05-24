@@ -98,16 +98,21 @@ QList<NavWaypoint> ModelNavDataProvider::waypoints() const {
 
 QList<NavTrack> ModelNavDataProvider::tracks() const {
   QList<NavTrack> out;
-  for (Track* tk : g_TrackList) {
-    if (!tk) continue;
+  const auto appendTrack = [&](Track* tk, const QColor& color) {
+    if (!tk) return;
     NavTrack nt;
+    nt.color = color;
     const int n = tk->GetnPoints();
     for (int i = 0; i < n; ++i) {
       TrackPoint* tp = tk->GetPoint(i);
       if (tp) nt.points.append(QPointF(tp->m_lon, tp->m_lat));
     }
     if (nt.points.size() >= 2) out.append(nt);
-  }
+  };
+  for (Track* tk : g_TrackList) appendTrack(tk, QColor(60, 60, 60));
+  // The live own-ship track being recorded (P2.11), distinct colour.
+  if (g_pActiveTrack && g_pActiveTrack->IsRunning())
+    appendTrack(g_pActiveTrack, QColor(200, 0, 0));
   return out;
 }
 
@@ -120,7 +125,10 @@ void ModelNavDataProvider::onWorkerUpdated() {
       static_cast<int>(g_TrackList.size()) * 17 +
       (pWayPointMan && pWayPointMan->GetWaypointList()
            ? static_cast<int>(pWayPointMan->GetWaypointList()->size())
-           : 0);
+           : 0) +
+      // The live own-ship track grows a point at a time; include its length
+      // so the track re-renders as it extends.
+      (g_pActiveTrack ? g_pActiveTrack->GetnPoints() : 0);
   if (sig != m_last_static_sig) {
     m_last_static_sig = sig;
     Q_EMIT staticChanged();
