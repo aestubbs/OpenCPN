@@ -62,6 +62,9 @@ class S52VectorChartProvider;
 class ChartBoundaryProvider;
 class ChartWorker;
 class DemoNavDataProvider;
+class ModelNavDataProvider;
+class SwitchableNavDataProvider;
+class NmeaLogReplay;
 class AisLayer;
 class OwnShipLayer;
 
@@ -173,9 +176,14 @@ private:
   QSGTransformNode* m_world_anchored_root = nullptr;
   QSGTransformNode* m_display_anchored_root = nullptr;
 
-  // Declared before the compositor so it outlives the overlay Layers that
-  // reference it (members destroy in reverse declaration order).
+  // Declared before the compositor so they outlive the overlay Layers that
+  // reference them (members destroy in reverse declaration order). The
+  // switchable provider is declared last of these so it's destroyed first
+  // (it references the demo + model providers).
   std::unique_ptr<DemoNavDataProvider> m_demo_provider;
+  std::unique_ptr<ModelNavDataProvider> m_model_provider;
+  std::unique_ptr<NmeaLogReplay> m_nav_replay;
+  std::unique_ptr<SwitchableNavDataProvider> m_nav_provider;
 
   std::unique_ptr<LayerCompositor> m_compositor;
   std::unique_ptr<Viewport> m_viewport;
@@ -188,6 +196,7 @@ private:
   AisLayer* m_ais_layer = nullptr;
   OwnShipLayer* m_own_ship_layer = nullptr;
   bool m_demo_mode = true;
+  bool m_live_centered = false;  // recentre on own ship once per live session
 
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;

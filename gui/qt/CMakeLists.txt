@@ -69,6 +69,11 @@ qt_add_qml_module(opencpn-qt
     own_ship_layer.cpp
     route_overlay_layers.h
     route_overlay_layers.cpp
+    model_nav_data_provider.h
+    model_nav_data_provider.cpp
+    switchable_nav_provider.h
+    nmea_log_replay.h
+    nmea_log_replay.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its
@@ -95,6 +100,16 @@ if (NOT DEFINED OCPN_QT_TEST_ENC)
 endif ()
 target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_TEST_ENC="${OCPN_QT_TEST_ENC}"
+)
+
+# A recorded NMEA-0183 log replayed into the model to give the live nav
+# overlays (AIS / own-ship) data without a hardware connection (P2.11).
+# Override with -DOCPN_QT_NMEA_LOG=/path/to/log at configure time.
+if (NOT DEFINED OCPN_QT_NMEA_LOG)
+  set(OCPN_QT_NMEA_LOG "${CMAKE_SOURCE_DIR}/test/testdata/Hakefjord.log")
+endif ()
+target_compile_definitions(opencpn-qt PRIVATE
+  OCPN_QT_NMEA_LOG="${OCPN_QT_NMEA_LOG}"
 )
 
 # wx_qt_string.h lives in the model layer; we use it from s52_engine.cpp

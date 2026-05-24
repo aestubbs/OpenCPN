@@ -48,8 +48,12 @@
 #include "own_ship_layer.h"
 #include "route_overlay_layers.h"
 #include "layer_compositor.h"
+#include "model/ais_decoder.h"
 #include "model/ocpn_config.h"
+#include "model_nav_data_provider.h"
+#include "nmea_log_replay.h"
 #include "raster_chart_provider.h"
+#include "switchable_nav_provider.h"
 #include "s52_engine.h"
 #include "s52_vector_chart_provider.h"
 #include "test_chart.h"
@@ -99,30 +103,59 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   world_layer->setZOrder(-1000);
   m_compositor->addLayer(world_layer);
 
-  // Nav overlays (P2.11): AIS targets + own ship, world-anchored, on top of
-  // the charts. Fed from the synthetic demo provider for now; the same
-  // NavDataProvider seam will host a live model adapter later. Each is a
-  // stable-id Layer, so it also exercises P2.10 persistence.
+  // Nav overlays (P2.11): AIS targets + own ship + routes/tracks/waypoints,
+  // world-anchored, on top of the charts. The overlay Layers bind to ONE
+  // switchable provider so demo<->live is a runtime flag, not a layer
+  // rebuild. Each is a stable-id Layer, so it also exercises P2.10.
+  //
+  // Live source mirrors the wx app: the comm/decoder pipeline feeds the model
+  // and the canvas reads it. Here a recorded NMEA log feeds the real
+  // AisDecoder (g_pAIS) + own-ship globals via NmeaLogReplay; swapping in a
+  // real CommDriver later changes only the source. (Routes/tracks/waypoints
+  // come from the model managers + navobj DB -- wired in a later slice.)
+  if (!g_pAIS) g_pAIS = new AisDecoder(AisDecoderCallbacks());
   m_demo_provider = std::make_unique<DemoNavDataProvider>(m_viewport.get());
-  m_ais_layer = new AisLayer(m_demo_provider.get(), m_viewport.get());
+  m_model_provider = std::make_unique<ModelNavDataProvider>();
+  m_nav_replay = std::make_unique<NmeaLogReplay>(
+      QString::fromUtf8(OCPN_QT_NMEA_LOG));
+  m_nav_provider = std::make_unique<SwitchableNavDataProvider>(
+      m_demo_provider.get(), m_model_provider.get());
+
+  m_ais_layer = new AisLayer(m_nav_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);
   m_compositor->addLayer(m_ais_layer);
-  m_own_ship_layer = new OwnShipLayer(m_demo_provider.get(), m_viewport.get());
+  m_own_ship_layer = new OwnShipLayer(m_nav_provider.get(), m_viewport.get());
   m_own_ship_layer->setZOrder(2001);
   m_compositor->addLayer(m_own_ship_layer);
 
   // Static nav overlays: tracks (under), routes, then waypoints on top.
-  auto* tracks = new TrackLayer(m_demo_provider.get(), m_viewport.get());
+  auto* tracks = new TrackLayer(m_nav_provider.get(), m_viewport.get());
   tracks->setZOrder(1500);
   m_compositor->addLayer(tracks);
-  auto* routes = new RouteLayer(m_demo_provider.get(), m_viewport.get());
+  auto* routes = new RouteLayer(m_nav_provider.get(), m_viewport.get());
   routes->setZOrder(1600);
   m_compositor->addLayer(routes);
-  auto* waypoints = new WaypointLayer(m_demo_provider.get(), m_viewport.get());
+  auto* waypoints = new WaypointLayer(m_nav_provider.get(), m_viewport.get());
   waypoints->setZOrder(1700);
   m_compositor->addLayer(waypoints);
 
+  // When live, recentre the view on the own-ship fix once it arrives (the
+  // log's vessels are wherever they really are, not on the demo charts).
+  connect(m_model_provider.get(), &NavDataProvider::dynamicChanged, this,
+          [this]() {
+            if (m_demo_mode || m_live_centered) return;
+            const OwnShipState s = m_model_provider->ownShip();
+            if (s.valid) {
+              m_viewport->setCenter(s.lat, s.lon);
+              m_live_centered = true;
+            }
+          });
+
+  // Start in the configured source (demo by default).
+  m_nav_provider->setLive(!m_demo_mode);
   m_demo_provider->setRunning(m_demo_mode);
+  m_model_provider->setRunning(!m_demo_mode);
+  m_nav_replay->setRunning(!m_demo_mode);
 
   // Repaint when:
   //   - any Layer dirties (data change, visibility/z-order/opacity).
@@ -556,15 +589,19 @@ void ChartCanvas::setShowBuoys(bool on) {
 void ChartCanvas::setDemoMode(bool on) {
   if (on == m_demo_mode) return;
   m_demo_mode = on;
-  // Demo mode animates the synthetic provider. Turning it on re-seeds the
-  // fleet around the current view so it's visible on whatever charts are
-  // loaded; off freezes it. (A live model adapter would switch in here.)
+  // Demo mode animates the synthetic provider (re-seeded around the current
+  // view so it's visible); live mode reads the real model, fed here by the
+  // NMEA-log replay (swap for a real CommDriver later).
+  if (m_nav_provider) m_nav_provider->setLive(!on);
   if (m_demo_provider) {
     if (on && m_viewport)
       m_demo_provider->seedAround(m_viewport->centerLat(),
                                   m_viewport->centerLon());
     m_demo_provider->setRunning(on);
   }
+  if (m_model_provider) m_model_provider->setRunning(!on);
+  if (m_nav_replay) m_nav_replay->setRunning(!on);
+  if (!on) m_live_centered = false;  // re-centre on own ship next live fix
   Q_EMIT demoModeChanged();
   update();
 }
