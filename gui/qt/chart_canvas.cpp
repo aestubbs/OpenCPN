@@ -127,6 +127,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
       m_demo_provider.get(), m_model_provider.get());
   // View-model over the active provider for the QML HUD (P3.2/P3.4).
   m_nav_state = std::make_unique<NavStateViewModel>(m_nav_provider.get());
+  // Selected-AIS-target model for the info popup (P3.9).
+  m_ais_selection = std::make_unique<AisSelectionViewModel>();
 
   m_ais_layer = new AisLayer(m_nav_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);
@@ -659,6 +661,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
     m_dragging = true;
     m_drag_last_pos = event->position();
+    m_press_pos = event->position();
     event->accept();
   } else {
     QQuickItem::mousePressEvent(event);
@@ -680,10 +683,39 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
 void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton && m_dragging) {
     m_dragging = false;
+    // A press+release that barely moved is a click (a pick), not a pan.
+    const QPointF d = event->position() - m_press_pos;
+    if (d.manhattanLength() <= 6) pickAisAt(event->position());
     event->accept();
   } else {
     QQuickItem::mouseReleaseEvent(event);
   }
+}
+
+void ChartCanvas::pickAisAt(const QPointF& screen_pos) {
+  if (!m_ais_selection || !m_nav_provider || !m_viewport) return;
+  // World->screen transform the canvas applies to the world-anchored root,
+  // so target screen px = transform.map(world(lon, -lat)).
+  const QMatrix4x4 m = m_viewport->transformMatrix(static_cast<int>(width()),
+                                                   static_cast<int>(height()));
+  constexpr double kPickRadiusPx = 14.0;
+  double best = kPickRadiusPx * kPickRadiusPx;
+  const AisTarget* hit = nullptr;
+  const QList<AisTarget> targets = m_nav_provider->aisTargets();
+  for (const AisTarget& t : targets) {
+    const QPointF sp = m.map(QPointF(t.lon, -t.lat));
+    const double dx = sp.x() - screen_pos.x();
+    const double dy = sp.y() - screen_pos.y();
+    const double d2 = dx * dx + dy * dy;
+    if (d2 < best) {
+      best = d2;
+      hit = &t;
+    }
+  }
+  if (hit)
+    m_ais_selection->select(*hit);
+  else
+    m_ais_selection->clear();
 }
 
 void ChartCanvas::wheelEvent(QWheelEvent* event) {

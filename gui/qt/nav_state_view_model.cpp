@@ -15,25 +15,10 @@
 
 #include "nav_state_view_model.h"
 
-#include <cmath>
-
 #include "nav_data_provider.h"
+#include "nav_format.h"
 
 namespace ocpn::qtui {
-
-namespace {
-// Format a signed degree value as D°M.m' with a hemisphere suffix.
-QString fmtCoord(double deg, int degWidth, QChar pos, QChar neg) {
-  const QChar hemi = deg >= 0.0 ? pos : neg;
-  deg = std::abs(deg);
-  const int d = static_cast<int>(deg);
-  const double m = (deg - d) * 60.0;
-  return QStringLiteral("%1°%2'%3")
-      .arg(d, degWidth, 10, QChar('0'))
-      .arg(m, 5, 'f', 2, QChar('0'))
-      .arg(hemi);
-}
-}  // namespace
 
 NavStateViewModel::NavStateViewModel(NavDataProvider* provider,
                                      QObject* parent)
@@ -54,18 +39,17 @@ void NavStateViewModel::refresh() {
 
 QString NavStateViewModel::positionText() const {
   if (!m_own.valid) return QStringLiteral("---");
-  return fmtCoord(m_own.lat, 2, QChar('N'), QChar('S')) + QStringLiteral("  ") +
-         fmtCoord(m_own.lon, 3, QChar('E'), QChar('W'));
+  return navfmt::latLon(m_own.lat, m_own.lon);
 }
 
 QString NavStateViewModel::sogText() const {
   if (!m_own.valid) return QStringLiteral("--.- kn");
-  return QStringLiteral("%1 kn").arg(m_own.sog, 0, 'f', 1);
+  return navfmt::sog(m_own.sog);
 }
 
 QString NavStateViewModel::cogText() const {
   if (!m_own.valid) return QStringLiteral("---°");
-  return QStringLiteral("%1°").arg(m_own.cog, 3, 'f', 0, QChar('0'));
+  return navfmt::cog(m_own.cog);
 }
 
 }  // namespace ocpn::qtui

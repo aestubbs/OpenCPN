@@ -219,6 +219,56 @@ ApplicationWindow {
                 }
             }
         }
+
+        // AIS target info popup (P3.9) -- shown when a target is picked
+        // (ChartCanvas hit-tests a click against the AisTargetStore).
+        Popup {
+            id: aisInfo
+            readonly property var sel: chart.selectedAis
+            visible: sel && sel.valid
+            closePolicy: Popup.NoAutoClose
+            x: 12
+            y: 12
+            padding: 14
+            background: Rectangle {
+                color: "#ee101418"; radius: 8; border.color: "#5affffff"
+            }
+
+            ColumnLayout {
+                spacing: 4
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+                    Label {
+                        text: qsTr("AIS target")
+                        color: "#90ee90"; font.pointSize: 13; font.bold: true
+                    }
+                    Item { Layout.fillWidth: true }
+                    ToolButton {
+                        text: "✕"; font.pointSize: 13
+                        onClicked: chart.selectedAis.clear()
+                    }
+                }
+                Label {
+                    text: (aisInfo.sel && aisInfo.sel.name.length > 0
+                           ? aisInfo.sel.name : qsTr("(unnamed)"))
+                    color: "#ffffff"; font.pointSize: 14; font.bold: true
+                }
+                Label {
+                    text: qsTr("MMSI  ") + (aisInfo.sel ? aisInfo.sel.mmsi : 0)
+                    color: "#c0c0c0"; font.pointSize: 11
+                }
+                Label {
+                    text: aisInfo.sel ? aisInfo.sel.positionText : ""
+                    color: "#b0d0ff"; font.pointSize: 11
+                }
+                Label {
+                    text: qsTr("SOG ") + (aisInfo.sel ? aisInfo.sel.sogText : "") +
+                          qsTr("   COG ") + (aisInfo.sel ? aisInfo.sel.cogText : "")
+                    color: "#e0e0e0"; font.pointSize: 11
+                }
+            }
+        }
     }
 
     // --- Footer: status bar -----------------------------------------------

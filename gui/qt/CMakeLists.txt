@@ -80,8 +80,11 @@ qt_add_qml_module(opencpn-qt
     model_nav_data_provider.h
     model_nav_data_provider.cpp
     switchable_nav_provider.h
+    nav_format.h
     nav_state_view_model.h
     nav_state_view_model.cpp
+    ais_selection_view_model.h
+    ais_selection_view_model.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its
