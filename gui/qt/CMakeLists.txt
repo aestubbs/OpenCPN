@@ -55,6 +55,8 @@ qt_add_qml_module(opencpn-qt
     ais_layer.cpp
     own_ship_layer.h
     own_ship_layer.cpp
+    route_overlay_layers.h
+    route_overlay_layers.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its

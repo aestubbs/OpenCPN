@@ -46,6 +46,7 @@
 #include "demo_nav_data_provider.h"
 #include "gshhs_world_provider.h"
 #include "own_ship_layer.h"
+#include "route_overlay_layers.h"
 #include "layer_compositor.h"
 #include "model/ocpn_config.h"
 #include "raster_chart_provider.h"
@@ -109,6 +110,18 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_own_ship_layer = new OwnShipLayer(m_demo_provider.get(), m_viewport.get());
   m_own_ship_layer->setZOrder(2001);
   m_compositor->addLayer(m_own_ship_layer);
+
+  // Static nav overlays: tracks (under), routes, then waypoints on top.
+  auto* tracks = new TrackLayer(m_demo_provider.get(), m_viewport.get());
+  tracks->setZOrder(1500);
+  m_compositor->addLayer(tracks);
+  auto* routes = new RouteLayer(m_demo_provider.get(), m_viewport.get());
+  routes->setZOrder(1600);
+  m_compositor->addLayer(routes);
+  auto* waypoints = new WaypointLayer(m_demo_provider.get(), m_viewport.get());
+  waypoints->setZOrder(1700);
+  m_compositor->addLayer(waypoints);
+
   m_demo_provider->setRunning(m_demo_mode);
 
   // Repaint when:

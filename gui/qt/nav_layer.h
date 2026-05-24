@@ -36,9 +36,11 @@
 #include <cmath>
 
 #include <QPointF>
+#include <QSGNode>
 
 #include "layer.h"
 #include "nav_data_provider.h"
+#include "sg_builder.h"
 #include "viewport.h"
 
 namespace ocpn::qtui {
@@ -100,6 +102,31 @@ private:
   NavDataProvider* m_provider;
   const Viewport* m_viewport;
   double m_last_scale = 0.0;
+};
+
+/**
+ * Base for STATIC nav overlays (routes, tracks, waypoints): geometry that
+ * changes rarely and is screen-correct under the world transform, so a
+ * wholesale rebuild via SgBuilder is fine (NavLayer only re-fires on data
+ * change and zoom, never on pan). Subclasses implement draw().
+ */
+class StaticNavLayer : public NavLayer {
+public:
+  using NavLayer::NavLayer;
+
+  QSGNode* updateSubtree(QSGNode* /*old*/, QQuickWindow* window) override {
+    // Rebuild wholesale and return a fresh root; the compositor frees the
+    // previous subtree (do NOT delete `old` here -- that double-frees).
+    auto* root = new QSGNode();
+    SgBuilder b(root, window);
+    draw(b, worldPerPx());
+    return root;
+  }
+
+protected:
+  // Build the overlay into `b`. `world_per_px` sizes screen-fixed elements
+  // (line widths, dot radii, label quads) in world units.
+  virtual void draw(SgBuilder& b, double world_per_px) = 0;
 };
 
 }  // namespace ocpn::qtui
