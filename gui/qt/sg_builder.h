@@ -73,10 +73,14 @@ public:
 
   // --- Pen / brush state (mirrors ocpnDC::SetPen / SetBrush) -------------
   // An invalid colour disables that part: noPen() draws fills only, noBrush()
-  // draws outlines only. Pen width is in the caller's coordinate units (see
-  // the coordinate-space note above).
+  // draws outlines only. Pen lines render through the shared AA-line shader
+  // (aa_line.h), so **pen width is in logical pixels** (screen-fixed at any
+  // zoom) -- unlike brush fills, whose geometry is in the caller's
+  // coordinate units. setDash() gives the pen a dash pattern (logical px).
   void setPen(const QColor& color, float width = 1.0f);
   void noPen();
+  void setDash(float on_px, float off_px);
+  void noDash();
   void setBrush(const QColor& color);
   void noBrush();
 
@@ -130,18 +134,19 @@ private:
   // Lazily create (once) a TextureCacheNode child of m_parent that owns the
   // textures for drawImage / drawText.
   TextureCacheNode* textureRoot();
-  // Append a thick polyline as filled quads (true width on every RHI
-  // backend, which caps GL line width at 1). `closed` joins last->first.
-  void appendThickPolyline(const QList<QPointF>& pts, const QColor& color,
-                           float width, bool closed);
+  // Append a polyline in the current pen (width/dash) via the shared AA-line
+  // shader. `closed` joins last->first.
+  void appendLine(const QList<QPointF>& pts, bool closed);
 
   QSGNode* m_parent;
   QQuickWindow* m_window;
   TextureCacheNode* m_tex_root = nullptr;
 
   QColor m_pen_color = QColor(0, 0, 0);
-  float m_pen_width = 1.0f;
+  float m_pen_width = 1.0f;  // logical px (AA-line shader is screen-fixed)
   bool m_has_pen = true;
+  float m_dash_on = 0.0f;   // logical px; 0 = solid
+  float m_dash_off = 0.0f;
   QColor m_brush_color;  // invalid by default -> no fill
   bool m_has_brush = false;
 };

@@ -11,6 +11,16 @@ qt_add_executable(opencpn-qt
   main.cpp
 )
 
+# Custom AA-line shaders (P2.4 #5 / P2.13): baked to .qsb via qsb and exposed
+# as Qt resources at :/shaders/aaline.{vert,frag}.qsb (see aa_line.cpp).
+find_package(Qt6 REQUIRED COMPONENTS ShaderTools)
+qt_add_shaders(opencpn-qt "opencpn_qt_shaders"
+  PREFIX "/"
+  FILES
+    shaders/aaline.vert
+    shaders/aaline.frag
+)
+
 qt_add_qml_module(opencpn-qt
   URI opencpn.qt
   VERSION 1.0
@@ -28,6 +38,8 @@ qt_add_qml_module(opencpn-qt
     sg_texture_cache.h
     sg_builder.h
     sg_builder.cpp
+    aa_line.h
+    aa_line.cpp
     chart_provider.h
     chart_layer.h
     chart_layer.cpp

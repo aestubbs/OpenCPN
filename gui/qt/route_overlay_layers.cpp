@@ -40,15 +40,15 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
     for (const QPointF& ll : r.points) pts.append(lonLatToWorld(ll));
 
     if (pts.size() >= 2) {
-      b.setPen(r.color, static_cast<float>(2.0 * wpp));
+      b.setPen(r.color, 2.0f);  // px (AA-line shader is screen-fixed)
       b.noBrush();
       b.drawPolyline(pts);
     }
     // Route-point markers: filled dot with a thin white ring.
     b.setBrush(r.color);
-    b.setPen(QColor(255, 255, 255), static_cast<float>(1.0 * wpp));
+    b.setPen(QColor(255, 255, 255), 1.0f);
     for (const QPointF& w : pts)
-      b.drawCircle(w, static_cast<float>(4.0 * wpp));
+      b.drawCircle(w, static_cast<float>(4.0 * wpp));  // radius: world units
   }
 }
 
@@ -59,7 +59,7 @@ void TrackLayer::draw(SgBuilder& b, double wpp) {
     QList<QPointF> pts;
     pts.reserve(t.points.size());
     for (const QPointF& ll : t.points) pts.append(lonLatToWorld(ll));
-    b.setPen(t.color, static_cast<float>(1.5 * wpp));
+    b.setPen(t.color, 1.5f);  // px
     b.noBrush();
     b.drawPolyline(pts);
   }
@@ -70,8 +70,8 @@ void WaypointLayer::draw(SgBuilder& b, double wpp) {
   for (const NavWaypoint& wp : provider()->waypoints()) {
     const QPointF w(wp.lon, -wp.lat);  // world
     b.setBrush(wp.color);
-    b.setPen(QColor(40, 40, 40), static_cast<float>(1.0 * wpp));
-    b.drawCircle(w, static_cast<float>(5.0 * wpp));
+    b.setPen(QColor(40, 40, 40), 1.0f);              // px
+    b.drawCircle(w, static_cast<float>(5.0 * wpp));  // radius: world units
 
     if (!wp.name.isEmpty()) {
       const QImage img = SgBuilder::renderText(wp.name, QColor(20, 20, 20), 9.0f);

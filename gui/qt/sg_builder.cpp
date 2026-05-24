@@ -27,6 +27,7 @@
 #include <QSGImageNode>
 #include <QSGNode>
 
+#include "aa_line.h"
 #include "sg_helpers.h"
 #include "sg_texture_cache.h"
 #include "tesselator.h"  // libtess2, for drawPolygon fills
@@ -39,14 +40,6 @@ inline QSGGeometry::Point2D pt(const QPointF& p) {
   v.set(static_cast<float>(p.x()), static_cast<float>(p.y()));
   return v;
 }
-
-// Unit perpendicular normal of segment a->b (rotate the direction +90deg).
-inline QPointF segNormal(const QPointF& a, const QPointF& b, bool& ok) {
-  const double dx = b.x() - a.x(), dy = b.y() - a.y();
-  const double len = std::hypot(dx, dy);
-  ok = len > 0.0;
-  return ok ? QPointF(-dy / len, dx / len) : QPointF(0, 0);
-}
 }  // namespace
 
 SgBuilder::SgBuilder(QSGNode* parent, QQuickWindow* window)
@@ -58,6 +51,11 @@ void SgBuilder::setPen(const QColor& color, float width) {
   m_has_pen = color.isValid();
 }
 void SgBuilder::noPen() { m_has_pen = false; }
+void SgBuilder::setDash(float on_px, float off_px) {
+  m_dash_on = on_px > 0.0f ? on_px : 0.0f;
+  m_dash_off = off_px > 0.0f ? off_px : 0.0f;
+}
+void SgBuilder::noDash() { m_dash_on = m_dash_off = 0.0f; }
 void SgBuilder::setBrush(const QColor& color) {
   m_brush_color = color;
   m_has_brush = color.isValid();
@@ -72,60 +70,23 @@ TextureCacheNode* SgBuilder::textureRoot() {
   return m_tex_root;
 }
 
-// A polyline as filled quads: each segment becomes a rectangle `width` wide
-// centred on the segment. This gives a true thick line on every RHI backend
-// (the GL line primitive caps width at 1). Joints are simple overlaps -- good
-// enough for routes/tracks; mitred joins are a later refinement.
-void SgBuilder::appendThickPolyline(const QList<QPointF>& pts, const QColor& color,
-                               float width, bool closed) {
+// Append a polyline through the shared AA-line shader, in the current pen
+// (width + dash in logical px, screen-fixed at any zoom).
+void SgBuilder::appendLine(const QList<QPointF>& pts, bool closed) {
   if (!m_parent || pts.size() < 2) return;
-
-  // Thin lines: a plain line strip rasterises cleanly (MSAA edges) and is
-  // cheaper than quads. A closed outline appends the first vertex again to
-  // close the loop with DrawLineStrip -- the Metal RHI backend rejects
-  // DrawLineLoop ("Primitive topology 0x2 not supported").
-  if (width <= 1.0f) {
-    const int n = static_cast<int>(pts.size()) + (closed ? 1 : 0);
-    auto* node =
-        sg::makeFlatColorNode(color, QSGGeometry::DrawLineStrip, n, width);
-    QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
-    for (qsizetype i = 0; i < pts.size(); ++i) v[i] = pt(pts[i]);
-    if (closed) v[pts.size()] = pt(pts[0]);
-    m_parent->appendChildNode(node);
-    return;
-  }
-
-  const double h = width / 2.0;
-  const qsizetype segs = closed ? pts.size() : pts.size() - 1;
-  QList<QSGGeometry::Point2D> tris;
-  tris.reserve(segs * 6);
-  for (qsizetype i = 0; i < segs; ++i) {
-    const QPointF& a = pts[i];
-    const QPointF& b = pts[(i + 1) % pts.size()];
-    bool ok = false;
-    const QPointF nrm = segNormal(a, b, ok);
-    if (!ok) continue;
-    const QPointF off = nrm * h;
-    const QPointF a0 = a + off, a1 = a - off, b0 = b + off, b1 = b - off;
-    tris << pt(a0) << pt(b0) << pt(b1);  // tri 1
-    tris << pt(a0) << pt(b1) << pt(a1);  // tri 2
-  }
-  if (tris.isEmpty()) return;
-  auto* node = sg::makeFlatColorNode(color, QSGGeometry::DrawTriangles,
-                                     static_cast<int>(tris.size()));
-  QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
-  for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
-  m_parent->appendChildNode(node);
+  QSGGeometryNode* node = makeAaLineNode(pts, m_pen_color, m_pen_width, closed,
+                                         m_dash_on, m_dash_off);
+  if (node) m_parent->appendChildNode(node);
 }
 
 void SgBuilder::drawLine(const QPointF& a, const QPointF& b) {
   if (!m_has_pen) return;
-  appendThickPolyline({a, b}, m_pen_color, m_pen_width, /*closed=*/false);
+  appendLine({a, b}, /*closed=*/false);
 }
 
 void SgBuilder::drawPolyline(const QList<QPointF>& pts) {
   if (!m_has_pen) return;
-  appendThickPolyline(pts, m_pen_color, m_pen_width, /*closed=*/false);
+  appendLine(pts, /*closed=*/false);
 }
 
 void SgBuilder::drawPolygon(const QList<QPointF>& pts) {
@@ -173,9 +134,8 @@ void SgBuilder::drawPolygon(const QList<QPointF>& pts) {
     tessDeleteTess(tess);
   }
 
-  // Outline: closed thick polyline in the pen.
-  if (m_has_pen)
-    appendThickPolyline(pts, m_pen_color, m_pen_width, /*closed=*/true);
+  // Outline: closed AA line in the pen.
+  if (m_has_pen) appendLine(pts, /*closed=*/true);
 }
 
 void SgBuilder::drawRect(const QRectF& rect) {
@@ -191,9 +151,9 @@ void SgBuilder::drawRect(const QRectF& rect) {
     m_parent->appendChildNode(node);
   }
   if (m_has_pen)
-    appendThickPolyline({rect.topLeft(), rect.topRight(), rect.bottomRight(),
-                         rect.bottomLeft()},
-                        m_pen_color, m_pen_width, /*closed=*/true);
+    appendLine({rect.topLeft(), rect.topRight(), rect.bottomRight(),
+                rect.bottomLeft()},
+               /*closed=*/true);
 }
 
 void SgBuilder::drawCircle(const QPointF& center, float radius, int segments) {
@@ -224,8 +184,7 @@ void SgBuilder::drawCircle(const QPointF& center, float radius, int segments) {
     for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
     m_parent->appendChildNode(node);
   }
-  if (m_has_pen)
-    appendThickPolyline(ring, m_pen_color, m_pen_width, /*closed=*/true);
+  if (m_has_pen) appendLine(ring, /*closed=*/true);
 }
 
 void SgBuilder::drawImage(const QRectF& dest, const QImage& image) {
