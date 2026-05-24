@@ -33,11 +33,16 @@ QT_END_NAMESPACE
 
 namespace ocpn::qtui {
 
+class Viewport;
+
 class DemoNavDataProvider : public NavDataProvider {
   Q_OBJECT
 
 public:
-  explicit DemoNavDataProvider(QObject* parent = nullptr);
+  // `viewport` (optional) lets the synthetic layout scale to the current
+  // zoom so the fleet fills the view wherever it's dropped.
+  explicit DemoNavDataProvider(const Viewport* viewport = nullptr,
+                               QObject* parent = nullptr);
 
   QList<AisTarget> aisTargets() const override { return m_targets; }
   OwnShipState ownShip() const override { return m_own; }
@@ -51,6 +56,11 @@ public:
   void setRunning(bool run);
   bool running() const;
 
+  /** (Re)place the synthetic fleet + route/track/waypoints centred on
+   *  (lat, lon), scaled to the current viewport zoom so it fills the view.
+   *  Emits dynamicChanged() + staticChanged(). */
+  void seedAround(double lat, double lon);
+
 private:
   void tick();  // advance positions by the elapsed interval, emit changed()
 
@@ -58,6 +68,7 @@ private:
   static void advance(double& lat, double& lon, double cog, double sog,
                       double seconds);
 
+  const Viewport* m_viewport = nullptr;  // for zoom-scaled layout (non-owning)
   QTimer* m_timer = nullptr;
   QElapsedTimer m_clock;        // wall-clock between ticks
   qint64 m_last_ms = 0;

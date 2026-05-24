@@ -117,6 +117,8 @@ public:
   Q_INVOKABLE void zoomIn();
   Q_INVOKABLE void zoomOut();
   Q_INVOKABLE void fitWorld();
+  // Re-seed the demo nav fleet around the current view centre (P2.11).
+  Q_INVOKABLE void dropDemoHere();
 
 Q_SIGNALS:
   void s52EngineChanged();

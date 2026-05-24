@@ -80,15 +80,17 @@ void SgBuilder::appendThickPolyline(const QList<QPointF>& pts, const QColor& col
                                float width, bool closed) {
   if (!m_parent || pts.size() < 2) return;
 
-  // Thin lines: a plain line strip/loop rasterises cleanly (MSAA edges) and
-  // is cheaper than quads.
+  // Thin lines: a plain line strip rasterises cleanly (MSAA edges) and is
+  // cheaper than quads. A closed outline appends the first vertex again to
+  // close the loop with DrawLineStrip -- the Metal RHI backend rejects
+  // DrawLineLoop ("Primitive topology 0x2 not supported").
   if (width <= 1.0f) {
-    // DrawLineLoop closes back to the first vertex itself.
-    auto* node = sg::makeFlatColorNode(
-        color, closed ? QSGGeometry::DrawLineLoop : QSGGeometry::DrawLineStrip,
-        static_cast<int>(pts.size()), width);
+    const int n = static_cast<int>(pts.size()) + (closed ? 1 : 0);
+    auto* node =
+        sg::makeFlatColorNode(color, QSGGeometry::DrawLineStrip, n, width);
     QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
     for (qsizetype i = 0; i < pts.size(); ++i) v[i] = pt(pts[i]);
+    if (closed) v[pts.size()] = pt(pts[0]);
     m_parent->appendChildNode(node);
     return;
   }

@@ -103,7 +103,7 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // the charts. Fed from the synthetic demo provider for now; the same
   // NavDataProvider seam will host a live model adapter later. Each is a
   // stable-id Layer, so it also exercises P2.10 persistence.
-  m_demo_provider = std::make_unique<DemoNavDataProvider>();
+  m_demo_provider = std::make_unique<DemoNavDataProvider>(m_viewport.get());
   m_ais_layer = new AisLayer(m_demo_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);
   m_compositor->addLayer(m_ais_layer);
@@ -536,10 +536,27 @@ void ChartCanvas::setShowText(bool on) {
 void ChartCanvas::setDemoMode(bool on) {
   if (on == m_demo_mode) return;
   m_demo_mode = on;
-  // Demo mode animates the synthetic provider. When off it freezes (and,
-  // once a live model adapter exists, the overlays would switch to it here).
-  if (m_demo_provider) m_demo_provider->setRunning(on);
+  // Demo mode animates the synthetic provider. Turning it on re-seeds the
+  // fleet around the current view so it's visible on whatever charts are
+  // loaded; off freezes it. (A live model adapter would switch in here.)
+  if (m_demo_provider) {
+    if (on && m_viewport)
+      m_demo_provider->seedAround(m_viewport->centerLat(),
+                                  m_viewport->centerLon());
+    m_demo_provider->setRunning(on);
+  }
   Q_EMIT demoModeChanged();
+  update();
+}
+
+void ChartCanvas::dropDemoHere() {
+  // Spawn the synthetic fleet around the current view centre (enabling demo
+  // mode if needed). Lets you place the demo wherever you've panned to.
+  if (!m_demo_provider || !m_viewport) return;
+  m_demo_provider->seedAround(m_viewport->centerLat(),
+                              m_viewport->centerLon());
+  if (!m_demo_mode) setDemoMode(true);
+  else m_demo_provider->setRunning(true);
   update();
 }
 

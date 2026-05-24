@@ -19,11 +19,27 @@
 
 #include <QTimer>
 
+#include "viewport.h"
+
 namespace ocpn::qtui {
 
 namespace {
 constexpr double kDegToRad = M_PI / 180.0;
 constexpr double kNmPerDegLat = 60.0;  // 1 deg latitude = 60 nautical miles
+
+// Synthetic fleet layout, as fractions of the view span (so it scales with
+// zoom). dLat/dLon are offsets from the seed centre; course/speed in deg/kn.
+struct TargetSeed {
+  double dlat, dlon, cog, sog;
+  int mmsi;
+  const char* name;
+};
+constexpr TargetSeed kTargetSeeds[] = {
+    {+0.25, -0.25, 135.0, 12.0, 244010001, "ALPHA"},
+    {-0.25, +0.45, 300.0, 18.0, 244010002, "BRAVO"},
+    {+0.08, +0.35, 220.0, 6.0, 244010003, "CHARLIE"},
+    {-0.12, -0.35, 20.0, 22.0, 244010004, "DELTA"},
+};
 }  // namespace
 
 void DemoNavDataProvider::advance(double& lat, double& lon, double cog,
@@ -37,38 +53,63 @@ void DemoNavDataProvider::advance(double& lat, double& lon, double cog,
   lon += (coslat > 1e-6) ? dist_deg_lat * std::sin(th) / coslat : 0.0;
 }
 
-DemoNavDataProvider::DemoNavDataProvider(QObject* parent)
-    : NavDataProvider(parent) {
-  // Own ship: mid-test-area, making way north-east.
-  m_own = {true, 52.5, 5.0, 50.0, 8.0, 50.0};
-
-  // A few AIS targets on assorted courses around the own ship.
-  m_targets = {
-      {244010001, 52.70, 4.80, 135.0, 12.0, 135.0, QStringLiteral("ALPHA")},
-      {244010002, 52.30, 5.40, 300.0, 18.0, 300.0, QStringLiteral("BRAVO")},
-      {244010003, 52.55, 5.30, 220.0, 6.0, 220.0, QStringLiteral("CHARLIE")},
-      {244010004, 52.40, 4.70, 20.0, 22.0, 20.0, QStringLiteral("DELTA")},
-  };
-
-  // A static demo route, a few waypoints, and one track.
-  NavRoute r;
-  r.name = QStringLiteral("Demo Route");
-  r.points = {{4.6, 52.2}, {5.0, 52.6}, {5.6, 52.7}, {6.0, 53.0}};
-  m_routes = {r};
-
-  m_waypoints = {
-      {QStringLiteral("WP1"), 52.2, 4.6},
-      {QStringLiteral("WP2"), 52.7, 5.6},
-      {QStringLiteral("Harbour"), 53.0, 6.0},
-  };
-
-  NavTrack t;
-  t.points = {{4.9, 52.35}, {4.95, 52.40}, {5.0, 52.45}, {5.02, 52.50}};
-  m_tracks = {t};
+DemoNavDataProvider::DemoNavDataProvider(const Viewport* viewport,
+                                         QObject* parent)
+    : NavDataProvider(parent), m_viewport(viewport) {
+  // Seed an initial fleet around the viewport's current centre (or a sane
+  // default). ChartCanvas re-seeds via seedAround() once the charts fit /
+  // when demo mode is toggled or "drop demo here" is invoked.
+  const double lat = m_viewport ? m_viewport->centerLat() : 52.5;
+  const double lon = m_viewport ? m_viewport->centerLon() : 5.0;
+  seedAround(lat, lon);
 
   m_timer = new QTimer(this);
   m_timer->setInterval(200);  // 5 Hz
   connect(m_timer, &QTimer::timeout, this, &DemoNavDataProvider::tick);
+}
+
+void DemoNavDataProvider::seedAround(double lat, double lon) {
+  // Span (degrees) across a typical view at the current zoom; the layout is
+  // placed as fractions of this so it fills the view at any scale.
+  const double s = m_viewport ? m_viewport->scale() : 0.0;
+  const double span = (s > 0.0) ? 700.0 / s : 8.0;
+
+  m_own = {true, lat, lon, 50.0, 8.0, 50.0};  // own ship dead centre
+
+  m_targets.clear();
+  for (const TargetSeed& ts : kTargetSeeds) {
+    AisTarget t;
+    t.mmsi = ts.mmsi;
+    t.lat = lat + ts.dlat * span;
+    t.lon = lon + ts.dlon * span;
+    t.cog = ts.cog;
+    t.sog = ts.sog;
+    t.hdg = ts.cog;
+    t.name = QString::fromLatin1(ts.name);
+    m_targets.append(t);
+  }
+
+  // Route / waypoints / track, as (lon, lat) offsets * span.
+  const auto P = [&](double dlon, double dlat) {
+    return QPointF(lon + dlon * span, lat + dlat * span);
+  };
+  NavRoute r;
+  r.name = QStringLiteral("Demo Route");
+  r.points = {P(-0.45, -0.35), P(0.0, 0.10), P(0.45, 0.25), P(0.70, 0.45)};
+  m_routes = {r};
+
+  m_waypoints = {
+      {QStringLiteral("WP1"), lat - 0.35 * span, lon - 0.45 * span},
+      {QStringLiteral("WP2"), lat + 0.25 * span, lon + 0.50 * span},
+      {QStringLiteral("Harbour"), lat + 0.50 * span, lon + 0.70 * span},
+  };
+
+  NavTrack t;
+  t.points = {P(-0.10, -0.15), P(-0.05, -0.10), P(0.0, -0.05), P(0.02, 0.0)};
+  m_tracks = {t};
+
+  Q_EMIT dynamicChanged();
+  Q_EMIT staticChanged();
 }
 
 void DemoNavDataProvider::setRunning(bool run) {

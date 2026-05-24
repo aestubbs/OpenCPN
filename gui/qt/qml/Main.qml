@@ -105,6 +105,10 @@ ApplicationWindow {
                 checked: chart.demoMode
                 onClicked: chart.demoMode = checked
             }
+            ToolButton {
+                text: qsTr("Drop demo here")
+                onClicked: chart.dropDemoHere()
+            }
 
             Item { Layout.fillWidth: true }  // spacer
 
