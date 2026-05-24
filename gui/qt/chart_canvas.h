@@ -64,7 +64,6 @@ class ChartWorker;
 class DemoNavDataProvider;
 class ModelNavDataProvider;
 class SwitchableNavDataProvider;
-class NmeaLogReplay;
 class AisLayer;
 class OwnShipLayer;
 
@@ -182,7 +181,6 @@ private:
   // (it references the demo + model providers).
   std::unique_ptr<DemoNavDataProvider> m_demo_provider;
   std::unique_ptr<ModelNavDataProvider> m_model_provider;
-  std::unique_ptr<NmeaLogReplay> m_nav_replay;
   std::unique_ptr<SwitchableNavDataProvider> m_nav_provider;
 
   std::unique_ptr<LayerCompositor> m_compositor;

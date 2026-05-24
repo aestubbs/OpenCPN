@@ -72,11 +72,12 @@ qt_add_qml_module(opencpn-qt
     ais_target_store.h
     in_memory_ais_store.h
     in_memory_ais_store.cpp
+    own_ship_holder.h
+    nav_feed_worker.h
+    nav_feed_worker.cpp
     model_nav_data_provider.h
     model_nav_data_provider.cpp
     switchable_nav_provider.h
-    nmea_log_replay.h
-    nmea_log_replay.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its

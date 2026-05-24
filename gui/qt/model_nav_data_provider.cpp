@@ -15,84 +15,55 @@
 
 #include "model_nav_data_provider.h"
 
-#include <cmath>
-
-#include <QDateTime>
-#include <QTimer>
+#include <QThread>
 
 #include "in_memory_ais_store.h"
-#include "model/ais_decoder.h"
-#include "model/ais_target_data.h"
-#include "model/own_ship.h"
 #include "model/route.h"
 #include "model/route_point.h"
 #include "model/routeman.h"
 #include "model/track.h"
+#include "nav_feed_worker.h"
+#include "own_ship_holder.h"
 
 namespace ocpn::qtui {
 
-namespace {
-inline bool finitePos(double lat, double lon) {
-  return std::isfinite(lat) && std::isfinite(lon) && std::abs(lat) <= 90.0 &&
-         std::abs(lon) <= 360.0 && !(lat == 0.0 && lon == 0.0);
-}
-// Drop a target this long after its last report (staleness). AIS reporting
-// intervals run from ~2 s (fast craft) to ~3 min (moored); 10 min is a safe
-// "lost" cutoff.
-constexpr qint64 kStaleMs = 10 * 60 * 1000;
-}  // namespace
-
-ModelNavDataProvider::ModelNavDataProvider(QObject* parent)
+ModelNavDataProvider::ModelNavDataProvider(const QString& log_path,
+                                           QObject* parent)
     : NavDataProvider(parent),
-      m_ais_store(std::make_unique<InMemoryAisTargetStore>()) {
-  m_timer = new QTimer(this);
-  m_timer->setInterval(250);  // 4 Hz poll of the model
-  connect(m_timer, &QTimer::timeout, this, &ModelNavDataProvider::poll);
+      m_ais_store(std::make_unique<InMemoryAisTargetStore>()),
+      m_own(std::make_unique<OwnShipHolder>()) {
+  m_thread = new QThread(this);
+  m_worker = new NavFeedWorker(m_ais_store.get(), m_own.get(), log_path);
+  m_worker->moveToThread(m_thread);
+  // Worker tick -> GUI-thread refresh (queued across the thread boundary).
+  connect(m_worker, &NavFeedWorker::updated, this,
+          &ModelNavDataProvider::onWorkerUpdated);
+  connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
 }
 
-ModelNavDataProvider::~ModelNavDataProvider() = default;
+ModelNavDataProvider::~ModelNavDataProvider() {
+  if (m_thread) {
+    QMetaObject::invokeMethod(m_worker, "stop", Qt::QueuedConnection);
+    m_thread->quit();
+    m_thread->wait();
+  }
+}
 
 void ModelNavDataProvider::setRunning(bool run) {
-  if (run)
-    m_timer->start();
-  else
-    m_timer->stop();
+  if (run) {
+    if (!m_thread->isRunning()) m_thread->start();
+    QMetaObject::invokeMethod(m_worker, "start", Qt::QueuedConnection);
+  } else if (m_worker) {
+    QMetaObject::invokeMethod(m_worker, "stop", Qt::QueuedConnection);
+  }
 }
 
 QList<AisTarget> ModelNavDataProvider::aisTargets() const {
-  // Read through the store -- the renderer's decoupled AIS boundary.
-  return m_ais_store->snapshot();
-}
-
-void ModelNavDataProvider::mirrorAisToStore() {
-  if (!g_pAIS) return;
-  const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  for (const auto& [mmsi, td] : g_pAIS->GetTargetList()) {
-    if (!td || td->b_lost || td->b_removed) continue;
-    if (!finitePos(td->Lat, td->Lon)) continue;
-    AisTarget t;
-    t.mmsi = td->MMSI;
-    t.lat = td->Lat;
-    t.lon = td->Lon;
-    t.cog = std::isfinite(td->COG) ? td->COG : 0.0;
-    t.sog = std::isfinite(td->SOG) ? td->SOG : 0.0;
-    t.hdg = td->HDG;
-    t.name = td->GetFullName().trimmed();
-    m_ais_store->upsert(t, now);
-  }
-  m_ais_store->prune(now, kStaleMs);
+  return m_ais_store->snapshot();  // thread-safe read
 }
 
 OwnShipState ModelNavDataProvider::ownShip() const {
-  OwnShipState s;
-  if (!finitePos(gLat, gLon)) return s;  // invalid -> hidden
-  s.valid = true;
-  s.lat = gLat;
-  s.lon = gLon;
-  s.cog = std::isfinite(gCog) ? gCog : 0.0;
-  s.sog = std::isfinite(gSog) ? gSog : 0.0;
-  s.hdg = std::isfinite(gHdt) ? gHdt : kHeadingUnavailable;
-  return s;
+  return m_own->get();  // thread-safe read
 }
 
 QList<NavRoute> ModelNavDataProvider::routes() const {
@@ -115,9 +86,7 @@ QList<NavWaypoint> ModelNavDataProvider::waypoints() const {
   const RoutePointList* list = pWayPointMan->GetWaypointList();
   if (!list) return out;
   for (RoutePoint* wp : *list) {
-    if (!wp) continue;
-    // Skip points that belong to a route (those draw via routes()).
-    if (wp->m_bIsInRoute) continue;
+    if (!wp || wp->m_bIsInRoute) continue;  // route points draw via routes()
     NavWaypoint nw;
     nw.name = wp->GetName();
     nw.lat = wp->m_lat;
@@ -142,16 +111,16 @@ QList<NavTrack> ModelNavDataProvider::tracks() const {
   return out;
 }
 
-void ModelNavDataProvider::poll() {
-  mirrorAisToStore();
+void ModelNavDataProvider::onWorkerUpdated() {
   Q_EMIT dynamicChanged();
 
   // Cheap static change-detect: route/waypoint/track counts.
-  const int sig = (pRouteList ? static_cast<int>(pRouteList->size()) : 0) * 73 +
-                  static_cast<int>(g_TrackList.size()) * 17 +
-                  (pWayPointMan && pWayPointMan->GetWaypointList()
-                       ? static_cast<int>(pWayPointMan->GetWaypointList()->size())
-                       : 0);
+  const int sig =
+      (pRouteList ? static_cast<int>(pRouteList->size()) : 0) * 73 +
+      static_cast<int>(g_TrackList.size()) * 17 +
+      (pWayPointMan && pWayPointMan->GetWaypointList()
+           ? static_cast<int>(pWayPointMan->GetWaypointList()->size())
+           : 0);
   if (sig != m_last_static_sig) {
     m_last_static_sig = sig;
     Q_EMIT staticChanged();

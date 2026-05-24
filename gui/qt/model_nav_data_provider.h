@@ -11,16 +11,18 @@
  * \file
  *
  * ModelNavDataProvider -- a live NavDataProvider that reads the real model
- * (P2.11 live adapter). This mirrors how the wx chart canvas gets its nav
- * data: the comm/decoder pipeline feeds the model singletons, and the canvas
- * READS them -- `g_pAIS->GetTargetList()`, the own-ship globals
- * (gLat/gLon/gCog/gSog), `pRouteList`, `pWayPointMan`, `g_TrackList`. This
- * adapter just snapshots those into the Qt value types the overlay Layers
- * consume, so the renderer is identical for demo and live data.
+ * (P2.11 live adapter), mirroring how the wx canvas gets nav data: the
+ * comm/decoder pipeline feeds the model and the canvas READS it.
  *
- * It polls on a timer (the model is mutated by the comm pipeline on its own
- * threads/events) and emits dynamicChanged() each tick for AIS/own-ship,
- * staticChanged() when the route/track/waypoint set changes.
+ * Threading: AIS decode runs on a NavFeedWorker on its own QThread, writing
+ * the thread-safe AisTargetStore + OwnShipHolder. This object lives on the
+ * GUI thread; it owns the worker/thread/store/holder and, on the worker's
+ * coalesced updated() signal (queued), re-emits dynamicChanged() so the
+ * overlay Layers snapshot the store and re-render on the GUI thread. The
+ * per-sentence CPU work never touches the GUI thread.
+ *
+ * Routes / tracks / waypoints are low-frequency and read straight from the
+ * model managers on the GUI thread.
  */
 
 #ifndef OCPN_QT_MODEL_NAV_DATA_PROVIDER_H_
@@ -31,19 +33,24 @@
 #include "nav_data_provider.h"
 
 QT_BEGIN_NAMESPACE
-class QTimer;
+class QThread;
 QT_END_NAMESPACE
 
 namespace ocpn::qtui {
 
 class AisTargetStore;
+class OwnShipHolder;
+class NavFeedWorker;
 
 class ModelNavDataProvider : public NavDataProvider {
   Q_OBJECT
 
 public:
-  explicit ModelNavDataProvider(QObject* parent = nullptr);
-  ~ModelNavDataProvider() override;  // out-of-line for unique_ptr<incomplete>
+  // `log_path` is the NMEA log the worker replays (stand-in for a live
+  // CommDriver, which would plug in at the same point later).
+  explicit ModelNavDataProvider(const QString& log_path,
+                                QObject* parent = nullptr);
+  ~ModelNavDataProvider() override;
 
   QList<AisTarget> aisTargets() const override;
   OwnShipState ownShip() const override;
@@ -51,20 +58,17 @@ public:
   QList<NavWaypoint> waypoints() const override;
   QList<NavTrack> tracks() const override;
 
-  /** Start/stop polling the model (~4 Hz). */
+  /** Start/stop the decode worker. */
   void setRunning(bool run);
 
 private:
-  void poll();  // mirror decoder -> store, prune; emit changed signals
-  // Copy the AIS decoder's current targets into the store (stamping
-  // last-seen) and prune stale ones. The store -- not g_pAIS -- is what
-  // aisTargets() reads, so the renderer is decoupled from the legacy class
-  // and a SQLite store can replace the in-memory one later.
-  void mirrorAisToStore();
+  void onWorkerUpdated();  // GUI thread: re-emit dynamic/static changed
 
-  QTimer* m_timer = nullptr;
-  int m_last_static_sig = -1;  // cheap change-detect for routes/tracks/wpts
   std::unique_ptr<AisTargetStore> m_ais_store;
+  std::unique_ptr<OwnShipHolder> m_own;
+  QThread* m_thread = nullptr;       // owns the worker's thread of execution
+  NavFeedWorker* m_worker = nullptr; // lives on m_thread
+  int m_last_static_sig = -1;        // cheap change-detect for routes/wpts
 };
 
 }  // namespace ocpn::qtui

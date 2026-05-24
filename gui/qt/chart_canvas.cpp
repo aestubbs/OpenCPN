@@ -53,7 +53,6 @@
 #include "model/select.h"
 #include "model/ocpn_config.h"
 #include "model_nav_data_provider.h"
-#include "nmea_log_replay.h"
 #include "raster_chart_provider.h"
 #include "switchable_nav_provider.h"
 #include "s52_engine.h"
@@ -123,9 +122,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   if (!pSelectAIS) pSelectAIS = new Select();
   if (!g_pAIS) g_pAIS = new AisDecoder(AisDecoderCallbacks());
   m_demo_provider = std::make_unique<DemoNavDataProvider>(m_viewport.get());
-  m_model_provider = std::make_unique<ModelNavDataProvider>();
-  m_nav_replay = std::make_unique<NmeaLogReplay>(
-      QString::fromUtf8(OCPN_QT_NMEA_LOG));
+  m_model_provider =
+      std::make_unique<ModelNavDataProvider>(QString::fromUtf8(OCPN_QT_NMEA_LOG));
   m_nav_provider = std::make_unique<SwitchableNavDataProvider>(
       m_demo_provider.get(), m_model_provider.get());
 
@@ -163,7 +161,6 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_nav_provider->setLive(!m_demo_mode);
   m_demo_provider->setRunning(m_demo_mode);
   m_model_provider->setRunning(!m_demo_mode);
-  m_nav_replay->setRunning(!m_demo_mode);
 
   // Repaint when:
   //   - any Layer dirties (data change, visibility/z-order/opacity).
@@ -608,7 +605,6 @@ void ChartCanvas::setDemoMode(bool on) {
     m_demo_provider->setRunning(on);
   }
   if (m_model_provider) m_model_provider->setRunning(!on);
-  if (m_nav_replay) m_nav_replay->setRunning(!on);
   if (!on) m_live_centered = false;  // re-centre on own ship next live fix
   Q_EMIT demoModeChanged();
   update();
