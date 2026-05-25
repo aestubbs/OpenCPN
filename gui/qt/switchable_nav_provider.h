@@ -99,6 +99,44 @@ public:
     Q_EMIT editChanged();
   }
 
+  // --- Route editing (#31): the user routes are editable in place. ------
+  const QList<NavRoute>& userRoutes() const { return m_user_routes; }
+
+  /** Move a vertex while dragging (cheap editChanged redraw). */
+  void moveRoutePoint(int route, int pt, double lat, double lon) {
+    if (route < 0 || route >= m_user_routes.size()) return;
+    NavRoute& r = m_user_routes[route];
+    if (pt < 0 || pt >= r.points.size()) return;
+    r.points[pt] = QPointF(lon, lat);
+    Q_EMIT editChanged();
+  }
+  /** Commit an edit gesture (drag release) -> route manager refreshes. */
+  void commitRouteEdit() { Q_EMIT staticChanged(); }
+
+  /** Insert a vertex into segment `seg` (between seg and seg+1). */
+  void insertRoutePoint(int route, int seg, double lat, double lon) {
+    if (route < 0 || route >= m_user_routes.size()) return;
+    NavRoute& r = m_user_routes[route];
+    if (seg < 0 || seg >= r.points.size() - 1) return;
+    r.points.insert(seg + 1, QPointF(lon, lat));
+    Q_EMIT staticChanged();
+  }
+  /** Delete a vertex; if the route drops below 2 points, delete the route. */
+  void deleteRoutePoint(int route, int pt) {
+    if (route < 0 || route >= m_user_routes.size()) return;
+    NavRoute& r = m_user_routes[route];
+    if (pt < 0 || pt >= r.points.size()) return;
+    r.points.removeAt(pt);
+    if (r.points.size() < 2) m_user_routes.removeAt(route);
+    Q_EMIT staticChanged();
+  }
+  /** Delete an entire user route. */
+  void deleteRoute(int route) {
+    if (route < 0 || route >= m_user_routes.size()) return;
+    m_user_routes.removeAt(route);
+    Q_EMIT staticChanged();
+  }
+
   // --- Own-ship track recording (#29) ----------------------------------
   // When recording, ChartCanvas feeds own-ship fixes via appendTrackPoint;
   // the growing track is merged into tracks() so the TrackLayer draws it.

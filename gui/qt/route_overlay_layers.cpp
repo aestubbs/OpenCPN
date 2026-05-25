@@ -57,6 +57,7 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
 
   for (const NavRoute& r : provider()->routes()) {
     if (r.points.size() < 1) continue;
+    const bool selected = !m_selected.isEmpty() && r.name == m_selected;
     QList<QPointF> pts;
     pts.reserve(r.points.size());
     for (const QPointF& ll : r.points) pts.append(lonLatToWorld(ll));
@@ -83,11 +84,14 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
             QRectF(mid.x() - tw / 2.0, mid.y() - th - 3.0 * wpp, tw, th), img);
       }
     }
-    // Route-point markers: filled dot with a thin white ring.
+    // Route-point markers: filled dot with a thin white ring. The selected
+    // route gets larger handles ringed in amber to signal it is editable.
+    const double radius = (selected ? 6.0 : 4.0) * wpp;
     b.setBrush(lineColor);
-    b.setPen(QColor(255, 255, 255), 1.0f);
+    b.setPen(selected ? QColor(255, 200, 60) : QColor(255, 255, 255),
+             selected ? 2.0f : 1.0f);
     for (const QPointF& w : pts)
-      b.drawCircle(w, static_cast<float>(4.0 * wpp));  // radius: world units
+      b.drawCircle(w, static_cast<float>(radius));  // radius: world units
   }
 }
 

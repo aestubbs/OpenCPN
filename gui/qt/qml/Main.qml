@@ -771,6 +771,50 @@ ApplicationWindow {
                 chartContextMenu.popup(x, y)
             }
         }
+
+        // Route-node context menu (right-click a node of the selected route).
+        Menu {
+            id: routeNodeMenu
+            MenuItem {
+                text: qsTr("Delete point")
+                onTriggered: chart.deleteRoutePointAtMenu()
+            }
+            MenuItem {
+                text: qsTr("Delete route")
+                onTriggered: chart.deleteSelectedRoute()
+            }
+            MenuSeparator {}
+            MenuItem {
+                text: qsTr("Finish editing")
+                onTriggered: chart.clearRouteSelection()
+            }
+        }
+        Connections {
+            target: chart
+            function onRouteNodeMenuRequested(x, y) {
+                routeNodeMenu.popup(x, y)
+            }
+        }
+
+        // Editing hint banner: shown while a route is selected for editing.
+        Rectangle {
+            visible: chart.selectedRoute >= 0
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 10
+            width: editHint.implicitWidth + 20
+            height: editHint.implicitHeight + 12
+            radius: 4
+            color: "#cc1a1e10"
+            border.color: "#80ffc83c"
+            Text {
+                id: editHint
+                anchors.centerIn: parent
+                text: qsTr("Editing route — drag nodes · click line to add · " +
+                           "right-click node to delete · click water to finish")
+                color: "#ffe0a0"; font.pointSize: 10
+            }
+        }
     }
 
     // --- Floating master toolbar (mirrors OpenCPN's single vertical wx

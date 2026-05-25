@@ -46,11 +46,20 @@ public:
     Q_EMIT dirty();
   }
 
+  /** Name of the route selected for editing; drawn emphasised with larger
+   *  draggable node handles. Empty = none. */
+  void setSelectedRouteName(const QString& name) {
+    if (name == m_selected) return;
+    m_selected = name;
+    Q_EMIT dirty();
+  }
+
 protected:
   void draw(SgBuilder& b, double world_per_px) override;
 
 private:
   int m_scheme = 0;
+  QString m_selected;
 };
 
 /** Tracks: a polyline per recorded track. */

@@ -612,6 +612,98 @@ void ChartCanvas::highlightChartCell(const QString& name) {
   update();
 }
 
+// --- Route editing (#31) ---------------------------------------------------
+bool ChartCanvas::hitRouteNode(const QPointF& sp, int& route, int& node) const {
+  if (!m_nav_provider || !m_viewport) return false;
+  const QMatrix4x4 m = m_viewport->transformMatrix(static_cast<int>(width()),
+                                                   static_cast<int>(height()));
+  constexpr double kR = 11.0;  // px
+  double best = kR * kR;
+  bool found = false;
+  const QList<NavRoute>& rs = m_nav_provider->userRoutes();
+  for (int ri = 0; ri < rs.size(); ++ri) {
+    const NavRoute& r = rs[ri];
+    for (int pi = 0; pi < r.points.size(); ++pi) {
+      const QPointF s = m.map(QPointF(r.points[pi].x(), -r.points[pi].y()));
+      const double dx = s.x() - sp.x(), dy = s.y() - sp.y();
+      const double d2 = dx * dx + dy * dy;
+      if (d2 < best) {
+        best = d2;
+        route = ri;
+        node = pi;
+        found = true;
+      }
+    }
+  }
+  return found;
+}
+
+bool ChartCanvas::hitRouteSegment(const QPointF& sp, int& route, int& seg,
+                                  double& lat, double& lon) const {
+  if (!m_nav_provider || !m_viewport) return false;
+  const int w = static_cast<int>(width()), h = static_cast<int>(height());
+  const QMatrix4x4 m = m_viewport->transformMatrix(w, h);
+  constexpr double kR = 8.0;  // px
+  double best = kR * kR;
+  bool found = false;
+  const QList<NavRoute>& rs = m_nav_provider->userRoutes();
+  for (int ri = 0; ri < rs.size(); ++ri) {
+    const NavRoute& r = rs[ri];
+    for (int si = 0; si + 1 < r.points.size(); ++si) {
+      const QPointF a = m.map(QPointF(r.points[si].x(), -r.points[si].y()));
+      const QPointF bp =
+          m.map(QPointF(r.points[si + 1].x(), -r.points[si + 1].y()));
+      const QPointF ab = bp - a;
+      const double l2 = ab.x() * ab.x() + ab.y() * ab.y();
+      double t = l2 > 0.0 ? ((sp.x() - a.x()) * ab.x() +
+                             (sp.y() - a.y()) * ab.y()) / l2
+                          : 0.0;
+      t = std::clamp(t, 0.0, 1.0);
+      const QPointF proj = a + ab * t;
+      const double dx = proj.x() - sp.x(), dy = proj.y() - sp.y();
+      const double d2 = dx * dx + dy * dy;
+      if (d2 < best) {
+        best = d2;
+        route = ri;
+        seg = si;
+        found = true;
+      }
+    }
+  }
+  if (found) m_viewport->screenToLatLon(sp.x(), sp.y(), w, h, lat, lon);
+  return found;
+}
+
+void ChartCanvas::selectRoute(int route) {
+  if (route == m_selected_route) return;
+  m_selected_route = route;
+  if (m_route_layer) {
+    QString name;
+    if (m_nav_provider && route >= 0) {
+      const QList<NavRoute>& rs = m_nav_provider->userRoutes();
+      if (route < rs.size()) name = rs[route].name;
+    }
+    m_route_layer->setSelectedRouteName(name);
+  }
+  Q_EMIT selectedRouteChanged();
+  update();
+}
+
+void ChartCanvas::clearRouteSelection() { selectRoute(-1); }
+
+void ChartCanvas::deleteRoutePointAtMenu() {
+  if (m_nav_provider && m_menu_route >= 0 && m_menu_node >= 0)
+    m_nav_provider->deleteRoutePoint(m_menu_route, m_menu_node);
+  m_menu_route = m_menu_node = -1;
+  clearRouteSelection();  // indices may have shifted -- drop selection
+}
+
+void ChartCanvas::deleteSelectedRoute() {
+  if (m_nav_provider && m_selected_route >= 0)
+    m_nav_provider->deleteRoute(m_selected_route);
+  clearRouteSelection();
+}
+
 void ChartCanvas::zoomIn() {
   const int w = static_cast<int>(width());
   const int h = static_cast<int>(height());
@@ -780,11 +872,31 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
   }
 
   if (event->button() == Qt::LeftButton) {
+    // Route editing: grabbing a node selects its route and starts a drag.
+    int rt = -1, nd = -1;
+    if (hitRouteNode(event->position(), rt, nd)) {
+      selectRoute(rt);
+      m_dragging_node = true;
+      m_drag_node = nd;
+      event->accept();
+      return;
+    }
     m_dragging = true;
     m_drag_last_pos = event->position();
     m_press_pos = event->position();
     event->accept();
   } else if (event->button() == Qt::RightButton) {
+    // Right-click on a route node -> the node menu (delete point/route).
+    int rt = -1, nd = -1;
+    if (hitRouteNode(event->position(), rt, nd)) {
+      selectRoute(rt);
+      m_menu_route = rt;
+      m_menu_node = nd;
+      Q_EMIT routeNodeMenuRequested(event->position().x(),
+                                    event->position().y());
+      event->accept();
+      return;
+    }
     // Record the world point under the cursor for the context-menu actions
     // (Center here / Object query here) and ask QML to pop the menu there.
     m_ctx_pos = event->position();
@@ -814,6 +926,15 @@ void ChartCanvas::queryObjectsHere() {
 }
 
 void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
+  if (m_dragging_node && m_nav_provider) {
+    double lat = 0, lon = 0;
+    const QPointF p = event->position();
+    m_viewport->screenToLatLon(p.x(), p.y(), static_cast<int>(width()),
+                               static_cast<int>(height()), lat, lon);
+    m_nav_provider->moveRoutePoint(m_selected_route, m_drag_node, lat, lon);
+    event->accept();
+    return;
+  }
   if (m_dragging) {
     const QPointF pos = event->position();
     const QPointF delta = pos - m_drag_last_pos;
@@ -826,13 +947,31 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
+  if (event->button() == Qt::LeftButton && m_dragging_node) {
+    m_dragging_node = false;
+    m_drag_node = -1;
+    if (m_nav_provider) m_nav_provider->commitRouteEdit();  // manager refresh
+    event->accept();
+    return;
+  }
   if (event->button() == Qt::LeftButton && m_dragging) {
     m_dragging = false;
-    // A press+release that barely moved is a click (a pick), not a pan. A
-    // left click picks an AIS target (contextual rollover); chart-object
-    // query is a right-click menu action (queryObjectsHere), the wx flow.
+    // A press+release that barely moved is a click. Route interactions take
+    // precedence: click a segment of the selected route to insert a point,
+    // click another route's line to select it, else AIS pick / deselect.
     const QPointF d = event->position() - m_press_pos;
-    if (d.manhattanLength() <= 6) pickAisAt(event->position());
+    if (d.manhattanLength() <= 6) {
+      int rt = -1, seg = -1;
+      double ilat = 0, ilon = 0;
+      if (hitRouteSegment(event->position(), rt, seg, ilat, ilon)) {
+        if (rt == m_selected_route && m_nav_provider)
+          m_nav_provider->insertRoutePoint(rt, seg, ilat, ilon);
+        else
+          selectRoute(rt);
+      } else if (!pickAisAt(event->position())) {
+        clearRouteSelection();  // clicked empty water -> leave edit
+      }
+    }
     event->accept();
   } else {
     QQuickItem::mouseReleaseEvent(event);

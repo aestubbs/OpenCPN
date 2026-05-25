@@ -147,6 +147,11 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(int colorScheme READ colorScheme WRITE setColorScheme NOTIFY
                  colorSchemeChanged)
 
+  // Index of the user route currently selected for editing, or -1 (#31).
+  // While >= 0 the route is emphasised, its nodes are draggable, a click on
+  // a segment inserts a point and a right-click on a node opens a menu.
+  Q_PROPERTY(int selectedRoute READ selectedRoute NOTIFY selectedRouteChanged)
+
   // MUIBar (P3.x): current chart scale "1:N" + follow-own-ship mode.
   Q_PROPERTY(QString scaleText READ scaleText NOTIFY viewChanged)
   Q_PROPERTY(bool followOwnShip READ followOwnShip WRITE setFollowOwnShip
@@ -194,6 +199,12 @@ public:
   void setTrackRecording(bool on);
   int colorScheme() const { return m_color_scheme; }
   void setColorScheme(int scheme);
+  int selectedRoute() const { return m_selected_route; }
+
+  // Route-edit actions (bound from the node context menu / chrome, #31).
+  Q_INVOKABLE void clearRouteSelection();
+  Q_INVOKABLE void deleteRoutePointAtMenu();  // node the menu opened on
+  Q_INVOKABLE void deleteSelectedRoute();
   bool followOwnShip() const { return m_follow_own_ship; }
   void setFollowOwnShip(bool on);
 
@@ -246,8 +257,11 @@ Q_SIGNALS:
   void routeBuildModeChanged();
   void trackRecordingChanged();
   void colorSchemeChanged();
+  void selectedRouteChanged();
   // Right-click on the chart at item-local (x, y); QML pops the context menu.
   void contextMenuRequested(qreal x, qreal y);
+  // Right-click on a route node; QML pops the node menu (delete point/route).
+  void routeNodeMenuRequested(qreal x, qreal y);
   // The set of in-view / displayed ENC cells changed (chart bar refresh).
   void chartCoverageChanged();
 
@@ -386,6 +400,19 @@ private:
   bool m_route_build_mode = false;
   bool m_track_recording = false;
   int m_color_scheme = 0;  // 0 day, 1 dusk, 2 night
+
+  // Route editing (#31).
+  int m_selected_route = -1;     // selected user route, or -1
+  bool m_dragging_node = false;  // a node drag is in progress
+  int m_drag_node = -1;          // node index being dragged
+  int m_menu_route = -1;         // route/node a right-click node menu targets
+  int m_menu_node = -1;
+  // Hit-test the user routes (screen px). Return the route + node within a
+  // small radius, or the nearest segment + the cursor's lat/lon for insert.
+  bool hitRouteNode(const QPointF& sp, int& route, int& node) const;
+  bool hitRouteSegment(const QPointF& sp, int& route, int& seg, double& lat,
+                       double& lon) const;
+  void selectRoute(int route);  // set selection + sync the overlay highlight
 
   // Hit-test a click (item-local px) against the live AIS targets and select
   // the nearest within a small radius (P3.9). Returns true if one was hit.
