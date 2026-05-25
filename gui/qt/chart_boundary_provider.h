@@ -53,6 +53,11 @@ public:
   /** Replace the catalog and trigger a rebuild (emits changed()). */
   void setExtents(const QList<CellExtent>& extents);
 
+  /** Highlight one cell by name -- its coverage (or bbox) is drawn brighter
+   *  over the grid. Empty name clears the highlight. Emits changed(). Used by
+   *  the chart-bar / Piano to show which area a key covers. */
+  void setHighlight(const QString& cell_name);
+
   QSGNode* renderChart(QSGNode* old_subtree, const Viewport& viewport,
                        QQuickWindow* window) override;
 
@@ -60,6 +65,9 @@ private:
   QString m_id;
   QList<CellExtent> m_extents;
   QColor m_color{90, 110, 140, 200};  // muted slate blue, mostly opaque
+  // Bright amber for the highlighted cell (chart-bar selection).
+  QColor m_highlight_color{255, 200, 60, 255};
+  QString m_highlight;  // name of the highlighted cell, empty if none
   double m_north = -90.0, m_south = 90.0, m_east = -180.0, m_west = 180.0;
 };
 

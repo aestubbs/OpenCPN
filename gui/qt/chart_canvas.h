@@ -125,6 +125,10 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(bool showWaypoints READ showWaypoints WRITE setShowWaypoints
                  NOTIFY overlayVisibilityChanged)
 
+  // Cursor geographic position for the window status bar (formatted lat/lon),
+  // updated on hover. Empty until the cursor enters the canvas.
+  Q_PROPERTY(QString cursorText READ cursorText NOTIFY cursorMoved)
+
   // MUIBar (P3.x): current chart scale "1:N" + follow-own-ship mode.
   Q_PROPERTY(QString scaleText READ scaleText NOTIFY viewChanged)
   Q_PROPERTY(bool followOwnShip READ followOwnShip WRITE setFollowOwnShip
@@ -165,6 +169,7 @@ public:
   void setShowWaypoints(bool on);
 
   QString scaleText() const;
+  QString cursorText() const { return m_cursor_text; }
   bool followOwnShip() const { return m_follow_own_ship; }
   void setFollowOwnShip(bool on);
 
@@ -193,6 +198,10 @@ public:
   // refreshes on chartCoverageChanged. "displayed" = currently in the quilt.
   Q_INVOKABLE QVariantList chartBarCells() const;
 
+  // Highlight (or clear, with an empty name) a chart-bar cell's coverage on
+  // the chart -- the Piano click action (non-destructive; does not pan).
+  Q_INVOKABLE void highlightChartCell(const QString& name);
+
 Q_SIGNALS:
   void s52EngineChanged();
   void displayCategoryChanged();
@@ -204,6 +213,7 @@ Q_SIGNALS:
   void overlayVisibilityChanged();
   void viewChanged();
   void followOwnShipChanged();
+  void cursorMoved();
   // Right-click on the chart at item-local (x, y); QML pops the context menu.
   void contextMenuRequested(qreal x, qreal y);
   // The set of in-view / displayed ENC cells changed (chart bar refresh).
@@ -216,6 +226,7 @@ protected:
   void mousePressEvent(QMouseEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
+  void hoverMoveEvent(QHoverEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
 
 private:
@@ -333,6 +344,9 @@ private:
   QPointF m_ctx_pos;
   double m_ctx_lat = 0.0;
   double m_ctx_lon = 0.0;
+
+  // Formatted cursor lat/lon for the status bar, updated on hover.
+  QString m_cursor_text;
 
   // Hit-test a click (item-local px) against the live AIS targets and select
   // the nearest within a small radius (P3.9). Returns true if one was hit.

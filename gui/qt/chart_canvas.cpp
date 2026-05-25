@@ -31,6 +31,7 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <QVarLengthArray>
+#include <QHoverEvent>
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSGNode>
@@ -53,6 +54,7 @@
 #include "model/ocpn_config.h"
 #include "model/track.h"  // g_pActiveTrack -- own-ship track recording
 #include "model_nav_data_provider.h"
+#include "nav_format.h"
 #include "nav_state_view_model.h"
 #include "layer.h"
 #include "object_query_view_model.h"
@@ -81,6 +83,7 @@ constexpr double kTestEast = 10.0;
 ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   setFlag(ItemHasContents, true);
   setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
+  setAcceptHoverEvents(true);  // track cursor lat/lon for the status bar
 
   m_viewport = std::make_unique<Viewport>();
   // Centre on the test chart, with the scale ChartCanvas's QML host fits
@@ -586,6 +589,11 @@ QVariantList ChartCanvas::chartBarCells() const {
   return out;
 }
 
+void ChartCanvas::highlightChartCell(const QString& name) {
+  if (m_boundary_provider) m_boundary_provider->setHighlight(name);
+  update();
+}
+
 void ChartCanvas::zoomIn() {
   const int w = static_cast<int>(width());
   const int h = static_cast<int>(height());
@@ -793,6 +801,18 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
   } else {
     QQuickItem::mouseReleaseEvent(event);
   }
+}
+
+void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {
+  if (m_viewport) {
+    double lat = 0, lon = 0;
+    const QPointF p = event->position();
+    m_viewport->screenToLatLon(p.x(), p.y(), static_cast<int>(width()),
+                               static_cast<int>(height()), lat, lon);
+    m_cursor_text = navfmt::latLon(lat, lon);
+    Q_EMIT cursorMoved();
+  }
+  QQuickItem::hoverMoveEvent(event);
 }
 
 bool ChartCanvas::pickAisAt(const QPointF& screen_pos) {

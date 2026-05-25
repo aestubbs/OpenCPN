@@ -43,6 +43,12 @@ void ChartBoundaryProvider::setExtents(const QList<CellExtent>& extents) {
   Q_EMIT changed();
 }
 
+void ChartBoundaryProvider::setHighlight(const QString& cell_name) {
+  if (cell_name == m_highlight) return;
+  m_highlight = cell_name;
+  Q_EMIT changed();
+}
+
 QSGNode* ChartBoundaryProvider::renderChart(QSGNode* old_subtree,
                                             const Viewport& /*viewport*/,
                                             QQuickWindow* /*window*/) {
@@ -83,6 +89,56 @@ QSGNode* ChartBoundaryProvider::renderChart(QSGNode* old_subtree,
   }
 
   node->markDirty(QSGNode::DirtyGeometry);
+
+  // Highlight overlay: the selected cell's coverage (or bbox), drawn brighter
+  // over the grid as a child node. Use DrawLines (segment pairs) so multiple
+  // coverage loops live in one geometry without primitive restarts.
+  auto* hi = node->childCount() > 0
+                 ? static_cast<QSGGeometryNode*>(node->firstChild())
+                 : nullptr;
+  const CellExtent* sel = nullptr;
+  if (!m_highlight.isEmpty())
+    for (const CellExtent& c : m_extents)
+      if (c.name == m_highlight && c.valid()) {
+        sel = &c;
+        break;
+      }
+  if (!sel) {
+    if (hi) {
+      node->removeChildNode(hi);
+      delete hi;
+    }
+  } else {
+    QVector<QPointF> segs;  // even count: consecutive pairs are line segments
+    auto addLoop = [&](const QPolygonF& poly) {
+      const int n = poly.size();
+      if (n < 2) return;
+      for (int k = 0; k < n; ++k) {
+        const QPointF a = poly[k], b = poly[(k + 1) % n];
+        segs.append(QPointF(a.x(), -a.y()));  // world: x=lon, y=-lat
+        segs.append(QPointF(b.x(), -b.y()));
+      }
+    };
+    if (!sel->coverage.isEmpty())
+      for (const QPolygonF& p : sel->coverage) addLoop(p);
+    else
+      addLoop(QPolygonF({{sel->west, sel->north},
+                         {sel->east, sel->north},
+                         {sel->east, sel->south},
+                         {sel->west, sel->south}}));
+
+    if (!hi) {
+      hi = sg::makeFlatColorNode(m_highlight_color, QSGGeometry::DrawLines, 0);
+      hi->geometry()->setLineWidth(3.0f);  // best-effort; clamped on some RHIs
+      node->appendChildNode(hi);
+    }
+    QSGGeometry* hg = hi->geometry();
+    hg->allocate(segs.size());
+    QSGGeometry::Point2D* hv = hg->vertexDataAsPoint2D();
+    for (int k = 0; k < segs.size(); ++k)
+      hv[k].set(static_cast<float>(segs[k].x()), static_cast<float>(segs[k].y()));
+    hi->markDirty(QSGNode::DirtyGeometry);
+  }
   return node;
 }
 

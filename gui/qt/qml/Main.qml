@@ -27,6 +27,25 @@ ApplicationWindow {
     // Minimum touch target (logical px) for the on-chart controls.
     readonly property int touchSize: 40
 
+    // Toggle for the on-chart debug/stats overlay (like an FPS counter).
+    property bool showDebug: false
+
+    // Native window status bar: cursor lat/lon (left) + chart scale (right).
+    footer: ToolBar {
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            Label {
+                text: chart.cursorText.length > 0 ? chart.cursorText
+                                                  : qsTr("—")
+                font.family: "monospace"
+            }
+            Item { Layout.fillWidth: true }
+            Label { text: chart.scaleText }
+        }
+    }
+
     // --- Canvas options: slide-out display panel from the right (mirrors
     //     OpenCPN's MUIBar CanvasOptions). Native right-edge Drawer.
     Drawer {
@@ -568,9 +587,11 @@ ApplicationWindow {
             }
         }
 
-        // Chart bar / "Piano" (P3.8) -- one segment per ENC cell covering the
-        // view, coarse->fine, mirroring wx's chart-selector bar. Displayed
-        // (quilted) cells are highlighted; click a segment to zoom to it.
+        // Chart bar / "Piano" (P3.8) -- one key per ENC cell covering the
+        // view, coarse->fine, mirroring wx's chart-selector bar. Each key
+        // shows the cell name and is tinted by usage band; keys for cells
+        // currently in the quilt are outlined. Clicking a key HIGHLIGHTS that
+        // cell's coverage on the chart (toggle) -- it does not move the view.
         Rectangle {
             id: chartBar
             anchors.bottom: parent.bottom
@@ -585,9 +606,22 @@ ApplicationWindow {
             clip: true
 
             property var cells: chart.chartBarCells()
+            property string selected: ""   // highlighted cell name
             Connections {
                 target: chart
                 function onChartCoverageChanged() { chartBar.cells = chart.chartBarCells() }
+            }
+            // Usage-band tint: overview->berthing, coarse blue -> warm harbour.
+            function bandColor(b) {
+                switch (b) {
+                case 1: return "#5b7fb4"
+                case 2: return "#4f9bb0"
+                case 3: return "#4faf7a"
+                case 4: return "#9bAf4f"
+                case 5: return "#c08a3e"
+                case 6: return "#c0623e"
+                default: return "#808890"
+                }
             }
 
             Row {
@@ -599,39 +633,61 @@ ApplicationWindow {
                     model: chartBar.cells
                     delegate: Rectangle {
                         required property var modelData
-                        width: 44; height: 20; radius: 3
-                        // Highlight cells currently in the quilt.
-                        color: modelData.displayed ? "#3573b9" : "#33ffffff"
-                        border.color: modelData.displayed ? "#7fbfff" : "#55ffffff"
+                        readonly property bool isSel: chartBar.selected === modelData.name
+                        implicitWidth: Math.max(40, keyLabel.implicitWidth + 12)
+                        height: 20; radius: 3
+                        color: chartBar.bandColor(modelData.band)
+                        // In-quilt cells get a bright outline; selected = amber.
+                        border.width: (isSel || modelData.displayed) ? 2 : 1
+                        border.color: isSel ? "#ffc83c"
+                                     : modelData.displayed ? "#e8f0ff" : "#40000000"
                         Text {
+                            id: keyLabel
                             anchors.centerIn: parent
-                            text: "B" + modelData.band
-                            color: "#f0f0f0"; font.pointSize: 9
+                            text: modelData.name
+                            color: "#ffffff"; font.pointSize: 9
                         }
                         MouseArea {
                             anchors.fill: parent
                             hoverEnabled: true
-                            onClicked: chart.fitBounds(modelData.north, modelData.south,
-                                                       modelData.east, modelData.west)
+                            onClicked: {
+                                if (chartBar.selected === modelData.name) {
+                                    chartBar.selected = ""
+                                    chart.highlightChartCell("")
+                                } else {
+                                    chartBar.selected = modelData.name
+                                    chart.highlightChartCell(modelData.name)
+                                }
+                            }
                             ToolTip.visible: containsMouse
-                            ToolTip.text: modelData.name + "  (1:" + modelData.scale + ")"
+                            ToolTip.text: modelData.name + "  (1:" + modelData.scale +
+                                          ", band " + modelData.band + ")"
                         }
                     }
                 }
             }
         }
 
-        // S-52 engine + source status, bottom-left overlay (was the footer).
-        Label {
-            anchors.left: parent.left
-            anchors.bottom: parent.bottom
-            anchors.margins: 10
-            padding: 4
-            background: Rectangle { color: "#aa101418"; radius: 4 }
-            text: (s52 ? s52.status : qsTr("S-52: (no engine)")) +
-                  (chart.demoMode ? qsTr("   [DEMO]") : qsTr("   [LIVE]"))
-            color: s52 && s52.ok ? "#a8e0a8" : "#e0a0a0"
-            font.pointSize: 10
+        // Debug / stats overlay (toggle via the menu, like an FPS counter).
+        // Off by default so it never obscures the chart bar.
+        Rectangle {
+            visible: root.showDebug
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 10
+            width: dbgText.implicitWidth + 16
+            height: dbgText.implicitHeight + 10
+            radius: 4
+            color: "#cc101418"
+            border.color: "#3affffff"
+            Text {
+                id: dbgText
+                anchors.centerIn: parent
+                text: (s52 ? s52.status : qsTr("S-52: (no engine)")) +
+                      (chart.demoMode ? qsTr("   [DEMO]") : qsTr("   [LIVE]"))
+                color: s52 && s52.ok ? "#a8e0a8" : "#e0a0a0"
+                font.pointSize: 10
+            }
         }
 
         // AIS target info popup (P3.9) -- shown when a target is picked
@@ -842,6 +898,11 @@ ApplicationWindow {
             onTriggered: { optionsWindow.show(); optionsWindow.raise() }
         }
         MenuSeparator {}
+        MenuItem {
+            text: qsTr("Show debug info"); checkable: true
+            checked: root.showDebug
+            onTriggered: root.showDebug = checked
+        }
         MenuItem {
             text: qsTr("Demo mode"); checkable: true
             checked: chart.demoMode
