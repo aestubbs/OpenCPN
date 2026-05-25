@@ -52,7 +52,12 @@ SqliteAisTargetStore::SqliteAisTargetStore() {
   sqlite3_exec(m_db,
                "CREATE TABLE IF NOT EXISTS ais_targets ("
                "mmsi INTEGER PRIMARY KEY, lat REAL, lon REAL, cog REAL, "
-               "sog REAL, hdg REAL, name TEXT, last_seen INTEGER)",
+               "sog REAL, hdg REAL, name TEXT, last_seen INTEGER, "
+               "shiptype INTEGER DEFAULT 0)",
+               nullptr, nullptr, nullptr);
+  // Migrate older DBs (no-op error if the column already exists).
+  sqlite3_exec(m_db,
+               "ALTER TABLE ais_targets ADD COLUMN shiptype INTEGER DEFAULT 0",
                nullptr, nullptr, nullptr);
   sqlite3_exec(m_db,
                "CREATE INDEX IF NOT EXISTS ais_last_seen "
@@ -64,8 +69,8 @@ SqliteAisTargetStore::SqliteAisTargetStore() {
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(
           m_db,
-          "SELECT mmsi,lat,lon,cog,sog,hdg,name,last_seen FROM ais_targets "
-          "WHERE last_seen >= ?1",
+          "SELECT mmsi,lat,lon,cog,sog,hdg,name,last_seen,shiptype "
+          "FROM ais_targets WHERE last_seen >= ?1",
           -1, &st, nullptr) == SQLITE_OK) {
     sqlite3_bind_int64(st, 1, cutoff);
     while (sqlite3_step(st) == SQLITE_ROW) {
@@ -79,6 +84,7 @@ SqliteAisTargetStore::SqliteAisTargetStore() {
       if (const unsigned char* n = sqlite3_column_text(st, 6))
         e.target.name = QString::fromUtf8(reinterpret_cast<const char*>(n));
       e.last_seen = sqlite3_column_int64(st, 7);
+      e.target.shipType = sqlite3_column_int(st, 8);
       m_targets.insert(e.target.mmsi, e);
     }
   }
@@ -134,10 +140,10 @@ void SqliteAisTargetStore::flushDirtyLocked() {
   if (sqlite3_prepare_v2(
           m_db,
           "INSERT INTO ais_targets"
-          "(mmsi,lat,lon,cog,sog,hdg,name,last_seen) "
-          "VALUES(?1,?2,?3,?4,?5,?6,?7,?8) "
+          "(mmsi,lat,lon,cog,sog,hdg,name,last_seen,shiptype) "
+          "VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9) "
           "ON CONFLICT(mmsi) DO UPDATE SET lat=?2,lon=?3,cog=?4,sog=?5,"
-          "hdg=?6,name=?7,last_seen=?8",
+          "hdg=?6,name=?7,last_seen=?8,shiptype=?9",
           -1, &st, nullptr) == SQLITE_OK) {
     for (int mmsi : m_dirty) {
       auto it = m_targets.constFind(mmsi);
@@ -152,6 +158,7 @@ void SqliteAisTargetStore::flushDirtyLocked() {
       const QByteArray name = t.name.toUtf8();
       sqlite3_bind_text(st, 7, name.constData(), -1, SQLITE_TRANSIENT);
       sqlite3_bind_int64(st, 8, it.value().last_seen);
+      sqlite3_bind_int(st, 9, t.shipType);
       sqlite3_step(st);
       sqlite3_reset(st);
     }

@@ -148,6 +148,7 @@ void ModelNavDataProvider::mirrorTargets() {
     t.cog = std::isfinite(td->COG) ? td->COG : 0.0;
     t.sog = std::isfinite(td->SOG) ? td->SOG : 0.0;
     t.hdg = td->HDG;
+    t.shipType = td->ShipType;
     t.name = td->GetFullName().trimmed();
     m_ais_store->upsert(t, now);
   }

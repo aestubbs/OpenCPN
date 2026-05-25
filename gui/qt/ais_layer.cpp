@@ -32,13 +32,70 @@
 namespace ocpn::qtui {
 
 namespace {
-// Symbol size (logical px) and AIS target colour.
+// Symbol size (logical px).
 constexpr float kSymbolPx = 11.0f;
-const QColor kAisColor(0, 140, 0);
 // COG/SOG predictor: how far ahead, in minutes. World length =
 // sog_knots * (minutes/60) / 60 degrees.
 constexpr double kPredictMinutes = 6.0;
 constexpr float kVectorPx = 2.0f;  // COG/SOG predictor line width
+
+// Vessel category from the AIS ship-and-cargo type (0-99).
+enum class AisCat { Default, Sailing, Pleasure, Fishing, Hsc, Service,
+                    Passenger, Cargo, Tanker };
+
+AisCat catOf(int st) {
+  if (st == 36) return AisCat::Sailing;
+  if (st == 37) return AisCat::Pleasure;
+  if (st == 30) return AisCat::Fishing;
+  if (st >= 40 && st <= 49) return AisCat::Hsc;
+  if (st >= 50 && st <= 55) return AisCat::Service;  // pilot/SAR/tug/...
+  if (st >= 60 && st <= 69) return AisCat::Passenger;
+  if (st >= 70 && st <= 79) return AisCat::Cargo;
+  if (st >= 80 && st <= 89) return AisCat::Tanker;
+  return AisCat::Default;
+}
+
+QColor catColor(AisCat c) {
+  switch (c) {
+    case AisCat::Sailing:   return QColor(0, 150, 40);
+    case AisCat::Pleasure:  return QColor(0, 150, 140);
+    case AisCat::Fishing:   return QColor(200, 120, 0);
+    case AisCat::Hsc:       return QColor(200, 0, 150);
+    case AisCat::Service:   return QColor(0, 120, 200);
+    case AisCat::Passenger: return QColor(40, 90, 210);
+    case AisCat::Cargo:     return QColor(110, 140, 40);
+    case AisCat::Tanker:    return QColor(200, 40, 40);
+    default:                return QColor(0, 140, 0);
+  }
+}
+
+bool isShip(AisCat c) {
+  return c == AisCat::Cargo || c == AisCat::Tanker || c == AisCat::Passenger;
+}
+
+// Build the symbol shape for a category, pointing "north" (local -y), in
+// logical px. Big ships get an elongated hull; small craft a triangle (HSC
+// narrower). DrawTriangles only (Metal rejects fans).
+QSGGeometryNode* makeSymbol(AisCat cat) {
+  const QColor col = catColor(cat);
+  const float h = kSymbolPx;
+  if (isShip(cat)) {
+    auto* n = sg::makeFlatColorNode(col, QSGGeometry::DrawTriangles, 9);
+    QSGGeometry::Point2D* v = n->geometry()->vertexDataAsPoint2D();
+    const QPointF bow(0, -h * 1.3f), mr(h * 0.45f, -h * 0.15f),
+        sr(h * 0.38f, h), sl(-h * 0.38f, h), ml(-h * 0.45f, -h * 0.15f);
+    const QPointF p[9] = {bow, mr, ml, mr, sr, sl, mr, sl, ml};
+    for (int i = 0; i < 9; ++i) v[i].set(p[i].x(), p[i].y());
+    return n;
+  }
+  const float wb = (cat == AisCat::Hsc) ? 0.32f : 0.5f;
+  auto* n = sg::makeFlatColorNode(col, QSGGeometry::DrawTriangles, 3);
+  QSGGeometry::Point2D* v = n->geometry()->vertexDataAsPoint2D();
+  v[0].set(0.0f, -h);
+  v[1].set(-h * wb, h * 0.5f);
+  v[2].set(h * wb, h * 0.5f);
+  return n;
+}
 }  // namespace
 
 AisLayer::TargetNode AisLayer::buildTarget(const AisTarget& t,
@@ -46,18 +103,12 @@ AisLayer::TargetNode AisLayer::buildTarget(const AisTarget& t,
   TargetNode tn;
   tn.pos = new QSGTransformNode();
 
-  // Symbol: an isoceles triangle pointing "north" (local -y), in logical px.
+  // Symbol: a per-category shape pointing "north" (local -y), in logical px.
   // The symbolXf transform rotates it to the course and scales px -> world.
   tn.symbolXf = new QSGTransformNode();
-  {
-    auto* tri = sg::makeFlatColorNode(kAisColor, QSGGeometry::DrawTriangles, 3);
-    QSGGeometry::Point2D* v = tri->geometry()->vertexDataAsPoint2D();
-    const float h = kSymbolPx;
-    v[0].set(0.0f, -h);             // apex (north)
-    v[1].set(-h * 0.5f, h * 0.5f);  // base left
-    v[2].set(h * 0.5f, h * 0.5f);   // base right
-    tn.symbolXf->appendChildNode(tri);
-  }
+  tn.shipType = t.shipType;
+  tn.sym = makeSymbol(catOf(t.shipType));
+  tn.symbolXf->appendChildNode(tn.sym);
   tn.pos->appendChildNode(tn.symbolXf);
 
   // COG/SOG predictor vector is built (and rebuilt on course change) in
@@ -66,7 +117,8 @@ AisLayer::TargetNode AisLayer::buildTarget(const AisTarget& t,
 
   // Name label: rendered once to a texture, screen-fixed via labelXf scale.
   if (window && !t.name.isEmpty()) {
-    const QImage img = SgBuilder::renderText(t.name, kAisColor, 9.0f);
+    const QImage img =
+        SgBuilder::renderText(t.name, catColor(catOf(t.shipType)), 9.0f);
     if (!img.isNull()) {
       QSGTexture* tex = window->createTextureFromImage(
           img, QQuickWindow::TextureHasAlphaChannel);
@@ -104,6 +156,18 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
   const bool first = !tn.built;  // must always initialise the transforms
   tn.built = true;
 
+  // Ship type often arrives after the first position report (static message),
+  // so rebuild the symbol shape/colour when it changes.
+  if (t.shipType != tn.shipType) {
+    if (tn.sym) {
+      tn.symbolXf->removeChildNode(tn.sym);
+      delete tn.sym;
+    }
+    tn.sym = makeSymbol(catOf(t.shipType));
+    tn.symbolXf->appendChildNode(tn.sym);
+    tn.shipType = t.shipType;
+  }
+
   // Symbol orientation + screen-fixed size: on first sight, course or zoom
   // change. rotate(cog) maps the local north-up apex (0,-1) to the
   // screen-correct heading; scale(wpp) fixes the px size. A target with no
@@ -126,7 +190,7 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
     const double len_deg = t.sog * (kPredictMinutes / 60.0) / 60.0;
     if (len_deg > 0.0) {
       tn.predictor = makeAaLineNode({QPointF(0, 0), headingVec(t.cog) * len_deg},
-                                    kAisColor, kVectorPx);
+                                    catColor(catOf(t.shipType)), kVectorPx);
       if (tn.predictor)
         tn.pos->insertChildNodeBefore(tn.predictor, tn.symbolXf);
     }

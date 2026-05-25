@@ -66,6 +66,8 @@ private:
     bool built = false;  // false until the first updateTarget initialises the
                          // transforms (cog/sog can't double as a sentinel:
                          // AIS reports -1 for "course/speed unavailable").
+    QSGGeometryNode* sym = nullptr;  // the symbol shape (child of symbolXf)
+    int shipType = -1;   // last applied; symbol/colour rebuilt when it changes
   };
 
   TargetNode buildTarget(const AisTarget& t, QQuickWindow* window);

@@ -43,6 +43,7 @@ struct AisTarget {
   double cog = 0.0;                    // course over ground, deg true
   double sog = 0.0;                    // speed over ground, knots
   double hdg = kHeadingUnavailable;    // heading, deg true (511 = N/A)
+  int shipType = 0;                    // AIS ship-and-cargo type (0-99)
   QString name;
 };
 
