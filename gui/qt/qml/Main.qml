@@ -334,31 +334,38 @@ ApplicationWindow {
         }
     }
 
-    // --- Options: the full tabbed settings dialog window (mirrors wx
-    //     options.cpp). Opened from the toolbar gear. Native TabBar +
-    //     StackLayout; the Charts tab carries the wired vector-display
-    //     controls, the rest are structured placeholders for now.
+    // --- Options: the tabbed settings window, following the macOS settings
+    //     HIG: a centred preference-style tab toolbar; standard (not touch)
+    //     native controls -- checkboxes/radio buttons, no enlarged sizes;
+    //     20pt margins; modeless, close via the window control; fixed size,
+    //     title shows the current pane. Other tabs are placeholders for now.
     Window {
         id: optionsWindow
-        title: qsTr("Options")
         flags: Qt.Dialog
-        width: 640
-        height: 520
+        width: 540
+        height: 460
+        // Non-resizable, as macOS settings windows are.
+        minimumWidth: width; maximumWidth: width
+        minimumHeight: height; maximumHeight: height
         color: palette.window
+        title: qsTr("Options") +
+               (optTabs.currentItem ? " — " + optTabs.currentItem.text : "")
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 0
             spacing: 0
 
+            // Centred preference-style tab toolbar (content-sized, not a
+            // full-width bar).
             TabBar {
                 id: optTabs
-                Layout.fillWidth: true
-                TabButton { text: qsTr("Display") }
-                TabButton { text: qsTr("Charts") }
-                TabButton { text: qsTr("Connections") }
-                TabButton { text: qsTr("Ships") }
-                TabButton { text: qsTr("Plugins") }
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 6
+                TabButton { text: qsTr("Display"); width: implicitWidth }
+                TabButton { text: qsTr("Charts"); width: implicitWidth }
+                TabButton { text: qsTr("Connections"); width: implicitWidth }
+                TabButton { text: qsTr("Ships"); width: implicitWidth }
+                TabButton { text: qsTr("Plugins"); width: implicitWidth }
             }
 
             StackLayout {
@@ -367,197 +374,213 @@ ApplicationWindow {
                 currentIndex: optTabs.currentIndex
 
                 // --- Display (general) ---
-                ColumnLayout {
-                    Layout.margins: 16
-                    spacing: 8
-                    Label { text: qsTr("General"); font.pointSize: 14; font.bold: true }
-                    Switch {
-                        text: qsTr("Auto-follow own ship")
-                        checked: chart.followOwnShip
-                        onToggled: chart.followOwnShip = checked
+                Item {
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 20
+                        spacing: 8
+                        Label { text: qsTr("General"); font.bold: true }
+                        CheckBox {
+                            text: qsTr("Auto-follow own ship")
+                            checked: chart.followOwnShip
+                            onToggled: chart.followOwnShip = checked
+                        }
+                        CheckBox {
+                            text: qsTr("Demo nav data")
+                            checked: chart.demoMode
+                            onToggled: chart.demoMode = checked
+                        }
+                        Item { Layout.fillHeight: true }
                     }
-                    Switch {
-                        text: qsTr("Demo nav data")
-                        checked: chart.demoMode
-                        onToggled: chart.demoMode = checked
-                    }
-                    Item { Layout.fillHeight: true }
                 }
 
                 // --- Charts (vector chart display) -- the wired controls ---
-                ColumnLayout {
-                    Layout.margins: 16
-                    spacing: 8
-                    Label {
-                        text: qsTr("Chart display category")
-                        font.pointSize: 14; font.bold: true
-                    }
-                    ButtonGroup { id: optCatGroup }
-                    Repeater {
-                        model: [ { label: qsTr("Base"), cat: 0 },
-                                 { label: qsTr("Standard"), cat: 1 },
-                                 { label: qsTr("All"), cat: 2 } ]
-                        delegate: RadioButton {
-                            required property var modelData
-                            text: modelData.label
-                            ButtonGroup.group: optCatGroup
-                            checked: chart.displayCategory === modelData.cat
-                            onClicked: chart.displayCategory = modelData.cat
+                Item {
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 20
+                        spacing: 8
+                        Label { text: qsTr("Chart display category"); font.bold: true }
+                        ButtonGroup { id: optCatGroup }
+                        Repeater {
+                            model: [ { label: qsTr("Base"), cat: 0 },
+                                     { label: qsTr("Standard"), cat: 1 },
+                                     { label: qsTr("All"), cat: 2 } ]
+                            delegate: RadioButton {
+                                required property var modelData
+                                text: modelData.label
+                                ButtonGroup.group: optCatGroup
+                                checked: chart.displayCategory === modelData.cat
+                                onClicked: chart.displayCategory = modelData.cat
+                            }
                         }
+                        MenuSeparator { Layout.fillWidth: true }
+                        Label { text: qsTr("Detail"); font.bold: true }
+                        CheckBox {
+                            text: qsTr("Soundings")
+                            checked: chart.showSoundings
+                            onToggled: chart.showSoundings = checked
+                        }
+                        CheckBox {
+                            text: qsTr("Text labels")
+                            checked: chart.showText
+                            onToggled: chart.showText = checked
+                        }
+                        CheckBox {
+                            text: qsTr("Lights")
+                            checked: chart.showLights
+                            onToggled: chart.showLights = checked
+                        }
+                        CheckBox {
+                            text: qsTr("Buoys & beacons")
+                            checked: chart.showBuoys
+                            onToggled: chart.showBuoys = checked
+                        }
+                        Item { Layout.fillHeight: true }
                     }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
-                    Label { text: qsTr("Detail"); font.pointSize: 14; font.bold: true }
-                    Switch {
-                        text: qsTr("Soundings")
-                        checked: chart.showSoundings
-                        onToggled: chart.showSoundings = checked
-                    }
-                    Switch {
-                        text: qsTr("Text labels")
-                        checked: chart.showText
-                        onToggled: chart.showText = checked
-                    }
-                    Switch {
-                        text: qsTr("Lights")
-                        checked: chart.showLights
-                        onToggled: chart.showLights = checked
-                    }
-                    Switch {
-                        text: qsTr("Buoys & beacons")
-                        checked: chart.showBuoys
-                        onToggled: chart.showBuoys = checked
-                    }
-                    Item { Layout.fillHeight: true }
                 }
 
                 // --- Connections: network data sources (#34) ---
-                ColumnLayout {
-                    id: connTab
-                    Layout.margins: 16
-                    spacing: 8
-                    readonly property var cm: chart.connections
+                Item {
+                    ColumnLayout {
+                        id: connTab
+                        anchors.fill: parent
+                        anchors.margins: 20
+                        spacing: 8
+                        readonly property var cm: chart.connections
 
-                    Label {
-                        text: qsTr("Network data sources")
-                        font.pointSize: 14; font.bold: true
-                    }
+                        Label { text: qsTr("Network data sources"); font.bold: true }
 
-                    // Existing connections list.
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 180
-                        clip: true
-                        model: connTab.cm ? connTab.cm.connections : []
-                        delegate: ItemDelegate {
-                            required property var modelData
-                            required property int index
-                            width: ListView.view.width
-                            height: 40
-                            contentItem: RowLayout {
-                                Switch {
-                                    checked: modelData.enabled
-                                    onToggled: chart.connections.setEnabled(index, checked)
-                                }
-                                Label {
-                                    text: modelData.summary
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                }
-                                ToolButton {
-                                    text: "✕"
-                                    onClicked: chart.connections.removeConnection(index)
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 150
+                            clip: true
+                            model: connTab.cm ? connTab.cm.connections : []
+                            delegate: ItemDelegate {
+                                required property var modelData
+                                required property int index
+                                width: ListView.view.width
+                                contentItem: RowLayout {
+                                    spacing: 8
+                                    CheckBox {
+                                        checked: modelData.enabled
+                                        onToggled: chart.connections.setEnabled(index, checked)
+                                    }
+                                    Label {
+                                        text: modelData.summary
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                    }
+                                    ToolButton {
+                                        text: "✕"
+                                        onClicked: chart.connections.removeConnection(index)
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
+                        MenuSeparator { Layout.fillWidth: true }
 
-                    // Add a new connection.
-                    Label { text: qsTr("Add connection"); font.bold: true }
-                    GridLayout {
-                        columns: 2
-                        columnSpacing: 10
-                        rowSpacing: 6
-                        Layout.fillWidth: true
+                        Label { text: qsTr("Add connection"); font.bold: true }
+                        GridLayout {
+                            columns: 2
+                            columnSpacing: 8
+                            rowSpacing: 8
+                            Layout.fillWidth: true
 
-                        Label { text: qsTr("Transport") }
-                        ComboBox {
-                            id: netProtoBox
-                            Layout.fillWidth: true
-                            model: ["TCP", "UDP"]
+                            Label {
+                                text: qsTr("Transport:")
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            ComboBox {
+                                id: netProtoBox
+                                Layout.fillWidth: true
+                                model: ["TCP", "UDP"]
+                            }
+                            Label {
+                                text: qsTr("Data protocol:")
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            ComboBox {
+                                id: dataProtoBox
+                                Layout.fillWidth: true
+                                model: ["NMEA 0183", "NMEA 2000", "SignalK"]
+                            }
+                            Label {
+                                text: qsTr("Address / host:")
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            TextField {
+                                id: addrField
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("e.g. 0.0.0.0 or 192.168.1.10")
+                                selectByMouse: true
+                            }
+                            Label {
+                                text: qsTr("Port:")
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            TextField {
+                                id: portField
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("e.g. 2000 / 60001")
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                validator: IntValidator { bottom: 1; top: 65535 }
+                                selectByMouse: true
+                            }
+                            Item {}  // spacer in label column
+                            Button {
+                                text: qsTr("Add")
+                                Layout.alignment: Qt.AlignLeft
+                                enabled: addrField.text.length > 0 && portField.text.length > 0
+                                onClicked: {
+                                    chart.connections.addConnection(
+                                        netProtoBox.currentIndex, addrField.text,
+                                        parseInt(portField.text), dataProtoBox.currentIndex)
+                                    addrField.text = ""; portField.text = ""
+                                }
+                            }
                         }
-                        Label { text: qsTr("Data protocol") }
-                        ComboBox {
-                            id: dataProtoBox
-                            Layout.fillWidth: true
-                            model: ["NMEA 0183", "NMEA 2000", "SignalK"]
+                        Label {
+                            text: qsTr("Enabling a connection opens the socket and switches to live data.")
+                            wrapMode: Text.Wrap; Layout.fillWidth: true
+                            color: palette.placeholderText; font.pointSize: 11
                         }
-                        Label { text: qsTr("Address / host") }
-                        TextField {
-                            id: addrField
-                            Layout.fillWidth: true
-                            placeholderText: qsTr("e.g. 0.0.0.0 or 192.168.1.10")
-                            selectByMouse: true
-                        }
-                        Label { text: qsTr("Port") }
-                        TextField {
-                            id: portField
-                            Layout.fillWidth: true
-                            placeholderText: qsTr("e.g. 2000 / 60001")
-                            inputMethodHints: Qt.ImhDigitsOnly
-                            validator: IntValidator { bottom: 1; top: 65535 }
-                            selectByMouse: true
-                        }
+                        Item { Layout.fillHeight: true }
                     }
-                    Button {
-                        text: qsTr("Add")
-                        enabled: addrField.text.length > 0 && portField.text.length > 0
-                        onClicked: {
-                            chart.connections.addConnection(
-                                netProtoBox.currentIndex, addrField.text,
-                                parseInt(portField.text), dataProtoBox.currentIndex)
-                            addrField.text = ""; portField.text = ""
-                        }
-                    }
-                    Label {
-                        text: qsTr("Enabling a connection opens the socket and switches to live data.")
-                        wrapMode: Text.Wrap; Layout.fillWidth: true
-                        opacity: 0.6; font.pointSize: 10
-                    }
-                    Item { Layout.fillHeight: true }
                 }
 
                 // --- Ships (placeholder) ---
-                ColumnLayout {
-                    Layout.margins: 16
-                    spacing: 8
-                    Label { text: qsTr("Own ship & AIS"); font.pointSize: 14; font.bold: true }
-                    Label {
-                        text: qsTr("Own-ship dimensions, AIS display and CPA/TCPA settings are not yet wired in.")
-                        wrapMode: Text.Wrap; Layout.fillWidth: true; opacity: 0.7
+                Item {
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 20
+                        spacing: 8
+                        Label { text: qsTr("Own ship & AIS"); font.bold: true }
+                        Label {
+                            text: qsTr("Own-ship dimensions, AIS display and CPA/TCPA settings are not yet wired in.")
+                            wrapMode: Text.Wrap; Layout.fillWidth: true
+                            color: palette.placeholderText
+                        }
+                        Item { Layout.fillHeight: true }
                     }
-                    Item { Layout.fillHeight: true }
                 }
 
                 // --- Plugins (placeholder) ---
-                ColumnLayout {
-                    Layout.margins: 16
-                    spacing: 8
-                    Label { text: qsTr("Plugins"); font.pointSize: 14; font.bold: true }
-                    Label {
-                        text: qsTr("Plugin management is not yet available in the Qt build.")
-                        wrapMode: Text.Wrap; Layout.fillWidth: true; opacity: 0.7
+                Item {
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 20
+                        spacing: 8
+                        Label { text: qsTr("Plugins"); font.bold: true }
+                        Label {
+                            text: qsTr("Plugin management is not yet available in the Qt build.")
+                            wrapMode: Text.Wrap; Layout.fillWidth: true
+                            color: palette.placeholderText
+                        }
+                        Item { Layout.fillHeight: true }
                     }
-                    Item { Layout.fillHeight: true }
                 }
-            }
-
-            DialogButtonBox {
-                Layout.fillWidth: true
-                Layout.margins: 8
-                standardButtons: DialogButtonBox.Close
-                onRejected: optionsWindow.close()
             }
         }
     }
