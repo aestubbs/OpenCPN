@@ -34,9 +34,14 @@ class NavStateViewModel : public QObject {
   Q_PROPERTY(bool ownShipValid READ ownShipValid NOTIFY changed)
   Q_PROPERTY(double sog READ sog NOTIFY changed)
   Q_PROPERTY(double cog READ cog NOTIFY changed)
+  // Heading (deg true). hdgValid is false when no heading is received (the
+  // 511 sentinel) so the HUD can fall back to COG for the boat icon.
+  Q_PROPERTY(double hdg READ hdg NOTIFY changed)
+  Q_PROPERTY(bool hdgValid READ hdgValid NOTIFY changed)
   Q_PROPERTY(QString positionText READ positionText NOTIFY changed)
   Q_PROPERTY(QString sogText READ sogText NOTIFY changed)
   Q_PROPERTY(QString cogText READ cogText NOTIFY changed)
+  Q_PROPERTY(QString hdgText READ hdgText NOTIFY changed)
   Q_PROPERTY(int aisTargetCount READ aisTargetCount NOTIFY changed)
 
 public:
@@ -46,9 +51,12 @@ public:
   bool ownShipValid() const { return m_own.valid; }
   double sog() const { return m_own.sog; }
   double cog() const { return m_own.cog; }
+  double hdg() const { return m_own.hdg; }
+  bool hdgValid() const { return m_own.hdg < 360.0; }
   QString positionText() const;
   QString sogText() const;
   QString cogText() const;
+  QString hdgText() const;
   int aisTargetCount() const { return m_ais_count; }
 
 Q_SIGNALS:

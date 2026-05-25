@@ -52,4 +52,9 @@ QString NavStateViewModel::cogText() const {
   return navfmt::cog(m_own.cog);
 }
 
+QString NavStateViewModel::hdgText() const {
+  if (!m_own.valid || m_own.hdg >= 360.0) return QStringLiteral("---°");
+  return navfmt::cog(m_own.hdg);
+}
+
 }  // namespace ocpn::qtui
