@@ -29,6 +29,7 @@ qt_add_qml_module(opencpn-qt
   QML_FILES
     qml/Main.qml
   SOURCES
+    app_controller.h
     chart_canvas.h
     chart_canvas.cpp
     layer.h
@@ -180,4 +181,7 @@ if (APPLE)
     MACOSX_BUNDLE TRUE
   )
   target_compile_options(opencpn-qt PRIVATE -mmacosx-version-min=10.15)
+  # Native title-bar accessory toggle (NSTitlebarAccessoryViewController).
+  target_sources(opencpn-qt PRIVATE macos_titlebar.h macos_titlebar.mm)
+  target_link_libraries(opencpn-qt PRIVATE "-framework AppKit")
 endif ()

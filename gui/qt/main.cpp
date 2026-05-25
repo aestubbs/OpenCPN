@@ -33,11 +33,17 @@
 #include <QQuickStyle>
 #include <QString>
 #include <QSurfaceFormat>
+#include <QTimer>
+#include <QWindow>
 
 #include <wx/init.h>
 
+#include "app_controller.h"
 #include "nav_core.h"
 #include "s52_engine.h"
+#if defined(Q_OS_MACOS)
+#include "macos_titlebar.h"
+#endif
 
 #ifndef OCPN_QT_S57DATA_DIR
 #define OCPN_QT_S57DATA_DIR ""
@@ -94,14 +100,30 @@ int main(int argc, char* argv[]) {
   const QString s57data = QString::fromUtf8(OCPN_QT_S57DATA_DIR);
   if (!s57data.isEmpty()) s52.init(s57data);
 
+  // Shared QML<->native state (vessel-data drawer). Exposed as "app".
+  ocpn::qtui::AppController appController;
+
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty("s52", &s52);
+  engine.rootContext()->setContextProperty("app", &appController);
   // Runtime Qt version string for the About dialog.
   engine.rootContext()->setContextProperty(
       "qtRuntimeVersion", QString::fromLatin1(qVersion()));
   // QML module URI declared in CMakeLists qt_add_qml_module(URI opencpn.qt).
   engine.loadFromModule("opencpn.qt", "Main");
   if (engine.rootObjects().isEmpty()) return -1;
+
+#if defined(Q_OS_MACOS)
+  // Put the drawer toggle in the native window title bar (right side). Defer
+  // so the NSWindow exists (valid winId). If it installs, QML hides the
+  // floating-toolbar fallback toggle.
+  if (auto* win = qobject_cast<QWindow*>(engine.rootObjects().first())) {
+    QTimer::singleShot(0, win, [win, &appController]() {
+      if (ocpn::qtui::installTitlebarToggle(win, &appController))
+        appController.setTitlebarToggle(true);
+    });
+  }
+#endif
 
   return app.exec();
 }

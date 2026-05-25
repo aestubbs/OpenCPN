@@ -58,39 +58,6 @@ ApplicationWindow {
         }
     }
 
-    // App toolbar under the native title bar. Right-aligned vessel-data
-    // drawer toggle drawn as the macOS "right sidebar" icon.
-    header: ToolBar {
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            Item { Layout.fillWidth: true }
-            ToolButton {
-                id: hudToggle
-                implicitWidth: 40
-                onClicked: root.hudExpanded = !root.hudExpanded
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Vessel data")
-                contentItem: Item {
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 22; height: 16; radius: 3
-                        color: "transparent"
-                        border.color: palette.windowText; border.width: 1.5
-                        Rectangle {  // the right "sidebar" cell
-                            anchors.right: parent.right; anchors.top: parent.top
-                            anchors.bottom: parent.bottom; anchors.margins: 1.5
-                            width: 7; radius: 1.5
-                            color: root.hudExpanded ? palette.highlight
-                                                    : palette.windowText
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // --- Canvas options: slide-out display panel from the right (mirrors
     //     OpenCPN's MUIBar CanvasOptions). Native right-edge Drawer.
     Drawer {
@@ -750,7 +717,7 @@ ApplicationWindow {
         // COG. Top-right corner.
         Rectangle {
             id: compass
-            visible: !root.hudExpanded  // the HUD panel supersedes it
+            visible: !app.hudExpanded  // the HUD panel supersedes it
             anchors.top: parent.top
             anchors.right: parent.right
             anchors.margins: 12
@@ -804,7 +771,7 @@ ApplicationWindow {
         // count, bound to the ChartCanvas NavStateViewModel.
         Rectangle {
             id: navHud
-            visible: !root.hudExpanded  // the HUD panel supersedes it
+            visible: !app.hudExpanded  // the HUD panel supersedes it
             anchors.top: compass.bottom
             anchors.right: parent.right
             anchors.margins: 12
@@ -1079,7 +1046,7 @@ ApplicationWindow {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: root.hudExpanded ? 300 : 0
+        width: app.hudExpanded ? 300 : 0
         clip: true
         Behavior on width { NumberAnimation { duration: 150 } }
 
@@ -1089,7 +1056,7 @@ ApplicationWindow {
                                    : (nav ? nav.cog : 0)
 
         Rectangle {
-            visible: root.hudExpanded
+            visible: app.hudExpanded
             anchors.fill: parent
             color: "#ee0e1216"; border.color: "#3affffff"
 
@@ -1339,8 +1306,17 @@ ApplicationWindow {
                 text: "⚙"; ToolTip.text: qsTr("Options")
                 onClicked: { optionsWindow.show(); optionsWindow.raise() }
             }
+            // Vessel-data drawer toggle -- fallback when the native title-bar
+            // button isn't available (non-macOS).
+            Tool {
+                visible: !app.titlebarToggle
+                text: "❯"; ToolTip.text: qsTr("Vessel data")
+                checkable: true
+                checked: app.hudExpanded
+                onClicked: app.hudExpanded = checked
+            }
 
-            ToolSeparator { Layout.fillWidth: true }
+            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; height: 1; color: "#40ffffff" }
 
             // Zoom / fit / follow -- our wired navigation controls (wx keeps
             // these on the per-canvas MUIBar; consolidated here for now).
@@ -1363,7 +1339,7 @@ ApplicationWindow {
                 onClicked: chart.followOwnShip = checked
             }
 
-            ToolSeparator { Layout.fillWidth: true }
+            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; height: 1; color: "#40ffffff" }
 
             // 3. Create Route (wx ID_MENU_ROUTE_NEW).
             Tool {
@@ -1411,7 +1387,7 @@ ApplicationWindow {
                 text: "⚓"; ToolTip.text: qsTr("Drop MOB marker (not yet implemented)")
             }
 
-            ToolSeparator { Layout.fillWidth: true }
+            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; height: 1; color: "#40ffffff" }
 
             // Live chart-scale readout (was on the MUIBar).
             Label {
