@@ -74,10 +74,7 @@ ApplicationWindow {
             anchors.margins: 16
             spacing: 8
 
-            Label {
-                text: qsTr("Chart display category")
-                font.pointSize: 14; font.bold: true
-            }
+            Label { text: qsTr("Chart display category"); font.bold: true }
             ButtonGroup { id: catGroup }
             Repeater {
                 model: [ { label: qsTr("Base"), cat: 0 },
@@ -86,42 +83,36 @@ ApplicationWindow {
                 delegate: RadioButton {
                     required property var modelData
                     text: modelData.label
-                    font.pointSize: 13
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.touchSize
                     ButtonGroup.group: catGroup
                     checked: chart.displayCategory === modelData.cat
                     onClicked: chart.displayCategory = modelData.cat
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
+            MenuSeparator { Layout.fillWidth: true }
 
-            Label { text: qsTr("Detail"); font.pointSize: 14; font.bold: true }
-            Switch {
-                text: qsTr("Soundings"); font.pointSize: 13
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+            Label { text: qsTr("Detail"); font.bold: true }
+            CheckBox {
+                text: qsTr("Soundings")
                 checked: chart.showSoundings
                 onToggled: chart.showSoundings = checked
             }
-            Switch {
-                text: qsTr("Text labels"); font.pointSize: 13
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+            CheckBox {
+                text: qsTr("Text labels")
                 checked: chart.showText
                 onToggled: chart.showText = checked
             }
-            Switch {
-                text: qsTr("Lights"); font.pointSize: 13
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+            CheckBox {
+                text: qsTr("Lights")
                 checked: chart.showLights
                 onToggled: chart.showLights = checked
             }
-            Switch {
-                text: qsTr("Buoys & beacons"); font.pointSize: 13
-                Layout.fillWidth: true; Layout.preferredHeight: root.touchSize
+            CheckBox {
+                text: qsTr("Buoys & beacons")
                 checked: chart.showBuoys
                 onToggled: chart.showBuoys = checked
             }
+            Item { Layout.fillHeight: true }
         }
     }
 
