@@ -63,6 +63,9 @@ private:
     QSGTransformNode* labelXf = nullptr;   // scale(world/px) for the name
     double cog = -1.0;  // last applied -- predictor/orientation rebuilt on change
     double sog = -1.0;
+    bool built = false;  // false until the first updateTarget initialises the
+                         // transforms (cog/sog can't double as a sentinel:
+                         // AIS reports -1 for "course/speed unavailable").
   };
 
   TargetNode buildTarget(const AisTarget& t, QQuickWindow* window);

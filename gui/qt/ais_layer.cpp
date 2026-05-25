@@ -101,20 +101,23 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
 
   const double wpp = worldPerPx();
   const bool course_changed = (t.cog != tn.cog) || (t.sog != tn.sog);
+  const bool first = !tn.built;  // must always initialise the transforms
+  tn.built = true;
 
-  // Symbol orientation + screen-fixed size: on course or zoom change.
-  // rotate(cog) maps the local north-up apex (0,-1) to (sin cog, -cos cog),
-  // i.e. the screen-correct heading vector; scale(wpp) fixes the px size.
-  if (course_changed || scale_changed) {
+  // Symbol orientation + screen-fixed size: on first sight, course or zoom
+  // change. rotate(cog) maps the local north-up apex (0,-1) to the
+  // screen-correct heading; scale(wpp) fixes the px size. A target with no
+  // course (cog < 0, "unavailable") points north.
+  if (course_changed || scale_changed || first) {
     QMatrix4x4 m;
     m.scale(static_cast<float>(wpp));
-    m.rotate(static_cast<float>(t.cog), 0.0f, 0.0f, 1.0f);
+    m.rotate(static_cast<float>(t.cog < 0.0 ? 0.0 : t.cog), 0.0f, 0.0f, 1.0f);
     tn.symbolXf->setMatrix(m);
   }
 
   // Predictor vector (world units, AA-line) -- rebuilt on course/speed
   // change. Drawn UNDER the symbol triangle so the marker stays on top.
-  if (course_changed) {
+  if (course_changed || first) {
     if (tn.predictor) {
       tn.pos->removeChildNode(tn.predictor);
       delete tn.predictor;
@@ -129,8 +132,8 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
     }
   }
 
-  // Label screen-fixed scale -- on zoom change.
-  if (tn.labelXf && (scale_changed || tn.cog < 0.0)) {
+  // Label screen-fixed scale -- on first sight or zoom change.
+  if (tn.labelXf && (scale_changed || first)) {
     QMatrix4x4 m;
     m.scale(static_cast<float>(wpp));
     tn.labelXf->setMatrix(m);
