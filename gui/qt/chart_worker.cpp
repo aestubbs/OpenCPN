@@ -60,4 +60,8 @@ void ChartWorker::loadCell(const CellExtent& cell) {
   Q_EMIT cellLoaded(cell.name, buf, n, s, e, w);
 }
 
+void ChartWorker::setColorScheme(int scheme) {
+  if (m_engine) m_engine->setColorScheme(scheme);
+}
+
 }  // namespace ocpn::qtui

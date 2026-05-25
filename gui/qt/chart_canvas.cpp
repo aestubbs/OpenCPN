@@ -115,8 +115,9 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // World background -- OpenCPN's shapefile basemap, always present under
   // everything (lowest z) so the canvas shows a land/sea world map at any
   // zoom. ENC cells and overlays composite on top.
-  auto* world =
+  m_basemap =
       new ShapefileBasemapProvider(QString::fromUtf8(OCPN_QT_BASEMAP_SHP));
+  auto* world = m_basemap;
   auto* world_layer = new ChartLayer(world, m_viewport.get());
   world_layer->setZOrder(-1000);
   m_compositor->addLayer(world_layer);
@@ -863,6 +864,37 @@ void ChartCanvas::setRouteBuildMode(bool on) {
       m_nav_provider->cancelRoute();  // toggled off -> discard draft
   }
   Q_EMIT routeBuildModeChanged();
+  update();
+}
+
+void ChartCanvas::setColorScheme(int scheme) {
+  if (scheme < 0 || scheme > 2 || scheme == m_color_scheme) return;
+  m_color_scheme = scheme;
+
+  // Re-tint the world basemap immediately (cheap, main-thread rebuild).
+  if (m_basemap) m_basemap->setColorScheme(scheme);
+
+  // S-52 cells bake their colours in at decode time, so switch the palette on
+  // the decode thread and re-decode the resident cells: evict their layers,
+  // forget them as requested, then re-run the quilt to re-request them. The
+  // setColorScheme is queued before the loadCell re-requests, so the worker
+  // applies the palette first.
+  if (m_worker) {
+    QMetaObject::invokeMethod(m_worker, "setColorScheme", Qt::QueuedConnection,
+                              Q_ARG(int, scheme));
+    QList<QString> resident;
+    for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+      if (it.value().extent.valid()) resident.append(it.key());  // skip demo
+    for (const QString& name : resident) {
+      m_compositor->removeLayer(m_loaded.value(name).layerId);
+      m_loaded.remove(name);
+      m_requested.remove(name);
+    }
+    m_needed.clear();
+    if (!m_catalog.isEmpty()) m_load_debounce->start();
+  }
+
+  Q_EMIT colorSchemeChanged();
   update();
 }
 

@@ -63,6 +63,11 @@ public Q_SLOTS:
    *  emit it. Serialised against other loadCell calls on this thread. */
   void loadCell(const ocpn::qtui::CellExtent& cell);
 
+  /** Switch the S-52 colour scheme (0=day,1=dusk,2=night) on the decode
+   *  thread, serialised against loadCell so it never races a decode. The
+   *  canvas re-requests the loaded cells afterwards to re-emit with it. */
+  void setColorScheme(int scheme);
+
 Q_SIGNALS:
   void extentsScanned(const QList<ocpn::qtui::CellExtent>& cells);
   void cellLoaded(const QString& id, const s52sg::Buffer& buffer, double north,

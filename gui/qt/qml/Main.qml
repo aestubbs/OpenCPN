@@ -855,9 +855,13 @@ ApplicationWindow {
                 ToolTip.text: qsTr("Record own-ship track")
                 onClicked: chart.trackRecording = checked
             }
-            // 6. Change Color Scheme (wx ID_COLSCHEME) -- not wired yet.
+            // 6. Change Color Scheme (wx ID_COLSCHEME): cycle day/dusk/night.
             Tool {
-                text: "◑"; ToolTip.text: qsTr("Change color scheme (not yet implemented)")
+                text: "◑"
+                ToolTip.text: [qsTr("Color scheme: Day"),
+                               qsTr("Color scheme: Dusk"),
+                               qsTr("Color scheme: Night")][chart.colorScheme]
+                onClicked: chart.colorScheme = (chart.colorScheme + 1) % 3
             }
             // 7. Print Chart (wx ID_PRINT) -- not wired yet.
             Tool {
@@ -922,5 +926,16 @@ ApplicationWindow {
         }
         MenuSeparator {}
         MenuItem { text: qsTr("Quit"); onTriggered: Qt.quit() }
+    }
+
+    // Colour-scheme dim overlay (#30): tints the whole window for dusk/night,
+    // mirroring how OpenCPN dims the display. Plain item, input-transparent
+    // (enabled:false) so it never intercepts chart/toolbar interaction.
+    Rectangle {
+        anchors.fill: parent
+        enabled: false
+        visible: chart.colorScheme !== 0
+        color: chart.colorScheme === 2 ? "#66200000"   // night: dark red wash
+                                       : "#400a1432"   // dusk: dark blue wash
     }
 }

@@ -64,6 +64,7 @@ class LayerCompositor;
 class Viewport;
 class S52VectorChartProvider;
 class ChartBoundaryProvider;
+class ShapefileBasemapProvider;
 class ChartWorker;
 class DemoNavDataProvider;
 class ModelNavDataProvider;
@@ -139,6 +140,12 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(bool trackRecording READ trackRecording WRITE setTrackRecording
                  NOTIFY trackRecordingChanged)
 
+  // Display colour scheme (#30): 0=day, 1=dusk, 2=night. Re-decodes loaded
+  // S-52 cells through the new palette and re-tints the basemap; the QML
+  // chrome dims to match.
+  Q_PROPERTY(int colorScheme READ colorScheme WRITE setColorScheme NOTIFY
+                 colorSchemeChanged)
+
   // MUIBar (P3.x): current chart scale "1:N" + follow-own-ship mode.
   Q_PROPERTY(QString scaleText READ scaleText NOTIFY viewChanged)
   Q_PROPERTY(bool followOwnShip READ followOwnShip WRITE setFollowOwnShip
@@ -184,6 +191,8 @@ public:
   void setRouteBuildMode(bool on);
   bool trackRecording() const { return m_track_recording; }
   void setTrackRecording(bool on);
+  int colorScheme() const { return m_color_scheme; }
+  void setColorScheme(int scheme);
   bool followOwnShip() const { return m_follow_own_ship; }
   void setFollowOwnShip(bool on);
 
@@ -235,6 +244,7 @@ Q_SIGNALS:
   void cursorMoved();
   void routeBuildModeChanged();
   void trackRecordingChanged();
+  void colorSchemeChanged();
   // Right-click on the chart at item-local (x, y); QML pops the context menu.
   void contextMenuRequested(qreal x, qreal y);
   // The set of in-view / displayed ENC cells changed (chart bar refresh).
@@ -338,6 +348,9 @@ private:
   ChartWorker* m_worker = nullptr;
   // Boundary overlay (owned by its ChartLayer in the compositor).
   ChartBoundaryProvider* m_boundary_provider = nullptr;
+  // World basemap provider (owned by its ChartLayer); kept for colour-scheme
+  // re-tinting.
+  ShapefileBasemapProvider* m_basemap = nullptr;
   // The decode-free catalog, keyed by cell name.
   QHash<QString, CellExtent> m_catalog;
   // Cells already asked of the worker (loaded or in flight) -- never twice.
@@ -370,6 +383,7 @@ private:
   QString m_cursor_text;
   bool m_route_build_mode = false;
   bool m_track_recording = false;
+  int m_color_scheme = 0;  // 0 day, 1 dusk, 2 night
 
   // Hit-test a click (item-local px) against the live AIS targets and select
   // the nearest within a small radius (P3.9). Returns true if one was hit.

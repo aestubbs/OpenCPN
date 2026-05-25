@@ -701,4 +701,18 @@ QString S52Engine::status() const {
   return m_impl->status;
 }
 
+void S52Engine::setColorScheme(int scheme) {
+  if (!m_impl || !m_impl->lib) return;
+  ColorScheme cs = GLOBAL_COLOR_SCHEME_DAY;
+  if (scheme == 1)
+    cs = GLOBAL_COLOR_SCHEME_DUSK;
+  else if (scheme == 2)
+    cs = GLOBAL_COLOR_SCHEME_NIGHT;
+  // Mutates the shared s52plib colour table; must run on the decode thread
+  // (s52plib is not re-entrant). Subsequent cell decodes emit the new palette.
+  ChartCtx ctx(false, 0);
+  m_impl->lib->SetPLIBColorScheme(cs, ctx);
+  m_impl->lib->UpdateMarinerParams();
+}
+
 }  // namespace ocpn::qtui

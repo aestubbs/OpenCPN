@@ -57,6 +57,11 @@ public:
   QSGNode* renderChart(QSGNode* old_subtree, const Viewport& viewport,
                        QQuickWindow* window) override;
 
+  /** Re-tint the basemap for the display colour scheme (0=day,1=dusk,
+   *  2=night) and request a rebuild, so the world backdrop matches the S-52
+   *  palette. */
+  void setColorScheme(int scheme);
+
   /** Land fill-boundary contours (world coords, x=lon y=-lat), each a closed
    *  loop. These are libtess2's BOUNDARY_CONTOURS of the filled region (same
    *  even-odd rule as the fill), so they coincide exactly with the land/sea

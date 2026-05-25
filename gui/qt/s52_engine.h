@@ -65,6 +65,11 @@ public:
    *  S52RAZDS.RLE from ...)". */
   QString status() const;
 
+  /** Switch the S-52 colour scheme: 0=day, 1=dusk, 2=night. Mutates the
+   *  shared s52plib colour table, so call it on the decode (worker) thread;
+   *  already-decoded cells must be re-decoded to pick up the new palette. */
+  void setColorScheme(int scheme);
+
   /** Build a small synthetic S-57 chart covering [north,south]x[west,east]
    *  and decode it through s52plib into world-coordinate geometry (P2.8c).
    *  Returns an empty buffer if the engine is not initialised. This is the

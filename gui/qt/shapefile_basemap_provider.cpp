@@ -59,6 +59,29 @@ ShapefileBasemapProvider::ShapefileBasemapProvider(const QString& shp_path,
   load(shp_path);
 }
 
+void ShapefileBasemapProvider::setColorScheme(int scheme) {
+  // Tint the backdrop to roughly track the S-52 day/dusk/night palettes so
+  // the world map doesn't glare beneath dimmed charts.
+  switch (scheme) {
+    case 1:  // dusk
+      m_sea = QColor(70, 92, 120);
+      m_land = QColor(110, 104, 86);
+      m_coast = QColor(70, 64, 52);
+      break;
+    case 2:  // night
+      m_sea = QColor(18, 28, 44);
+      m_land = QColor(34, 32, 27);
+      m_coast = QColor(48, 44, 36);
+      break;
+    default:  // day
+      m_sea = QColor(170, 195, 220);
+      m_land = QColor(225, 213, 180);
+      m_coast = QColor(120, 110, 90);
+      break;
+  }
+  Q_EMIT changed();
+}
+
 void ShapefileBasemapProvider::load(const QString& shp_path) {
   shp::ShapefileReader reader(shp_path.toStdString());
   if (!reader.isOpen()) {
