@@ -1175,13 +1175,9 @@ ApplicationWindow {
             onTriggered: root.showDebug = checked
         }
         MenuItem {
-            text: qsTr("Demo mode"); checkable: true
+            text: qsTr("Demo mode (Hakefjord replay)"); checkable: true
             checked: chart.demoMode
             onTriggered: chart.demoMode = checked
-        }
-        MenuItem {
-            text: qsTr("Drop demo here")
-            onTriggered: chart.dropDemoHere()
         }
         MenuSeparator {}
         MenuItem { text: qsTr("Quit"); onTriggered: Qt.quit() }

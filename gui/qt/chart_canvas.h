@@ -235,8 +235,6 @@ public:
   Q_INVOKABLE void zoomIn();
   Q_INVOKABLE void zoomOut();
   Q_INVOKABLE void fitWorld();
-  // Re-seed the demo nav fleet around the current view centre (P2.11).
-  Q_INVOKABLE void dropDemoHere();
 
   // Right-click context-menu actions (operate on the world point recorded at
   // the last right-click). centerViewHere recentres; queryObjectsHere fills
@@ -323,7 +321,9 @@ private:
   // reference them (members destroy in reverse declaration order). The
   // switchable provider is declared last of these so it's destroyed first
   // (it references the demo + model providers).
-  std::unique_ptr<DemoNavDataProvider> m_demo_provider;
+  // "Demo" is the standard OpenCPN Hakefjord NMEA-log replay; "live" reads
+  // the model fed by user connections. Both are ModelNavDataProviders.
+  std::unique_ptr<ModelNavDataProvider> m_demo_provider;
   std::unique_ptr<ModelNavDataProvider> m_model_provider;
   std::unique_ptr<SwitchableNavDataProvider> m_nav_provider;
   // View-model over m_nav_provider, exposed to the QML HUD (P3.2).

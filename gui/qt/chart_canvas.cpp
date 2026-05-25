@@ -134,15 +134,15 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // main() before this canvas exists. A recorded NMEA log feeds the real
   // AisDecoder via the worker thread; swapping in a real CommDriver later
   // changes only the source.
-  m_demo_provider = std::make_unique<DemoNavDataProvider>(m_viewport.get());
-  // Live source config: if a TCP NMEA host is set (config INI keys
-  // live/nmeaHost + live/nmeaPort), use a real CommDriver; else replay the
-  // bundled log. Edit the INI to point at a real AIS feed.
-  const QString live_host =
-      m_layer_config->value("live/nmeaHost", QString()).toString();
-  const int live_port = m_layer_config->value("live/nmeaPort", 0).toInt();
-  m_model_provider = std::make_unique<ModelNavDataProvider>(
-      QString::fromUtf8(OCPN_QT_NMEA_LOG), live_host, live_port);
+  // Demo source = the standard OpenCPN Hakefjord NMEA-log replay (decodes to
+  // its own store, independent of the live model). Live source = the real
+  // model fed by user connections (Options > Connections -> MakeCommDriver);
+  // it polls g_pAIS + the own-ship globals when active. No auto-connect and
+  // no log in live mode.
+  m_demo_provider = std::make_unique<ModelNavDataProvider>(
+      QString::fromUtf8(OCPN_QT_NMEA_LOG), QString(), 0);
+  m_model_provider =
+      std::make_unique<ModelNavDataProvider>(QString(), QString(), 0);
   m_nav_provider = std::make_unique<SwitchableNavDataProvider>(
       m_demo_provider.get(), m_model_provider.get());
   // View-model over the active provider for the QML HUD (P3.2/P3.4).
@@ -189,22 +189,23 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   waypoints->setZOrder(1700);
   m_compositor->addLayer(waypoints);
 
-  // When live, recentre the view on the own-ship fix once it arrives (the
-  // log's vessels are wherever they really are, not on the demo charts).
-  connect(m_model_provider.get(), &NavDataProvider::dynamicChanged, this,
+  // Recentre on the active source's own-ship fix once after each mode switch
+  // (the Hakefjord demo and a live feed are both at their real positions,
+  // not on the loaded charts). m_live_centered is reset in setDemoMode.
+  connect(m_nav_provider.get(), &NavDataProvider::dynamicChanged, this,
           [this]() {
-            if (m_demo_mode || m_live_centered) return;
-            const OwnShipState s = m_model_provider->ownShip();
+            if (m_live_centered) return;
+            const OwnShipState s = m_nav_provider->ownShip();
             if (s.valid) {
               m_viewport->setCenter(s.lat, s.lon);
               m_live_centered = true;
             }
           });
 
-  // Start in the configured source (demo by default).
+  // Start in the configured source (demo = Hakefjord replay by default).
   m_nav_provider->setLive(!m_demo_mode);
   m_demo_provider->setRunning(m_demo_mode);
-  m_model_provider->setRunning(!m_demo_mode);
+  if (!m_demo_mode) m_model_provider->setModelPolling(true);
 
   // Repaint when:
   //   - any Layer dirties (data change, visibility/z-order/opacity).
@@ -824,38 +825,17 @@ void ChartCanvas::setShowBuoys(bool on) {
 void ChartCanvas::setDemoMode(bool on) {
   if (on == m_demo_mode) return;
   m_demo_mode = on;
-  // Demo mode animates the synthetic provider (re-seeded around the current
-  // view so it's visible); live mode reads the real model, fed here by the
-  // NMEA-log replay (swap for a real CommDriver later).
+  // Demo = the Hakefjord NMEA-log replay (a self-contained sample feed);
+  // live = the real model fed by user connections. The two are mutually
+  // exclusive: in demo the live model poll is stopped (real feeds are not
+  // shown); in live the replay is stopped (no Hakefjord).
   if (m_nav_provider) m_nav_provider->setLive(!on);
-  if (m_demo_provider) {
-    if (on && m_viewport)
-      m_demo_provider->seedAround(m_viewport->centerLat(),
-                                  m_viewport->centerLon());
-    m_demo_provider->setRunning(on);
-  }
-  if (m_model_provider) m_model_provider->setRunning(!on);
-  // Record the own-ship track only in live mode (demo own-ship isn't in the
-  // model globals the recorder reads).
-  if (g_pActiveTrack) {
-    if (on)
-      g_pActiveTrack->Stop();
-    else if (!g_pActiveTrack->IsRunning())
-      g_pActiveTrack->Start();
-  }
-  if (!on) m_live_centered = false;  // re-centre on own ship next live fix
+  if (m_demo_provider) m_demo_provider->setRunning(on);
+  if (m_model_provider) m_model_provider->setModelPolling(!on);
+  m_live_centered = false;  // recentre on the new source's first fix
+  // Track recording is left to the user (toolbar toggle, #29); it records
+  // off whichever own-ship fix is active.
   Q_EMIT demoModeChanged();
-  update();
-}
-
-void ChartCanvas::dropDemoHere() {
-  // Spawn the synthetic fleet around the current view centre (enabling demo
-  // mode if needed). Lets you place the demo wherever you've panned to.
-  if (!m_demo_provider || !m_viewport) return;
-  m_demo_provider->seedAround(m_viewport->centerLat(),
-                              m_viewport->centerLon());
-  if (!m_demo_mode) setDemoMode(true);
-  else m_demo_provider->setRunning(true);
   update();
 }
 
