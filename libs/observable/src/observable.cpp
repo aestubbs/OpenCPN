@@ -82,17 +82,16 @@ bool Observable::Unlisten(wxEvtHandler* listener, wxEventType ev_type) {
 void Observable::Notify(const std::shared_ptr<const void>& ptr,
                               const std::string& s, int num,
                               void* client_data) {
-  std::lock_guard<std::mutex> lock(m_mutex);
-  auto& listeners = m_list.listeners;
-
-  for (const auto& l : listeners) {
-    auto evt = new ObservedEvt(l.second);
-    evt->SetSharedPtr(ptr);
-    evt->SetClientData(client_data);
-    evt->SetString(s.c_str());  // Better safe than sorry: force a deep copy
-    evt->SetInt(num);
-    wxQueueEvent(l.first, evt);
-  }
+  // Fan out through the Qt notifier (queued on the Qt event loop). The
+  // matching ObservableListener turns this back into an ObservedEvt and
+  // dispatches it synchronously to its wxEvtHandler -- so the whole path runs
+  // with no wx event loop.
+  ObsData data;
+  data.shared_ptr = ptr;
+  data.string = s;
+  data.num = num;
+  data.client_data = client_data;
+  ObsNotifyByKey(key, data);
 }
 
 void Observable::Notify() { Notify("", nullptr); }
@@ -109,16 +108,24 @@ void ObservableListener::Listen(const std::string& k, wxEvtHandler* l,
 }
 
 void ObservableListener::Listen() {
-  if (!key.empty()) {
-    assert(listener);
-    Observable(key).Listen(listener, ev_type);
-  }
+  if (key.empty()) return;
+  assert(listener);
+  // Subscribe on the Qt notifier; on each notification (delivered on this
+  // thread's Qt event loop) rebuild the ObservedEvt and dispatch it
+  // synchronously to the wxEvtHandler -- ProcessEvent() needs no event loop.
+  wxEvtHandler* l = listener;
+  wxEventType e = ev_type;
+  m_conn.Listen(key, [l, e](const ObsData& d) {
+    ObservedEvt evt(e);
+    evt.SetSharedPtr(d.shared_ptr);
+    evt.SetClientData(d.client_data);
+    evt.SetString(wxString::FromUTF8(d.string.c_str()));
+    evt.SetInt(d.num);
+    l->ProcessEvent(evt);
+  });
 }
 
 void ObservableListener::Unlisten() {
-  if (!key.empty()) {
-    assert(listener);
-    Observable(key).Unlisten(listener, ev_type);
-    key = "";
-  }
+  m_conn.Reset();
+  key = "";
 }

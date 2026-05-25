@@ -33,9 +33,7 @@
 #include <QQuickStyle>
 #include <QString>
 #include <QSurfaceFormat>
-#include <QTimer>
 
-#include <wx/app.h>
 #include <wx/init.h>
 
 #include "nav_core.h"
@@ -59,19 +57,12 @@ int main(int argc, char* argv[]) {
   app.setOrganizationName("OpenCPN");
   app.setApplicationName("opencpn-qt");
 
-  // Bring up wx services (also creates a wxAppConsole so wxTheApp exists).
-  // The model's message bus (NavMsgBus) fans out each decoded NavMsg via the
-  // wx Observable system (wxQueueEvent), which needs a wx event loop to
-  // drain. This is a Qt-only app, so nothing would dispatch those events and
-  // every AIS/position message would be silently dropped. A QTimer below
-  // drains the wx pending-event queue so the observable consumers (AisDecoder,
-  // CommBridge, the data monitor) actually fire. (Idempotent; refcounted.)
+  // Initialise the wx LIBRARY (string/event-table services the model still
+  // uses) -- not a wx event loop. The notify/listen fan-out (NavMsgBus ->
+  // AisDecoder / CommBridge / data monitor) now runs entirely on the Qt event
+  // loop via the Qt notifier (libs/observable), with ObservedEvt dispatched
+  // synchronously, so no wx event loop or pump is needed.
   wxInitialize();
-  QTimer wx_pump;
-  QObject::connect(&wx_pump, &QTimer::timeout, []() {
-    if (wxTheApp) wxTheApp->ProcessPendingEvents();
-  });
-  wx_pump.start(15);  // ~66 Hz: queued nav messages feel immediate
 
   // Use the platform-native Qt Quick Controls style so the chrome (toolbar,
   // drawer, dialogs, switches) renders natively instead of the generic

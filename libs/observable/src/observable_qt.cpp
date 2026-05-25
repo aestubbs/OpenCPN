@@ -164,3 +164,7 @@ void PostToMainThread(std::function<void()> action) {
     action();
   }
 }
+
+void ObsNotifyByKey(const std::string& key, const ObsData& data) {
+  ObsRegistry::Notifier(key).Notify(data);
+}

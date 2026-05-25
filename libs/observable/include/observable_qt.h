@@ -122,4 +122,12 @@ private:
  */
 void PostToMainThread(std::function<void()> action);
 
+/**
+ * Notify every listener on `key` with `data`, through the Qt notifier
+ * registry. The wx-side Observable::Notify is implemented on top of this so
+ * the notify/listen machinery runs entirely on the Qt event loop -- no wx
+ * event loop. Qt-header-free, so it is callable from wx-including code.
+ */
+void ObsNotifyByKey(const std::string& key, const ObsData& data);
+
 #endif  // OBSERVABLE_QT_H

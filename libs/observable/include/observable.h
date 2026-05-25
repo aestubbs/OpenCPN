@@ -39,6 +39,9 @@
 #include <wx/event.h>
 
 #include "observable_evt.h"
+// Qt-header-free; provides ObsConnection + ObsNotifyByKey so the notify/listen
+// machinery runs on the Qt event loop with no wx event loop.
+#include "observable_qt.h"
 
 #ifndef DECL_EXP
 #if defined(_MSC_VER) || defined(__CYGWIN__)
@@ -207,6 +210,9 @@ private:
   std::string key;
   wxEvtHandler* listener;
   wxEventType ev_type;
+  // Qt-side subscription: delivers on the Qt event loop and synchronously
+  // dispatches an ObservedEvt to `listener` -- no wx event loop needed.
+  ObsConnection m_conn;
 };
 
 /**
