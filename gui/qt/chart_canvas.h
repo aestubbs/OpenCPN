@@ -199,8 +199,13 @@ public:
   Q_INVOKABLE QVariantList chartBarCells() const;
 
   // Highlight (or clear, with an empty name) a chart-bar cell's coverage on
-  // the chart -- the Piano click action (non-destructive; does not pan).
+  // the chart -- the Piano hover/rollover action (mirrors wx
+  // HandlePianoRollover; non-destructive, does not pan).
   Q_INVOKABLE void highlightChartCell(const QString& name);
+
+  // Autoscale the view to a chart's native scale (Piano click; mirrors wx
+  // HandlePianoClick / SelectQuiltRefdbChart autoscale).
+  Q_INVOKABLE void selectChart(const QString& name);
 
 Q_SIGNALS:
   void s52EngineChanged();

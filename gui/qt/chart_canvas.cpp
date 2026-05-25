@@ -551,7 +551,10 @@ void ChartCanvas::updateVisibleCells() {
 QVariantList ChartCanvas::chartBarCells() const {
   QVariantList out;
   if (!m_viewport || m_catalog.isEmpty()) return out;
-  // Current view bounds (equirectangular: degrees = px / scale).
+  // Like wx's chart bar, list every chart AVAILABLE over the view (all scale
+  // bands), not just the rendered ones -- so the user can pick a different
+  // scale from the bar. The "displayed" flag marks the cells actually in the
+  // active quilt (m_needed) so QML can outline what's currently drawn.
   const double s = m_viewport->scale();
   if (s <= 0.0) return out;
   const double halfLon = (width() / 2.0) / s;
@@ -561,7 +564,6 @@ QVariantList ChartCanvas::chartBarCells() const {
   const double latMin = cLat - halfLat, latMax = cLat + halfLat;
   const double lonMin = cLon - halfLon, lonMax = cLon + halfLon;
 
-  // Collect real chart cells (skip admin/coverage-only) intersecting the view.
   QList<const CellExtent*> cells;
   for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
     const CellExtent& c = it.value();
@@ -587,6 +589,19 @@ QVariantList ChartCanvas::chartBarCells() const {
     out.append(m);
   }
   return out;
+}
+
+void ChartCanvas::selectChart(const QString& name) {
+  auto it = m_catalog.constFind(name);
+  if (it == m_catalog.cend() || it->nativeScale <= 0 || !m_viewport) return;
+  // Autoscale to the chart's native compilation scale, keeping the current
+  // centre (mirrors wx SelectQuiltRefdbChart with autoscale). Setting the
+  // viewport scale rebases the quilt so this chart's band becomes the one
+  // rendered here. scale (px/deg) is the inverse of displayScaleN: N = K/scale.
+  constexpr double kK = 111320.0 * 3.78 * 1000.0;  // see displayScaleN()
+  m_viewport->setScale(kK / it->nativeScale);
+  Q_EMIT viewChanged();
+  update();  // viewport::changed also kicks the debounced quilt rebuild
 }
 
 void ChartCanvas::highlightChartCell(const QString& name) {

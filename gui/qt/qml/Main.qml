@@ -32,6 +32,15 @@ ApplicationWindow {
 
     // Native window status bar: cursor lat/lon (left) + chart scale (right).
     footer: ToolBar {
+        // macOS bottom bars carry a faint hairline separator along their top.
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 1
+            color: Qt.rgba(palette.windowText.r, palette.windowText.g,
+                           palette.windowText.b, 0.15)
+        }
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 8
@@ -117,9 +126,8 @@ ApplicationWindow {
         flags: Qt.Dialog
         width: 460
         height: 560
-        color: sysPalette.window
+        color: palette.window
 
-        SystemPalette { id: sysPalette }
         readonly property var rl: chart.routeList
 
         ColumnLayout {
@@ -231,9 +239,8 @@ ApplicationWindow {
         flags: Qt.Dialog
         width: 420
         height: 480
-        color: oqPalette.window
+        color: palette.window
 
-        SystemPalette { id: oqPalette }
         readonly property var q: chart.objectQuery
 
         onVisibleChanged: if (!visible) chart.objectQuery.clear()
@@ -300,9 +307,7 @@ ApplicationWindow {
         flags: Qt.Dialog
         width: 640
         height: 520
-        color: optPalette.window
-
-        SystemPalette { id: optPalette }
+        color: palette.window
 
         ColumnLayout {
             anchors.fill: parent
@@ -441,9 +446,7 @@ ApplicationWindow {
         flags: Qt.Dialog
         width: 420
         height: 260
-        color: aboutPalette.window
-
-        SystemPalette { id: aboutPalette }
+        color: palette.window
 
         ColumnLayout {
             anchors.fill: parent
@@ -606,7 +609,6 @@ ApplicationWindow {
             clip: true
 
             property var cells: chart.chartBarCells()
-            property string selected: ""   // highlighted cell name
             Connections {
                 target: chart
                 function onChartCoverageChanged() { chartBar.cells = chart.chartBarCells() }
@@ -633,14 +635,13 @@ ApplicationWindow {
                     model: chartBar.cells
                     delegate: Rectangle {
                         required property var modelData
-                        readonly property bool isSel: chartBar.selected === modelData.name
                         implicitWidth: Math.max(40, keyLabel.implicitWidth + 12)
                         height: 20; radius: 3
                         color: chartBar.bandColor(modelData.band)
-                        // In-quilt cells get a bright outline; selected = amber.
-                        border.width: (isSel || modelData.displayed) ? 2 : 1
-                        border.color: isSel ? "#ffc83c"
-                                     : modelData.displayed ? "#e8f0ff" : "#40000000"
+                        // Cells currently in the quilt (drawn) get a bright
+                        // outline; merely-available cells a faint one.
+                        border.width: modelData.displayed ? 2 : 1
+                        border.color: modelData.displayed ? "#e8f0ff" : "#50000000"
                         Text {
                             id: keyLabel
                             anchors.centerIn: parent
@@ -654,15 +655,11 @@ ApplicationWindow {
                         MouseArea {
                             anchors.fill: parent
                             hoverEnabled: true
-                            onClicked: {
-                                if (chartBar.selected === modelData.name) {
-                                    chartBar.selected = ""
-                                    chart.highlightChartCell("")
-                                } else {
-                                    chartBar.selected = modelData.name
-                                    chart.highlightChartCell(modelData.name)
-                                }
-                            }
+                            // Hover = show coverage outline (wx piano rollover);
+                            // click = autoscale to the chart (wx piano click).
+                            onEntered: chart.highlightChartCell(modelData.name)
+                            onExited: chart.highlightChartCell("")
+                            onClicked: chart.selectChart(modelData.name)
                             ToolTip.visible: containsMouse
                             ToolTip.text: modelData.name + "  (1:" + modelData.scale +
                                           ", band " + modelData.band + ")"
