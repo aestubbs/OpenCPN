@@ -430,14 +430,100 @@ ApplicationWindow {
                     Item { Layout.fillHeight: true }
                 }
 
-                // --- Connections (placeholder) ---
+                // --- Connections: network data sources (#34) ---
                 ColumnLayout {
+                    id: connTab
                     Layout.margins: 16
                     spacing: 8
-                    Label { text: qsTr("Data connections"); font.pointSize: 14; font.bold: true }
+                    readonly property var cm: chart.connections
+
                     Label {
-                        text: qsTr("Serial / network connection management is not yet wired into this dialog.")
-                        wrapMode: Text.Wrap; Layout.fillWidth: true; opacity: 0.7
+                        text: qsTr("Network data sources")
+                        font.pointSize: 14; font.bold: true
+                    }
+
+                    // Existing connections list.
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 180
+                        clip: true
+                        model: connTab.cm ? connTab.cm.connections : []
+                        delegate: ItemDelegate {
+                            required property var modelData
+                            required property int index
+                            width: ListView.view.width
+                            height: 40
+                            contentItem: RowLayout {
+                                Switch {
+                                    checked: modelData.enabled
+                                    onToggled: chart.connections.setEnabled(index, checked)
+                                }
+                                Label {
+                                    text: modelData.summary
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+                                ToolButton {
+                                    text: "✕"
+                                    onClicked: chart.connections.removeConnection(index)
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
+
+                    // Add a new connection.
+                    Label { text: qsTr("Add connection"); font.bold: true }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 10
+                        rowSpacing: 6
+                        Layout.fillWidth: true
+
+                        Label { text: qsTr("Transport") }
+                        ComboBox {
+                            id: netProtoBox
+                            Layout.fillWidth: true
+                            model: ["TCP", "UDP"]
+                        }
+                        Label { text: qsTr("Data protocol") }
+                        ComboBox {
+                            id: dataProtoBox
+                            Layout.fillWidth: true
+                            model: ["NMEA 0183", "NMEA 2000", "SignalK"]
+                        }
+                        Label { text: qsTr("Address / host") }
+                        TextField {
+                            id: addrField
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("e.g. 0.0.0.0 or 192.168.1.10")
+                            selectByMouse: true
+                        }
+                        Label { text: qsTr("Port") }
+                        TextField {
+                            id: portField
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("e.g. 2000 / 60001")
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            validator: IntValidator { bottom: 1; top: 65535 }
+                            selectByMouse: true
+                        }
+                    }
+                    Button {
+                        text: qsTr("Add")
+                        enabled: addrField.text.length > 0 && portField.text.length > 0
+                        onClicked: {
+                            chart.connections.addConnection(
+                                netProtoBox.currentIndex, addrField.text,
+                                parseInt(portField.text), dataProtoBox.currentIndex)
+                            addrField.text = ""; portField.text = ""
+                        }
+                    }
+                    Label {
+                        text: qsTr("Enabling a connection opens the socket and switches to live data.")
+                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                        opacity: 0.6; font.pointSize: 10
                     }
                     Item { Layout.fillHeight: true }
                 }

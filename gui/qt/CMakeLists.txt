@@ -96,6 +96,8 @@ qt_add_qml_module(opencpn-qt
     s57_dictionary.cpp
     route_list_view_model.h
     route_list_view_model.cpp
+    connections_view_model.h
+    connections_view_model.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its

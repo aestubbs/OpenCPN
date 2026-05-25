@@ -153,6 +153,15 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // Route/waypoint list model for the manager (P3.7).
   m_route_list = std::make_unique<RouteListViewModel>(m_nav_provider.get());
 
+  // Data-source connections (#34): enabling one creates a CommDriver that
+  // feeds the model; switch to live + poll the model so the data shows.
+  m_connections = std::make_unique<ConnectionsViewModel>();
+  connect(m_connections.get(), &ConnectionsViewModel::activated, this,
+          [this]() {
+            setDemoMode(false);
+            if (m_model_provider) m_model_provider->setModelPolling(true);
+          });
+
   m_ais_layer = new AisLayer(m_nav_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);
   m_compositor->addLayer(m_ais_layer);

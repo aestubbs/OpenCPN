@@ -114,6 +114,20 @@ void ModelNavDataProvider::setRunning(bool run) {
   }
 }
 
+void ModelNavDataProvider::setModelPolling(bool on) {
+  if (on) {
+    if (!m_poll_timer) {
+      m_poll_timer = new QTimer(this);
+      m_poll_timer->setInterval(250);  // 4 Hz mirror
+      connect(m_poll_timer, &QTimer::timeout, this,
+              &ModelNavDataProvider::pollNetwork);
+    }
+    if (!m_poll_timer->isActive()) m_poll_timer->start();
+  } else if (m_poll_timer) {
+    m_poll_timer->stop();
+  }
+}
+
 void ModelNavDataProvider::mirrorTargets() {
   if (!g_pAIS) return;
   const qint64 now = QDateTime::currentMSecsSinceEpoch();

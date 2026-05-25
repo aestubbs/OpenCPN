@@ -65,6 +65,11 @@ public:
   /** Start/stop the decode worker. */
   void setRunning(bool run);
 
+  /** Poll the model (g_pAIS + own-ship globals) on a timer without creating
+   *  any driver -- used when data is fed by user-configured connections
+   *  (ConnectionsViewModel -> MakeCommDriver), #34. */
+  void setModelPolling(bool on);
+
 private:
   void onWorkerUpdated();  // replay path: publish own-ship globals + re-emit
   void pollNetwork();      // network path (GUI thread): mirror model + re-emit
@@ -85,6 +90,7 @@ private:
   bool m_use_network = false;
   bool m_driver_made = false;
   QTimer* m_net_timer = nullptr;     // GUI-thread mirror tick
+  QTimer* m_poll_timer = nullptr;    // model-poll tick for configured drivers
 
   int m_last_static_sig = -1;        // cheap change-detect for routes/wpts
 };

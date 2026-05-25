@@ -42,6 +42,7 @@
 
 #include "ais_selection_view_model.h"  // complete type needed for Q_PROPERTY
 #include "chart_extent.h"  // CellExtent -- catalog entry (value type)
+#include "connections_view_model.h"  // complete type needed for Q_PROPERTY
 #include "nav_state_view_model.h"  // complete type needed for Q_PROPERTY
 #include "object_query_view_model.h"  // complete type needed for Q_PROPERTY
 #include "route_list_view_model.h"    // complete type needed for Q_PROPERTY
@@ -120,6 +121,10 @@ class ChartCanvas : public QQuickItem {
   // Route & mark manager (P3.7): the route/waypoint lists + per-layer
   // visibility toggles.
   Q_PROPERTY(ocpn::qtui::RouteListViewModel* routeList READ routeList CONSTANT)
+
+  // Data-source connections for the Options > Connections tab (#34).
+  Q_PROPERTY(ocpn::qtui::ConnectionsViewModel* connections READ connections
+                 CONSTANT)
   Q_PROPERTY(bool showRoutes READ showRoutes WRITE setShowRoutes NOTIFY
                  overlayVisibilityChanged)
   Q_PROPERTY(bool showTracks READ showTracks WRITE setShowTracks NOTIFY
@@ -183,6 +188,7 @@ public:
   AisSelectionViewModel* selectedAis() const { return m_ais_selection.get(); }
   ObjectQueryViewModel* objectQuery() const { return m_object_query.get(); }
   RouteListViewModel* routeList() const { return m_route_list.get(); }
+  ConnectionsViewModel* connections() const { return m_connections.get(); }
 
   bool showRoutes() const;
   void setShowRoutes(bool on);
@@ -322,6 +328,8 @@ private:
   std::unique_ptr<ObjectQueryViewModel> m_object_query;
   // Route/waypoint lists for the route & mark manager (P3.7).
   std::unique_ptr<RouteListViewModel> m_route_list;
+  // Data-source connections (Options > Connections, #34).
+  std::unique_ptr<ConnectionsViewModel> m_connections;
 
   std::unique_ptr<LayerCompositor> m_compositor;
   std::unique_ptr<Viewport> m_viewport;
