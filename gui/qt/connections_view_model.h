@@ -50,6 +50,11 @@ public:
   Q_INVOKABLE void removeConnection(int index);
   Q_INVOKABLE void setEnabled(int index, bool on);
 
+  /** Re-open any persisted connections that were enabled (auto-reconnect on
+   *  launch) and emit activated() if any. Call once after wiring activated().
+   */
+  void activatePersisted();
+
 Q_SIGNALS:
   void changed();
   /** A connection was enabled -- the canvas should go live + mirror the
@@ -58,6 +63,8 @@ Q_SIGNALS:
 
 private:
   void apply(int index);  // build ConnectionParams + MakeCommDriver
+  void load();            // read the persisted list from the config store
+  void save() const;      // write the list to the config store
 
   struct Conn {
     int netProto = 0;   // TCP/UDP

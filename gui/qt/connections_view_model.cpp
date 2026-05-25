@@ -15,11 +15,19 @@
 
 #include "connections_view_model.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QVariantMap>
 
+#include "config_store.h"
 #include "model/comm_bridge.h"
 #include "model/comm_drv_factory.h"
 #include "model/conn_params.h"
+
+namespace {
+constexpr char kConfigKey[] = "connections";
+}
 
 namespace ocpn::qtui {
 
@@ -35,7 +43,53 @@ QString dataProtoText(int p) {
 }
 }  // namespace
 
-ConnectionsViewModel::ConnectionsViewModel(QObject* parent) : QObject(parent) {}
+ConnectionsViewModel::ConnectionsViewModel(QObject* parent) : QObject(parent) {
+  load();
+}
+
+void ConnectionsViewModel::load() {
+  const QString json =
+      ConfigStore::instance().getString(QString::fromLatin1(kConfigKey));
+  if (json.isEmpty()) return;
+  const QJsonArray arr = QJsonDocument::fromJson(json.toUtf8()).array();
+  m_conns.clear();
+  for (const QJsonValue& v : arr) {
+    const QJsonObject o = v.toObject();
+    Conn c;
+    c.netProto = o.value("netProto").toInt();
+    c.address = o.value("address").toString();
+    c.port = o.value("port").toInt();
+    c.dataProto = o.value("dataProto").toInt();
+    c.enabled = o.value("enabled").toBool();
+    m_conns.append(c);
+  }
+}
+
+void ConnectionsViewModel::save() const {
+  QJsonArray arr;
+  for (const Conn& c : m_conns) {
+    QJsonObject o;
+    o["netProto"] = c.netProto;
+    o["address"] = c.address;
+    o["port"] = c.port;
+    o["dataProto"] = c.dataProto;
+    o["enabled"] = c.enabled;
+    arr.append(o);
+  }
+  ConfigStore::instance().setString(
+      QString::fromLatin1(kConfigKey),
+      QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+}
+
+void ConnectionsViewModel::activatePersisted() {
+  bool any = false;
+  for (int i = 0; i < m_conns.size(); ++i)
+    if (m_conns[i].enabled) {
+      apply(i);
+      any = true;
+    }
+  if (any) Q_EMIT activated();
+}
 
 QVariantList ConnectionsViewModel::connections() const {
   QVariantList out;
@@ -66,12 +120,14 @@ void ConnectionsViewModel::addConnection(int netProto, const QString& address,
   c.dataProto = dataProto;
   c.enabled = false;
   m_conns.append(c);
+  save();
   Q_EMIT changed();
 }
 
 void ConnectionsViewModel::removeConnection(int index) {
   if (index < 0 || index >= m_conns.size()) return;
   m_conns.removeAt(index);
+  save();
   Q_EMIT changed();
 }
 
@@ -79,6 +135,7 @@ void ConnectionsViewModel::setEnabled(int index, bool on) {
   if (index < 0 || index >= m_conns.size()) return;
   m_conns[index].enabled = on;
   if (on) apply(index);
+  save();
   Q_EMIT changed();
   if (on) Q_EMIT activated();
 }

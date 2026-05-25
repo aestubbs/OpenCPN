@@ -46,6 +46,7 @@
 #include "chart_boundary_provider.h"
 #include "chart_layer.h"
 #include "chart_worker.h"
+#include "config_store.h"
 #include "demo_nav_data_provider.h"
 #include "shapefile_basemap_provider.h"
 #include "own_ship_layer.h"
@@ -161,6 +162,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
             setDemoMode(false);
             if (m_model_provider) m_model_provider->setModelPolling(true);
           });
+  // Re-open any connections that were enabled last session (auto-reconnect).
+  m_connections->activatePersisted();
+
+  // Restore the persisted colour scheme (#35).
+  setColorScheme(ConfigStore::instance().getInt("display/colorScheme", 0));
 
   m_ais_layer = new AisLayer(m_nav_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);
@@ -1032,6 +1038,7 @@ void ChartCanvas::setRouteBuildMode(bool on) {
 void ChartCanvas::setColorScheme(int scheme) {
   if (scheme < 0 || scheme > 2 || scheme == m_color_scheme) return;
   m_color_scheme = scheme;
+  ConfigStore::instance().setInt("display/colorScheme", scheme);
 
   // Re-tint the world basemap + route lines immediately (cheap rebuilds).
   if (m_basemap) m_basemap->setColorScheme(scheme);
