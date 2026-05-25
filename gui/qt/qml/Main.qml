@@ -58,6 +58,39 @@ ApplicationWindow {
         }
     }
 
+    // App toolbar under the native title bar. Right-aligned vessel-data
+    // drawer toggle drawn as the macOS "right sidebar" icon.
+    header: ToolBar {
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            Item { Layout.fillWidth: true }
+            ToolButton {
+                id: hudToggle
+                implicitWidth: 40
+                onClicked: root.hudExpanded = !root.hudExpanded
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Vessel data")
+                contentItem: Item {
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 22; height: 16; radius: 3
+                        color: "transparent"
+                        border.color: palette.windowText; border.width: 1.5
+                        Rectangle {  // the right "sidebar" cell
+                            anchors.right: parent.right; anchors.top: parent.top
+                            anchors.bottom: parent.bottom; anchors.margins: 1.5
+                            width: 7; radius: 1.5
+                            color: root.hudExpanded ? palette.highlight
+                                                    : palette.windowText
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // --- Canvas options: slide-out display panel from the right (mirrors
     //     OpenCPN's MUIBar CanvasOptions). Native right-edge Drawer.
     Drawer {
@@ -720,8 +753,7 @@ ApplicationWindow {
             visible: !root.hudExpanded  // the HUD panel supersedes it
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.topMargin: 46  // clear the sidebar-toggle button
-            anchors.rightMargin: 12
+            anchors.margins: 12
             width: 72; height: 72; radius: width / 2
             color: "#cc101418"
             border.color: "#3affffff"
@@ -1437,34 +1469,4 @@ ApplicationWindow {
                                        : "#400a1432"   // dusk: dark blue wash
     }
 
-    // Vessel-data drawer toggle, top-right (macOS "right sidebar" icon).
-    // Topmost child so it stays clickable over the panel when expanded.
-    Rectangle {
-        id: hudToggle
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.topMargin: 8
-        anchors.rightMargin: 10
-        width: 34; height: 26; radius: 5
-        color: hudToggleArea.containsMouse ? "#22808080" : "transparent"
-        Rectangle {  // sidebar glyph: rounded rect with the right cell filled
-            anchors.centerIn: parent
-            width: 22; height: 16; radius: 3
-            color: "transparent"
-            border.color: palette.windowText; border.width: 1.5
-            Rectangle {
-                anchors.right: parent.right; anchors.top: parent.top
-                anchors.bottom: parent.bottom; anchors.margins: 1.5
-                width: 7
-                radius: 1.5
-                color: root.hudExpanded ? "#5b9bd5" : palette.windowText
-            }
-        }
-        MouseArea {
-            id: hudToggleArea
-            anchors.fill: parent
-            hoverEnabled: true
-            onClicked: root.hudExpanded = !root.hudExpanded
-        }
-    }
 }
