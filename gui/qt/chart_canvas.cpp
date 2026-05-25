@@ -140,9 +140,10 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // it polls g_pAIS + the own-ship globals when active. No auto-connect and
   // no log in live mode.
   m_demo_provider = std::make_unique<ModelNavDataProvider>(
-      QString::fromUtf8(OCPN_QT_NMEA_LOG), QString(), 0);
-  m_model_provider =
-      std::make_unique<ModelNavDataProvider>(QString(), QString(), 0);
+      QString::fromUtf8(OCPN_QT_NMEA_LOG), QString(), 0, /*persist_ais=*/false);
+  // Live source persists AIS to SQLite so targets restore on restart (#40).
+  m_model_provider = std::make_unique<ModelNavDataProvider>(
+      QString(), QString(), 0, /*persist_ais=*/true);
   m_nav_provider = std::make_unique<SwitchableNavDataProvider>(
       m_demo_provider.get(), m_model_provider.get());
   // View-model over the active provider for the QML HUD (P3.2/P3.4).

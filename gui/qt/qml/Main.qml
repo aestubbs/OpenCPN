@@ -1316,7 +1316,7 @@ ApplicationWindow {
                 onClicked: app.hudExpanded = checked
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; height: 1; color: "#40ffffff" }
+            Rectangle { Layout.fillWidth: true; Layout.topMargin: 3; Layout.bottomMargin: 3; Layout.leftMargin: 4; Layout.rightMargin: 4; height: 1; color: palette.mid }
 
             // Zoom / fit / follow -- our wired navigation controls (wx keeps
             // these on the per-canvas MUIBar; consolidated here for now).
@@ -1339,7 +1339,7 @@ ApplicationWindow {
                 onClicked: chart.followOwnShip = checked
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; height: 1; color: "#40ffffff" }
+            Rectangle { Layout.fillWidth: true; Layout.topMargin: 3; Layout.bottomMargin: 3; Layout.leftMargin: 4; Layout.rightMargin: 4; height: 1; color: palette.mid }
 
             // 3. Create Route (wx ID_MENU_ROUTE_NEW).
             Tool {
@@ -1387,16 +1387,6 @@ ApplicationWindow {
                 text: "⚓"; ToolTip.text: qsTr("Drop MOB marker (not yet implemented)")
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; height: 1; color: "#40ffffff" }
-
-            // Live chart-scale readout (was on the MUIBar).
-            Label {
-                text: chart.scaleText
-                font.pointSize: 9
-                horizontalAlignment: Text.AlignHCenter
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillWidth: true
-            }
         }
 
         // Drag the whole toolbar; clamp within the window.

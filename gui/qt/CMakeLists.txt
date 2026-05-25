@@ -77,6 +77,8 @@ qt_add_qml_module(opencpn-qt
     ais_target_store.h
     in_memory_ais_store.h
     in_memory_ais_store.cpp
+    sqlite_ais_store.h
+    sqlite_ais_store.cpp
     nav_core.h
     nav_core.cpp
     own_ship_holder.h

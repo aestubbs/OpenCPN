@@ -20,6 +20,7 @@
 #include <QTimer>
 
 #include "in_memory_ais_store.h"
+#include "sqlite_ais_store.h"
 #include "model/ais_decoder.h"
 #include "model/ais_target_data.h"
 #include "model/comm_bridge.h"
@@ -47,9 +48,14 @@ inline bool finitePos(double lat, double lon) {
 
 ModelNavDataProvider::ModelNavDataProvider(const QString& log_path,
                                            const QString& net_host,
-                                           int net_port, QObject* parent)
+                                           int net_port, bool persist_ais,
+                                           QObject* parent)
     : NavDataProvider(parent),
-      m_ais_store(std::make_unique<InMemoryAisTargetStore>()),
+      m_ais_store(persist_ais
+                      ? std::unique_ptr<AisTargetStore>(
+                            std::make_unique<SqliteAisTargetStore>())
+                      : std::unique_ptr<AisTargetStore>(
+                            std::make_unique<InMemoryAisTargetStore>())),
       m_own(std::make_unique<OwnShipHolder>()),
       m_net_host(net_host),
       m_net_port(net_port),

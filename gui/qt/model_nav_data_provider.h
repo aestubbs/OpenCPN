@@ -52,8 +52,11 @@ public:
   //     model via the comm framework (NavMsgBus -> AisDecoder + CommBridge),
   //     event-driven on the GUI thread; this provider mirrors it on a timer.
   //   - otherwise the NavFeedWorker replays `log_path` on its own thread.
+  // persist_ais: back the AIS store with SQLite (live source) so targets
+  // survive restarts; false uses the in-memory store (demo/replay).
   ModelNavDataProvider(const QString& log_path, const QString& net_host,
-                       int net_port, QObject* parent = nullptr);
+                       int net_port, bool persist_ais = false,
+                       QObject* parent = nullptr);
   ~ModelNavDataProvider() override;
 
   QList<AisTarget> aisTargets() const override;
