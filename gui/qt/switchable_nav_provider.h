@@ -64,20 +64,20 @@ public:
     m_has_rubber = false;
     m_draft = NavRoute{};
     m_draft.name = QStringLiteral("Route %1").arg(++m_route_seq);
-    Q_EMIT staticChanged();
+    Q_EMIT editChanged();
   }
   /** Append a vertex (degrees) to the draft route. */
   void addRoutePoint(double lat, double lon) {
     if (!m_building) return;
     m_draft.points.append(QPointF(lon, lat));
-    Q_EMIT staticChanged();
+    Q_EMIT editChanged();
   }
   /** Live "rubber band" segment from the last vertex to the cursor. */
   void setRouteRubberband(double lat, double lon) {
     if (!m_building) return;
     m_rubber = QPointF(lon, lat);
     m_has_rubber = true;
-    Q_EMIT staticChanged();
+    Q_EMIT editChanged();  // cheap route-only redraw, no waypoint relabel
   }
   /** Commit the draft (>=2 points) as a user route. Returns true if kept. */
   bool finishRoute() {
@@ -87,7 +87,7 @@ public:
     m_building = false;
     m_has_rubber = false;
     m_draft = NavRoute{};
-    Q_EMIT staticChanged();
+    Q_EMIT staticChanged();  // committed set changed -> route manager refreshes
     return ok;
   }
   /** Discard the draft without committing. */
@@ -96,7 +96,7 @@ public:
     m_building = false;
     m_has_rubber = false;
     m_draft = NavRoute{};
-    Q_EMIT staticChanged();
+    Q_EMIT editChanged();
   }
 
   // --- Own-ship track recording (#29) ----------------------------------

@@ -71,6 +71,7 @@ class ModelNavDataProvider;
 class SwitchableNavDataProvider;
 class AisLayer;
 class OwnShipLayer;
+class RouteLayer;
 
 class ChartCanvas : public QQuickItem {
   Q_OBJECT
@@ -313,6 +314,7 @@ private:
   // compositor; pointers kept only to forward state). World-anchored, on top.
   AisLayer* m_ais_layer = nullptr;
   OwnShipLayer* m_own_ship_layer = nullptr;
+  RouteLayer* m_route_layer = nullptr;  // for colour-scheme line tinting
   bool m_demo_mode = true;
   bool m_live_centered = false;  // recentre on own ship once per live session
   bool m_follow_own_ship = false;  // MUIBar follow mode

@@ -30,12 +30,27 @@ public:
   RouteLayer(NavDataProvider* p, const Viewport* v, QObject* parent = nullptr)
       : StaticNavLayer(p, v, parent) {
     setOwner(QStringLiteral("core.routes"));
+    // Also rebuild on interactive route edits (draft rubber-band / drag) --
+    // the cheap route-only path that doesn't relabel waypoints (see
+    // NavDataProvider::editChanged).
+    connectData(&NavDataProvider::editChanged);
   }
   QString id() const override { return QStringLiteral("core.routes"); }
   QString name() const override { return QStringLiteral("Routes"); }
 
+  /** Display colour scheme (0=day,1=dusk,2=night): graphite grey route lines
+   *  in day, lighter grey at dusk/night so they read on the dimmed chart. */
+  void setColorScheme(int scheme) {
+    if (scheme == m_scheme) return;
+    m_scheme = scheme;
+    Q_EMIT dirty();
+  }
+
 protected:
   void draw(SgBuilder& b, double world_per_px) override;
+
+private:
+  int m_scheme = 0;
 };
 
 /** Tracks: a polyline per recorded track. */

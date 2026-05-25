@@ -59,6 +59,12 @@ Q_SIGNALS:
    *  static overlays connect to this so they rebuild only when their data
    *  actually changes -- not on every AIS tick (P2.12). */
   void staticChanged();
+
+  /** High-frequency route-edit changed (draft rubber-band, waypoint drag).
+   *  Only the route overlay listens, so an interactive edit doesn't trigger
+   *  the expensive rebuild of the waypoint/track layers (whose label text
+   *  rendering would otherwise lag the cursor). */
+  void editChanged();
 };
 
 }  // namespace ocpn::qtui

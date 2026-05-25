@@ -164,9 +164,9 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   auto* tracks = new TrackLayer(m_nav_provider.get(), m_viewport.get());
   tracks->setZOrder(1500);
   m_compositor->addLayer(tracks);
-  auto* routes = new RouteLayer(m_nav_provider.get(), m_viewport.get());
-  routes->setZOrder(1600);
-  m_compositor->addLayer(routes);
+  m_route_layer = new RouteLayer(m_nav_provider.get(), m_viewport.get());
+  m_route_layer->setZOrder(1600);
+  m_compositor->addLayer(m_route_layer);
   auto* waypoints = new WaypointLayer(m_nav_provider.get(), m_viewport.get());
   waypoints->setZOrder(1700);
   m_compositor->addLayer(waypoints);
@@ -871,8 +871,9 @@ void ChartCanvas::setColorScheme(int scheme) {
   if (scheme < 0 || scheme > 2 || scheme == m_color_scheme) return;
   m_color_scheme = scheme;
 
-  // Re-tint the world basemap immediately (cheap, main-thread rebuild).
+  // Re-tint the world basemap + route lines immediately (cheap rebuilds).
   if (m_basemap) m_basemap->setColorScheme(scheme);
+  if (m_route_layer) m_route_layer->setColorScheme(scheme);
 
   // S-52 cells bake their colours in at decode time, so switch the palette on
   // the decode thread and re-decode the resident cells: evict their layers,
