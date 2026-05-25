@@ -165,6 +165,9 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // Re-open any connections that were enabled last session (auto-reconnect).
   m_connections->activatePersisted();
 
+  // Decoded-message stream for the Data Monitor (taps all comm messages).
+  m_nmea_monitor = std::make_unique<NmeaMonitorModel>();
+
   // Restore the persisted colour scheme (#35).
   setColorScheme(ConfigStore::instance().getInt("display/colorScheme", 0));
 

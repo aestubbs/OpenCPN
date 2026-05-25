@@ -160,6 +160,8 @@ void ConnectionsViewModel::apply(int index) {
   }
   params.IOSelect = DS_TYPE_INPUT;
   params.bEnabled = true;
+  qInfo("Connection: opening %s %s:%d proto=%d", c.netProto == 1 ? "UDP" : "TCP",
+        c.address.toUtf8().constData(), c.port, c.dataProto);
   MakeCommDriver(&params);  // creates + registers + starts (async, retries)
 }
 

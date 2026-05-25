@@ -100,6 +100,8 @@ qt_add_qml_module(opencpn-qt
     connections_view_model.cpp
     config_store.h
     config_store.cpp
+    nmea_monitor_model.h
+    nmea_monitor_model.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its

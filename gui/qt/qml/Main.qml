@@ -631,6 +631,70 @@ ApplicationWindow {
         }
     }
 
+    // --- Data Monitor: scrolling view of decoded NMEA/N2K messages, to
+    //     diagnose what a connection is actually delivering.
+    Window {
+        id: dataMonitorWindow
+        title: qsTr("Data monitor")
+        flags: Qt.Dialog
+        width: 580
+        height: 420
+        color: palette.window
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 6
+
+            RowLayout {
+                Layout.fillWidth: true
+                CheckBox {
+                    text: qsTr("Pause")
+                    checked: chart.nmeaMonitor.paused
+                    onToggled: chart.nmeaMonitor.paused = checked
+                }
+                Item { Layout.fillWidth: true }
+                Label {
+                    text: monModel.count + qsTr(" lines")
+                    color: palette.placeholderText
+                }
+                Button {
+                    text: qsTr("Clear")
+                    onClicked: monModel.clear()
+                }
+            }
+            Frame {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                padding: 2
+                ListView {
+                    id: monView
+                    anchors.fill: parent
+                    clip: true
+                    model: ListModel { id: monModel }
+                    delegate: Text {
+                        required property string line
+                        width: monView.width
+                        text: line
+                        font.family: "monospace"
+                        font.pointSize: 11
+                        elide: Text.ElideRight
+                    }
+                    ScrollBar.vertical: ScrollBar {}
+                }
+            }
+        }
+
+        Connections {
+            target: chart.nmeaMonitor
+            function onLineReceived(line) {
+                monModel.append({ "line": line })
+                if (monModel.count > 1000) monModel.remove(0)
+                monView.positionViewAtEnd()  // auto-scroll
+            }
+        }
+    }
+
     // --- Central: world-anchored + display-anchored scene-graph subtrees,
     //     both inside the ChartCanvas QQuickItem.
     ChartCanvas {
@@ -1056,6 +1120,11 @@ ApplicationWindow {
             // 7. Print Chart (wx ID_PRINT) -- not wired yet.
             Tool {
                 text: "⎙"; ToolTip.text: qsTr("Print chart (not yet implemented)")
+            }
+            // Data Monitor: scrolling view of decoded NMEA/N2K messages.
+            Tool {
+                text: "≣"; ToolTip.text: qsTr("Data monitor")
+                onClicked: { dataMonitorWindow.show(); dataMonitorWindow.raise() }
             }
             // 8. About OpenCPN (wx ID_ABOUT).
             Tool {
