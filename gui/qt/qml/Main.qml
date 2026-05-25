@@ -645,7 +645,11 @@ ApplicationWindow {
                             id: keyLabel
                             anchors.centerIn: parent
                             text: modelData.name
-                            color: "#ffffff"; font.pointSize: 9
+                            color: "#ffffff"
+                            // Monospaced so confusable glyphs in NOAA cell IDs
+                            // (e.g. US4CA11M vs US4CA1IM -- digit-1 vs cap-I)
+                            // are distinguishable, as on the wx chart bar.
+                            font.family: "monospace"; font.pointSize: 9
                         }
                         MouseArea {
                             anchors.fill: parent
