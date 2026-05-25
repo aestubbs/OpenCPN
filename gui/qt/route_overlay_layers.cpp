@@ -23,6 +23,7 @@
 #include <cmath>
 
 #include <QImage>
+#include <QTransform>
 
 namespace ocpn::qtui {
 
@@ -67,21 +68,41 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
       b.noBrush();
       b.drawPolyline(pts);
 
-      // Per-segment compass bearing label, larger font, above the midpoint.
+      // Per-segment compass bearing label, rotated to lie along the segment
+      // (kept upright) and offset just off the line.
       for (int i = 0; i + 1 < r.points.size(); ++i) {
         const double brg = bearingDeg(r.points[i], r.points[i + 1]);
         const QString txt =
             QStringLiteral("%1°").arg(
                 static_cast<int>(std::lround(brg)) % 360, 3, 10, QChar('0'));
-        const QImage img = SgBuilder::renderText(txt, labelColor, 13.0f);
+        QImage img = SgBuilder::renderText(txt, labelColor, 16.0f);
         if (img.isNull()) continue;
         const qreal dpr =
             img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
+
+        // Segment direction in world == screen orientation (x/y scaled
+        // equally). Align the text to it, flipped to stay left-to-right.
+        const QPointF a = pts[i], c = pts[i + 1];
+        const double dx = c.x() - a.x(), dy = c.y() - a.y();
+        const double len = std::hypot(dx, dy);
+        if (len <= 0.0) continue;
+        double angle = std::atan2(dy, dx) * 180.0 / M_PI;
+        if (angle > 90.0)
+          angle -= 180.0;
+        else if (angle < -90.0)
+          angle += 180.0;
+        img = img.transformed(QTransform().rotate(angle),
+                              Qt::SmoothTransformation);
+
         const double tw = img.width() / dpr * wpp;
         const double th = img.height() / dpr * wpp;
-        const QPointF mid = (pts[i] + pts[i + 1]) / 2.0;
-        b.drawImage(
-            QRectF(mid.x() - tw / 2.0, mid.y() - th - 3.0 * wpp, tw, th), img);
+        // Offset off the line along its normal so the label clears the route.
+        const double nx = -dy / len, ny = dx / len;  // left normal
+        const double off = 12.0 * wpp;
+        const QPointF mid =
+            (a + c) / 2.0 + QPointF(nx * off, ny * off);
+        b.drawImage(QRectF(mid.x() - tw / 2.0, mid.y() - th / 2.0, tw, th),
+                    img);
       }
     }
     // Route-point markers: filled dot with a thin white ring. The selected
