@@ -46,11 +46,11 @@ public:
     Q_EMIT dirty();
   }
 
-  /** Name of the route selected for editing; drawn emphasised with larger
+  /** GUID of the route selected for editing; drawn emphasised with larger
    *  draggable node handles. Empty = none. */
-  void setSelectedRouteName(const QString& name) {
-    if (name == m_selected) return;
-    m_selected = name;
+  void setSelectedRouteGuid(const QString& guid) {
+    if (guid == m_selected) return;
+    m_selected = guid;
     Q_EMIT dirty();
   }
 

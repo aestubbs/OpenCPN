@@ -10,11 +10,20 @@
 /**
  * \file
  *
- * SwitchableNavDataProvider -- a NavDataProvider that forwards to one of two
- * backing providers (demo vs live), so the overlay Layers bind to a single
- * stable provider and the demo/live switch is a runtime flag rather than a
- * layer rebuild. Re-emits whichever backing provider's signals are currently
- * active, and fires both on a switch so everything refreshes.
+ * SwitchableNavDataProvider -- a NavDataProvider that forwards AIS / own-ship
+ * to one of two backing providers (demo vs live), while routes, tracks and
+ * waypoints are read straight from the MODEL (pRouteList / g_TrackList /
+ * pWayPointMan) and persisted to the SQLite navobj DB (NavObj_dB) -- the
+ * single source of truth (#32). So a user route is the same object whether
+ * shown in demo or live mode, survives restarts, and the in-app route editor
+ * (#31) mutates the model objects directly.
+ *
+ * The in-progress "draft" route (Create Route, #28) stays a lightweight Qt
+ * overlay for a responsive rubber-band; on finish it is committed to a model
+ * Route and inserted into the DB.
+ *
+ * Model-touching methods are implemented in switchable_nav_provider.cpp so
+ * the model/wx headers stay out of this widely-included header.
  */
 
 #ifndef OCPN_QT_SWITCHABLE_NAV_PROVIDER_H_
@@ -37,9 +46,11 @@ public:
       connect(p, &NavDataProvider::dynamicChanged, this, [this, p]() {
         if (current() == p) Q_EMIT dynamicChanged();
       });
-      connect(p, &NavDataProvider::staticChanged, this, [this, p]() {
-        if (current() == p) Q_EMIT staticChanged();
-      });
+      // The live provider's staticChanged means the model routes/tracks
+      // changed (e.g. a fresh fix grew the active track) -- forward it in
+      // both modes so the model-backed overlays refresh.
+      connect(p, &NavDataProvider::staticChanged, this,
+              [this]() { Q_EMIT staticChanged(); });
     }
   }
 
@@ -53,9 +64,8 @@ public:
   bool isLive() const { return m_use_live; }
 
   // --- Interactive route building (Create Route, #28) ------------------
-  // The draft route plus committed user routes are merged into routes() on
-  // top of the active provider's, so they show in both demo and live mode
-  // and appear in the route manager (which reads the same provider).
+  // The draft route is a Qt-side overlay merged into routes(); on finish it
+  // becomes a model Route persisted to the DB.
   bool buildingRoute() const { return m_building; }
 
   /** Start a new draft route (clears any prior draft). */
@@ -79,17 +89,8 @@ public:
     m_has_rubber = true;
     Q_EMIT editChanged();  // cheap route-only redraw, no waypoint relabel
   }
-  /** Commit the draft (>=2 points) as a user route. Returns true if kept. */
-  bool finishRoute() {
-    if (!m_building) return false;
-    const bool ok = m_draft.points.size() >= 2;
-    if (ok) m_user_routes.append(m_draft);
-    m_building = false;
-    m_has_rubber = false;
-    m_draft = NavRoute{};
-    Q_EMIT staticChanged();  // committed set changed -> route manager refreshes
-    return ok;
-  }
+  /** Commit the draft (>=2 points) as a model Route + persist. True if kept. */
+  bool finishRoute();
   /** Discard the draft without committing. */
   void cancelRoute() {
     if (!m_building) return;
@@ -99,72 +100,20 @@ public:
     Q_EMIT editChanged();
   }
 
-  // --- Route editing (#31): the user routes are editable in place. ------
-  const QList<NavRoute>& userRoutes() const { return m_user_routes; }
+  // --- Route editing (#31): operates on the model routes (pRouteList), in
+  //     pRouteList order so an index from userRoutes() maps straight back.
+  //     Each committed change is persisted via NavObj_dB. -----------------
+  QList<NavRoute> userRoutes() const;            // model routes, in order
+  void moveRoutePoint(int route, int pt, double lat, double lon);  // drag
+  void commitRouteEdit();                         // drag release -> persist
+  void insertRoutePoint(int route, int seg, double lat, double lon);
+  void deleteRoutePoint(int route, int pt);
+  void deleteRoute(int route);
 
-  /** Move a vertex while dragging (cheap editChanged redraw). */
-  void moveRoutePoint(int route, int pt, double lat, double lon) {
-    if (route < 0 || route >= m_user_routes.size()) return;
-    NavRoute& r = m_user_routes[route];
-    if (pt < 0 || pt >= r.points.size()) return;
-    r.points[pt] = QPointF(lon, lat);
-    Q_EMIT editChanged();
-  }
-  /** Commit an edit gesture (drag release) -> route manager refreshes. */
-  void commitRouteEdit() { Q_EMIT staticChanged(); }
-
-  /** Insert a vertex into segment `seg` (between seg and seg+1). */
-  void insertRoutePoint(int route, int seg, double lat, double lon) {
-    if (route < 0 || route >= m_user_routes.size()) return;
-    NavRoute& r = m_user_routes[route];
-    if (seg < 0 || seg >= r.points.size() - 1) return;
-    r.points.insert(seg + 1, QPointF(lon, lat));
-    Q_EMIT staticChanged();
-  }
-  /** Delete a vertex; if the route drops below 2 points, delete the route. */
-  void deleteRoutePoint(int route, int pt) {
-    if (route < 0 || route >= m_user_routes.size()) return;
-    NavRoute& r = m_user_routes[route];
-    if (pt < 0 || pt >= r.points.size()) return;
-    r.points.removeAt(pt);
-    if (r.points.size() < 2) m_user_routes.removeAt(route);
-    Q_EMIT staticChanged();
-  }
-  /** Delete an entire user route. */
-  void deleteRoute(int route) {
-    if (route < 0 || route >= m_user_routes.size()) return;
-    m_user_routes.removeAt(route);
-    Q_EMIT staticChanged();
-  }
-
-  // --- Own-ship track recording (#29) ----------------------------------
-  // When recording, ChartCanvas feeds own-ship fixes via appendTrackPoint;
-  // the growing track is merged into tracks() so the TrackLayer draws it.
+  // --- Own-ship track recording (#29): the model ActiveTrack records off
+  //     the own-ship fix on its own timer and persists to the DB. ----------
   bool recordingTrack() const { return m_recording; }
-
-  /** Start (true) or stop (false) recording. Starting begins a fresh track. */
-  void setRecordingTrack(bool on) {
-    if (on == m_recording) return;
-    m_recording = on;
-    if (on) {
-      m_record_track = NavTrack{};
-      m_record_track.color = QColor(150, 0, 200);  // recording track violet
-    }
-    Q_EMIT staticChanged();
-  }
-  /** Append an own-ship fix (degrees) to the active track, skipping
-   *  near-duplicate fixes so a stationary vessel doesn't pile up points. */
-  void appendTrackPoint(double lat, double lon) {
-    if (!m_recording) return;
-    const QPointF p(lon, lat);
-    if (!m_record_track.points.isEmpty()) {
-      const QPointF& last = m_record_track.points.constLast();
-      const double dx = p.x() - last.x(), dy = p.y() - last.y();
-      if (dx * dx + dy * dy < 1.0e-8) return;  // ~1 m -- ignore jitter
-    }
-    m_record_track.points.append(p);
-    Q_EMIT staticChanged();
-  }
+  void setRecordingTrack(bool on);
 
   QList<AisTarget> aisTargets() const override {
     return current() ? current()->aisTargets() : QList<AisTarget>();
@@ -172,24 +121,9 @@ public:
   OwnShipState ownShip() const override {
     return current() ? current()->ownShip() : OwnShipState{};
   }
-  QList<NavRoute> routes() const override {
-    QList<NavRoute> r = current() ? current()->routes() : QList<NavRoute>();
-    r += m_user_routes;
-    if (m_building && !m_draft.points.isEmpty()) {
-      NavRoute d = m_draft;
-      if (m_has_rubber) d.points.append(m_rubber);  // live segment to cursor
-      r.append(d);
-    }
-    return r;
-  }
-  QList<NavWaypoint> waypoints() const override {
-    return current() ? current()->waypoints() : QList<NavWaypoint>();
-  }
-  QList<NavTrack> tracks() const override {
-    QList<NavTrack> t = current() ? current()->tracks() : QList<NavTrack>();
-    if (m_record_track.points.size() >= 2) t.append(m_record_track);
-    return t;
-  }
+  QList<NavRoute> routes() const override;     // model routes + draft
+  QList<NavWaypoint> waypoints() const override;
+  QList<NavTrack> tracks() const override;
 
 private:
   NavDataProvider* current() const { return m_use_live ? m_live : m_demo; }
@@ -198,16 +132,13 @@ private:
   NavDataProvider* m_live;
   bool m_use_live = false;
 
-  // Route-building state.
-  QList<NavRoute> m_user_routes;  // committed user routes
-  NavRoute m_draft;               // route currently being drawn
-  QPointF m_rubber;               // cursor end-point for the live segment
+  // Draft (in-progress creation) state.
+  NavRoute m_draft;     // route currently being drawn
+  QPointF m_rubber;     // cursor end-point for the live segment
   bool m_building = false;
   bool m_has_rubber = false;
   int m_route_seq = 0;
 
-  // Track-recording state.
-  NavTrack m_record_track;
   bool m_recording = false;
 };
 

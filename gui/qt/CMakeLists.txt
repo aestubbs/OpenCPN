@@ -84,6 +84,7 @@ qt_add_qml_module(opencpn-qt
     model_nav_data_provider.h
     model_nav_data_provider.cpp
     switchable_nav_provider.h
+    switchable_nav_provider.cpp
     nav_format.h
     nav_state_view_model.h
     nav_state_view_model.cpp

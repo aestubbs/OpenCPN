@@ -58,7 +58,7 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
 
   for (const NavRoute& r : provider()->routes()) {
     if (r.points.size() < 1) continue;
-    const bool selected = !m_selected.isEmpty() && r.name == m_selected;
+    const bool selected = !m_selected.isEmpty() && r.guid == m_selected;
     QList<QPointF> pts;
     pts.reserve(r.points.size());
     for (const QPointF& ll : r.points) pts.append(lonLatToWorld(ll));

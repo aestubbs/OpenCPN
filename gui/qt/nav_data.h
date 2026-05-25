@@ -57,6 +57,7 @@ struct OwnShipState {
 
 struct NavRoute {
   QString name;
+  QString guid;                        // model Route GUID ("" for the draft)
   QColor color = QColor(200, 0, 200);  // S-52-ish route magenta
   QList<QPointF> points;               // (lon, lat) in geographic degrees
 };

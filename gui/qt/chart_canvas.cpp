@@ -218,10 +218,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // active track recorder (#29) -- append each fresh own-ship fix.
   connect(m_nav_provider.get(), &NavDataProvider::dynamicChanged, this,
           [this]() {
+            // Track recording is handled by the model ActiveTrack itself
+            // (its own timer off the own-ship fix); here we only follow.
+            if (!m_follow_own_ship) return;
             const OwnShipState s = m_nav_provider->ownShip();
-            if (!s.valid) return;
-            if (m_track_recording) m_nav_provider->appendTrackPoint(s.lat, s.lon);
-            if (m_follow_own_ship) m_viewport->setCenter(s.lat, s.lon);
+            if (s.valid) m_viewport->setCenter(s.lat, s.lon);
           });
   // On resize, repaint AND re-evaluate visible cells: the initial fit +
   // selection can run before the canvas has its real size (the catalog scan
@@ -678,12 +679,12 @@ void ChartCanvas::selectRoute(int route) {
   if (route == m_selected_route) return;
   m_selected_route = route;
   if (m_route_layer) {
-    QString name;
+    QString guid;
     if (m_nav_provider && route >= 0) {
-      const QList<NavRoute>& rs = m_nav_provider->userRoutes();
-      if (route < rs.size()) name = rs[route].name;
+      const QList<NavRoute> rs = m_nav_provider->userRoutes();
+      if (route < rs.size()) guid = rs[route].guid;
     }
-    m_route_layer->setSelectedRouteName(name);
+    m_route_layer->setSelectedRouteGuid(guid);
   }
   Q_EMIT selectedRouteChanged();
   update();
@@ -1041,14 +1042,7 @@ void ChartCanvas::setColorScheme(int scheme) {
 void ChartCanvas::setTrackRecording(bool on) {
   if (on == m_track_recording) return;
   m_track_recording = on;
-  if (m_nav_provider) {
-    m_nav_provider->setRecordingTrack(on);
-    // Seed the track with the current fix so it starts at the vessel.
-    if (on) {
-      const OwnShipState s = m_nav_provider->ownShip();
-      if (s.valid) m_nav_provider->appendTrackPoint(s.lat, s.lon);
-    }
-  }
+  if (m_nav_provider) m_nav_provider->setRecordingTrack(on);
   Q_EMIT trackRecordingChanged();
   update();
 }
