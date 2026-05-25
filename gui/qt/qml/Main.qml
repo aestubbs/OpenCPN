@@ -33,6 +33,9 @@ ApplicationWindow {
     // Expandable vessel-data HUD panel on the right edge (own-ship gauges).
     property bool hudExpanded: false
 
+    // wx "Hide Toolbar": collapse the floating master toolbar to its toggle.
+    property bool toolbarCollapsed: false
+
     // Native window status bar: cursor lat/lon (left) + chart scale (right).
     footer: ToolBar {
         // macOS bottom bars carry a faint hairline separator along their top.
@@ -389,9 +392,14 @@ ApplicationWindow {
                             onToggled: chart.followOwnShip = checked
                         }
                         CheckBox {
-                            text: qsTr("Demo nav data")
+                            text: qsTr("Demo nav data (Hakefjord replay)")
                             checked: chart.demoMode
                             onToggled: chart.demoMode = checked
+                        }
+                        CheckBox {
+                            text: qsTr("Show debug overlay")
+                            checked: root.showDebug
+                            onToggled: root.showDebug = checked
                         }
                         Item { Layout.fillHeight: true }
                     }
@@ -889,6 +897,48 @@ ApplicationWindow {
             }
         }
 
+        // --- MUIBar: per-canvas controls bottom-right, mirroring OpenCPN's
+        //     MUIBar -- zoom in/out, follow own ship, and a menu opening the
+        //     canvas display options. (Distinct from the master toolbar.)
+        Pane {
+            id: muiBar
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 12
+            padding: 3
+            RowLayout {
+                spacing: 2
+                component MuiTool: ToolButton {
+                    font.pointSize: 16
+                    implicitWidth: 36; implicitHeight: 32
+                    ToolTip.visible: hovered && ToolTip.text.length > 0
+                    ToolTip.delay: 400
+                }
+                MuiTool {
+                    text: "+"; font.pointSize: 19; ToolTip.text: qsTr("Zoom in")
+                    onClicked: chart.zoomIn()
+                }
+                MuiTool {
+                    text: "−"; font.pointSize: 19; ToolTip.text: qsTr("Zoom out")
+                    onClicked: chart.zoomOut()
+                }
+                MuiTool {
+                    text: "⤢"; font.pointSize: 14; ToolTip.text: qsTr("Fit / zoom to world")
+                    onClicked: chart.fitWorld()
+                }
+                MuiTool {
+                    text: "⊙"; ToolTip.text: qsTr("Auto-follow own ship")
+                    checkable: true
+                    checked: chart.followOwnShip
+                    onClicked: chart.followOwnShip = checked
+                }
+                MuiTool {
+                    text: "☰"; ToolTip.text: qsTr("Canvas display options")
+                    onClicked: canvasOptions.open()
+                }
+            }
+        }
+
         // Debug / stats overlay (toggle via the menu, like an FPS counter).
         // Off by default so it never obscures the chart bar.
         Rectangle {
@@ -1296,97 +1346,73 @@ ApplicationWindow {
         ColumnLayout {
             spacing: 2
 
-            // 1. Menu (wx "Hide Toolbar" master button).
+            // wx ID_MASTERTOGGLE: collapse/expand the master toolbar. The
+            // rest of the tools hide when collapsed, leaving just this button.
             Tool {
-                text: "☰"; ToolTip.text: qsTr("Menu")
-                onClicked: mainMenu.popup(floatToolbar, floatToolbar.width, 0)
+                text: "☰"
+                ToolTip.text: root.toolbarCollapsed ? qsTr("Show toolbar")
+                                                    : qsTr("Hide toolbar")
+                onClicked: root.toolbarCollapsed = !root.toolbarCollapsed
             }
-            // 2. Options -> full tabbed settings dialog (wx ID_SETTINGS).
+            // wx ID_SETTINGS.
             Tool {
+                visible: !root.toolbarCollapsed
                 text: "⚙"; ToolTip.text: qsTr("Options")
                 onClicked: { optionsWindow.show(); optionsWindow.raise() }
             }
-            // Vessel-data drawer toggle -- fallback when the native title-bar
-            // button isn't available (non-macOS).
+            // wx ID_MENU_ROUTE_NEW.
             Tool {
-                visible: !app.titlebarToggle
-                text: "❯"; ToolTip.text: qsTr("Vessel data")
-                checkable: true
-                checked: app.hudExpanded
-                onClicked: app.hudExpanded = checked
-            }
-
-            Rectangle { Layout.fillWidth: true; Layout.topMargin: 3; Layout.bottomMargin: 3; Layout.leftMargin: 4; Layout.rightMargin: 4; height: 1; color: palette.mid }
-
-            // Zoom / fit / follow -- our wired navigation controls (wx keeps
-            // these on the per-canvas MUIBar; consolidated here for now).
-            Tool {
-                text: "+"; font.pointSize: 19; ToolTip.text: qsTr("Zoom in")
-                onClicked: chart.zoomIn()
-            }
-            Tool {
-                text: "−"; font.pointSize: 19; ToolTip.text: qsTr("Zoom out")
-                onClicked: chart.zoomOut()
-            }
-            Tool {
-                text: "⤢"; font.pointSize: 14; ToolTip.text: qsTr("Fit / zoom to world")
-                onClicked: chart.fitWorld()
-            }
-            Tool {
-                text: "⊙"; ToolTip.text: qsTr("Auto-follow own ship")
-                checkable: true
-                checked: chart.followOwnShip
-                onClicked: chart.followOwnShip = checked
-            }
-
-            Rectangle { Layout.fillWidth: true; Layout.topMargin: 3; Layout.bottomMargin: 3; Layout.leftMargin: 4; Layout.rightMargin: 4; height: 1; color: palette.mid }
-
-            // 3. Create Route (wx ID_MENU_ROUTE_NEW).
-            Tool {
+                visible: !root.toolbarCollapsed
                 text: "✚"; checkable: true
                 checked: chart.routeBuildMode
                 ToolTip.text: qsTr("Create route  (left-click adds points, right-click finishes)")
                 onClicked: chart.routeBuildMode = checked
             }
-            // 4. Route & Mark Manager -> the dialog window.
+            // wx ID_ROUTEMANAGER.
             Tool {
+                visible: !root.toolbarCollapsed
                 text: "▤"; ToolTip.text: qsTr("Route && mark manager")
                 onClicked: { routeManagerWindow.show(); routeManagerWindow.raise() }
             }
-            // 5. Enable Tracking (wx ID_TRACK).
+            // wx ID_TRACK.
             Tool {
+                visible: !root.toolbarCollapsed
                 text: "⊚"; checkable: true
                 checked: chart.trackRecording
                 ToolTip.text: qsTr("Record own-ship track")
                 onClicked: chart.trackRecording = checked
             }
-            // 6. Change Color Scheme (wx ID_COLSCHEME): cycle day/dusk/night.
+            // wx ID_COLSCHEME: cycle day/dusk/night.
             Tool {
+                visible: !root.toolbarCollapsed
                 text: "◑"
                 ToolTip.text: [qsTr("Color scheme: Day"),
                                qsTr("Color scheme: Dusk"),
                                qsTr("Color scheme: Night")][chart.colorScheme]
                 onClicked: chart.colorScheme = (chart.colorScheme + 1) % 3
             }
-            // 7. Print Chart (wx ID_PRINT) -- not wired yet.
+            // wx ID_PRINT -- not wired yet.
             Tool {
+                visible: !root.toolbarCollapsed
                 text: "⎙"; ToolTip.text: qsTr("Print chart (not yet implemented)")
             }
-            // Data Monitor: scrolling view of decoded NMEA/N2K messages.
+            // Data Monitor (Qt addition).
             Tool {
+                visible: !root.toolbarCollapsed
                 text: "≣"; ToolTip.text: qsTr("Data monitor")
                 onClicked: { dataMonitorWindow.show(); dataMonitorWindow.raise() }
             }
-            // 8. About OpenCPN (wx ID_ABOUT).
+            // wx ID_ABOUT.
             Tool {
+                visible: !root.toolbarCollapsed
                 text: "ⓘ"; ToolTip.text: qsTr("About OpenCPN")
                 onClicked: { aboutWindow.show(); aboutWindow.raise() }
             }
-            // 9. Drop MOB Marker (wx ID_MOB) -- not wired yet.
+            // wx ID_MOB -- not wired yet.
             Tool {
+                visible: !root.toolbarCollapsed
                 text: "⚓"; ToolTip.text: qsTr("Drop MOB marker (not yet implemented)")
             }
-
         }
 
         // Drag the whole toolbar; clamp within the window.
@@ -1397,31 +1423,6 @@ ApplicationWindow {
             yAxis.minimum: 0
             yAxis.maximum: root.height - floatToolbar.height
         }
-    }
-
-    Menu {
-        id: mainMenu
-        MenuItem {
-            text: qsTr("Quick display…")
-            onTriggered: canvasOptions.open()
-        }
-        MenuItem {
-            text: qsTr("Options…")
-            onTriggered: { optionsWindow.show(); optionsWindow.raise() }
-        }
-        MenuSeparator {}
-        MenuItem {
-            text: qsTr("Show debug info"); checkable: true
-            checked: root.showDebug
-            onTriggered: root.showDebug = checked
-        }
-        MenuItem {
-            text: qsTr("Demo mode (Hakefjord replay)"); checkable: true
-            checked: chart.demoMode
-            onTriggered: chart.demoMode = checked
-        }
-        MenuSeparator {}
-        MenuItem { text: qsTr("Quit"); onTriggered: Qt.quit() }
     }
 
     // Colour-scheme dim overlay (#30): tints the whole window for dusk/night,
