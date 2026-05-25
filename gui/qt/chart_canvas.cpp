@@ -705,6 +705,19 @@ void ChartCanvas::deleteSelectedRoute() {
   clearRouteSelection();
 }
 
+void ChartCanvas::reverseRoute(int index) {
+  if (m_nav_provider) m_nav_provider->reverseRoute(index);
+}
+
+void ChartCanvas::renameRoute(int index, const QString& name) {
+  if (m_nav_provider && !name.isEmpty()) m_nav_provider->renameRoute(index, name);
+}
+
+void ChartCanvas::deleteRoute(int index) {
+  if (m_nav_provider) m_nav_provider->deleteRoute(index);
+  clearRouteSelection();
+}
+
 void ChartCanvas::zoomIn() {
   const int w = static_cast<int>(width());
   const int h = static_cast<int>(height());

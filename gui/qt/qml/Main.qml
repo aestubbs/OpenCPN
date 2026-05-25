@@ -170,13 +170,29 @@ ApplicationWindow {
                 model: routeManagerWindow.rl ? routeManagerWindow.rl.routes : []
                 delegate: ItemDelegate {
                     required property var modelData
+                    required property int index
                     width: ListView.view.width
                     height: root.touchSize
                     contentItem: RowLayout {
+                        spacing: 4
                         Label {
-                            text: modelData.name + "  (" + modelData.points + ")"
+                            text: (modelData.name.length > 0 ? modelData.name
+                                                             : qsTr("(unnamed)"))
+                                  + "  (" + modelData.points + ")"
                             Layout.fillWidth: true
                             elide: Text.ElideRight
+                        }
+                        ToolButton {
+                            text: qsTr("Rename")
+                            onClicked: {
+                                renameDialog.routeIndex = index
+                                renameField.text = modelData.name
+                                renameDialog.open()
+                            }
+                        }
+                        ToolButton {
+                            text: qsTr("Reverse")
+                            onClicked: chart.reverseRoute(index)
                         }
                         ToolButton {
                             text: qsTr("Zoom")
@@ -186,7 +202,28 @@ ApplicationWindow {
                                 routeManagerWindow.close()
                             }
                         }
+                        ToolButton {
+                            text: "✕"
+                            onClicked: chart.deleteRoute(index)
+                        }
                     }
+                }
+            }
+
+            // Rename dialog: prompts for a new name for routeIndex.
+            Dialog {
+                id: renameDialog
+                title: qsTr("Rename route")
+                anchors.centerIn: parent
+                modal: true
+                standardButtons: Dialog.Ok | Dialog.Cancel
+                property int routeIndex: -1
+                onAccepted: chart.renameRoute(routeIndex, renameField.text)
+                TextField {
+                    id: renameField
+                    implicitWidth: 260
+                    selectByMouse: true
+                    onAccepted: renameDialog.accept()
                 }
             }
 

@@ -205,6 +205,11 @@ public:
   Q_INVOKABLE void clearRouteSelection();
   Q_INVOKABLE void deleteRoutePointAtMenu();  // node the menu opened on
   Q_INVOKABLE void deleteSelectedRoute();
+
+  // Route-manager actions on a route by index (#33).
+  Q_INVOKABLE void reverseRoute(int index);
+  Q_INVOKABLE void renameRoute(int index, const QString& name);
+  Q_INVOKABLE void deleteRoute(int index);
   bool followOwnShip() const { return m_follow_own_ship; }
   void setFollowOwnShip(bool on);
 

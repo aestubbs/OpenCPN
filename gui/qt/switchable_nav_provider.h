@@ -109,6 +109,8 @@ public:
   void insertRoutePoint(int route, int seg, double lat, double lon);
   void deleteRoutePoint(int route, int pt);
   void deleteRoute(int route);
+  void reverseRoute(int route);                       // flip course direction
+  void renameRoute(int route, const QString& name);   // set + persist name
 
   // --- Own-ship track recording (#29): the model ActiveTrack records off
   //     the own-ship fix on its own timer and persists to the DB. ----------

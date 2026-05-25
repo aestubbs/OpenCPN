@@ -170,6 +170,26 @@ void SwitchableNavDataProvider::deleteRoute(int route) {
   Q_EMIT staticChanged();
 }
 
+void SwitchableNavDataProvider::reverseRoute(int route) {
+  if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
+    return;
+  Route* r = (*pRouteList)[route];
+  if (!r) return;
+  r->Reverse();
+  NavObj_dB::GetInstance().UpdateRoute(r);
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::renameRoute(int route, const QString& name) {
+  if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
+    return;
+  Route* r = (*pRouteList)[route];
+  if (!r) return;
+  r->m_RouteNameString = name;
+  NavObj_dB::GetInstance().UpdateDBRouteAttributes(r);
+  Q_EMIT staticChanged();
+}
+
 void SwitchableNavDataProvider::setRecordingTrack(bool on) {
   if (on == m_recording) return;
   m_recording = on;
