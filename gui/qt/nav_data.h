@@ -53,6 +53,13 @@ struct OwnShipState {
   double cog = 0.0;
   double sog = 0.0;
   double hdg = kHeadingUnavailable;
+  // Wind + speed-through-water (#39). Angle sentinel -1000 = no data; speed
+  // < 0 = no data. Angles are degrees relative to the bow (0 = ahead).
+  double awa = -1000.0;  // apparent wind angle
+  double aws = -1.0;     // apparent wind speed, knots
+  double twa = -1000.0;  // true wind angle
+  double tws = -1.0;     // true wind speed, knots
+  double stw = -1.0;     // speed through water, knots
 };
 
 struct NavRoute {

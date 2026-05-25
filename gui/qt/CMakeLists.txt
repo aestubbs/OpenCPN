@@ -102,6 +102,8 @@ qt_add_qml_module(opencpn-qt
     config_store.cpp
     nmea_monitor_model.h
     nmea_monitor_model.cpp
+    wind_decoder.h
+    wind_decoder.cpp
 )
 
 # Inject the source-tree path to data/s57data/ so s52plib can find its

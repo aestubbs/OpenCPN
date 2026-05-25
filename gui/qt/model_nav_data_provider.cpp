@@ -32,6 +32,7 @@
 #include "model/track.h"
 #include "nav_feed_worker.h"
 #include "own_ship_holder.h"
+#include "wind_decoder.h"
 #include "wx/string.h"
 
 namespace ocpn::qtui {
@@ -160,6 +161,13 @@ void ModelNavDataProvider::pollNetwork() {
     s.sog = std::isfinite(gSog) ? gSog : 0.0;
     s.hdg = std::isfinite(gHdt) ? gHdt : kHeadingUnavailable;
   }
+  // Merge decoded wind + speed-through-water (#39).
+  const WindData w = WindDecoder::instance().data();
+  s.awa = w.awa;
+  s.aws = w.aws;
+  s.twa = w.twa;
+  s.tws = w.tws;
+  s.stw = w.stw;
   m_own->set(s);
   emitChanges();
 }
