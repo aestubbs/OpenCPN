@@ -129,6 +129,11 @@ class ChartCanvas : public QQuickItem {
   // updated on hover. Empty until the cursor enters the canvas.
   Q_PROPERTY(QString cursorText READ cursorText NOTIFY cursorMoved)
 
+  // Interactive route-building mode (Create Route, #28). While on, a left
+  // click drops a route vertex and a right click finishes the route.
+  Q_PROPERTY(bool routeBuildMode READ routeBuildMode WRITE setRouteBuildMode
+                 NOTIFY routeBuildModeChanged)
+
   // MUIBar (P3.x): current chart scale "1:N" + follow-own-ship mode.
   Q_PROPERTY(QString scaleText READ scaleText NOTIFY viewChanged)
   Q_PROPERTY(bool followOwnShip READ followOwnShip WRITE setFollowOwnShip
@@ -170,6 +175,8 @@ public:
 
   QString scaleText() const;
   QString cursorText() const { return m_cursor_text; }
+  bool routeBuildMode() const { return m_route_build_mode; }
+  void setRouteBuildMode(bool on);
   bool followOwnShip() const { return m_follow_own_ship; }
   void setFollowOwnShip(bool on);
 
@@ -219,6 +226,7 @@ Q_SIGNALS:
   void viewChanged();
   void followOwnShipChanged();
   void cursorMoved();
+  void routeBuildModeChanged();
   // Right-click on the chart at item-local (x, y); QML pops the context menu.
   void contextMenuRequested(qreal x, qreal y);
   // The set of in-view / displayed ENC cells changed (chart bar refresh).
@@ -352,6 +360,7 @@ private:
 
   // Formatted cursor lat/lon for the status bar, updated on hover.
   QString m_cursor_text;
+  bool m_route_build_mode = false;
 
   // Hit-test a click (item-local px) against the live AIS targets and select
   // the nearest within a small radius (P3.9). Returns true if one was hit.

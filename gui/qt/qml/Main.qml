@@ -757,8 +757,11 @@ ApplicationWindow {
                 onTriggered: chart.centerViewHere()
             }
             MenuSeparator {}
+            MenuItem {
+                text: qsTr("Create route")
+                onTriggered: chart.routeBuildMode = true
+            }
             // wx canvas-menu items not yet wired (kept for layout parity).
-            MenuItem { text: qsTr("Create route"); enabled: false }
             MenuItem { text: qsTr("Drop mark here"); enabled: false }
             MenuItem { text: qsTr("Measure"); enabled: false }
         }
@@ -833,10 +836,12 @@ ApplicationWindow {
 
             ToolSeparator { Layout.fillWidth: true }
 
-            // 3. Create Route (wx ID_MENU_ROUTE_NEW) -- not wired yet.
+            // 3. Create Route (wx ID_MENU_ROUTE_NEW).
             Tool {
                 text: "✚"; checkable: true
-                ToolTip.text: qsTr("Create route (not yet implemented)")
+                checked: chart.routeBuildMode
+                ToolTip.text: qsTr("Create route  (left-click adds points, right-click finishes)")
+                onClicked: chart.routeBuildMode = checked
             }
             // 4. Route & Mark Manager -> the dialog window.
             Tool {

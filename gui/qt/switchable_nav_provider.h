@@ -52,6 +52,53 @@ public:
   }
   bool isLive() const { return m_use_live; }
 
+  // --- Interactive route building (Create Route, #28) ------------------
+  // The draft route plus committed user routes are merged into routes() on
+  // top of the active provider's, so they show in both demo and live mode
+  // and appear in the route manager (which reads the same provider).
+  bool buildingRoute() const { return m_building; }
+
+  /** Start a new draft route (clears any prior draft). */
+  void beginRoute() {
+    m_building = true;
+    m_has_rubber = false;
+    m_draft = NavRoute{};
+    m_draft.name = QStringLiteral("Route %1").arg(++m_route_seq);
+    Q_EMIT staticChanged();
+  }
+  /** Append a vertex (degrees) to the draft route. */
+  void addRoutePoint(double lat, double lon) {
+    if (!m_building) return;
+    m_draft.points.append(QPointF(lon, lat));
+    Q_EMIT staticChanged();
+  }
+  /** Live "rubber band" segment from the last vertex to the cursor. */
+  void setRouteRubberband(double lat, double lon) {
+    if (!m_building) return;
+    m_rubber = QPointF(lon, lat);
+    m_has_rubber = true;
+    Q_EMIT staticChanged();
+  }
+  /** Commit the draft (>=2 points) as a user route. Returns true if kept. */
+  bool finishRoute() {
+    if (!m_building) return false;
+    const bool ok = m_draft.points.size() >= 2;
+    if (ok) m_user_routes.append(m_draft);
+    m_building = false;
+    m_has_rubber = false;
+    m_draft = NavRoute{};
+    Q_EMIT staticChanged();
+    return ok;
+  }
+  /** Discard the draft without committing. */
+  void cancelRoute() {
+    if (!m_building) return;
+    m_building = false;
+    m_has_rubber = false;
+    m_draft = NavRoute{};
+    Q_EMIT staticChanged();
+  }
+
   QList<AisTarget> aisTargets() const override {
     return current() ? current()->aisTargets() : QList<AisTarget>();
   }
@@ -59,7 +106,14 @@ public:
     return current() ? current()->ownShip() : OwnShipState{};
   }
   QList<NavRoute> routes() const override {
-    return current() ? current()->routes() : QList<NavRoute>();
+    QList<NavRoute> r = current() ? current()->routes() : QList<NavRoute>();
+    r += m_user_routes;
+    if (m_building && !m_draft.points.isEmpty()) {
+      NavRoute d = m_draft;
+      if (m_has_rubber) d.points.append(m_rubber);  // live segment to cursor
+      r.append(d);
+    }
+    return r;
   }
   QList<NavWaypoint> waypoints() const override {
     return current() ? current()->waypoints() : QList<NavWaypoint>();
@@ -74,6 +128,14 @@ private:
   NavDataProvider* m_demo;
   NavDataProvider* m_live;
   bool m_use_live = false;
+
+  // Route-building state.
+  QList<NavRoute> m_user_routes;  // committed user routes
+  NavRoute m_draft;               // route currently being drawn
+  QPointF m_rubber;               // cursor end-point for the live segment
+  bool m_building = false;
+  bool m_has_rubber = false;
+  int m_route_seq = 0;
 };
 
 }  // namespace ocpn::qtui

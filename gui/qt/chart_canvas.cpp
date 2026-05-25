@@ -758,6 +758,24 @@ QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,
 }
 
 void ChartCanvas::mousePressEvent(QMouseEvent* event) {
+  // Route-building mode (Create Route): left adds a vertex, right finishes.
+  if (m_route_build_mode && m_nav_provider) {
+    double lat = 0, lon = 0;
+    const QPointF p = event->position();
+    m_viewport->screenToLatLon(p.x(), p.y(), static_cast<int>(width()),
+                               static_cast<int>(height()), lat, lon);
+    if (event->button() == Qt::LeftButton) {
+      m_nav_provider->addRoutePoint(lat, lon);
+    } else if (event->button() == Qt::RightButton) {
+      m_nav_provider->finishRoute();
+      m_route_build_mode = false;
+      Q_EMIT routeBuildModeChanged();
+      update();
+    }
+    event->accept();
+    return;
+  }
+
   if (event->button() == Qt::LeftButton) {
     m_dragging = true;
     m_drag_last_pos = event->position();
@@ -826,8 +844,24 @@ void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {
                                static_cast<int>(height()), lat, lon);
     m_cursor_text = navfmt::latLon(lat, lon);
     Q_EMIT cursorMoved();
+    // Live rubber-band segment to the cursor while drawing a route.
+    if (m_route_build_mode && m_nav_provider)
+      m_nav_provider->setRouteRubberband(lat, lon);
   }
   QQuickItem::hoverMoveEvent(event);
+}
+
+void ChartCanvas::setRouteBuildMode(bool on) {
+  if (on == m_route_build_mode) return;
+  m_route_build_mode = on;
+  if (m_nav_provider) {
+    if (on)
+      m_nav_provider->beginRoute();  // start a fresh draft
+    else
+      m_nav_provider->cancelRoute();  // toggled off -> discard draft
+  }
+  Q_EMIT routeBuildModeChanged();
+  update();
 }
 
 bool ChartCanvas::pickAisAt(const QPointF& screen_pos) {
