@@ -213,12 +213,14 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
     // Only chase visible cells once a catalog exists (async ENC path).
     if (!m_catalog.isEmpty()) m_load_debounce->start();
   });
-  // Follow mode: recentre on the own-ship fix as it updates.
+  // Follow mode: recentre on the own-ship fix as it updates. Also feed the
+  // active track recorder (#29) -- append each fresh own-ship fix.
   connect(m_nav_provider.get(), &NavDataProvider::dynamicChanged, this,
           [this]() {
-            if (!m_follow_own_ship) return;
             const OwnShipState s = m_nav_provider->ownShip();
-            if (s.valid) m_viewport->setCenter(s.lat, s.lon);
+            if (!s.valid) return;
+            if (m_track_recording) m_nav_provider->appendTrackPoint(s.lat, s.lon);
+            if (m_follow_own_ship) m_viewport->setCenter(s.lat, s.lon);
           });
   // On resize, repaint AND re-evaluate visible cells: the initial fit +
   // selection can run before the canvas has its real size (the catalog scan
@@ -861,6 +863,21 @@ void ChartCanvas::setRouteBuildMode(bool on) {
       m_nav_provider->cancelRoute();  // toggled off -> discard draft
   }
   Q_EMIT routeBuildModeChanged();
+  update();
+}
+
+void ChartCanvas::setTrackRecording(bool on) {
+  if (on == m_track_recording) return;
+  m_track_recording = on;
+  if (m_nav_provider) {
+    m_nav_provider->setRecordingTrack(on);
+    // Seed the track with the current fix so it starts at the vessel.
+    if (on) {
+      const OwnShipState s = m_nav_provider->ownShip();
+      if (s.valid) m_nav_provider->appendTrackPoint(s.lat, s.lon);
+    }
+  }
+  Q_EMIT trackRecordingChanged();
   update();
 }
 

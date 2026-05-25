@@ -99,6 +99,35 @@ public:
     Q_EMIT staticChanged();
   }
 
+  // --- Own-ship track recording (#29) ----------------------------------
+  // When recording, ChartCanvas feeds own-ship fixes via appendTrackPoint;
+  // the growing track is merged into tracks() so the TrackLayer draws it.
+  bool recordingTrack() const { return m_recording; }
+
+  /** Start (true) or stop (false) recording. Starting begins a fresh track. */
+  void setRecordingTrack(bool on) {
+    if (on == m_recording) return;
+    m_recording = on;
+    if (on) {
+      m_record_track = NavTrack{};
+      m_record_track.color = QColor(150, 0, 200);  // recording track violet
+    }
+    Q_EMIT staticChanged();
+  }
+  /** Append an own-ship fix (degrees) to the active track, skipping
+   *  near-duplicate fixes so a stationary vessel doesn't pile up points. */
+  void appendTrackPoint(double lat, double lon) {
+    if (!m_recording) return;
+    const QPointF p(lon, lat);
+    if (!m_record_track.points.isEmpty()) {
+      const QPointF& last = m_record_track.points.constLast();
+      const double dx = p.x() - last.x(), dy = p.y() - last.y();
+      if (dx * dx + dy * dy < 1.0e-8) return;  // ~1 m -- ignore jitter
+    }
+    m_record_track.points.append(p);
+    Q_EMIT staticChanged();
+  }
+
   QList<AisTarget> aisTargets() const override {
     return current() ? current()->aisTargets() : QList<AisTarget>();
   }
@@ -119,7 +148,9 @@ public:
     return current() ? current()->waypoints() : QList<NavWaypoint>();
   }
   QList<NavTrack> tracks() const override {
-    return current() ? current()->tracks() : QList<NavTrack>();
+    QList<NavTrack> t = current() ? current()->tracks() : QList<NavTrack>();
+    if (m_record_track.points.size() >= 2) t.append(m_record_track);
+    return t;
   }
 
 private:
@@ -136,6 +167,10 @@ private:
   bool m_building = false;
   bool m_has_rubber = false;
   int m_route_seq = 0;
+
+  // Track-recording state.
+  NavTrack m_record_track;
+  bool m_recording = false;
 };
 
 }  // namespace ocpn::qtui

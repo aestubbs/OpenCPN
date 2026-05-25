@@ -848,10 +848,12 @@ ApplicationWindow {
                 text: "▤"; ToolTip.text: qsTr("Route && mark manager")
                 onClicked: { routeManagerWindow.show(); routeManagerWindow.raise() }
             }
-            // 5. Enable Tracking (wx ID_TRACK) -- not wired yet.
+            // 5. Enable Tracking (wx ID_TRACK).
             Tool {
                 text: "⊚"; checkable: true
-                ToolTip.text: qsTr("Enable tracking (not yet implemented)")
+                checked: chart.trackRecording
+                ToolTip.text: qsTr("Record own-ship track")
+                onClicked: chart.trackRecording = checked
             }
             // 6. Change Color Scheme (wx ID_COLSCHEME) -- not wired yet.
             Tool {
