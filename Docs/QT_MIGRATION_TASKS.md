@@ -915,7 +915,8 @@ render anything onto the chart, only manages the plugin lifecycle.
 - [ ] **P3.3** Core world-anchored Layers — own-ship, routes, tracks, AIS targets.
 - [ ] **P3.4** QML HUD tier — depth, SOG/COG, wind readouts bound to view-models.
 - [ ] **P3.5** Toolbar / main controls in QML (touch-friendly).
-- [ ] **P3.6** Settings / preferences UI in QML.
+- [ ] **P3.6** Settings / preferences UI in QML — the Options dialog
+      (see the breakdown below).
 - [ ] **P3.7** Route & mark manager UI in QML.
 - [ ] **P3.8** Chart selection / quilting UI.
 - [ ] **P3.9** Dialogs (AIS target info, object query, alarms) in QML.
@@ -925,6 +926,128 @@ render anything onto the chart, only manages the plugin lifecycle.
       `slots` / `emit` keywords now that no wx/system headers remain to clash
       with. Touches the QObject classes added during Phase 1 (`observable_qt`,
       `comm_drv_*`). Introduced by P1.5a.
+
+### P3.6 — Options / Settings dialog breakdown
+
+The legacy wx Options dialog (`gui/src/options.cpp`, `gui/include/gui/
+options.h`) is a `wxListbook` of six top-level pages, each a `wxNotebook`
+of sub-panels (`CreatePanel_*`). This is the authoritative feature
+inventory for the QML port. The Qt build (`gui/qt/qml/Main.qml`,
+`optionsWindow`) already stubs the five-page shell (Display / Charts /
+Connections / Ships / Plugins) with a handful of wired controls; the
+checklist marks what exists vs. what is still to be specified/built.
+
+Status legend: `[x]` wired in the Qt build today · `[~]` page exists,
+control still a placeholder · `[ ]` not yet present.
+
+**Display page** (wx sub-panels: General, Units, Advanced, Templates)
+- [x] General → auto-follow own ship (Qt has follow + demo-mode + debug
+      toggles; these last two are Qt-specific, not wx).
+- [ ] General → Navigation Mode: North-Up / Course-Up radio, Look-Ahead.
+- [ ] General → Chart Display: enable quilting, preserve scale on chart
+      switch.
+- [ ] General → Controls: smooth pan/zoom, zoom-to-cursor, 10 Hz screen
+      update, mouse-wheel zoom sensitivity.
+- [ ] General → other toggles: show GPS/compass window, auto-anchor mark,
+      date/time format (UTC vs OS local timezone), own-ship COG/HDT
+      predictor lengths, SOG/COG damping, ETA / default boat speed.
+- [ ] **Units** sub-page — distance, speed, wind speed, depth, height,
+      temperature unit choices; lat/lon format (`SDMM`); show true /
+      magnetic bearings; user magnetic variation (WMM).
+- [ ] **Advanced** sub-page — de-skew raster charts, OpenGL on/off +
+      "OpenGL Options…" sub-dialog (accelerated panning, texture
+      compression + caching, polygon/line smoothing, software GL, texture
+      memory size, rebuild/clear texture cache), chart-rotation averaging
+      time, chart-display update period, screen-size (mm) calibration,
+      responsive/touch sizing.
+- [ ] **Templates** sub-page — configuration templates: list, create,
+      apply, delete, multi-canvas screen-config selector.
+
+**Charts page** (wx sub-panels: Chart Files, Vector Chart Display, Chart
+Groups, Tides & Currents)
+- [ ] **Chart Files** — chart directory list (add / remove / compress /
+      migrate), scan-and-update DB, force full rebuild, "Prepare all ENC
+      charts" (PARSE_ENC), rebuild chart database.
+- [x] **Vector Chart Display** → Display Category (Base / Standard / All;
+      wx also has Mariner's Standard). Qt has Base/Standard/All wired.
+- [x] Vector → detail toggles: soundings, text, lights, buoys/beacons (Qt
+      has these four).
+- [ ] Vector → remaining detail/cartography: chart-info objects, buoy/
+      light labels, light descriptions, extended light sectors, national
+      text, important-text-only, de-cluttered text, reduced detail at
+      small scale, super-SCAMIN, graphics style (paper / simplified),
+      boundaries (plain / symbolised), 2-/4-colour, shallow / safety /
+      deep depth contours, CM93 detail-level slider + CM93 offset, "User
+      Standard Objects" checklist (select-all / clear-all / reset-to-
+      standard), ECDIS help.
+- [ ] **Chart Groups** — named chart-group editor: available-charts tree,
+      active-group trees, new/delete group, insert/remove directory.
+- [ ] **Tides & Currents** — tide/current data-set (harmonics) list:
+      add / remove data locations.
+
+**Connections page** (wx sub-panel: NMEA / data connections)
+- [x] Connection list (enable/disable, summary, remove) and add-connection
+      form (transport TCP/UDP, protocol NMEA0183/2000/SignalK, host, port).
+      Qt has a basic add/list backed by `chart.connections`.
+- [ ] Full connections editor parity — serial ports + baud, GPSD/Garmin
+      host, network connection edit dialog, per-connection input/output
+      filters, NMEA sentence filtering, priorities, "show NMEA debug
+      window".
+
+**Ships page** (wx sub-panels: Own ship, AIS Targets, MMSI Properties,
+Routes/Points)
+- [x] **Own ship** → identity: vessel name + own MMSI (Qt has both).
+- [ ] Own ship → display: ship icon type (Default / Real-scale bitmap /
+      Real-scale vector), real-size dimensions (LOA, beam, GPS offsets,
+      minimum screen size), COG/HDT predictor lengths, range rings
+      (count, spacing, unit, colour), show direction to active waypoint.
+- [~] **AIS Targets** — Qt has a placeholder pane. To build:
+  - [ ] CPA calculation: max target range for (T)CPA alerts, CPA warn
+        distance, TCPA warn time.
+  - [ ] Lost targets: mark-lost / remove-lost timeouts.
+  - [ ] Display: COG-predictor arrow length (+ sync with own ship),
+        target tracks length, suppress anchored/moored (speed max),
+        realtime-prediction speed min, target attenuation threshold,
+        show area notices, show real size, show names above scale, WPL
+        position-message handling.
+  - [ ] Rollover info block: class/type/status, SOG/COG, CPA/TCPA.
+  - [ ] CPA/TCPA alerts: alert dialog, alert sound (+ test), suppress for
+        moored, acknowledge-timeout.
+- [ ] **MMSI Properties** — per-MMSI list + editor (track mode
+      default/always/never, persist track, ignore, MOB, VDM follower,
+      ship name); maps to `MmsiProperties` / AIS name-file API (P1.6c).
+- [ ] **Routes/Points** — route/waypoint defaults: distance unit, new-
+      route line colour/style, persist-active-route, default waypoint &
+      routepoint icons, arrival-circle radius, SCAMIN min/max, tracks
+      (auto-daily at midnight Computer/UTC/LMT, highlight + colour,
+      tracking precision).
+
+**User Interface page** (not present in the Qt shell yet — wx sub-panels:
+General Options, Sounds)
+- [ ] **General Options** — language choice, fonts (per-element font +
+      colour chooser, reset), toolbar/window style, show status bar /
+      menu bar / chart bar / compass window / zoom buttons, toolbar
+      auto-hide (+ timeout) / transparency, scaled-graphics & touchscreen
+      (mobile/responsive) interface, UI / chart-object / ship / text /
+      ENC-text / ENC-sounding scale-factor sliders, play ship's bells,
+      Inland ECDIS toggle + manual.
+- [ ] **Sounds** — sound-output device + per-event sound files (anchor,
+      AIS, SART, DSC) with enable + test.
+
+**Plugins page**
+- [~] Qt shows a placeholder. To build: plugin list/enable, catalog
+      manager (browse / install / uninstall / update), add-plugin panel,
+      per-plugin settings. Lifecycle-only UI; rendering is the Phase 4
+      Qt plugin host. *(Tracked jointly with Phase 4.)*
+
+**Dialog framework / cross-cutting**
+- [ ] OK / Cancel / Apply semantics and the wx change-bitmask
+      (`S52_CHANGED`, `GROUPS_CHANGED`, `TIDES_CHANGED`, `GL_CHANGED`,
+      `LOCALE_CHANGED`, `REBUILD_RASTER_CACHE`, …) — the Qt port needs an
+      equivalent "what changed → what to refresh" dispatch. The current
+      QML pane applies changes live (no Apply button).
+- [ ] Initial-page / sub-page deep-linking (`SetInitialPage`), colour
+      scheme, persisted window position/size.
 
 ## Phase 4 — Qt plugin host  (est. 6–8 wks)
 
