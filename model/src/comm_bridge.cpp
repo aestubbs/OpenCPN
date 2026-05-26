@@ -289,9 +289,9 @@ bool CommBridge::Initialize() {
   InitCommListeners();
 
   // Initialize a listener for driver state changes
-  m_driver_change_lstnr.Init(
-      CommDriverRegistry::GetInstance().evt_driverlist_change,
-      [&](const ObservedEvt&) { OnDriverStateChange(); });
+  m_driver_change_lstnr.Listen(
+      CommDriverRegistry::GetInstance().evt_driverlist_change.GetKey(),
+      [&](const ObsData&) { OnDriverStateChange(); });
 
   return true;
 }
@@ -425,101 +425,106 @@ void CommBridge::InitCommListeners() {
   // Initialize the comm listeners
 
   // GNSS Position Data PGN  129029
-  m_n2k_129029_lstnr.Init(Nmea2000Msg(static_cast<uint64_t>(129029)),
-                          [&](const ObservedEvt& ev) {
-                            HandleN2K_129029(UnpackEvtPointer<Nmea2000Msg>(ev));
-                          });
+  m_n2k_129029_lstnr.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129029)).GetKey(),
+      [&](const ObsData& d) {
+        HandleN2K_129029(UnpackObsData<Nmea2000Msg>(d));
+      });
 
   // Position rapid   PGN 129025
-  m_n2k_129025_lstnr.Init(Nmea2000Msg(static_cast<uint64_t>(129025)),
-                          [&](const ObservedEvt& ev) {
-                            HandleN2K_129025(UnpackEvtPointer<Nmea2000Msg>(ev));
-                          });
+  m_n2k_129025_lstnr.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129025)).GetKey(),
+      [&](const ObsData& d) {
+        HandleN2K_129025(UnpackObsData<Nmea2000Msg>(d));
+      });
 
   // COG SOG rapid   PGN 129026
-  m_n2k_129026_lstnr.Init(Nmea2000Msg(static_cast<uint64_t>(129026)),
-                          [&](const ObservedEvt& ev) {
-                            HandleN2K_129026(UnpackEvtPointer<Nmea2000Msg>(ev));
-                          });
+  m_n2k_129026_lstnr.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129026)).GetKey(),
+      [&](const ObsData& d) {
+        HandleN2K_129026(UnpackObsData<Nmea2000Msg>(d));
+      });
 
   // Heading rapid   PGN 127250
-  m_n2k_127250_lstnr.Init(Nmea2000Msg(static_cast<uint64_t>(127250)),
-                          [&](const ObservedEvt& ev) {
-                            HandleN2K_127250(UnpackEvtPointer<Nmea2000Msg>(ev));
-                          });
+  m_n2k_127250_lstnr.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(127250)).GetKey(),
+      [&](const ObsData& d) {
+        HandleN2K_127250(UnpackObsData<Nmea2000Msg>(d));
+      });
   // Variation   PGN 127258
-  m_n2k_127258_lstnr.Init(Nmea2000Msg(static_cast<uint64_t>(127258)),
-                          [&](const ObservedEvt& ev) {
-                            HandleN2K_127258(UnpackEvtPointer<Nmea2000Msg>(ev));
-                          });
+  m_n2k_127258_lstnr.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(127258)).GetKey(),
+      [&](const ObsData& d) {
+        HandleN2K_127258(UnpackObsData<Nmea2000Msg>(d));
+      });
 
   // GNSS Satellites in View   PGN 129540
-  m_n2k_129540_lstnr.Init(Nmea2000Msg(static_cast<uint64_t>(129540)),
-                          [&](const ObservedEvt& ev) {
-                            HandleN2K_129540(UnpackEvtPointer<Nmea2000Msg>(ev));
-                          });
+  m_n2k_129540_lstnr.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129540)).GetKey(),
+      [&](const ObsData& d) {
+        HandleN2K_129540(UnpackObsData<Nmea2000Msg>(d));
+      });
 
   // NMEA0183
   // RMC
-  Nmea0183Msg n0183_msg_RMC("RMC");
-  m_n0183_rmc_lstnr.Init(Nmea0183Msg("RMC"), [&](const ObservedEvt& ev) {
-    HandleN0183_RMC(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_rmc_lstnr.Listen(Nmea0183Msg("RMC").GetKey(), [&](const ObsData& d) {
+    HandleN0183_RMC(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // THS
-  m_n0183_ths_lstnr.Init(Nmea0183Msg("THS"), [&](const ObservedEvt& ev) {
-    HandleN0183_THS(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_ths_lstnr.Listen(Nmea0183Msg("THS").GetKey(), [&](const ObsData& d) {
+    HandleN0183_THS(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // HDT
-  m_n0183_hdt_lstnr.Init(Nmea0183Msg("HDT"), [&](const ObservedEvt& ev) {
-    HandleN0183_HDT(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_hdt_lstnr.Listen(Nmea0183Msg("HDT").GetKey(), [&](const ObsData& d) {
+    HandleN0183_HDT(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // HDG
-  m_n0183_hdg_lstnr.Init(Nmea0183Msg("HDG"), [&](const ObservedEvt& ev) {
-    HandleN0183_HDG(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_hdg_lstnr.Listen(Nmea0183Msg("HDG").GetKey(), [&](const ObsData& d) {
+    HandleN0183_HDG(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // HDM
-  m_n0183_hdm_lstnr.Init(Nmea0183Msg("HDM"), [&](const ObservedEvt& ev) {
-    HandleN0183_HDM(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_hdm_lstnr.Listen(Nmea0183Msg("HDM").GetKey(), [&](const ObsData& d) {
+    HandleN0183_HDM(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // HVD
-  m_n0183_hvd_lstnr.Init(Nmea0183Msg("HVD"), [&](const ObservedEvt& ev) {
-    HandleN0183_HVD(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_hvd_lstnr.Listen(Nmea0183Msg("HVD").GetKey(), [&](const ObsData& d) {
+    HandleN0183_HVD(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // VTG
-  m_n0183_vtg_lstnr.Init(Nmea0183Msg("VTG"), [&](const ObservedEvt& ev) {
-    HandleN0183_VTG(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_vtg_lstnr.Listen(Nmea0183Msg("VTG").GetKey(), [&](const ObsData& d) {
+    HandleN0183_VTG(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // GSV
-  m_n0183_gsv_lstnr.Init(Nmea0183Msg("GSV"), [&](const ObservedEvt& ev) {
-    HandleN0183_GSV(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_gsv_lstnr.Listen(Nmea0183Msg("GSV").GetKey(), [&](const ObsData& d) {
+    HandleN0183_GSV(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // GGA
-  m_n0183_gga_lstnr.Init(Nmea0183Msg("GGA"), [&](const ObservedEvt& ev) {
-    HandleN0183_GGA(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_gga_lstnr.Listen(Nmea0183Msg("GGA").GetKey(), [&](const ObsData& d) {
+    HandleN0183_GGA(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // GLL
-  Nmea0183Msg n0183_msg_GLL("GLL");
-  m_n0183_gll_lstnr.Init(Nmea0183Msg("GLL"), [&](const ObservedEvt& ev) {
-    HandleN0183_GLL(UnpackEvtPointer<Nmea0183Msg>(ev));
+  m_n0183_gll_lstnr.Listen(Nmea0183Msg("GLL").GetKey(), [&](const ObsData& d) {
+    HandleN0183_GLL(UnpackObsData<Nmea0183Msg>(d));
   });
 
   // AIVDO
-  m_n0183_aivdo_lstnr.Init(Nmea0183Msg("AIVDO"), [&](const ObservedEvt& ev) {
-    HandleN0183_AIVDO(UnpackEvtPointer<Nmea0183Msg>(ev));
-  });
+  m_n0183_aivdo_lstnr.Listen(Nmea0183Msg("AIVDO").GetKey(),
+                             [&](const ObsData& d) {
+                               HandleN0183_AIVDO(UnpackObsData<Nmea0183Msg>(d));
+                             });
 
   // SignalK
-  m_signal_k_lstnr.Init(SignalkMsg(), [&](const ObservedEvt& ev) {
-    HandleSignalK(UnpackEvtPointer<SignalkMsg>(ev));
+  m_signal_k_lstnr.Listen(SignalkMsg().GetKey(), [&](const ObsData& d) {
+    HandleSignalK(UnpackObsData<SignalkMsg>(d));
   });
 }
 

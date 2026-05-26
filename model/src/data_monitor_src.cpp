@@ -37,17 +37,18 @@
 
 #include "observable.h"
 
-static void InitListener(ObsListener& ol, NavMsg& msg,
-                         const std::function<void(ObservedEvt)>& on_message) {
-  ol.Init(msg, on_message);
+static void InitListener(ObsConnection& ol, NavMsg& msg,
+                         const ObsConnection::Action& on_message) {
+  ol.Listen(msg.GetKey(), on_message);
 }
 
 DataMonitorSrc::DataMonitorSrc(const SinkFunc& sink_func)
     : m_sink_func(sink_func) {
   new_msg_lstnr.Listen(NavMsgBus::GetInstance().new_msg_event.Key(),
                        [this](const ObsData&) { OnNewMessage(); });
-  undelivered_msg_lstnr.Init(CommDriverRegistry::GetInstance().evt_dropped_msg,
-                             [&](ObservedEvt& ev) { OnMessage(ev); });
+  undelivered_msg_lstnr.Listen(
+      CommDriverRegistry::GetInstance().evt_dropped_msg.GetKey(),
+      [&](const ObsData& d) { OnMessage(d); });
 }
 
 void DataMonitorSrc::OnNewMessage() {
@@ -55,7 +56,7 @@ void DataMonitorSrc::OnNewMessage() {
   for (const auto& msg : messages) {
     auto found = m_listeners.find(msg);
     if (found == m_listeners.end()) {
-      ObsListener listener;
+      ObsConnection listener;
       std::string type(msg);
       size_t pos;
       NavAddr::Bus bus = NavAddr::Bus::Undef;
@@ -66,8 +67,8 @@ void DataMonitorSrc::OnNewMessage() {
         if ((pos = type.find('-')) != std::string::npos)
           type = type.substr(pos + 1);
         m_listeners[msg] = std::move(listener);
-        std::function<void(ObservedEvt)> listen_action = [&](ObservedEvt ev) {
-          OnMessage(ev);
+        ObsConnection::Action listen_action = [&](const ObsData& d) {
+          OnMessage(d);
         };
         switch (bus) {
           case NavAddr::Bus::N0183: {
@@ -98,7 +99,7 @@ void DataMonitorSrc::OnNewMessage() {
   }
 }
 
-void DataMonitorSrc::OnMessage(ObservedEvt& ev) {
-  auto ptr = UnpackEvtPointer<NavMsg>(ev);
+void DataMonitorSrc::OnMessage(const ObsData& d) {
+  auto ptr = UnpackObsData<NavMsg>(d);
   m_sink_func(ptr);
 }

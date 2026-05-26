@@ -58,15 +58,15 @@ public:
 
 private:
   SinkFunc m_sink_func;
-  std::unordered_map<std::string, ObsListener> m_listeners;
+  std::unordered_map<std::string, ObsConnection> m_listeners;
   ObsConnection new_msg_lstnr;
-  ObsListener undelivered_msg_lstnr;
+  ObsConnection undelivered_msg_lstnr;
 
   /** Handle new message type detected. */
   void OnNewMessage();
 
   /** Handle incoming message. */
-  void OnMessage(ObservedEvt& ev);
+  void OnMessage(const ObsData& d);
 };
 
 #endif  //  DATA_MONITOR_SRC__

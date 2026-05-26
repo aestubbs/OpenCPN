@@ -130,4 +130,14 @@ void PostToMainThread(std::function<void()> action);
  */
 void ObsNotifyByKey(const std::string& key, const ObsData& data);
 
+/**
+ * Recover the typed shared payload an ObsData carries (the wx-free
+ * equivalent of UnpackEvtPointer for ObservedEvt). Returns a
+ * shared_ptr<const T> aliasing data.shared_ptr.
+ */
+template <typename T>
+std::shared_ptr<const T> UnpackObsData(const ObsData& data) {
+  return std::static_pointer_cast<const T>(data.shared_ptr);
+}
+
 #endif  // OBSERVABLE_QT_H

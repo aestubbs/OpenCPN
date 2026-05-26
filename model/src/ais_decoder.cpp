@@ -1339,55 +1339,62 @@ void AisDecoder::InitCommListeners() {
   // (P1.11), each listener owns its own wxEvtHandler proxy via ObsListener
   // and the lambda fires directly when the upstream KeyProvider notifies.
 
-  auto handle_n0183 = [this](const ObservedEvt &ev) {
-    auto n0183_msg = UnpackEvtPointer<Nmea0183Msg>(ev);
+  auto handle_n0183 = [this](const ObsData &d) {
+    auto n0183_msg = UnpackObsData<Nmea0183Msg>(d);
     HandleN0183_AIS(n0183_msg);
   };
 
   // NMEA0183 message types: all routed to HandleN0183_AIS.
-  listener_N0183_VDM.Init(Nmea0183Msg("VDM"), handle_n0183);
-  listener_N0183_FRPOS.Init(Nmea0183Msg("FRPOS"), handle_n0183);
-  listener_N0183_CDDSC.Init(Nmea0183Msg("CDDSC"), handle_n0183);
-  listener_N0183_CDDSE.Init(Nmea0183Msg("CDDSE"), handle_n0183);
-  listener_N0183_TLL.Init(Nmea0183Msg("TLL"), handle_n0183);
-  listener_N0183_TTM.Init(Nmea0183Msg("TTM"), handle_n0183);
-  listener_N0183_OSD.Init(Nmea0183Msg("OSD"), handle_n0183);
-  listener_N0183_WPL.Init(Nmea0183Msg("WPL"), handle_n0183);
+  listener_N0183_VDM.Listen(Nmea0183Msg("VDM").GetKey(), handle_n0183);
+  listener_N0183_FRPOS.Listen(Nmea0183Msg("FRPOS").GetKey(), handle_n0183);
+  listener_N0183_CDDSC.Listen(Nmea0183Msg("CDDSC").GetKey(), handle_n0183);
+  listener_N0183_CDDSE.Listen(Nmea0183Msg("CDDSE").GetKey(), handle_n0183);
+  listener_N0183_TLL.Listen(Nmea0183Msg("TLL").GetKey(), handle_n0183);
+  listener_N0183_TTM.Listen(Nmea0183Msg("TTM").GetKey(), handle_n0183);
+  listener_N0183_OSD.Listen(Nmea0183Msg("OSD").GetKey(), handle_n0183);
+  listener_N0183_WPL.Listen(Nmea0183Msg("WPL").GetKey(), handle_n0183);
 
   // SignalK
-  listener_SignalK.Init(SignalkMsg(), [this](const ObservedEvt &ev) {
-    HandleSignalK(UnpackEvtPointer<SignalkMsg>(ev));
+  listener_SignalK.Listen(SignalkMsg().GetKey(), [this](const ObsData &d) {
+    HandleSignalK(UnpackObsData<SignalkMsg>(d));
   });
 
   // AIS NMEA2000 PGNs
-  listener_N2K_129038.Init(Nmea2000Msg(static_cast<uint64_t>(129038)),
-                           [this](const ObservedEvt &ev) {
-                             HandleN2K_129038(UnpackEvtPointer<Nmea2000Msg>(ev));
-                           });
-  listener_N2K_129039.Init(Nmea2000Msg(static_cast<uint64_t>(129039)),
-                           [this](const ObservedEvt &ev) {
-                             HandleN2K_129039(UnpackEvtPointer<Nmea2000Msg>(ev));
-                           });
-  listener_N2K_129041.Init(Nmea2000Msg(static_cast<uint64_t>(129041)),
-                           [this](const ObservedEvt &ev) {
-                             HandleN2K_129041(UnpackEvtPointer<Nmea2000Msg>(ev));
-                           });
-  listener_N2K_129794.Init(Nmea2000Msg(static_cast<uint64_t>(129794)),
-                           [this](const ObservedEvt &ev) {
-                             HandleN2K_129794(UnpackEvtPointer<Nmea2000Msg>(ev));
-                           });
-  listener_N2K_129809.Init(Nmea2000Msg(static_cast<uint64_t>(129809)),
-                           [this](const ObservedEvt &ev) {
-                             HandleN2K_129809(UnpackEvtPointer<Nmea2000Msg>(ev));
-                           });
-  listener_N2K_129810.Init(Nmea2000Msg(static_cast<uint64_t>(129810)),
-                           [this](const ObservedEvt &ev) {
-                             HandleN2K_129810(UnpackEvtPointer<Nmea2000Msg>(ev));
-                           });
-  listener_N2K_129793.Init(Nmea2000Msg(static_cast<uint64_t>(129793)),
-                           [this](const ObservedEvt &ev) {
-                             HandleN2K_129793(UnpackEvtPointer<Nmea2000Msg>(ev));
-                           });
+  listener_N2K_129038.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129038)).GetKey(),
+      [this](const ObsData &d) {
+        HandleN2K_129038(UnpackObsData<Nmea2000Msg>(d));
+      });
+  listener_N2K_129039.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129039)).GetKey(),
+      [this](const ObsData &d) {
+        HandleN2K_129039(UnpackObsData<Nmea2000Msg>(d));
+      });
+  listener_N2K_129041.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129041)).GetKey(),
+      [this](const ObsData &d) {
+        HandleN2K_129041(UnpackObsData<Nmea2000Msg>(d));
+      });
+  listener_N2K_129794.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129794)).GetKey(),
+      [this](const ObsData &d) {
+        HandleN2K_129794(UnpackObsData<Nmea2000Msg>(d));
+      });
+  listener_N2K_129809.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129809)).GetKey(),
+      [this](const ObsData &d) {
+        HandleN2K_129809(UnpackObsData<Nmea2000Msg>(d));
+      });
+  listener_N2K_129810.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129810)).GetKey(),
+      [this](const ObsData &d) {
+        HandleN2K_129810(UnpackObsData<Nmea2000Msg>(d));
+      });
+  listener_N2K_129793.Listen(
+      Nmea2000Msg(static_cast<uint64_t>(129793)).GetKey(),
+      [this](const ObsData &d) {
+        HandleN2K_129793(UnpackObsData<Nmea2000Msg>(d));
+      });
 }
 
 bool AisDecoder::HandleN0183_AIS(const N0183MsgPtr &n0183_msg) {

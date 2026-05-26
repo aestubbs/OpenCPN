@@ -171,28 +171,28 @@ private:
   PriorityMap priority_map_satellites;
 
   //  comm event listeners
-  ObsListener m_n2k_129029_lstnr;
-  ObsListener m_n2k_129025_lstnr;
-  ObsListener m_n2k_129026_lstnr;
-  ObsListener m_n2k_127250_lstnr;
-  ObsListener m_n2k_127258_lstnr;
-  ObsListener m_n2k_129540_lstnr;
+  ObsConnection m_n2k_129029_lstnr;
+  ObsConnection m_n2k_129025_lstnr;
+  ObsConnection m_n2k_129026_lstnr;
+  ObsConnection m_n2k_127250_lstnr;
+  ObsConnection m_n2k_127258_lstnr;
+  ObsConnection m_n2k_129540_lstnr;
 
-  ObsListener m_n0183_rmc_lstnr;
-  ObsListener m_n0183_ths_lstnr;
-  ObsListener m_n0183_hdt_lstnr;
-  ObsListener m_n0183_hdg_lstnr;
-  ObsListener m_n0183_hdm_lstnr;
-  ObsListener m_n0183_hvd_lstnr;
-  ObsListener m_n0183_vtg_lstnr;
-  ObsListener m_n0183_gsv_lstnr;
-  ObsListener m_n0183_gga_lstnr;
-  ObsListener m_n0183_gll_lstnr;
-  ObsListener m_n0183_aivdo_lstnr;
+  ObsConnection m_n0183_rmc_lstnr;
+  ObsConnection m_n0183_ths_lstnr;
+  ObsConnection m_n0183_hdt_lstnr;
+  ObsConnection m_n0183_hdg_lstnr;
+  ObsConnection m_n0183_hdm_lstnr;
+  ObsConnection m_n0183_hvd_lstnr;
+  ObsConnection m_n0183_vtg_lstnr;
+  ObsConnection m_n0183_gsv_lstnr;
+  ObsConnection m_n0183_gga_lstnr;
+  ObsConnection m_n0183_gll_lstnr;
+  ObsConnection m_n0183_aivdo_lstnr;
 
-  ObsListener m_signal_k_lstnr;
+  ObsConnection m_signal_k_lstnr;
 
-  ObsListener m_driver_change_lstnr;
+  ObsConnection m_driver_change_lstnr;
 
   CommDecoder m_decoder;
 

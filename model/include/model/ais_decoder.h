@@ -203,23 +203,23 @@ private:
   AIS_Target_Name_Hash *AISTargetNamesC;
   AIS_Target_Name_Hash *AISTargetNamesNC;
 
-  ObsListener listener_N0183_VDM;
-  ObsListener listener_N0183_FRPOS;
-  ObsListener listener_N0183_CDDSC;
-  ObsListener listener_N0183_CDDSE;
-  ObsListener listener_N0183_TLL;
-  ObsListener listener_N0183_TTM;
-  ObsListener listener_N0183_OSD;
-  ObsListener listener_N0183_WPL;
-  ObsListener listener_SignalK;
+  ObsConnection listener_N0183_VDM;
+  ObsConnection listener_N0183_FRPOS;
+  ObsConnection listener_N0183_CDDSC;
+  ObsConnection listener_N0183_CDDSE;
+  ObsConnection listener_N0183_TLL;
+  ObsConnection listener_N0183_TTM;
+  ObsConnection listener_N0183_OSD;
+  ObsConnection listener_N0183_WPL;
+  ObsConnection listener_SignalK;
 
-  ObsListener listener_N2K_129038;
-  ObsListener listener_N2K_129039;
-  ObsListener listener_N2K_129041;
-  ObsListener listener_N2K_129794;
-  ObsListener listener_N2K_129809;
-  ObsListener listener_N2K_129810;
-  ObsListener listener_N2K_129793;
+  ObsConnection listener_N2K_129038;
+  ObsConnection listener_N2K_129039;
+  ObsConnection listener_N2K_129041;
+  ObsConnection listener_N2K_129794;
+  ObsConnection listener_N2K_129809;
+  ObsConnection listener_N2K_129810;
+  ObsConnection listener_N2K_129793;
 
   bool m_busy;
   QTimer TimerAIS;
