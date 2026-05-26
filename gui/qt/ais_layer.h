@@ -68,6 +68,7 @@ private:
                          // AIS reports -1 for "course/speed unavailable").
     QSGGeometryNode* sym = nullptr;  // the symbol shape (child of symbolXf)
     int shipType = -1;   // last applied; symbol/colour rebuilt when it changes
+    bool dangerous = false;  // last applied; symbol/predictor recoloured on flip
   };
 
   TargetNode buildTarget(const AisTarget& t, QQuickWindow* window);

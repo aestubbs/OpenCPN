@@ -45,6 +45,15 @@ struct AisTarget {
   double hdg = kHeadingUnavailable;    // heading, deg true (511 = N/A)
   int shipType = 0;                    // AIS ship-and-cargo type (0-99)
   QString name;
+
+  // CPA/TCPA solution vs own ship (mirrors wx AisTargetData; computed by
+  // ais_cpa.cpp). Valid only when cpaValid; -1 = not computed.
+  double rangeNm = -1.0;   // current range to target, NM
+  double bearingDeg = -1.0;// current bearing to target, deg true
+  double cpaNm = -1.0;     // closest point of approach, NM
+  double tcpaMin = -1.0;   // time to CPA, minutes (>=0 when valid)
+  bool cpaValid = false;   // CPA/TCPA solution available
+  bool dangerous = false;  // crosses the CPA/TCPA warning thresholds
 };
 
 struct OwnShipState {

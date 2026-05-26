@@ -108,6 +108,8 @@ qt_add_qml_module(opencpn-qt
     display_config.cpp
     ais_config.h
     ais_config.cpp
+    ais_cpa.h
+    ais_cpa.cpp
     route_defaults_config.h
     route_defaults_config.cpp
     ui_config.h

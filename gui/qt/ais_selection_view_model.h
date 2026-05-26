@@ -35,6 +35,12 @@ class AisSelectionViewModel : public QObject {
   Q_PROPERTY(QString positionText READ positionText NOTIFY changed)
   Q_PROPERTY(QString sogText READ sogText NOTIFY changed)
   Q_PROPERTY(QString cogText READ cogText NOTIFY changed)
+  // CPA/TCPA solution vs own ship (P-CPA). dangerous drives the popup accent.
+  Q_PROPERTY(QString rangeText READ rangeText NOTIFY changed)
+  Q_PROPERTY(QString bearingText READ bearingText NOTIFY changed)
+  Q_PROPERTY(QString cpaText READ cpaText NOTIFY changed)
+  Q_PROPERTY(QString tcpaText READ tcpaText NOTIFY changed)
+  Q_PROPERTY(bool dangerous READ dangerous NOTIFY changed)
 
 public:
   using QObject::QObject;
@@ -45,9 +51,17 @@ public:
   QString positionText() const;
   QString sogText() const;
   QString cogText() const;
+  QString rangeText() const;
+  QString bearingText() const;
+  QString cpaText() const;
+  QString tcpaText() const;
+  bool dangerous() const { return m_valid && m_target.dangerous; }
 
   /** Set the selected target (from a hit-test) and notify QML. */
   void select(const AisTarget& target);
+  /** Refresh the selected target's data (same MMSI) from a fresh snapshot, so
+   *  CPA/TCPA stay live while the popup is open. No-op if MMSI not present. */
+  void refresh(const QList<AisTarget>& targets);
   /** Clear the selection (close the popup). Invokable from QML. */
   Q_INVOKABLE void clear();
 

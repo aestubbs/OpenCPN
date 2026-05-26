@@ -19,6 +19,8 @@
 #include <QThread>
 #include <QTimer>
 
+#include "ais_config.h"
+#include "ais_cpa.h"
 #include "in_memory_ais_store.h"
 #include "sqlite_ais_store.h"
 #include "model/ais_decoder.h"
@@ -183,7 +185,13 @@ void ModelNavDataProvider::pollNetwork() {
 }
 
 QList<AisTarget> ModelNavDataProvider::aisTargets() const {
-  return m_ais_store->snapshot();  // thread-safe read
+  QList<AisTarget> list = m_ais_store->snapshot();  // thread-safe read
+  // Enrich with the CPA/TCPA solution vs the current own-ship fix, so every
+  // consumer (layer colouring, info popup) sees a consistent answer.
+  const OwnShipState own = m_own->get();
+  const AisConfig& cfg = AisConfig::instance();
+  for (AisTarget& t : list) computeCpa(own, t, cfg);
+  return list;
 }
 
 OwnShipState ModelNavDataProvider::ownShip() const {

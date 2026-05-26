@@ -55,6 +55,11 @@ AisCat catOf(int st) {
   return AisCat::Default;
 }
 
+// Dangerous targets (CPA/TCPA inside the warning thresholds) are drawn in a
+// vivid alert red, overriding their category colour -- mirrors wx's AIS alert
+// rendering.
+const QColor kDangerColor(255, 0, 0);
+
 QColor catColor(AisCat c) {
   switch (c) {
     case AisCat::Sailing:   return QColor(0, 150, 40);
@@ -76,8 +81,8 @@ bool isShip(AisCat c) {
 // Build the symbol shape for a category, pointing "north" (local -y), in
 // logical px. Big ships get an elongated hull; small craft a triangle (HSC
 // narrower). DrawTriangles only (Metal rejects fans).
-QSGGeometryNode* makeSymbol(AisCat cat) {
-  const QColor col = catColor(cat);
+QSGGeometryNode* makeSymbol(AisCat cat, bool dangerous) {
+  const QColor col = dangerous ? kDangerColor : catColor(cat);
   const float h = kSymbolPx;
   if (isShip(cat)) {
     auto* n = sg::makeFlatColorNode(col, QSGGeometry::DrawTriangles, 9);
@@ -107,7 +112,8 @@ AisLayer::TargetNode AisLayer::buildTarget(const AisTarget& t,
   // The symbolXf transform rotates it to the course and scales px -> world.
   tn.symbolXf = new QSGTransformNode();
   tn.shipType = t.shipType;
-  tn.sym = makeSymbol(catOf(t.shipType));
+  tn.dangerous = t.dangerous;
+  tn.sym = makeSymbol(catOf(t.shipType), t.dangerous);
   tn.symbolXf->appendChildNode(tn.sym);
   tn.pos->appendChildNode(tn.symbolXf);
 
@@ -153,19 +159,22 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
 
   const double wpp = worldPerPx();
   const bool course_changed = (t.cog != tn.cog) || (t.sog != tn.sog);
+  const bool danger_changed = (t.dangerous != tn.dangerous);
   const bool first = !tn.built;  // must always initialise the transforms
   tn.built = true;
 
   // Ship type often arrives after the first position report (static message),
-  // so rebuild the symbol shape/colour when it changes.
-  if (t.shipType != tn.shipType) {
+  // so rebuild the symbol shape/colour when it changes -- or when the
+  // dangerous state flips (category colour <-> alert red).
+  if (t.shipType != tn.shipType || danger_changed) {
     if (tn.sym) {
       tn.symbolXf->removeChildNode(tn.sym);
       delete tn.sym;
     }
-    tn.sym = makeSymbol(catOf(t.shipType));
+    tn.sym = makeSymbol(catOf(t.shipType), t.dangerous);
     tn.symbolXf->appendChildNode(tn.sym);
     tn.shipType = t.shipType;
+    tn.dangerous = t.dangerous;
   }
 
   // Symbol orientation + screen-fixed size: on first sight, course or zoom
@@ -181,7 +190,7 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
 
   // Predictor vector (world units, AA-line) -- rebuilt on course/speed
   // change. Drawn UNDER the symbol triangle so the marker stays on top.
-  if (course_changed || first) {
+  if (course_changed || danger_changed || first) {
     if (tn.predictor) {
       tn.pos->removeChildNode(tn.predictor);
       delete tn.predictor;
@@ -189,8 +198,9 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
     }
     const double len_deg = t.sog * (kPredictMinutes / 60.0) / 60.0;
     if (len_deg > 0.0) {
+      const QColor vc = t.dangerous ? kDangerColor : catColor(catOf(t.shipType));
       tn.predictor = makeAaLineNode({QPointF(0, 0), headingVec(t.cog) * len_deg},
-                                    catColor(catOf(t.shipType)), kVectorPx);
+                                    vc, kVectorPx);
       if (tn.predictor)
         tn.pos->insertChildNodeBefore(tn.predictor, tn.symbolXf);
     }

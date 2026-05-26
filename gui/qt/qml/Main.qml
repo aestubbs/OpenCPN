@@ -2516,8 +2516,12 @@ ApplicationWindow {
             x: 12
             y: 12
             padding: 14
+            readonly property bool danger: aisInfo.sel && aisInfo.sel.dangerous
             background: Rectangle {
-                color: "#ee101418"; radius: 8; border.color: "#5affffff"
+                color: "#ee101418"; radius: 8
+                // Red border + glow when the target is a CPA/TCPA threat.
+                border.color: aisInfo.danger ? "#ff3b30" : "#5affffff"
+                border.width: aisInfo.danger ? 2 : 1
             }
 
             ColumnLayout {
@@ -2526,8 +2530,10 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 12
                     Label {
-                        text: qsTr("AIS target")
-                        color: "#90ee90"; font.pointSize: 13; font.bold: true
+                        text: aisInfo.danger ? qsTr("⚠ AIS — CPA ALERT")
+                                             : qsTr("AIS target")
+                        color: aisInfo.danger ? "#ff453a" : "#90ee90"
+                        font.pointSize: 13; font.bold: true
                     }
                     Item { Layout.fillWidth: true }
                     ToolButton {
@@ -2552,6 +2558,17 @@ ApplicationWindow {
                     text: qsTr("SOG ") + (aisInfo.sel ? aisInfo.sel.sogText : "") +
                           qsTr("   COG ") + (aisInfo.sel ? aisInfo.sel.cogText : "")
                     color: "#e0e0e0"; font.pointSize: 11
+                }
+                Label {
+                    text: qsTr("RNG ") + (aisInfo.sel ? aisInfo.sel.rangeText : "") +
+                          qsTr("   BRG ") + (aisInfo.sel ? aisInfo.sel.bearingText : "")
+                    color: "#e0e0e0"; font.pointSize: 11
+                }
+                Label {
+                    text: qsTr("CPA ") + (aisInfo.sel ? aisInfo.sel.cpaText : "") +
+                          qsTr("   TCPA ") + (aisInfo.sel ? aisInfo.sel.tcpaText : "")
+                    color: aisInfo.danger ? "#ff8c80" : "#e0e0e0"
+                    font.pointSize: 11; font.bold: aisInfo.danger
                 }
             }
         }

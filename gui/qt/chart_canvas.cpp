@@ -245,6 +245,9 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // active track recorder (#29) -- append each fresh own-ship fix.
   connect(m_nav_provider.get(), &NavDataProvider::dynamicChanged, this,
           [this]() {
+            // Keep the open AIS info popup's CPA/TCPA live as the fix updates.
+            if (m_ais_selection && m_ais_selection->valid())
+              m_ais_selection->refresh(m_nav_provider->aisTargets());
             // Track recording is handled by the model ActiveTrack itself
             // (its own timer off the own-ship fix); here we only follow.
             if (!m_follow_own_ship) return;
