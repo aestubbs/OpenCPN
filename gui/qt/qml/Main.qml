@@ -2119,6 +2119,10 @@ ApplicationWindow {
         height: 420
         color: palette.window
 
+        // Source filter ("" = all). Lets you isolate one connection to see if
+        // it is delivering -- e.g. select the N2000 source to check it.
+        property string srcFilter: ""
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 8
@@ -2130,6 +2134,14 @@ ApplicationWindow {
                     text: qsTr("Pause")
                     checked: chart.nmeaMonitor.paused
                     onToggled: chart.nmeaMonitor.paused = checked
+                }
+                Label { text: qsTr("Source:") }
+                ComboBox {
+                    id: srcCombo
+                    Layout.preferredWidth: 240
+                    model: [qsTr("All")].concat(chart.nmeaMonitor.sources)
+                    onActivated: dataMonitorWindow.srcFilter =
+                                 (currentIndex === 0 ? "" : currentText)
                 }
                 Item { Layout.fillWidth: true }
                 Label {
@@ -2152,7 +2164,13 @@ ApplicationWindow {
                     model: ListModel { id: monModel }
                     delegate: Text {
                         required property string line
+                        required property string src
+                        readonly property bool shown:
+                            dataMonitorWindow.srcFilter === "" ||
+                            dataMonitorWindow.srcFilter === src
                         width: monView.width
+                        height: shown ? implicitHeight : 0
+                        visible: shown
                         text: line
                         font.family: "monospace"
                         font.pointSize: 11
@@ -2165,8 +2183,8 @@ ApplicationWindow {
 
         Connections {
             target: chart.nmeaMonitor
-            function onLineReceived(line) {
-                monModel.append({ "line": line })
+            function onLineReceived(line, source) {
+                monModel.append({ "line": line, "src": source })
                 if (monModel.count > 1000) monModel.remove(0)
                 monView.positionViewAtEnd()  // auto-scroll
             }

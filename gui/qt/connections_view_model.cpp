@@ -23,11 +23,41 @@
 #include "config_store.h"
 #include "model/comm_bridge.h"
 #include "model/comm_drv_factory.h"
+#include "model/comm_drv_registry.h"
+#include "model/comm_navmsg.h"
 #include "model/conn_params.h"
 
 namespace {
 constexpr char kConfigKey[] = "connections";
+
+// The message bus a connection's driver registers on, by data protocol index.
+NavAddr::Bus busForProto(int dataProto) {
+  switch (dataProto) {
+    case 1: return NavAddr::Bus::N2000;
+    case 2: return NavAddr::Bus::Signalk;
+    default: return NavAddr::Bus::N0183;
+  }
 }
+
+// Build the ConnectionParams for a connection -- shared by start (apply) and
+// stop (disable) so the driver's iface key matches exactly.
+ConnectionParams paramsFor(int netProto, const QString& address, int port,
+                           int dataProto) {
+  ConnectionParams params;
+  params.Type = NETWORK;
+  params.NetProtocol = (netProto == 1) ? UDP : TCP;
+  params.NetworkAddress = wxString(address.toUtf8().constData());
+  params.NetworkPort = port;
+  switch (dataProto) {
+    case 1: params.Protocol = PROTO_NMEA2000; break;
+    case 2: params.Protocol = PROTO_SIGNALK; break;
+    default: params.Protocol = PROTO_NMEA0183; break;
+  }
+  params.IOSelect = DS_TYPE_INPUT;
+  params.bEnabled = true;
+  return params;
+}
+}  // namespace
 
 namespace ocpn::qtui {
 
@@ -126,6 +156,7 @@ void ConnectionsViewModel::addConnection(int netProto, const QString& address,
 
 void ConnectionsViewModel::removeConnection(int index) {
   if (index < 0 || index >= m_conns.size()) return;
+  if (m_conns[index].enabled) disable(index);  // stop its driver first
   m_conns.removeAt(index);
   save();
   Q_EMIT changed();
@@ -134,7 +165,10 @@ void ConnectionsViewModel::removeConnection(int index) {
 void ConnectionsViewModel::setEnabled(int index, bool on) {
   if (index < 0 || index >= m_conns.size()) return;
   m_conns[index].enabled = on;
-  if (on) apply(index);
+  if (on)
+    apply(index);
+  else
+    disable(index);  // tear the driver down so the feed stops
   save();
   Q_EMIT changed();
   if (on) Q_EMIT activated();
@@ -148,21 +182,27 @@ void ConnectionsViewModel::apply(int index) {
   // globals is alive (AisDecoder is booted in nav_core).
   CommBridge::GetInstance();
 
-  ConnectionParams params;
-  params.Type = NETWORK;
-  params.NetProtocol = (c.netProto == 1) ? UDP : TCP;
-  params.NetworkAddress = wxString(c.address.toUtf8().constData());
-  params.NetworkPort = c.port;
-  switch (c.dataProto) {
-    case 1: params.Protocol = PROTO_NMEA2000; break;
-    case 2: params.Protocol = PROTO_SIGNALK; break;
-    default: params.Protocol = PROTO_NMEA0183; break;
-  }
-  params.IOSelect = DS_TYPE_INPUT;
-  params.bEnabled = true;
+  ConnectionParams params = paramsFor(c.netProto, c.address, c.port, c.dataProto);
   qInfo("Connection: opening %s %s:%d proto=%d", c.netProto == 1 ? "UDP" : "TCP",
         c.address.toUtf8().constData(), c.port, c.dataProto);
   MakeCommDriver(&params);  // creates + registers + starts (async, retries)
+}
+
+void ConnectionsViewModel::disable(int index) {
+  const Conn& c = m_conns[index];
+  if (c.address.isEmpty() || c.port <= 0) return;
+  // Match the running driver by its iface key (== GetStrippedDSPort) + bus and
+  // deactivate it -- which erases the unique_ptr and tears down the socket so
+  // the feed actually stops.
+  const ConnectionParams params =
+      paramsFor(c.netProto, c.address, c.port, c.dataProto);
+  const std::string iface = params.GetStrippedDSPort();
+  auto& reg = CommDriverRegistry::GetInstance();
+  DriverPtr& d = FindDriver(reg.GetDrivers(), iface, busForProto(c.dataProto));
+  if (d) {
+    qInfo("Connection: closing %s", iface.c_str());
+    reg.Deactivate(d);
+  }
 }
 
 }  // namespace ocpn::qtui

@@ -29,6 +29,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 class DataMonitorSrc;
 
@@ -38,6 +39,11 @@ class NmeaMonitorModel : public QObject {
   Q_OBJECT
   // When paused, incoming lines are dropped (the view freezes).
   Q_PROPERTY(bool paused READ paused WRITE setPaused NOTIFY pausedChanged)
+  // Distinct message sources seen so far (e.g. "N0183 192.168.3.10:2000",
+  // "N2000 192.168.3.10:1457"), so the view can filter by connection. A source
+  // that never delivers a message never appears here -- which itself shows a
+  // connection isn't producing data.
+  Q_PROPERTY(QStringList sources READ sources NOTIFY sourcesChanged)
 
 public:
   explicit NmeaMonitorModel(QObject* parent = nullptr);
@@ -45,15 +51,18 @@ public:
 
   bool paused() const { return m_paused; }
   void setPaused(bool on);
+  QStringList sources() const { return m_sources; }
 
 Q_SIGNALS:
-  /** One decoded message, formatted "HH:mm:ss  <sentence/PGN>". */
-  void lineReceived(const QString& line);
+  /** One decoded message: text "HH:mm:ss  <sentence/PGN>" + its source tag. */
+  void lineReceived(const QString& line, const QString& source);
   void pausedChanged();
+  void sourcesChanged();
 
 private:
   std::unique_ptr<DataMonitorSrc> m_src;
   bool m_paused = false;
+  QStringList m_sources;
 };
 
 }  // namespace ocpn::qtui

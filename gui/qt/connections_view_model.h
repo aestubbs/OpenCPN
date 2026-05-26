@@ -62,9 +62,10 @@ Q_SIGNALS:
   void activated();
 
 private:
-  void apply(int index);  // build ConnectionParams + MakeCommDriver
-  void load();            // read the persisted list from the config store
-  void save() const;      // write the list to the config store
+  void apply(int index);    // build ConnectionParams + MakeCommDriver
+  void disable(int index);  // find the running driver + Deactivate (stop) it
+  void load();              // read the persisted list from the config store
+  void save() const;        // write the list to the config store
 
   struct Conn {
     int netProto = 0;   // TCP/UDP
