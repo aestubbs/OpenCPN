@@ -40,6 +40,7 @@
 
 #include "app_controller.h"
 #include "nav_core.h"
+#include "own_ship_config.h"
 #include "s52_engine.h"
 #if defined(Q_OS_MACOS)
 #include "macos_titlebar.h"
@@ -106,6 +107,8 @@ int main(int argc, char* argv[]) {
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty("s52", &s52);
   engine.rootContext()->setContextProperty("app", &appController);
+  engine.rootContext()->setContextProperty(
+      "ownShip", &ocpn::qtui::OwnShipConfig::instance());
   // Runtime Qt version string for the About dialog.
   engine.rootContext()->setContextProperty(
       "qtRuntimeVersion", QString::fromLatin1(qVersion()));

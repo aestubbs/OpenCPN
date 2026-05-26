@@ -103,6 +103,8 @@ qt_add_qml_module(opencpn-qt
     connections_view_model.cpp
     config_store.h
     config_store.cpp
+    own_ship_config.h
+    own_ship_config.cpp
     nmea_monitor_model.h
     nmea_monitor_model.cpp
     wind_decoder.h

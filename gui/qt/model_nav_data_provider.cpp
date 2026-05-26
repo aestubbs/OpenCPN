@@ -32,6 +32,7 @@
 #include "model/routeman.h"
 #include "model/track.h"
 #include "nav_feed_worker.h"
+#include "own_ship_config.h"
 #include "own_ship_holder.h"
 #include "wind_decoder.h"
 #include "wx/string.h"
@@ -138,8 +139,10 @@ void ModelNavDataProvider::setModelPolling(bool on) {
 void ModelNavDataProvider::mirrorTargets() {
   if (!g_pAIS) return;
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  const int own_mmsi = OwnShipConfig::instance().mmsiValue();
   for (const auto& [mmsi, td] : g_pAIS->GetTargetList()) {
     if (!td || td->b_lost || td->b_removed) continue;
+    if (own_mmsi != 0 && td->MMSI == own_mmsi) continue;  // own vessel
     if (!finitePos(td->Lat, td->Lon)) continue;
     AisTarget t;
     t.mmsi = td->MMSI;

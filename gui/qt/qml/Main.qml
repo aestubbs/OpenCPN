@@ -339,36 +339,126 @@ ApplicationWindow {
     Window {
         id: optionsWindow
         flags: Qt.Dialog
-        width: 540
-        height: 460
+        // macOS shows a wider window (sidebar + pane), like System Settings.
+        // Other platforms get the compact top-tab layout.
+        width: optionsWindow.useSidebar ? 720 : 540
+        height: 480
         // Non-resizable, as macOS settings windows are.
         minimumWidth: width; maximumWidth: width
         minimumHeight: height; maximumHeight: height
         color: palette.window
-        title: qsTr("Options") +
-               (optTabs.currentItem ? " — " + optTabs.currentItem.text : "")
+
+        // --- Options framework ------------------------------------------
+        // The pages are shared across platforms; only the navigation chrome
+        // changes -- a left sidebar (macOS System-Settings style) vs. a top
+        // tab bar (Windows/Linux). `currentPage` is the single source of
+        // truth that both chromes drive and the content StackLayout follows.
+        readonly property bool useSidebar: Qt.platform.os === "osx"
+        property int currentPage: 0
+        // Page metadata for the sidebar (title + glyph + accent colour, in the
+        // spirit of macOS System Settings' coloured icons). Order matches the
+        // content StackLayout below.
+        readonly property var pages: [
+            { title: qsTr("Display"),     glyph: "▦", accent: "#3478f6" },
+            { title: qsTr("Charts"),      glyph: "◈", accent: "#34c759" },
+            { title: qsTr("Connections"), glyph: "⇄", accent: "#ff9500" },
+            { title: qsTr("Ships"),       glyph: "⚓", accent: "#30b0c7" },
+            { title: qsTr("Plugins"),     glyph: "▣", accent: "#af52de" }
+        ]
+        title: qsTr("Options") + " — " + pages[currentPage].title
 
         ColumnLayout {
             anchors.fill: parent
             spacing: 0
 
-            // Centred preference-style tab toolbar (content-sized, not a
-            // full-width bar).
+            // Top tab bar -- the Windows/Linux chrome. Hidden on macOS.
             TabBar {
                 id: optTabs
+                visible: !optionsWindow.useSidebar
                 Layout.alignment: Qt.AlignHCenter
                 Layout.topMargin: 6
-                TabButton { text: qsTr("Display"); width: implicitWidth }
-                TabButton { text: qsTr("Charts"); width: implicitWidth }
-                TabButton { text: qsTr("Connections"); width: implicitWidth }
-                TabButton { text: qsTr("Ships"); width: implicitWidth }
-                TabButton { text: qsTr("Plugins"); width: implicitWidth }
+                currentIndex: optionsWindow.currentPage
+                onCurrentIndexChanged: optionsWindow.currentPage = currentIndex
+                Repeater {
+                    model: optionsWindow.pages
+                    TabButton {
+                        required property var modelData
+                        text: modelData.title
+                        width: implicitWidth
+                    }
+                }
             }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 0
+
+                // Left sidebar -- the macOS chrome. Hidden elsewhere.
+                Rectangle {
+                    visible: optionsWindow.useSidebar
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 200
+                    // Subtle inset-sidebar tone, like System Settings.
+                    color: Qt.darker(palette.window, 1.04)
+                    border.width: 0
+
+                    ListView {
+                        id: sidebar
+                        anchors.fill: parent
+                        anchors.topMargin: 12
+                        anchors.bottomMargin: 12
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        clip: true
+                        interactive: false
+                        spacing: 2
+                        model: optionsWindow.pages
+                        currentIndex: optionsWindow.currentPage
+                        delegate: ItemDelegate {
+                            required property var modelData
+                            required property int index
+                            width: ListView.view.width
+                            height: 34
+                            onClicked: optionsWindow.currentPage = index
+                            background: Rectangle {
+                                radius: 6
+                                color: index === optionsWindow.currentPage
+                                       ? palette.highlight
+                                       : (hovered ? Qt.rgba(0.5, 0.5, 0.5, 0.12)
+                                                  : "transparent")
+                            }
+                            contentItem: RowLayout {
+                                spacing: 9
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    width: 22; height: 22; radius: 5
+                                    color: modelData.accent
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: modelData.glyph
+                                        color: "white"
+                                        font.pointSize: 12
+                                    }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: modelData.title
+                                    elide: Text.ElideRight
+                                    color: index === optionsWindow.currentPage
+                                           ? palette.highlightedText
+                                           : palette.windowText
+                                }
+                            }
+                        }
+                    }
+                }
 
             StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: optTabs.currentIndex
+                currentIndex: optionsWindow.currentPage
 
                 // --- Display (general) ---
                 Item {
@@ -552,19 +642,93 @@ ApplicationWindow {
                     }
                 }
 
-                // --- Ships (placeholder) ---
+                // --- Ships: own-ship identity + AIS sub-screens ---
+                // Demonstrates a page with internal sub-screens (the
+                // "General -> About" pattern). The sub-tabs live inside the
+                // page, so they travel with it across both chromes.
                 Item {
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 20
-                        spacing: 8
-                        Label { text: qsTr("Own ship & AIS"); font.bold: true }
-                        Label {
-                            text: qsTr("Own-ship dimensions, AIS display and CPA/TCPA settings are not yet wired in.")
-                            wrapMode: Text.Wrap; Layout.fillWidth: true
-                            color: palette.placeholderText
+                        spacing: 12
+
+                        TabBar {
+                            id: shipsSubTabs
+                            Layout.fillWidth: true
+                            TabButton { text: qsTr("Own ship") }
+                            TabButton { text: qsTr("AIS Targets") }
                         }
-                        Item { Layout.fillHeight: true }
+
+                        StackLayout {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            currentIndex: shipsSubTabs.currentIndex
+
+                            // Own ship: vessel identity (name + MMSI). The MMSI
+                            // also drives self-exclusion from the AIS display.
+                            Item {
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+                                    Label { text: qsTr("Vessel identity"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8
+                                        rowSpacing: 8
+                                        Layout.fillWidth: true
+
+                                        Label {
+                                            text: qsTr("Vessel name:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            Layout.fillWidth: true
+                                            text: ownShip.vesselName
+                                            placeholderText: qsTr("e.g. Serenity")
+                                            selectByMouse: true
+                                            onEditingFinished: ownShip.vesselName = text
+                                        }
+                                        Label {
+                                            text: qsTr("MMSI:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            Layout.fillWidth: true
+                                            text: ownShip.mmsi
+                                            placeholderText: qsTr("nine digits")
+                                            inputMethodHints: Qt.ImhDigitsOnly
+                                            maximumLength: 9
+                                            validator: RegularExpressionValidator {
+                                                regularExpression: /[0-9]{0,9}/
+                                            }
+                                            selectByMouse: true
+                                            onEditingFinished: ownShip.mmsi = text
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Your own MMSI is hidden from the AIS display — we already plot your position from the GPS fix.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                    Item { Layout.fillHeight: true }
+                                }
+                            }
+
+                            // AIS Targets: display options (placeholder for now).
+                            Item {
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+                                    Label { text: qsTr("AIS target display"); font.bold: true }
+                                    Label {
+                                        text: qsTr("AIS display, CPA/TCPA alarms and target filtering are not yet wired in.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText
+                                    }
+                                    Item { Layout.fillHeight: true }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -583,6 +747,7 @@ ApplicationWindow {
                         Item { Layout.fillHeight: true }
                     }
                 }
+            }
             }
         }
     }
