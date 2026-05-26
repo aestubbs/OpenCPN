@@ -35,6 +35,10 @@ public:
   void setString(const QString& key, const QString& value);
   int getInt(const QString& key, int def) const;
   void setInt(const QString& key, int value);
+  bool getBool(const QString& key, bool def) const;
+  void setBool(const QString& key, bool value);
+  double getDouble(const QString& key, double def) const;
+  void setDouble(const QString& key, double value);
 
 private:
   ConfigStore();

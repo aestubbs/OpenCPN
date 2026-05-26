@@ -14,6 +14,7 @@ import QtQuick
 import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 import opencpn.qt
 
@@ -111,6 +112,36 @@ ApplicationWindow {
                 text: qsTr("Buoys & beacons")
                 checked: chart.showBuoys
                 onToggled: chart.showBuoys = checked
+            }
+
+            MenuSeparator { Layout.fillWidth: true }
+
+            // Quick display: the common view controls, shared with the
+            // Options > Display page via the `display` backend.
+            Label { text: qsTr("Quick display"); font.bold: true }
+            CheckBox {
+                text: qsTr("Follow own ship")
+                checked: chart.followOwnShip
+                onToggled: chart.followOwnShip = checked
+            }
+            CheckBox {
+                text: qsTr("Compass window")
+                checked: DisplayConfig.showCompass
+                onToggled: DisplayConfig.showCompass = checked
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Label { text: qsTr("Orientation:") }
+                RadioButton {
+                    text: qsTr("N-Up")
+                    checked: DisplayConfig.navMode === 0
+                    onClicked: DisplayConfig.navMode = 0
+                }
+                RadioButton {
+                    text: qsTr("C-Up")
+                    checked: DisplayConfig.navMode === 1
+                    onClicked: DisplayConfig.navMode = 1
+                }
             }
             Item { Layout.fillHeight: true }
         }
@@ -342,7 +373,7 @@ ApplicationWindow {
         // macOS shows a wider window (sidebar + pane), like System Settings.
         // Other platforms get the compact top-tab layout.
         width: optionsWindow.useSidebar ? 720 : 540
-        height: 480
+        height: 520
         // Non-resizable, as macOS settings windows are.
         minimumWidth: width; maximumWidth: width
         minimumHeight: height; maximumHeight: height
@@ -460,29 +491,327 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 currentIndex: optionsWindow.currentPage
 
-                // --- Display (general) ---
+                // --- Display: General / Units / Advanced sub-tabs, mirroring
+                //     the wx Options > Display notebook. All controls bind to
+                //     the shared `display` (DisplayConfig) backend except the
+                //     Qt-specific demo/debug toggles and follow (on `chart`).
                 Item {
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 20
-                        spacing: 8
-                        Label { text: qsTr("General"); font.bold: true }
-                        CheckBox {
-                            text: qsTr("Auto-follow own ship")
-                            checked: chart.followOwnShip
-                            onToggled: chart.followOwnShip = checked
+                        spacing: 12
+
+                        TabBar {
+                            id: displaySubTabs
+                            Layout.fillWidth: true
+                            TabButton { text: qsTr("General") }
+                            TabButton { text: qsTr("Units") }
+                            TabButton { text: qsTr("Advanced") }
                         }
-                        CheckBox {
-                            text: qsTr("Demo nav data (Hakefjord replay)")
-                            checked: chart.demoMode
-                            onToggled: chart.demoMode = checked
+
+                        StackLayout {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            currentIndex: displaySubTabs.currentIndex
+
+                            // --- General ---
+                            ScrollView {
+                                id: genScroll
+                                clip: true
+                                ColumnLayout {
+                                    width: genScroll.availableWidth
+                                    spacing: 8
+
+                                    Label { text: qsTr("Navigation"); font.bold: true }
+                                    RowLayout {
+                                        Label { text: qsTr("Chart orientation:") }
+                                        RadioButton {
+                                            text: qsTr("North-Up")
+                                            checked: DisplayConfig.navMode === 0
+                                            onClicked: DisplayConfig.navMode = 0
+                                        }
+                                        RadioButton {
+                                            text: qsTr("Course-Up")
+                                            checked: DisplayConfig.navMode === 1
+                                            onClicked: DisplayConfig.navMode = 1
+                                        }
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Auto-follow own ship")
+                                        checked: chart.followOwnShip
+                                        onToggled: chart.followOwnShip = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Look ahead while following")
+                                        checked: DisplayConfig.lookAhead
+                                        onToggled: DisplayConfig.lookAhead = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Preserve scale on chart switch")
+                                        checked: DisplayConfig.preserveScaleOnSwitch
+                                        onToggled: DisplayConfig.preserveScaleOnSwitch = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Display & controls"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Show compass / GPS window")
+                                        checked: DisplayConfig.showCompass
+                                        onToggled: DisplayConfig.showCompass = checked
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: qsTr("Mouse-wheel zoom:") }
+                                        Slider {
+                                            Layout.fillWidth: true
+                                            from: 1.1; to: 2.0; stepSize: 0.05
+                                            value: DisplayConfig.wheelZoomFactor
+                                            onMoved: DisplayConfig.wheelZoomFactor = value
+                                        }
+                                        Label {
+                                            text: DisplayConfig.wheelZoomFactor.toFixed(2) + "×"
+                                            font.family: "monospace"
+                                        }
+                                    }
+                                    RowLayout {
+                                        Label { text: qsTr("Time display:") }
+                                        RadioButton {
+                                            text: qsTr("UTC")
+                                            checked: DisplayConfig.timeZone === 0
+                                            onClicked: DisplayConfig.timeZone = 0
+                                        }
+                                        RadioButton {
+                                            text: qsTr("Local")
+                                            checked: DisplayConfig.timeZone === 1
+                                            onClicked: DisplayConfig.timeZone = 1
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Own-ship vectors"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("COG/SOG predictor (min):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 1; to: 60
+                                            value: Math.round(DisplayConfig.cogPredictorMinutes)
+                                            onValueModified: DisplayConfig.cogPredictorMinutes = value
+                                        }
+                                        Label {
+                                            text: qsTr("SOG/COG damping (s):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 30
+                                            value: Math.round(DisplayConfig.sogCogDampingSeconds)
+                                            onValueModified: DisplayConfig.sogCogDampingSeconds = value
+                                        }
+                                        Label {
+                                            text: qsTr("Default boat speed (kn):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 1; to: 60
+                                            value: Math.round(DisplayConfig.defaultBoatSpeed)
+                                            onValueModified: DisplayConfig.defaultBoatSpeed = value
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Prototype (Qt-only)"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Demo nav data (Hakefjord replay)")
+                                        checked: chart.demoMode
+                                        onToggled: chart.demoMode = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Show debug overlay")
+                                        checked: root.showDebug
+                                        onToggled: root.showDebug = checked
+                                    }
+                                }
+                            }
+
+                            // --- Units ---
+                            ScrollView {
+                                id: unitsScroll
+                                clip: true
+                                ColumnLayout {
+                                    width: unitsScroll.availableWidth
+                                    spacing: 8
+                                    Label { text: qsTr("Units"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+
+                                        Label {
+                                            text: qsTr("Distance:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Nautical miles"), qsTr("Kilometres"),
+                                                    qsTr("Statute miles")]
+                                            currentIndex: DisplayConfig.distanceUnit
+                                            onActivated: DisplayConfig.distanceUnit = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Speed:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Knots"), qsTr("km/h"), qsTr("mph")]
+                                            currentIndex: DisplayConfig.speedUnit
+                                            onActivated: DisplayConfig.speedUnit = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Wind speed:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Knots"), qsTr("m/s"), qsTr("km/h"),
+                                                    qsTr("mph")]
+                                            currentIndex: DisplayConfig.windUnit
+                                            onActivated: DisplayConfig.windUnit = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Depth:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Metres"), qsTr("Feet"), qsTr("Fathoms")]
+                                            currentIndex: DisplayConfig.depthUnit
+                                            onActivated: DisplayConfig.depthUnit = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Height:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Metres"), qsTr("Feet")]
+                                            currentIndex: DisplayConfig.heightUnit
+                                            onActivated: DisplayConfig.heightUnit = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Temperature:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Celsius"), qsTr("Fahrenheit")]
+                                            currentIndex: DisplayConfig.tempUnit
+                                            onActivated: DisplayConfig.tempUnit = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Lat/Lon format:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Degrees, decimal minutes"),
+                                                    qsTr("Degrees, minutes, seconds"),
+                                                    qsTr("Decimal degrees")]
+                                            currentIndex: DisplayConfig.latLonFormat
+                                            onActivated: DisplayConfig.latLonFormat = currentIndex
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Bearings"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Show magnetic bearings")
+                                        checked: DisplayConfig.showMagneticBearings
+                                        onToggled: DisplayConfig.showMagneticBearings = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Use my own magnetic variation")
+                                        enabled: DisplayConfig.showMagneticBearings
+                                        checked: DisplayConfig.useUserMagVar
+                                        onToggled: DisplayConfig.useUserMagVar = checked
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        enabled: DisplayConfig.showMagneticBearings && DisplayConfig.useUserMagVar
+                                        Label { text: qsTr("Variation (°, E +):") }
+                                        TextField {
+                                            implicitWidth: 80
+                                            text: DisplayConfig.userMagVar.toFixed(1)
+                                            inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                            validator: DoubleValidator { bottom: -180; top: 180; decimals: 1 }
+                                            selectByMouse: true
+                                            onEditingFinished: DisplayConfig.userMagVar = parseFloat(text)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // --- Advanced ---
+                            ScrollView {
+                                id: advScroll
+                                clip: true
+                                ColumnLayout {
+                                    width: advScroll.availableWidth
+                                    spacing: 8
+                                    Label { text: qsTr("Advanced"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("De-skew raster charts")
+                                        checked: DisplayConfig.deskewRaster
+                                        onToggled: DisplayConfig.deskewRaster = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Responsive / touch sizing")
+                                        checked: DisplayConfig.responsiveSizing
+                                        onToggled: DisplayConfig.responsiveSizing = checked
+                                    }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Course-up averaging (s):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 30
+                                            value: Math.round(DisplayConfig.chartRotationAveraging)
+                                            onValueModified: DisplayConfig.chartRotationAveraging = value
+                                        }
+                                        Label {
+                                            text: qsTr("Screen width (mm, 0 = auto):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 1200
+                                            value: Math.round(DisplayConfig.screenMmWidth)
+                                            onValueModified: DisplayConfig.screenMmWidth = value
+                                        }
+                                    }
+                                    MenuSeparator { Layout.fillWidth: true }
+                                    Label {
+                                        text: qsTr("OpenGL acceleration, texture caching and the " +
+                                                   "quilting on/off switch from the wx dialog do not " +
+                                                   "apply: the Qt build always renders through the GPU " +
+                                                   "scene graph and always quilts.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                }
+                            }
                         }
-                        CheckBox {
-                            text: qsTr("Show debug overlay")
-                            checked: root.showDebug
-                            onToggled: root.showDebug = checked
-                        }
-                        Item { Layout.fillHeight: true }
                     }
                 }
 
@@ -657,6 +986,20 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             TabButton { text: qsTr("Own ship") }
                             TabButton { text: qsTr("AIS Targets") }
+                            TabButton { text: qsTr("MMSI") }
+                            TabButton { text: qsTr("Routes/Points") }
+                        }
+
+                        // Colour pickers shared by the Routes/Points sub-tab.
+                        ColorDialog {
+                            id: routeColorDialog
+                            selectedColor: RouteDefaultsConfig.routeColor
+                            onAccepted: RouteDefaultsConfig.routeColor = selectedColor
+                        }
+                        ColorDialog {
+                            id: trackColorDialog
+                            selectedColor: RouteDefaultsConfig.trackColor
+                            onAccepted: RouteDefaultsConfig.trackColor = selectedColor
                         }
 
                         StackLayout {
@@ -664,11 +1007,12 @@ ApplicationWindow {
                             Layout.fillHeight: true
                             currentIndex: shipsSubTabs.currentIndex
 
-                            // Own ship: vessel identity (name + MMSI). The MMSI
-                            // also drives self-exclusion from the AIS display.
-                            Item {
+                            // --- Own ship: identity + display attributes. ---
+                            ScrollView {
+                                id: ownShipScroll
+                                clip: true
                                 ColumnLayout {
-                                    anchors.fill: parent
+                                    width: ownShipScroll.availableWidth
                                     spacing: 8
                                     Label { text: qsTr("Vessel identity"); font.bold: true }
                                     GridLayout {
@@ -683,10 +1027,10 @@ ApplicationWindow {
                                         }
                                         TextField {
                                             Layout.fillWidth: true
-                                            text: ownShip.vesselName
+                                            text: OwnShipConfig.vesselName
                                             placeholderText: qsTr("e.g. Serenity")
                                             selectByMouse: true
-                                            onEditingFinished: ownShip.vesselName = text
+                                            onEditingFinished: OwnShipConfig.vesselName = text
                                         }
                                         Label {
                                             text: qsTr("MMSI:")
@@ -694,7 +1038,7 @@ ApplicationWindow {
                                         }
                                         TextField {
                                             Layout.fillWidth: true
-                                            text: ownShip.mmsi
+                                            text: OwnShipConfig.mmsi
                                             placeholderText: qsTr("nine digits")
                                             inputMethodHints: Qt.ImhDigitsOnly
                                             maximumLength: 9
@@ -702,7 +1046,7 @@ ApplicationWindow {
                                                 regularExpression: /[0-9]{0,9}/
                                             }
                                             selectByMouse: true
-                                            onEditingFinished: ownShip.mmsi = text
+                                            onEditingFinished: OwnShipConfig.mmsi = text
                                         }
                                     }
                                     Label {
@@ -710,22 +1054,508 @@ ApplicationWindow {
                                         wrapMode: Text.Wrap; Layout.fillWidth: true
                                         color: palette.placeholderText; font.pointSize: 11
                                     }
-                                    Item { Layout.fillHeight: true }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Display"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Ship icon:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Default symbol"),
+                                                    qsTr("Real-scale bitmap"),
+                                                    qsTr("Real-scale vector")]
+                                            currentIndex: OwnShipConfig.iconType
+                                            onActivated: OwnShipConfig.iconType = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Length overall (m):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 500
+                                            value: Math.round(OwnShipConfig.loa)
+                                            onValueModified: OwnShipConfig.loa = value
+                                        }
+                                        Label {
+                                            text: qsTr("Beam (m):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 100
+                                            value: Math.round(OwnShipConfig.beam)
+                                            onValueModified: OwnShipConfig.beam = value
+                                        }
+                                        Label {
+                                            text: qsTr("GPS offset from bow (m):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 500
+                                            value: Math.round(OwnShipConfig.gpsOffsetY)
+                                            onValueModified: OwnShipConfig.gpsOffsetY = value
+                                        }
+                                        Label {
+                                            text: qsTr("GPS offset from port (m):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 100
+                                            value: Math.round(OwnShipConfig.gpsOffsetX)
+                                            onValueModified: OwnShipConfig.gpsOffsetX = value
+                                        }
+                                        Label {
+                                            text: qsTr("Min screen size (mm):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 100
+                                            value: Math.round(OwnShipConfig.minScreenSize)
+                                            onValueModified: OwnShipConfig.minScreenSize = value
+                                        }
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Show direction to active waypoint")
+                                        checked: OwnShipConfig.showWaypointDirection
+                                        onToggled: OwnShipConfig.showWaypointDirection = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Range rings"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Show range rings")
+                                        checked: OwnShipConfig.showRangeRings
+                                        onToggled: OwnShipConfig.showRangeRings = checked
+                                    }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        enabled: OwnShipConfig.showRangeRings
+                                        Label {
+                                            text: qsTr("Number of rings:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 10
+                                            value: OwnShipConfig.ringCount
+                                            onValueModified: OwnShipConfig.ringCount = value
+                                        }
+                                        Label {
+                                            text: qsTr("Ring spacing:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 1; to: 100
+                                            value: Math.round(OwnShipConfig.ringSpacing)
+                                            onValueModified: OwnShipConfig.ringSpacing = value
+                                        }
+                                        Label {
+                                            text: qsTr("Ring unit:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Nautical miles"), qsTr("Kilometres"),
+                                                    qsTr("Statute miles")]
+                                            currentIndex: OwnShipConfig.ringUnit
+                                            onActivated: OwnShipConfig.ringUnit = currentIndex
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Real-scale icon, GPS offsets and range rings are saved; the own-ship marker is a fixed symbol until those render paths land.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
                                 }
                             }
 
-                            // AIS Targets: display options (placeholder for now).
+                            // --- AIS Targets: CPA/TCPA, lost, display, alerts. ---
+                            ScrollView {
+                                id: aisScroll
+                                clip: true
+                                ColumnLayout {
+                                    width: aisScroll.availableWidth
+                                    spacing: 8
+
+                                    Label { text: qsTr("CPA / TCPA"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Max target range (NM):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            implicitWidth: 90
+                                            text: AisConfig.cpaMaxRangeNm.toFixed(1)
+                                            validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
+                                            selectByMouse: true
+                                            onEditingFinished: AisConfig.cpaMaxRangeNm = parseFloat(text)
+                                        }
+                                        Label {
+                                            text: qsTr("CPA warning (NM):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            implicitWidth: 90
+                                            text: AisConfig.cpaWarnNm.toFixed(2)
+                                            validator: DoubleValidator { bottom: 0; top: 50; decimals: 2 }
+                                            selectByMouse: true
+                                            onEditingFinished: AisConfig.cpaWarnNm = parseFloat(text)
+                                        }
+                                        Label {
+                                            text: qsTr("TCPA warning (min):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 120
+                                            value: Math.round(AisConfig.tcpaWarnMin)
+                                            onValueModified: AisConfig.tcpaWarnMin = value
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Lost targets"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Mark lost after (min):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 60
+                                            value: Math.round(AisConfig.markLostMin)
+                                            onValueModified: AisConfig.markLostMin = value
+                                        }
+                                        Label {
+                                            text: qsTr("Remove after (min):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 60
+                                            value: Math.round(AisConfig.removeLostMin)
+                                            onValueModified: AisConfig.removeLostMin = value
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Display"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Show target names")
+                                        checked: AisConfig.showNames
+                                        onToggled: AisConfig.showNames = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Show targets at real size")
+                                        checked: AisConfig.showRealSize
+                                        onToggled: AisConfig.showRealSize = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Show area notices")
+                                        checked: AisConfig.showAreaNotices
+                                        onToggled: AisConfig.showAreaNotices = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Process WPL position messages")
+                                        checked: AisConfig.handleWplMessages
+                                        onToggled: AisConfig.handleWplMessages = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Sync predictor length with own ship")
+                                        checked: AisConfig.syncPredictorWithOwnShip
+                                        onToggled: AisConfig.syncPredictorWithOwnShip = checked
+                                    }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("COG predictor (min):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 60
+                                            enabled: !AisConfig.syncPredictorWithOwnShip
+                                            value: Math.round(AisConfig.predictorMinutes)
+                                            onValueModified: AisConfig.predictorMinutes = value
+                                        }
+                                        Label {
+                                            text: qsTr("Target tracks (min):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 120
+                                            value: Math.round(AisConfig.tracksLengthMin)
+                                            onValueModified: AisConfig.tracksLengthMin = value
+                                        }
+                                        Label {
+                                            text: qsTr("Suppress anchored below (kn):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            implicitWidth: 90
+                                            text: AisConfig.suppressAnchoredSpeedMax.toFixed(1)
+                                            validator: DoubleValidator { bottom: 0; top: 20; decimals: 1 }
+                                            selectByMouse: true
+                                            onEditingFinished: AisConfig.suppressAnchoredSpeedMax = parseFloat(text)
+                                        }
+                                        Label {
+                                            text: qsTr("Attenuate above (targets):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 5000; stepSize: 50
+                                            value: AisConfig.attenuationThreshold
+                                            onValueModified: AisConfig.attenuationThreshold = value
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Rollover info"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Class / type / status")
+                                        checked: AisConfig.rolloverClass
+                                        onToggled: AisConfig.rolloverClass = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("SOG / COG")
+                                        checked: AisConfig.rolloverCogSog
+                                        onToggled: AisConfig.rolloverCogSog = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("CPA / TCPA")
+                                        checked: AisConfig.rolloverCpaTcpa
+                                        onToggled: AisConfig.rolloverCpaTcpa = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Alerts"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("CPA/TCPA alert dialog")
+                                        checked: AisConfig.cpaAlert
+                                        onToggled: AisConfig.cpaAlert = checked
+                                    }
+                                    RowLayout {
+                                        CheckBox {
+                                            text: qsTr("Alert sound")
+                                            enabled: AisConfig.cpaAlert
+                                            checked: AisConfig.cpaAlertSound
+                                            onToggled: AisConfig.cpaAlertSound = checked
+                                        }
+                                        Button {
+                                            text: qsTr("Test")
+                                            enabled: false  // pending the sound engine
+                                        }
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Suppress alerts for moored targets")
+                                        enabled: AisConfig.cpaAlert
+                                        checked: AisConfig.suppressMooredAlerts
+                                        onToggled: AisConfig.suppressMooredAlerts = checked
+                                    }
+                                    RowLayout {
+                                        enabled: AisConfig.cpaAlert
+                                        Label { text: qsTr("Acknowledge timeout (min):") }
+                                        SpinBox {
+                                            from: 0; to: 60
+                                            value: Math.round(AisConfig.ackTimeoutMin)
+                                            onValueModified: AisConfig.ackTimeoutMin = value
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("These settings are saved now; CPA/TCPA computation, target filtering and the alert engine are not wired in yet.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                }
+                            }
+
+                            // --- MMSI Properties: per-MMSI editor (pending). ---
                             Item {
                                 ColumnLayout {
                                     anchors.fill: parent
                                     spacing: 8
-                                    Label { text: qsTr("AIS target display"); font.bold: true }
+                                    Label { text: qsTr("MMSI properties"); font.bold: true }
                                     Label {
-                                        text: qsTr("AIS display, CPA/TCPA alarms and target filtering are not yet wired in.")
+                                        text: qsTr("Per-MMSI rules — track mode (default / always / never), persist track, ignore, treat as MOB, VDM follower and a custom ship name — map to the model's MmsiProperties / AIS name-file API, which is not yet bound into the Qt build. The per-MMSI list editor will live here.")
                                         wrapMode: Text.Wrap; Layout.fillWidth: true
                                         color: palette.placeholderText
                                     }
                                     Item { Layout.fillHeight: true }
+                                }
+                            }
+
+                            // --- Routes / Points defaults. ---
+                            ScrollView {
+                                id: routesScroll
+                                clip: true
+                                ColumnLayout {
+                                    width: routesScroll.availableWidth
+                                    spacing: 8
+
+                                    Label { text: qsTr("New route"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Line colour:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: 60
+                                            Layout.preferredHeight: 24
+                                            radius: 4
+                                            color: RouteDefaultsConfig.routeColor
+                                            border.color: "#80808080"
+                                            TapHandler { onTapped: routeColorDialog.open() }
+                                        }
+                                        Label {
+                                            text: qsTr("Line style:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Solid"), qsTr("Dot"), qsTr("Long dash"),
+                                                    qsTr("Short dash"), qsTr("Dash-dot")]
+                                            currentIndex: RouteDefaultsConfig.routeStyle
+                                            onActivated: RouteDefaultsConfig.routeStyle = currentIndex
+                                        }
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Persist active route across restarts")
+                                        checked: RouteDefaultsConfig.persistActiveRoute
+                                        onToggled: RouteDefaultsConfig.persistActiveRoute = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Waypoints"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Default mark icon:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            Layout.fillWidth: true
+                                            text: RouteDefaultsConfig.waypointIcon
+                                            selectByMouse: true
+                                            onEditingFinished: RouteDefaultsConfig.waypointIcon = text
+                                        }
+                                        Label {
+                                            text: qsTr("Default route-point icon:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            Layout.fillWidth: true
+                                            text: RouteDefaultsConfig.routepointIcon
+                                            selectByMouse: true
+                                            onEditingFinished: RouteDefaultsConfig.routepointIcon = text
+                                        }
+                                        Label {
+                                            text: qsTr("Arrival circle (NM):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            implicitWidth: 90
+                                            text: RouteDefaultsConfig.arrivalCircleNm.toFixed(2)
+                                            validator: DoubleValidator { bottom: 0; top: 10; decimals: 2 }
+                                            selectByMouse: true
+                                            onEditingFinished: RouteDefaultsConfig.arrivalCircleNm = parseFloat(text)
+                                        }
+                                        Label {
+                                            text: qsTr("SCAMIN min / max:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        RowLayout {
+                                            SpinBox {
+                                                from: 0; to: 4000000; stepSize: 1000
+                                                value: RouteDefaultsConfig.scaminMin
+                                                onValueModified: RouteDefaultsConfig.scaminMin = value
+                                            }
+                                            SpinBox {
+                                                from: 0; to: 4000000; stepSize: 1000
+                                                value: RouteDefaultsConfig.scaminMax
+                                                onValueModified: RouteDefaultsConfig.scaminMax = value
+                                            }
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Tracks"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Auto-create daily:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Off"), qsTr("Computer time"),
+                                                    qsTr("UTC"), qsTr("Local mean time")]
+                                            currentIndex: RouteDefaultsConfig.trackAutoDaily
+                                            onActivated: RouteDefaultsConfig.trackAutoDaily = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Precision:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("High"), qsTr("Medium"), qsTr("Low")]
+                                            currentIndex: RouteDefaultsConfig.trackingPrecision
+                                            onActivated: RouteDefaultsConfig.trackingPrecision = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Highlight colour:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        RowLayout {
+                                            CheckBox {
+                                                text: qsTr("Highlight")
+                                                checked: RouteDefaultsConfig.trackHighlight
+                                                onToggled: RouteDefaultsConfig.trackHighlight = checked
+                                            }
+                                            Rectangle {
+                                                Layout.preferredWidth: 60
+                                                Layout.preferredHeight: 24
+                                                radius: 4
+                                                opacity: RouteDefaultsConfig.trackHighlight ? 1.0 : 0.4
+                                                color: RouteDefaultsConfig.trackColor
+                                                border.color: "#80808080"
+                                                TapHandler {
+                                                    enabled: RouteDefaultsConfig.trackHighlight
+                                                    onTapped: trackColorDialog.open()
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Saved as defaults; new routes, marks and tracks will adopt them as the creation paths gain styling.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
                                 }
                             }
                         }
@@ -777,7 +1607,7 @@ ApplicationWindow {
                 Layout.alignment: Qt.AlignHCenter
             }
             Label {
-                text: qsTr("A chart plotter and marine GPS navigation display.\n" +
+                text: qsTr("A chart plotter and marine GPS navigation DisplayConfig.\n" +
                            "This build renders S-57/S-52 vector charts through a " +
                            "Qt Quick scene graph.")
                 wrapMode: Text.Wrap
@@ -881,7 +1711,9 @@ ApplicationWindow {
         // COG. Top-right corner.
         Rectangle {
             id: compass
-            visible: !app.hudExpanded  // the HUD panel supersedes it
+            // Hidden when the HUD panel supersedes it, or by the Display
+            // option (wx "Show compass window").
+            visible: !app.hudExpanded && DisplayConfig.showCompass
             anchors.top: parent.top
             anchors.right: parent.right
             anchors.margins: 12
@@ -1582,7 +2414,7 @@ ApplicationWindow {
     }
 
     // Colour-scheme dim overlay (#30): tints the whole window for dusk/night,
-    // mirroring how OpenCPN dims the display. Plain item, input-transparent
+    // mirroring how OpenCPN dims the DisplayConfig. Plain item, input-transparent
     // (enabled:false) so it never intercepts chart/toolbar interaction.
     Rectangle {
         anchors.fill: parent

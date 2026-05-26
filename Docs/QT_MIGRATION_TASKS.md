@@ -937,31 +937,76 @@ inventory for the QML port. The Qt build (`gui/qt/qml/Main.qml`,
 Connections / Ships / Plugins) with a handful of wired controls; the
 checklist marks what exists vs. what is still to be specified/built.
 
-Status legend: `[x]` wired in the Qt build today · `[~]` page exists,
-control still a placeholder · `[ ]` not yet present.
+Status legend: `[x]` wired & live · `[p]` control present, setting persisted
+but pending renderer support · `[~]` page exists, control still a placeholder
+· `[ ]` not yet present · `[—]` not applicable to the Qt build (rationale
+given).
 
-**Display page** (wx sub-panels: General, Units, Advanced, Templates)
-- [x] General → auto-follow own ship (Qt has follow + demo-mode + debug
-      toggles; these last two are Qt-specific, not wx).
-- [ ] General → Navigation Mode: North-Up / Course-Up radio, Look-Ahead.
-- [ ] General → Chart Display: enable quilting, preserve scale on chart
-      switch.
-- [ ] General → Controls: smooth pan/zoom, zoom-to-cursor, 10 Hz screen
-      update, mouse-wheel zoom sensitivity.
-- [ ] General → other toggles: show GPS/compass window, auto-anchor mark,
-      date/time format (UTC vs OS local timezone), own-ship COG/HDT
-      predictor lengths, SOG/COG damping, ETA / default boat speed.
-- [ ] **Units** sub-page — distance, speed, wind speed, depth, height,
-      temperature unit choices; lat/lon format (`SDMM`); show true /
-      magnetic bearings; user magnetic variation (WMM).
-- [ ] **Advanced** sub-page — de-skew raster charts, OpenGL on/off +
-      "OpenGL Options…" sub-dialog (accelerated panning, texture
-      compression + caching, polygon/line smoothing, software GL, texture
-      memory size, rebuild/clear texture cache), chart-rotation averaging
-      time, chart-display update period, screen-size (mm) calibration,
-      responsive/touch sizing.
-- [ ] **Templates** sub-page — configuration templates: list, create,
-      apply, delete, multi-canvas screen-config selector.
+The Display page is now built out as **General / Units / Advanced** sub-tabs
+in `optionsWindow` (Main.qml), all bound to the shared `DisplayConfig` backend
+(`gui/qt/display_config.{h,cpp}`, context property `display`), persisted via
+`ConfigStore`. The right-edge **Canvas Options drawer** ("Quick display")
+shares the same backend, so the two surfaces stay in sync. Changes apply live
+(no Apply button). The wx "Templates" sub-panel and the unported items below
+remain.
+
+**Display page → General** (wx sub-panel: General)
+- [x] Auto-follow own ship (`chart.followOwnShip`). Plus the Qt-only demo-mode
+      and debug-overlay toggles.
+- [x] Show compass / GPS window — toggles the on-chart compass rose overlay
+      (`display.showCompass`; also in the Quick-display drawer).
+- [x] Mouse-wheel zoom sensitivity — slider 1.1×–2.0× per notch, consumed by
+      `ChartCanvas::wheelEvent` (`display.wheelZoomFactor`).
+- [x] Own-ship COG/SOG predictor length (minutes) — consumed by
+      `OwnShipLayer` (`display.cogPredictorMinutes`).
+- [p] Navigation Mode North-Up / Course-Up + look-ahead — controls present and
+      persisted (`display.navMode`, `display.lookAhead`), but the viewport
+      does not rotate / lead yet (no Course-Up render path).
+- [p] Preserve scale on chart switch — persisted (`display.preserveScaleOnSwitch`);
+      the Piano-click autoscale will read it once wired.
+- [p] Time display UTC vs local, SOG/COG damping, default boat speed (ETA) —
+      controls present and persisted (`display.timeZone`,
+      `sogCogDampingSeconds`, `defaultBoatSpeed`); no readout consumes them yet
+      (no time field / nav filter / ETA panel in the Qt HUD so far).
+- [—] Enable/disable quilting — the Qt canvas **always** quilts (the only
+      chart model is the scene-graph quilt + Piano bar); a global "turn
+      quilting off" mode has no Qt equivalent, so it is intentionally omitted.
+- [—] Smooth pan/zoom, zoom-to-cursor, 10 Hz screen update — moot under Qt:
+      pan/zoom is GPU scene-graph and inherently smooth, the wheel already
+      zooms about the cursor, and redraw is driven by the scene-graph vsync
+      (no fixed-Hz repaint timer to expose).
+- [ ] Auto-anchor mark; HDT (separate from COG) predictor length.
+
+**Display page → Units** (wx sub-panel: Units) — **[x] built**
+- [x] Distance, speed, wind-speed, depth, height, temperature unit choices
+      (`display.{distance,speed,wind,depth,height,temp}Unit`).
+- [x] Lat/Lon format — decimal-minutes / DMS / decimal-degrees
+      (`display.latLonFormat`).
+- [x] Show true / magnetic bearings + user magnetic variation
+      (`display.showMagneticBearings`, `useUserMagVar`, `userMagVar`).
+- Note: speed / lat-lon / bearing settings take effect live through
+  `DisplayConfig::format{Speed,Distance,LatLon,Bearing}`, which the HUD, AIS
+  info and status-bar view-models now call. Depth/height/temp/wind units are
+  stored and await the S-52 sounding pipeline + wind/depth readouts that will
+  consume them.
+
+**Display page → Advanced** (wx sub-panel: Advanced)
+- [p] De-skew raster charts, course-up heading-averaging time, screen-size
+      (mm) calibration, responsive/touch sizing — controls present and
+      persisted (`display.{deskewRaster,chartRotationAveraging,screenMmWidth,
+      responsiveSizing}`), pending the raster/rotation/true-scale/touch render
+      paths.
+- [—] OpenGL on/off + the "OpenGL Options…" sub-dialog (accelerated panning,
+      texture compression + caching, polygon/line smoothing, software GL,
+      texture-memory size, rebuild/clear texture cache) — not applicable: the
+      Qt build renders exclusively through the Qt Quick scene graph (GPU
+      always on, RHI manages texture upload/caching), so there is no GL on/off
+      switch or texcache to tune. A note in the Advanced tab states this.
+- [ ] Chart-display update period — see the 10 Hz note above (no repaint timer).
+
+**Display page → Templates** (wx sub-panel: Templates)
+- [ ] Configuration templates — list, create, apply, delete; multi-canvas
+      screen-config selector. Not yet built (a whole feature; deferred).
 
 **Charts page** (wx sub-panels: Chart Files, Vector Chart Display, Chart
 Groups, Tides & Currents)
@@ -995,32 +1040,51 @@ Groups, Tides & Currents)
       window".
 
 **Ships page** (wx sub-panels: Own ship, AIS Targets, MMSI Properties,
-Routes/Points)
-- [x] **Own ship** → identity: vessel name + own MMSI (Qt has both).
-- [ ] Own ship → display: ship icon type (Default / Real-scale bitmap /
-      Real-scale vector), real-size dimensions (LOA, beam, GPS offsets,
-      minimum screen size), COG/HDT predictor lengths, range rings
-      (count, spacing, unit, colour), show direction to active waypoint.
-- [~] **AIS Targets** — Qt has a placeholder pane. To build:
-  - [ ] CPA calculation: max target range for (T)CPA alerts, CPA warn
-        distance, TCPA warn time.
-  - [ ] Lost targets: mark-lost / remove-lost timeouts.
-  - [ ] Display: COG-predictor arrow length (+ sync with own ship),
-        target tracks length, suppress anchored/moored (speed max),
-        realtime-prediction speed min, target attenuation threshold,
-        show area notices, show real size, show names above scale, WPL
-        position-message handling.
-  - [ ] Rollover info block: class/type/status, SOG/COG, CPA/TCPA.
-  - [ ] CPA/TCPA alerts: alert dialog, alert sound (+ test), suppress for
-        moored, acknowledge-timeout.
-- [ ] **MMSI Properties** — per-MMSI list + editor (track mode
-      default/always/never, persist track, ignore, MOB, VDM follower,
-      ship name); maps to `MmsiProperties` / AIS name-file API (P1.6c).
-- [ ] **Routes/Points** — route/waypoint defaults: distance unit, new-
-      route line colour/style, persist-active-route, default waypoint &
-      routepoint icons, arrival-circle radius, SCAMIN min/max, tracks
-      (auto-daily at midnight Computer/UTC/LMT, highlight + colour,
-      tracking precision).
+Routes/Points) — now built as four sub-tabs in `optionsWindow`, backed by the
+QML-singleton settings objects `OwnShipConfig`, `AisConfig` and
+`RouteDefaultsConfig` (+ the existing identity in `OwnShipConfig`), persisted
+via `ConfigStore`. (These, and `DisplayConfig`, are exposed as
+`QML_SINGLETON`s rather than context properties — a context property reads
+`undefined` in bindings on early-constructed objects, which left bool toggles
+stuck; singletons are compile-time resolved and always available.)
+
+**Ships → Own ship** (wx sub-panel: Own ship)
+- [x] Identity: vessel name + own MMSI (drives AIS self-exclusion).
+- [p] Display: ship-icon type (Default / Real-scale bitmap / Real-scale
+      vector), real-size dimensions (LOA, beam, GPS offsets, minimum screen
+      size), show direction to active waypoint, range rings (count, spacing,
+      unit) — all controls present and persisted (`OwnShipConfig.*`); the
+      own-ship marker is a fixed symbol until the real-scale icon / GPS-offset
+      / range-ring render paths land. (COG predictor length lives on Display →
+      General and is consumed live.)
+- [ ] Range-ring colour, HDT (separate from COG) predictor length.
+
+**Ships → AIS Targets** (wx sub-panel: AIS Targets) — controls built;
+all persisted (`AisConfig.*`), pending the CPA/TCPA + filtering + alert engine
+- [p] CPA/TCPA: max target range, CPA warn distance, TCPA warn time.
+- [p] Lost targets: mark-lost / remove-lost timeouts.
+- [p] Display: COG-predictor length (+ "sync with own ship"), target tracks
+      length, suppress-anchored speed max, attenuation threshold, show area
+      notices, show real size, show names, WPL handling.
+- [p] Rollover info block toggles: class/type/status, SOG/COG, CPA/TCPA.
+- [p] Alerts: alert dialog, alert sound (Test button disabled pending the
+      sound engine), suppress for moored, acknowledge timeout.
+- [ ] Realtime-prediction speed min (control not yet surfaced).
+
+**Ships → MMSI Properties** (wx sub-panel: MMSI Properties)
+- [ ] Per-MMSI list + editor (track mode default/always/never, persist track,
+      ignore, MOB, VDM follower, ship name). Placeholder pane only: needs the
+      model's `MmsiProperties` / AIS name-file API (P1.6c) bound into the Qt
+      build, plus a list model. Documented in-pane.
+
+**Ships → Routes/Points** (wx sub-panel: Routes/Points) — controls built;
+persisted (`RouteDefaultsConfig.*`), pending styled route/track creation
+- [p] New route: line colour (ColorDialog swatch) + style, persist-active-
+      route.
+- [p] Waypoints: default mark + route-point icon names, arrival-circle radius,
+      SCAMIN min/max.
+- [p] Tracks: auto-daily mode (Off / Computer / UTC / LMT), tracking
+      precision, highlight + highlight colour.
 
 **User Interface page** (not present in the Qt shell yet — wx sub-panels:
 General Options, Sounds)

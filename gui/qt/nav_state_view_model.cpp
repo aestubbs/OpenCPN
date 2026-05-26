@@ -15,8 +15,8 @@
 
 #include "nav_state_view_model.h"
 
+#include "display_config.h"
 #include "nav_data_provider.h"
-#include "nav_format.h"
 
 namespace ocpn::qtui {
 
@@ -28,6 +28,10 @@ NavStateViewModel::NavStateViewModel(NavDataProvider* provider,
             &NavStateViewModel::refresh);
     refresh();
   }
+  // Re-emit when units / lat-lon format / bearing mode change so the HUD and
+  // status bar re-read the formatted text without a fresh nav fix.
+  connect(&DisplayConfig::instance(), &DisplayConfig::changed, this,
+          &NavStateViewModel::changed);
 }
 
 void NavStateViewModel::refresh() {
@@ -39,22 +43,22 @@ void NavStateViewModel::refresh() {
 
 QString NavStateViewModel::positionText() const {
   if (!m_own.valid) return QStringLiteral("---");
-  return navfmt::latLon(m_own.lat, m_own.lon);
+  return DisplayConfig::instance().formatLatLon(m_own.lat, m_own.lon);
 }
 
 QString NavStateViewModel::sogText() const {
   if (!m_own.valid) return QStringLiteral("--.- kn");
-  return navfmt::sog(m_own.sog);
+  return DisplayConfig::instance().formatSpeed(m_own.sog);
 }
 
 QString NavStateViewModel::cogText() const {
   if (!m_own.valid) return QStringLiteral("---°");
-  return navfmt::cog(m_own.cog);
+  return DisplayConfig::instance().formatBearing(m_own.cog);
 }
 
 QString NavStateViewModel::hdgText() const {
   if (!m_own.valid || m_own.hdg >= 360.0) return QStringLiteral("---°");
-  return navfmt::cog(m_own.hdg);
+  return DisplayConfig::instance().formatBearing(m_own.hdg);
 }
 
 }  // namespace ocpn::qtui

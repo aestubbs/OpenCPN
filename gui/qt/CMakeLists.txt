@@ -88,7 +88,6 @@ qt_add_qml_module(opencpn-qt
     model_nav_data_provider.cpp
     switchable_nav_provider.h
     switchable_nav_provider.cpp
-    nav_format.h
     nav_state_view_model.h
     nav_state_view_model.cpp
     ais_selection_view_model.h
@@ -105,6 +104,12 @@ qt_add_qml_module(opencpn-qt
     config_store.cpp
     own_ship_config.h
     own_ship_config.cpp
+    display_config.h
+    display_config.cpp
+    ais_config.h
+    ais_config.cpp
+    route_defaults_config.h
+    route_defaults_config.cpp
     nmea_monitor_model.h
     nmea_monitor_model.cpp
     wind_decoder.h

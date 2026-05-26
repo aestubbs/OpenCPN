@@ -23,6 +23,7 @@
 #include <QSGTransformNode>
 
 #include "aa_line.h"
+#include "display_config.h"
 #include "sg_helpers.h"
 
 namespace ocpn::qtui {
@@ -31,7 +32,6 @@ namespace {
 constexpr float kShipPx = 15.0f;           // own-ship symbol size (logical px)
 const QColor kOwnColor(200, 0, 0);
 const QColor kLaylineColor(120, 120, 120);
-constexpr double kPredictMinutes = 6.0;    // COG/SOG vector look-ahead
 constexpr double kLaylineDeg = 40.0;       // tacking half-angle off COG
 constexpr double kLaylineLenDeg = 0.6;     // layline length (world degrees)
 constexpr float kVectorPx = 2.0f;          // COG/SOG predictor line width
@@ -115,7 +115,8 @@ QSGNode* OwnShipLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* /*window*/)
                                 /*dash_on_px=*/8.0f, /*dash_off_px=*/6.0f);
     if (m_laylines) m_pos->insertChildNodeBefore(m_laylines, m_symbolXf);
 
-    const double len = s.sog * (kPredictMinutes / 60.0) / 60.0;
+    const double predict_min = DisplayConfig::instance().cogPredictorMinutes();
+    const double len = s.sog * (predict_min / 60.0) / 60.0;
     if (len > 0.0) {
       m_predictor = makeAaLineNode({QPointF(0, 0), headingVec(s.cog) * len},
                                    kOwnColor, kVectorPx);

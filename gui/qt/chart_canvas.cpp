@@ -54,8 +54,8 @@
 #include "layer_compositor.h"
 #include "model/ocpn_config.h"
 #include "model/track.h"  // g_pActiveTrack -- own-ship track recording
+#include "display_config.h"
 #include "model_nav_data_provider.h"
-#include "nav_format.h"
 #include "nav_state_view_model.h"
 #include "layer.h"
 #include "object_query_view_model.h"
@@ -997,7 +997,7 @@ void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {
     const QPointF p = event->position();
     m_viewport->screenToLatLon(p.x(), p.y(), static_cast<int>(width()),
                                static_cast<int>(height()), lat, lon);
-    m_cursor_text = navfmt::latLon(lat, lon);
+    m_cursor_text = DisplayConfig::instance().formatLatLon(lat, lon);
     Q_EMIT cursorMoved();
     // Live rubber-band segment to the cursor while drawing a route.
     if (m_route_build_mode && m_nav_provider)
@@ -1209,8 +1209,11 @@ void ChartCanvas::wheelEvent(QWheelEvent* event) {
     QQuickItem::wheelEvent(event);
     return;
   }
-  // Each notch (15°) zooms by sqrt(2) -- four notches doubles/halves.
-  const double factor = std::pow(2.0, deg / 30.0);
+  // Each notch (15°) zooms by the user's wheel-zoom factor (Display options;
+  // 1.1 gentle .. 2.0 brisk). The exponent normalises trackpad/fine scrolls.
+  const double per_notch =
+      std::max(1.01, DisplayConfig::instance().wheelZoomFactor());
+  const double factor = std::pow(per_notch, deg / 15.0);
   const QPointF p = event->position();
   m_viewport->zoomAt(p.x(), p.y(), factor,
                      static_cast<int>(width()),

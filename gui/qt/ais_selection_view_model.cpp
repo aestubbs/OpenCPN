@@ -15,7 +15,7 @@
 
 #include "ais_selection_view_model.h"
 
-#include "nav_format.h"
+#include "display_config.h"
 
 namespace ocpn::qtui {
 
@@ -32,15 +32,15 @@ void AisSelectionViewModel::clear() {
 }
 
 QString AisSelectionViewModel::positionText() const {
-  return navfmt::latLon(m_target.lat, m_target.lon);
+  return DisplayConfig::instance().formatLatLon(m_target.lat, m_target.lon);
 }
 
 QString AisSelectionViewModel::sogText() const {
-  return navfmt::sog(m_target.sog);
+  return DisplayConfig::instance().formatSpeed(m_target.sog);
 }
 
 QString AisSelectionViewModel::cogText() const {
-  return navfmt::cog(m_target.cog);
+  return DisplayConfig::instance().formatBearing(m_target.cog);
 }
 
 }  // namespace ocpn::qtui

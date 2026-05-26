@@ -92,4 +92,26 @@ void ConfigStore::setInt(const QString& key, int value) {
   setString(key, QString::number(value));
 }
 
+bool ConfigStore::getBool(const QString& key, bool def) const {
+  const QString s = getString(key);
+  if (s.isEmpty()) return def;
+  return s != QStringLiteral("0");
+}
+
+void ConfigStore::setBool(const QString& key, bool value) {
+  setString(key, value ? QStringLiteral("1") : QStringLiteral("0"));
+}
+
+double ConfigStore::getDouble(const QString& key, double def) const {
+  const QString s = getString(key);
+  if (s.isEmpty()) return def;
+  bool ok = false;
+  const double v = s.toDouble(&ok);
+  return ok ? v : def;
+}
+
+void ConfigStore::setDouble(const QString& key, double value) {
+  setString(key, QString::number(value, 'g', 10));
+}
+
 }  // namespace ocpn::qtui
