@@ -25,8 +25,9 @@ ApplicationWindow {
     height: 720
     title: qsTr("OpenCPN (Qt prototype)")
 
-    // Minimum touch target (logical px) for the on-chart controls.
-    readonly property int touchSize: 40
+    // Minimum touch target (logical px) for the on-chart controls. Scaled by
+    // the UI scale factor (Options > User Interface): -5..+5 -> ~0.4x..~1.6x.
+    readonly property int touchSize: Math.round(40 * (1 + 0.12 * UIConfig.guiScaleFactor))
 
     // Toggle for the on-chart debug/stats overlay (like an FPS counter).
     property bool showDebug: false
@@ -39,6 +40,7 @@ ApplicationWindow {
 
     // Native window status bar: cursor lat/lon (left) + chart scale (right).
     footer: ToolBar {
+        visible: UIConfig.showStatusBar  // Options > User Interface
         // macOS bottom bars carry a faint hairline separator along their top.
         Rectangle {
             anchors.top: parent.top
@@ -394,6 +396,7 @@ ApplicationWindow {
             { title: qsTr("Charts"),      glyph: "◈", accent: "#34c759" },
             { title: qsTr("Connections"), glyph: "⇄", accent: "#ff9500" },
             { title: qsTr("Ships"),       glyph: "⚓", accent: "#30b0c7" },
+            { title: qsTr("User Interface"), glyph: "▤", accent: "#ff2d55" },
             { title: qsTr("Plugins"),     glyph: "▣", accent: "#af52de" }
         ]
         title: qsTr("Options") + " — " + pages[currentPage].title
@@ -518,6 +521,8 @@ ApplicationWindow {
                             ScrollView {
                                 id: genScroll
                                 clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
                                 ColumnLayout {
                                     width: genScroll.availableWidth
                                     spacing: 8
@@ -644,6 +649,8 @@ ApplicationWindow {
                             ScrollView {
                                 id: unitsScroll
                                 clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
                                 ColumnLayout {
                                     width: unitsScroll.availableWidth
                                     spacing: 8
@@ -763,6 +770,8 @@ ApplicationWindow {
                             ScrollView {
                                 id: advScroll
                                 clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
                                 ColumnLayout {
                                     width: advScroll.availableWidth
                                     spacing: 8
@@ -800,64 +809,261 @@ ApplicationWindow {
                                             onValueModified: DisplayConfig.screenMmWidth = value
                                         }
                                     }
-                                    MenuSeparator { Layout.fillWidth: true }
-                                    Label {
-                                        text: qsTr("OpenGL acceleration, texture caching and the " +
-                                                   "quilting on/off switch from the wx dialog do not " +
-                                                   "apply: the Qt build always renders through the GPU " +
-                                                   "scene graph and always quilts.")
-                                        wrapMode: Text.Wrap; Layout.fillWidth: true
-                                        color: palette.placeholderText; font.pointSize: 11
-                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // --- Charts (vector chart display) -- the wired controls ---
+                // --- Charts: Chart Files / Vector Display / Groups / Tides
+                //     sub-tabs. The display category + the four detail toggles
+                //     the s52 provider honours are wired live (on `chart`); the
+                //     extended vector options bind ChartConfig (persisted,
+                //     pending provider support). File/group/tide management
+                //     awaits a runtime chart-directory backend.
                 Item {
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 20
-                        spacing: 8
-                        Label { text: qsTr("Chart display category"); font.bold: true }
-                        ButtonGroup { id: optCatGroup }
-                        Repeater {
-                            model: [ { label: qsTr("Base"), cat: 0 },
-                                     { label: qsTr("Standard"), cat: 1 },
-                                     { label: qsTr("All"), cat: 2 } ]
-                            delegate: RadioButton {
-                                required property var modelData
-                                text: modelData.label
-                                ButtonGroup.group: optCatGroup
-                                checked: chart.displayCategory === modelData.cat
-                                onClicked: chart.displayCategory = modelData.cat
+                        spacing: 12
+
+                        TabBar {
+                            id: chartsSubTabs
+                            Layout.fillWidth: true
+                            TabButton { text: qsTr("Chart Files") }
+                            TabButton { text: qsTr("Vector Display") }
+                            TabButton { text: qsTr("Groups") }
+                            TabButton { text: qsTr("Tides") }
+                        }
+
+                        StackLayout {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            currentIndex: chartsSubTabs.currentIndex
+
+                            // --- Chart Files (pending runtime chart-dir backend) ---
+                            Item {
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+                                    Label { text: qsTr("Chart files"); font.bold: true }
+                                    Label {
+                                        text: qsTr("The Qt build loads its chart set from a path fixed at build time, so the chart-directory list, database scan/rebuild and ENC pre-processing controls are not yet available. They arrive with the runtime chart-directory manager.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText
+                                    }
+                                    Item { Layout.fillHeight: true }
+                                }
+                            }
+
+                            // --- Vector Chart Display ---
+                            ScrollView {
+                                id: vchartScroll
+                                clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
+                                ColumnLayout {
+                                    width: vchartScroll.availableWidth
+                                    spacing: 8
+
+                                    Label { text: qsTr("Display category"); font.bold: true }
+                                    ButtonGroup { id: optCatGroup }
+                                    Repeater {
+                                        model: [ { label: qsTr("Base"), cat: 0 },
+                                                 { label: qsTr("Standard"), cat: 1 },
+                                                 { label: qsTr("All"), cat: 2 } ]
+                                        delegate: RadioButton {
+                                            required property var modelData
+                                            text: modelData.label
+                                            ButtonGroup.group: optCatGroup
+                                            checked: chart.displayCategory === modelData.cat
+                                            onClicked: chart.displayCategory = modelData.cat
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Detail (live)"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Soundings")
+                                        checked: chart.showSoundings
+                                        onToggled: chart.showSoundings = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Text labels")
+                                        checked: chart.showText
+                                        onToggled: chart.showText = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Lights")
+                                        checked: chart.showLights
+                                        onToggled: chart.showLights = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Buoys & beacons")
+                                        checked: chart.showBuoys
+                                        onToggled: chart.showBuoys = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Cartography & text"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Chart information objects")
+                                        checked: ChartConfig.chartInfoObjects
+                                        onToggled: ChartConfig.chartInfoObjects = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Buoy & light labels")
+                                        checked: ChartConfig.buoyLightLabels
+                                        onToggled: ChartConfig.buoyLightLabels = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Light descriptions")
+                                        checked: ChartConfig.lightDescriptions
+                                        onToggled: ChartConfig.lightDescriptions = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Extended light sectors")
+                                        checked: ChartConfig.extendedLightSectors
+                                        onToggled: ChartConfig.extendedLightSectors = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("National text")
+                                        checked: ChartConfig.nationalText
+                                        onToggled: ChartConfig.nationalText = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Important text only")
+                                        checked: ChartConfig.importantTextOnly
+                                        onToggled: ChartConfig.importantTextOnly = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("De-cluttered text")
+                                        checked: ChartConfig.declutterText
+                                        onToggled: ChartConfig.declutterText = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Reduced detail at small scale")
+                                        checked: ChartConfig.reducedDetailSmallScale
+                                        onToggled: ChartConfig.reducedDetailSmallScale = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Super SCAMIN")
+                                        checked: ChartConfig.superScamin
+                                        onToggled: ChartConfig.superScamin = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Style"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label { text: qsTr("Graphics:"); Layout.alignment: Qt.AlignRight }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Paper chart"), qsTr("Simplified")]
+                                            currentIndex: ChartConfig.graphicsStyle
+                                            onActivated: ChartConfig.graphicsStyle = currentIndex
+                                        }
+                                        Label { text: qsTr("Boundaries:"); Layout.alignment: Qt.AlignRight }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Plain"), qsTr("Symbolised")]
+                                            currentIndex: ChartConfig.boundaryStyle
+                                            onActivated: ChartConfig.boundaryStyle = currentIndex
+                                        }
+                                        Label { text: qsTr("Colours:"); Layout.alignment: Qt.AlignRight }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Four colour"), qsTr("Two colour")]
+                                            currentIndex: ChartConfig.colourCount
+                                            onActivated: ChartConfig.colourCount = currentIndex
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Depth contours (m)"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label { text: qsTr("Shallow:"); Layout.alignment: Qt.AlignRight }
+                                        SpinBox {
+                                            from: 0; to: 50
+                                            value: Math.round(ChartConfig.shallowContour)
+                                            onValueModified: ChartConfig.shallowContour = value
+                                        }
+                                        Label { text: qsTr("Safety:"); Layout.alignment: Qt.AlignRight }
+                                        SpinBox {
+                                            from: 0; to: 50
+                                            value: Math.round(ChartConfig.safetyContour)
+                                            onValueModified: ChartConfig.safetyContour = value
+                                        }
+                                        Label { text: qsTr("Deep:"); Layout.alignment: Qt.AlignRight }
+                                        SpinBox {
+                                            from: 0; to: 100
+                                            value: Math.round(ChartConfig.deepContour)
+                                            onValueModified: ChartConfig.deepContour = value
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("CM93"); font.bold: true }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: qsTr("Detail level:") }
+                                        Slider {
+                                            Layout.fillWidth: true
+                                            from: -5; to: 5; stepSize: 1; snapMode: Slider.SnapAlways
+                                            value: ChartConfig.cm93Detail
+                                            onMoved: ChartConfig.cm93Detail = value
+                                        }
+                                        Label { text: ChartConfig.cm93Detail.toString(); font.family: "monospace" }
+                                    }
+
+                                    Label {
+                                        text: qsTr("Display category and the four detail toggles above apply live. The remaining cartography options are saved and take effect once the S-52 provider exposes the matching viewing groups.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                }
+                            }
+
+                            // --- Chart Groups (pending) ---
+                            Item {
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+                                    Label { text: qsTr("Chart groups"); font.bold: true }
+                                    Label {
+                                        text: qsTr("Named chart groups depend on the chart-directory manager and are not yet available in the Qt build.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText
+                                    }
+                                    Item { Layout.fillHeight: true }
+                                }
+                            }
+
+                            // --- Tides & Currents (pending) ---
+                            Item {
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+                                    Label { text: qsTr("Tides & currents"); font.bold: true }
+                                    Label {
+                                        text: qsTr("Tide and current harmonic data sets are not yet loaded by the Qt build; the data-location list will live here.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText
+                                    }
+                                    Item { Layout.fillHeight: true }
+                                }
                             }
                         }
-                        MenuSeparator { Layout.fillWidth: true }
-                        Label { text: qsTr("Detail"); font.bold: true }
-                        CheckBox {
-                            text: qsTr("Soundings")
-                            checked: chart.showSoundings
-                            onToggled: chart.showSoundings = checked
-                        }
-                        CheckBox {
-                            text: qsTr("Text labels")
-                            checked: chart.showText
-                            onToggled: chart.showText = checked
-                        }
-                        CheckBox {
-                            text: qsTr("Lights")
-                            checked: chart.showLights
-                            onToggled: chart.showLights = checked
-                        }
-                        CheckBox {
-                            text: qsTr("Buoys & beacons")
-                            checked: chart.showBuoys
-                            onToggled: chart.showBuoys = checked
-                        }
-                        Item { Layout.fillHeight: true }
                     }
                 }
 
@@ -1011,6 +1217,8 @@ ApplicationWindow {
                             ScrollView {
                                 id: ownShipScroll
                                 clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
                                 ColumnLayout {
                                     width: ownShipScroll.availableWidth
                                     spacing: 8
@@ -1181,6 +1389,8 @@ ApplicationWindow {
                             ScrollView {
                                 id: aisScroll
                                 clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
                                 ColumnLayout {
                                     width: aisScroll.availableWidth
                                     spacing: 8
@@ -1404,6 +1614,8 @@ ApplicationWindow {
                             ScrollView {
                                 id: routesScroll
                                 clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
                                 ColumnLayout {
                                     width: routesScroll.availableWidth
                                     spacing: 8
@@ -1553,6 +1765,275 @@ ApplicationWindow {
                                     }
                                     Label {
                                         text: qsTr("Saved as defaults; new routes, marks and tracks will adopt them as the creation paths gain styling.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- User Interface: General Options + Sounds sub-tabs. ---
+                Item {
+                    // One file picker, retargeted per sound row. onAccepted
+                    // writes the chosen path back to the row's UIConfig field.
+                    FileDialog {
+                        id: soundFileDialog
+                        property string target: ""
+                        title: qsTr("Choose sound file")
+                        nameFilters: [qsTr("Audio files (*.wav *.mp3 *.ogg *.aiff)"),
+                                      qsTr("All files (*)")]
+                        onAccepted: {
+                            var f = selectedFile.toString()
+                            if (target === "anchor") UIConfig.anchorSoundFile = f
+                            else if (target === "ais") UIConfig.aisSoundFile = f
+                            else if (target === "sart") UIConfig.sartSoundFile = f
+                            else if (target === "dsc") UIConfig.dscSoundFile = f
+                        }
+                    }
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 20
+                        spacing: 12
+
+                        TabBar {
+                            id: uiSubTabs
+                            Layout.fillWidth: true
+                            TabButton { text: qsTr("General Options") }
+                            TabButton { text: qsTr("Sounds") }
+                        }
+
+                        StackLayout {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            currentIndex: uiSubTabs.currentIndex
+
+                            // --- General Options ---
+                            ScrollView {
+                                id: uiGenScroll
+                                clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
+                                ColumnLayout {
+                                    width: uiGenScroll.availableWidth
+                                    spacing: 8
+
+                                    Label { text: qsTr("General"); font.bold: true }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: qsTr("Language:") }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("System default"), "English",
+                                                    "Deutsch", "Français", "Español",
+                                                    "Nederlands", "Italiano"]
+                                            currentIndex: UIConfig.language
+                                            onActivated: UIConfig.language = currentIndex
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Language and per-element fonts are saved; they take effect once Qt Linguist translations and a font manager are in place.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Show"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Status bar")
+                                        checked: UIConfig.showStatusBar
+                                        onToggled: UIConfig.showStatusBar = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Chart bar")
+                                        checked: UIConfig.showChartBar
+                                        onToggled: UIConfig.showChartBar = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Compass / GPS window")
+                                        checked: DisplayConfig.showCompass
+                                        onToggled: DisplayConfig.showCompass = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Zoom buttons")
+                                        checked: UIConfig.showZoomButtons
+                                        onToggled: UIConfig.showZoomButtons = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Toolbar"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Auto-hide toolbar")
+                                        checked: UIConfig.autoHideToolbar
+                                        onToggled: UIConfig.autoHideToolbar = checked
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        enabled: UIConfig.autoHideToolbar
+                                        Label { text: qsTr("Hide after (s):") }
+                                        SpinBox {
+                                            from: 1; to: 60
+                                            value: UIConfig.autoHideTimeout
+                                            onValueModified: UIConfig.autoHideTimeout = value
+                                        }
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: qsTr("Transparency:") }
+                                        Slider {
+                                            Layout.fillWidth: true
+                                            from: 0.0; to: 0.9; stepSize: 0.05
+                                            value: UIConfig.toolbarTransparency
+                                            onMoved: UIConfig.toolbarTransparency = value
+                                        }
+                                        Label {
+                                            text: Math.round(UIConfig.toolbarTransparency * 100) + "%"
+                                            font.family: "monospace"
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Interface"); font.bold: true }
+                                    CheckBox {
+                                        text: qsTr("Touchscreen interface")
+                                        checked: UIConfig.touchInterface
+                                        onToggled: UIConfig.touchInterface = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Use Inland ECDIS")
+                                        checked: UIConfig.inlandEcdis
+                                        onToggled: UIConfig.inlandEcdis = checked
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Play ship's bells")
+                                        checked: UIConfig.playShipsBells
+                                        onToggled: UIConfig.playShipsBells = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Scale factors"); font.bold: true }
+                                    GridLayout {
+                                        columns: 3
+                                        columnSpacing: 8; rowSpacing: 6
+                                        Layout.fillWidth: true
+
+                                        Label { text: qsTr("User interface:"); Layout.alignment: Qt.AlignRight }
+                                        Slider {
+                                            Layout.fillWidth: true
+                                            from: -5; to: 5; stepSize: 1; snapMode: Slider.SnapAlways
+                                            value: UIConfig.guiScaleFactor
+                                            onMoved: UIConfig.guiScaleFactor = value
+                                        }
+                                        Label { text: UIConfig.guiScaleFactor.toString(); font.family: "monospace" }
+
+                                        Label { text: qsTr("Chart objects:"); Layout.alignment: Qt.AlignRight }
+                                        Slider {
+                                            Layout.fillWidth: true
+                                            from: -5; to: 5; stepSize: 1; snapMode: Slider.SnapAlways
+                                            value: UIConfig.chartObjectScaleFactor
+                                            onMoved: UIConfig.chartObjectScaleFactor = value
+                                        }
+                                        Label { text: UIConfig.chartObjectScaleFactor.toString(); font.family: "monospace" }
+
+                                        Label { text: qsTr("Ship:"); Layout.alignment: Qt.AlignRight }
+                                        Slider {
+                                            Layout.fillWidth: true
+                                            from: -5; to: 5; stepSize: 1; snapMode: Slider.SnapAlways
+                                            value: UIConfig.shipScaleFactor
+                                            onMoved: UIConfig.shipScaleFactor = value
+                                        }
+                                        Label { text: UIConfig.shipScaleFactor.toString(); font.family: "monospace" }
+
+                                        Label { text: qsTr("ENC text:"); Layout.alignment: Qt.AlignRight }
+                                        Slider {
+                                            Layout.fillWidth: true
+                                            from: -5; to: 5; stepSize: 1; snapMode: Slider.SnapAlways
+                                            value: UIConfig.encTextScaleFactor
+                                            onMoved: UIConfig.encTextScaleFactor = value
+                                        }
+                                        Label { text: UIConfig.encTextScaleFactor.toString(); font.family: "monospace" }
+
+                                        Label { text: qsTr("ENC soundings:"); Layout.alignment: Qt.AlignRight }
+                                        Slider {
+                                            Layout.fillWidth: true
+                                            from: -5; to: 5; stepSize: 1; snapMode: Slider.SnapAlways
+                                            value: UIConfig.encSoundingScaleFactor
+                                            onMoved: UIConfig.encSoundingScaleFactor = value
+                                        }
+                                        Label { text: UIConfig.encSoundingScaleFactor.toString(); font.family: "monospace" }
+                                    }
+                                    Label {
+                                        text: qsTr("The interface scale factor resizes the toolbar/controls live. Chart-object, ship and ENC scale factors are saved and apply once the renderer honours them.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                }
+                            }
+
+                            // --- Sounds ---
+                            ScrollView {
+                                id: uiSoundScroll
+                                clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
+                                ColumnLayout {
+                                    width: uiSoundScroll.availableWidth
+                                    spacing: 10
+
+                                    // Per-event sound row: enable + path + browse + test.
+                                    component SoundRow: ColumnLayout {
+                                        id: soundRow
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        property string label
+                                        property string key
+                                        property bool soundEnabled
+                                        property string file
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            CheckBox {
+                                                text: soundRow.label
+                                                checked: soundRow.soundEnabled
+                                                onToggled: {
+                                                    if (soundRow.key === "anchor") UIConfig.anchorAlarmSound = checked
+                                                    else if (soundRow.key === "ais") UIConfig.aisAlertSound = checked
+                                                    else if (soundRow.key === "sart") UIConfig.sartAlertSound = checked
+                                                    else if (soundRow.key === "dsc") UIConfig.dscAlertSound = checked
+                                                }
+                                            }
+                                            Item { Layout.fillWidth: true }
+                                            Button {
+                                                text: qsTr("Browse…")
+                                                onClicked: { soundFileDialog.target = soundRow.key; soundFileDialog.open() }
+                                            }
+                                            Button { text: qsTr("Test"); enabled: false }
+                                        }
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: soundRow.file.length > 0 ? soundRow.file : qsTr("(no file chosen)")
+                                            elide: Text.ElideMiddle
+                                            color: palette.placeholderText; font.pointSize: 11
+                                        }
+                                    }
+
+                                    Label { text: qsTr("Alert sounds"); font.bold: true }
+                                    SoundRow { label: qsTr("Anchor alarm"); key: "anchor"
+                                        soundEnabled: UIConfig.anchorAlarmSound; file: UIConfig.anchorSoundFile }
+                                    SoundRow { label: qsTr("AIS alert"); key: "ais"
+                                        soundEnabled: UIConfig.aisAlertSound; file: UIConfig.aisSoundFile }
+                                    SoundRow { label: qsTr("AIS SART"); key: "sart"
+                                        soundEnabled: UIConfig.sartAlertSound; file: UIConfig.sartSoundFile }
+                                    SoundRow { label: qsTr("DSC"); key: "dsc"
+                                        soundEnabled: UIConfig.dscAlertSound; file: UIConfig.dscSoundFile }
+
+                                    Label {
+                                        text: qsTr("Sound playback is not yet wired in; these choices are saved for when the Qt sound engine lands. Test is disabled until then.")
                                         wrapMode: Text.Wrap; Layout.fillWidth: true
                                         color: palette.placeholderText; font.pointSize: 11
                                     }
@@ -1818,7 +2299,7 @@ ApplicationWindow {
             anchors.bottomMargin: 10
             height: 26
             width: Math.min(barRow.implicitWidth + 8, chart.width - 24)
-            visible: barRow.count > 0
+            visible: barRow.count > 0 && UIConfig.showChartBar  // Options > UI
             radius: 4
             color: "#cc101418"
             border.color: "#3affffff"
@@ -1904,10 +2385,12 @@ ApplicationWindow {
                 }
                 MuiTool {
                     text: "+"; font.pointSize: 19; ToolTip.text: qsTr("Zoom in")
+                    visible: UIConfig.showZoomButtons  // Options > User Interface
                     onClicked: chart.zoomIn()
                 }
                 MuiTool {
                     text: "−"; font.pointSize: 19; ToolTip.text: qsTr("Zoom out")
+                    visible: UIConfig.showZoomButtons
                     onClicked: chart.zoomOut()
                 }
                 MuiTool {
@@ -2319,6 +2802,21 @@ ApplicationWindow {
         x: 16
         y: 16
         padding: 4
+        // Toolbar transparency (Options > User Interface).
+        opacity: 1.0 - UIConfig.toolbarTransparency
+
+        // Auto-hide (Options > User Interface): collapse to the toggle after a
+        // period of no hover; pointing at it expands it again.
+        HoverHandler {
+            id: tbHover
+            onHoveredChanged: if (hovered && UIConfig.autoHideToolbar)
+                                  root.toolbarCollapsed = false
+        }
+        Timer {
+            interval: Math.max(1, UIConfig.autoHideTimeout) * 1000
+            running: UIConfig.autoHideToolbar && !tbHover.hovered
+            onTriggered: root.toolbarCollapsed = true
+        }
 
         // Reusable vertical tool factory so every button is sized / tooltipped
         // identically. Inert tools just omit an onClicked handler.

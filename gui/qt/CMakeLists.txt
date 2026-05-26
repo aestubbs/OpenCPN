@@ -110,6 +110,10 @@ qt_add_qml_module(opencpn-qt
     ais_config.cpp
     route_defaults_config.h
     route_defaults_config.cpp
+    ui_config.h
+    ui_config.cpp
+    chart_config.h
+    chart_config.cpp
     nmea_monitor_model.h
     nmea_monitor_model.cpp
     wind_decoder.h

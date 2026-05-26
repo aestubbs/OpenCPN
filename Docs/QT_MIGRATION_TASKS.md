@@ -933,9 +933,10 @@ The legacy wx Options dialog (`gui/src/options.cpp`, `gui/include/gui/
 options.h`) is a `wxListbook` of six top-level pages, each a `wxNotebook`
 of sub-panels (`CreatePanel_*`). This is the authoritative feature
 inventory for the QML port. The Qt build (`gui/qt/qml/Main.qml`,
-`optionsWindow`) already stubs the five-page shell (Display / Charts /
-Connections / Ships / Plugins) with a handful of wired controls; the
-checklist marks what exists vs. what is still to be specified/built.
+`optionsWindow`) implements the six-page shell (Display / Charts / Connections
+/ Ships / User Interface / Plugins); most pages are built out against this
+inventory and backed by persisted settings singletons, with the checklist
+marking what is wired live vs. persisted-pending vs. still to build.
 
 Status legend: `[x]` wired & live · `[p]` control present, setting persisted
 but pending renderer support · `[~]` page exists, control still a placeholder
@@ -1009,26 +1010,30 @@ remain.
       screen-config selector. Not yet built (a whole feature; deferred).
 
 **Charts page** (wx sub-panels: Chart Files, Vector Chart Display, Chart
-Groups, Tides & Currents)
+Groups, Tides & Currents) — now four sub-tabs in `optionsWindow`. The extended
+vector options bind a new `ChartConfig` QML-singleton (persisted); the live
+toggles stay on `chart` (ChartCanvas).
 - [ ] **Chart Files** — chart directory list (add / remove / compress /
       migrate), scan-and-update DB, force full rebuild, "Prepare all ENC
-      charts" (PARSE_ENC), rebuild chart database.
+      charts" (PARSE_ENC), rebuild chart database. Placeholder pane: the Qt
+      build loads its chart set from a build-time path, so this awaits a
+      runtime chart-directory manager (which Groups + Files both need).
 - [x] **Vector Chart Display** → Display Category (Base / Standard / All;
       wx also has Mariner's Standard). Qt has Base/Standard/All wired.
-- [x] Vector → detail toggles: soundings, text, lights, buoys/beacons (Qt
-      has these four).
-- [ ] Vector → remaining detail/cartography: chart-info objects, buoy/
-      light labels, light descriptions, extended light sectors, national
-      text, important-text-only, de-cluttered text, reduced detail at
-      small scale, super-SCAMIN, graphics style (paper / simplified),
-      boundaries (plain / symbolised), 2-/4-colour, shallow / safety /
-      deep depth contours, CM93 detail-level slider + CM93 offset, "User
-      Standard Objects" checklist (select-all / clear-all / reset-to-
-      standard), ECDIS help.
-- [ ] **Chart Groups** — named chart-group editor: available-charts tree,
-      active-group trees, new/delete group, insert/remove directory.
-- [ ] **Tides & Currents** — tide/current data-set (harmonics) list:
-      add / remove data locations.
+- [x] Vector → detail toggles (live): soundings, text, lights, buoys/beacons.
+- [p] Vector → remaining detail/cartography: chart-info objects, buoy/light
+      labels, light descriptions, extended light sectors, national text,
+      important-text-only, de-cluttered text, reduced detail at small scale,
+      super-SCAMIN, graphics style (paper / simplified), boundaries (plain /
+      symbolised), 2-/4-colour, shallow / safety / deep depth contours, CM93
+      detail-level slider — all present and persisted (`ChartConfig.*`),
+      applied once the s52 provider exposes the matching viewing groups.
+- [ ] Vector → CM93 offset, "User Standard Objects" checklist (select-all /
+      clear-all / reset-to-standard), ECDIS help (not surfaced).
+- [ ] **Chart Groups** — named chart-group editor. Placeholder; needs the
+      chart-directory manager.
+- [ ] **Tides & Currents** — tide/current data-set (harmonics) list.
+      Placeholder; the Qt build does not load harmonics yet.
 
 **Connections page** (wx sub-panel: NMEA / data connections)
 - [x] Connection list (enable/disable, summary, remove) and add-connection
@@ -1086,17 +1091,39 @@ persisted (`RouteDefaultsConfig.*`), pending styled route/track creation
 - [p] Tracks: auto-daily mode (Off / Computer / UTC / LMT), tracking
       precision, highlight + highlight colour.
 
-**User Interface page** (not present in the Qt shell yet — wx sub-panels:
-General Options, Sounds)
-- [ ] **General Options** — language choice, fonts (per-element font +
-      colour chooser, reset), toolbar/window style, show status bar /
-      menu bar / chart bar / compass window / zoom buttons, toolbar
-      auto-hide (+ timeout) / transparency, scaled-graphics & touchscreen
-      (mobile/responsive) interface, UI / chart-object / ship / text /
-      ENC-text / ENC-sounding scale-factor sliders, play ship's bells,
-      Inland ECDIS toggle + manual.
-- [ ] **Sounds** — sound-output device + per-event sound files (anchor,
-      AIS, SART, DSC) with enable + test.
+**User Interface page** (wx sub-panels: General Options, Sounds) — now a page
+in `optionsWindow` (between Ships and Plugins), backed by the `UIConfig`
+QML-singleton (persisted). Several controls are wired live to the shell.
+
+**UI → General Options**
+- [x] Show status bar / chart bar / compass window / zoom buttons — toggle the
+      footer ToolBar, chart bar, compass overlay (shared with Display via
+      `DisplayConfig.showCompass`) and the MUIBar zoom keys live.
+- [x] Toolbar transparency (floating-toolbar opacity) and auto-hide (+ timeout)
+      — wired: a hover-reset Timer collapses the toolbar after the timeout.
+- [x] UI scale factor — drives the touch-target size (`root.touchSize`) live.
+- [p] Touchscreen interface, Inland ECDIS, play ship's bells, and the chart-
+      object / ship / ENC-text / ENC-sounding scale factors — present and
+      persisted; await the touch layout / renderer scaling / sound + bells.
+- [p] Language choice — persisted; pending Qt Linguist i18n (P3.10).
+- [ ] Per-element fonts (font + colour chooser, reset), toolbar/window style,
+      menu bar (the frameless Qt shell has no menu bar to toggle).
+- [—] Scaled-graphics interface — folded into Display → Advanced
+      "Responsive / touch sizing" (`DisplayConfig.responsiveSizing`); not
+      duplicated here.
+- [x] Mouse-wheel zoom sensitivity — lives on Display → General
+      (`DisplayConfig.wheelZoomFactor`), consumed live.
+- [ ] Inland ECDIS manual button.
+- [—] Show compass window / mouse-wheel sensitivity are not duplicated as
+      separate UIConfig keys: the UI page binds the existing DisplayConfig
+      properties so the two pages stay in sync.
+
+**UI → Sounds**
+- [p] Per-event sound files (anchor, AIS, SART, DSC) with enable + file picker
+      (FileDialog) — present and persisted (`UIConfig.*Sound`/`*SoundFile`);
+      Test is disabled and playback is inert pending the Qt sound engine.
+- [ ] Sound-output device selection / custom play command (not surfaced; no
+      sound engine yet).
 
 **Plugins page**
 - [~] Qt shows a placeholder. To build: plugin list/enable, catalog
