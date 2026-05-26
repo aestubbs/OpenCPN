@@ -2366,6 +2366,62 @@ ApplicationWindow {
             }
         }
 
+        // --- Scale bar (mirrors wx ScaleBarDraw): bottom-left, a "nice" round
+        //     distance for the current zoom + label, recomputed on pan/zoom and
+        //     when the distance unit changes. Styled like the other HUD pills.
+        Rectangle {
+            id: scaleBar
+            property var sb: chart.scaleBar()
+            Connections {
+                target: chart
+                function onViewChanged() { scaleBar.sb = chart.scaleBar() }
+            }
+            Connections {
+                target: DisplayConfig
+                function onChanged() { scaleBar.sb = chart.scaleBar() }
+            }
+            // scaleBar() yields an empty map until the viewport is ready.
+            readonly property real barLen: (sb && sb.length) ? sb.length : 0
+            readonly property string barText: (sb && sb.label) ? sb.label : ""
+            visible: barLen > 6
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            anchors.margins: 12
+            width: barLen + 16
+            height: barCol.implicitHeight + 12
+            radius: 4
+            color: "#cc101418"
+            border.color: "#3affffff"
+
+            Column {
+                id: barCol
+                anchors.centerIn: parent
+                spacing: 3
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: scaleBar.barText
+                    color: "#e8f0ff"; font.pointSize: 10; font.bold: true
+                }
+                // The bar: a baseline with end ticks, exactly `length` px wide.
+                Item {
+                    width: scaleBar.barLen
+                    height: 8
+                    Rectangle {  // baseline
+                        anchors.bottom: parent.bottom
+                        width: parent.width; height: 2; color: "#e8f0ff"
+                    }
+                    Rectangle {  // left tick
+                        anchors.left: parent.left; anchors.bottom: parent.bottom
+                        width: 2; height: 8; color: "#e8f0ff"
+                    }
+                    Rectangle {  // right tick
+                        anchors.right: parent.right; anchors.bottom: parent.bottom
+                        width: 2; height: 8; color: "#e8f0ff"
+                    }
+                }
+            }
+        }
+
         // --- MUIBar: per-canvas controls bottom-right, mirroring OpenCPN's
         //     MUIBar -- zoom in/out, follow own ship, and a menu opening the
         //     canvas display options. (Distinct from the master toolbar.)

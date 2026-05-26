@@ -39,6 +39,7 @@
 #include <QPointF>
 #include <QQuickItem>
 #include <QSet>
+#include <QVariantMap>
 
 #include "ais_selection_view_model.h"  // complete type needed for Q_PROPERTY
 #include "chart_extent.h"  // CellExtent -- catalog entry (value type)
@@ -257,6 +258,13 @@ public:
   // HandlePianoClick / SelectQuiltRefdbChart autoscale).
   Q_INVOKABLE void selectChart(const QString& name);
 
+  // Scale bar (mirrors wx ScaleBarDraw, simplified form): a "nice" round
+  // distance for the current zoom + its on-screen pixel length. Returns
+  // { "length": <px>, "label": "<n> <unit>" }, using the Display units. The
+  // QML scale bar binds to this and refreshes on viewChanged. Empty if the
+  // viewport is not ready.
+  Q_INVOKABLE QVariantMap scaleBar() const;
+
 Q_SIGNALS:
   void s52EngineChanged();
   void displayCategoryChanged();
@@ -350,7 +358,10 @@ private:
   AisLayer* m_ais_layer = nullptr;
   OwnShipLayer* m_own_ship_layer = nullptr;
   RouteLayer* m_route_layer = nullptr;  // for colour-scheme line tinting
-  bool m_demo_mode = true;
+  // Demo (Hakefjord replay) is OFF by default and opt-in only: the app boots
+  // into the live setup (persisted connections auto-start). Persisted in
+  // ConfigStore ("display/demoMode"); the constructor reads it.
+  bool m_demo_mode = false;
   bool m_live_centered = false;  // recentre on own ship once per live session
   bool m_follow_own_ship = false;  // MUIBar follow mode
 

@@ -155,15 +155,22 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // Route/waypoint list model for the manager (P3.7).
   m_route_list = std::make_unique<RouteListViewModel>(m_nav_provider.get());
 
+  // Demo (Hakefjord replay) is opt-in: read the persisted choice (default
+  // off). The app otherwise boots into the live setup.
+  m_demo_mode = ConfigStore::instance().getBool("display/demoMode", false);
+
   // Data-source connections (#34): enabling one creates a CommDriver that
-  // feeds the model; switch to live + poll the model so the data shows.
+  // feeds the model. The live/demo mode is governed solely by m_demo_mode
+  // (the explicit toggle), so activating a connection never flips demo --
+  // it just makes sure the model is being polled when we're live.
   m_connections = std::make_unique<ConnectionsViewModel>();
   connect(m_connections.get(), &ConnectionsViewModel::activated, this,
           [this]() {
-            setDemoMode(false);
-            if (m_model_provider) m_model_provider->setModelPolling(true);
+            if (!m_demo_mode && m_model_provider)
+              m_model_provider->setModelPolling(true);
           });
-  // Re-open any connections that were enabled last session (auto-reconnect).
+  // Auto-start the configured setup: re-open any connections enabled last
+  // session (auto-reconnect) so live data flows on launch.
   m_connections->activatePersisted();
 
   // Decoded-message stream for the Data Monitor (taps all comm messages).
@@ -628,6 +635,49 @@ void ChartCanvas::selectChart(const QString& name) {
   update();  // viewport::changed also kicks the debounced quilt rebuild
 }
 
+QVariantMap ChartCanvas::scaleBar() const {
+  QVariantMap out;
+  if (!m_viewport || width() <= 1.0) return out;
+  constexpr double kPi = 3.14159265358979323846;
+  // Equirectangular: scale is px per degree (lon and lat equal). Ground NM per
+  // horizontal pixel at the centre latitude (1° lon = 60·cos(lat) NM).
+  const double coslat = std::max(0.05, std::cos(m_viewport->centerLat()
+                                                * kPi / 180.0));
+  const double nm_per_px = 60.0 * coslat / m_viewport->scale();
+  if (!std::isfinite(nm_per_px) || nm_per_px <= 0.0) return out;
+
+  // Aim the bar at ~a quarter of the canvas width, then round to a 1/2/5
+  // "nice" number in the user's distance unit (dropping to m/ft when short).
+  const double target_nm = (width() * 0.25) * nm_per_px;
+  double per_nm;       // user-unit per NM
+  QString suffix;
+  switch (DisplayConfig::instance().distanceUnit()) {
+    case 1: per_nm = 1.852;        suffix = QStringLiteral("km"); break;
+    case 2: per_nm = 1.150779448;  suffix = QStringLiteral("mi"); break;
+    default: per_nm = 1.0;         suffix = QStringLiteral("NM"); break;
+  }
+  double target_u = target_nm * per_nm;
+  if (target_u < 0.5) {  // too short for the big unit -> metres / feet
+    if (suffix == QStringLiteral("mi")) { per_nm = 6076.115; suffix = QStringLiteral("ft"); }
+    else { per_nm = 1852.0; suffix = QStringLiteral("m"); }
+    target_u = target_nm * per_nm;
+  }
+  if (!(target_u > 0.0)) return out;
+
+  const double logd = std::log10(target_u);
+  const double places = std::floor(logd);
+  const double rem = logd - places;
+  double nice_u = std::pow(10.0, places);
+  if (rem < 0.2) nice_u /= 5.0;        // ... 0.2, 0.5, 1, 2, 5, 10 ...
+  else if (rem < 0.5) nice_u /= 2.0;
+
+  const double nice_nm = nice_u / per_nm;
+  out[QStringLiteral("length")] = nice_nm / nm_per_px;  // pixels
+  out[QStringLiteral("label")] =
+      QStringLiteral("%1 %2").arg(nice_u, 0, 'g', 4).arg(suffix);
+  return out;
+}
+
 void ChartCanvas::highlightChartCell(const QString& name) {
   if (m_boundary_provider) m_boundary_provider->setHighlight(name);
   update();
@@ -826,6 +876,7 @@ void ChartCanvas::setShowBuoys(bool on) {
 void ChartCanvas::setDemoMode(bool on) {
   if (on == m_demo_mode) return;
   m_demo_mode = on;
+  ConfigStore::instance().setBool("display/demoMode", on);  // opt-in, persisted
   // Demo = the Hakefjord NMEA-log replay (a self-contained sample feed);
   // live = the real model fed by user connections. The two are mutually
   // exclusive: in demo the live model poll is stopped (real feeds are not
