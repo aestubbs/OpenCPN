@@ -160,6 +160,87 @@ chart_context* MakeMinimalChartContext(double ref_lat, double ref_lon) {
   return ctx;
 }
 
+// Reconstruct a PolyTessGeo from an OSENC FEATURE_GEOMETRY_RECORD_AREA payload
+// (ported from Osenc::BuildPolyTessGeo). `p` points at the payload start
+// (after the 6-byte record base); `plen` is its length. The payload is:
+// 4 doubles extent {s_lat,n_lat,w_lon,e_lon}, 3 uint32 {contour, triprim,
+// edge counts}, then the per-contour point-count array (contour×int) and the
+// triangle primitives, then the edge index table (ignored here). Returns
+// nullptr on a malformed/too-short payload.
+PolyTessGeo* buildOsencPolyTessGeo(const char* p, uint32_t plen) {
+  constexpr uint32_t kFixed = 4 * sizeof(double) + 3 * sizeof(uint32_t);  // 44
+  if (plen < kFixed) return nullptr;
+  double ext[4];
+  std::memcpy(ext, p, 4 * sizeof(double));  // s_lat, n_lat, w_lon, e_lon
+  uint32_t nContours, nTriPrim, nEdge;
+  std::memcpy(&nContours, p + 32, 4);
+  std::memcpy(&nTriPrim, p + 36, 4);
+  std::memcpy(&nEdge, p + 40, 4);
+  (void)nEdge;
+  const char* const end = p + plen;
+  const char* run = p + kFixed;
+
+  auto* pPTG = new PolyTessGeo();
+  pPTG->SetExtents(ext[2], ext[0], ext[3], ext[1]);  // w, s, e, n
+  auto* ppg = new PolyTriGroup;
+  ppg->m_bSMSENC = true;
+  ppg->data_type = DATA_TYPE_DOUBLE;
+  ppg->nContours = static_cast<int>(nContours);
+  ppg->pn_vertex = static_cast<int*>(malloc(nContours * sizeof(int)));
+  // Per-contour point-count array.
+  if (run + nContours * sizeof(int) > end) { delete ppg; delete pPTG; return nullptr; }
+  std::memcpy(ppg->pn_vertex, run, nContours * sizeof(int));
+  run += nContours * sizeof(int);
+  ppg->pgroup_geom = nullptr;
+
+  TriPrim** p_prev = &(ppg->tri_prim_head);
+  int nvert_max = 0;
+  size_t total_bytes = 2 * sizeof(float);
+  bool bad = false;
+  for (uint32_t i = 0; i < nTriPrim && !bad; ++i) {
+    if (run + 1 + sizeof(uint32_t) + 4 * sizeof(double) > end) { bad = true; break; }
+    const uint8_t tri_type = static_cast<uint8_t>(*run++);
+    uint32_t nvert;
+    std::memcpy(&nvert, run, sizeof(uint32_t));
+    run += sizeof(uint32_t);
+    auto* tp = new TriPrim;
+    *p_prev = tp;
+    p_prev = &(tp->p_next);
+    tp->p_next = nullptr;
+    tp->type = tri_type;
+    tp->nVert = nvert;
+    nvert_max = std::max<int>(nvert_max, static_cast<int>(nvert));
+    double bb[4];
+    std::memcpy(bb, run, 4 * sizeof(double));  // minx, maxx, miny, maxy
+    run += 4 * sizeof(double);
+    tp->tri_box.Set(bb[2], bb[0], bb[3], bb[1]);
+    const size_t vbytes = static_cast<size_t>(nvert) * 2 * sizeof(float);
+    if (run + vbytes > end) { bad = true; break; }
+    tp->p_vertex = reinterpret_cast<double*>(const_cast<char*>(run));
+    run += vbytes;
+    total_bytes += vbytes;
+  }
+  // Coalesce vertices into one owned float buffer (the source payload is
+  // transient), repointing each TriPrim.
+  auto* vbuf = static_cast<unsigned char*>(malloc(total_bytes));
+  unsigned char* vrun = vbuf;
+  for (TriPrim* tp = ppg->tri_prim_head; tp; tp = tp->p_next) {
+    const size_t vb = static_cast<size_t>(tp->nVert) * 2 * sizeof(float);
+    std::memcpy(vrun, tp->p_vertex, vb);
+    tp->p_vertex = reinterpret_cast<double*>(vrun);
+    vrun += vb;
+  }
+  ppg->bsingle_alloc = true;
+  ppg->single_buffer = vbuf;
+  ppg->single_buffer_size = total_bytes;
+  ppg->data_type = DATA_TYPE_FLOAT;
+
+  pPTG->SetPPGHead(ppg);
+  pPTG->SetnVertexMax(nvert_max);
+  pPTG->Set_OK(true);
+  return pPTG;
+}
+
 void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
                   OGRPolygon* poly, double ref_lat, double ref_lon,
                   S57Obj* obj, chart_context* ctx) {
@@ -717,6 +798,18 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
         }
         break;
       }
+      case FEATURE_GEOMETRY_RECORD_AREA: {
+        if (cur) {
+          PolyTessGeo* ptg = buildOsencPolyTessGeo(pl, plen);
+          if (ptg && ptg->IsOk()) {
+            cur->SetAreaGeometry(ptg, ref_lat, ref_lon);
+            cur->Primitive_type = GEO_AREA;
+          } else {
+            delete ptg;
+          }
+        }
+        break;
+      }
       case FEATURE_GEOMETRY_RECORD_LINE: {
         // payload: 4 doubles (extent) + uint32 edgeVector_count + index table.
         if (cur && plen >= 4 * sizeof(double) + sizeof(uint32_t)) {
@@ -789,7 +882,7 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
   auto appendDedup = [](QList<QPointF>& list, const QPointF& pt) {
     if (list.isEmpty() || list.last() != pt) list.append(pt);
   };
-  int n_points = 0, n_lines = 0;
+  int n_points = 0, n_lines = 0, n_areas = 0;
   for (S57Obj* obj : objects) {
     if (obj->Primitive_type == GEO_POINT) {
       LUPrec* lup = plib->S52_LUPLookup(PAPER_CHART, obj->FeatureName, obj);
@@ -838,6 +931,15 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
       rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
       plib->RenderLineToSG(buf, &rz, pts);
       ++n_lines;
+    } else if (obj->Primitive_type == GEO_AREA) {
+      LUPrec* lup = plib->S52_LUPLookup(PLAIN_BOUNDARIES, obj->FeatureName, obj);
+      if (!lup) continue;
+      plib->_LUP2rules(lup, obj);
+      ObjRazRules rz;
+      rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
+      rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
+      plib->RenderAreaToSG(buf, &rz);
+      ++n_areas;
     }
   }
 
@@ -845,9 +947,11 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
   if (os) *os = slat;
   if (oe) *oe = elon;
   if (ow) *ow = wlon;
-  qWarning("decodeOsenc: %d objects -- %d points, %d lines (%d edges, %d nodes)%s",
-           static_cast<int>(objects.size()), n_points, n_lines, ve.size(),
-           vc.size(), have_extent ? "" : " [no extent]");
+  qWarning(
+      "decodeOsenc: %d objects -- %d areas, %d points, %d lines (%d edges, "
+      "%d nodes)%s",
+      static_cast<int>(objects.size()), n_areas, n_points, n_lines, ve.size(),
+      vc.size(), have_extent ? "" : " [no extent]");
   return buf;
 }
 

@@ -125,6 +125,8 @@ void ChartWorker::loadCell(const CellExtent& cell) {
       bool ok = false;
       const QByteArray osenc =
           OChartsService::instance().decryptCell(cell.path, ok);
+      qWarning("loadCell ocharts %s: decrypt ok=%d bytes=%lld",
+               qPrintable(cell.name), ok, (long long)osenc.size());
       if (ok) buf = m_engine->decodeOsenc(osenc, &n, &s, &e, &w);
       break;
     }

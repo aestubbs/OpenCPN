@@ -400,6 +400,15 @@ void ChartCanvas::reloadCharts() {
     m_chart_source->setStatus(tr("No ENC cells found"), false);
     return;
   }
+  // If any o-charts cells are present, kick off the decryption daemon now on
+  // the GUI thread (reliable QProcess spawn) so the worker finds it ready.
+  for (const QString& c : cells) {
+    if (c.endsWith(QStringLiteral(".oesu"), Qt::CaseInsensitive) ||
+        c.endsWith(QStringLiteral(".oesenc"), Qt::CaseInsensitive)) {
+      OChartsService::instance().prespawnDaemon();
+      break;
+    }
+  }
   m_chart_source->setStatus(tr("Scanning %1 cells…").arg(cells.size()), true);
   if (!m_worker) {
     startAsyncLoad(cells, m_s57data_dir);

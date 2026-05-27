@@ -87,6 +87,11 @@ public:
    *  extent scans (the header carries CELL_EXTENT + native scale). */
   QByteArray decryptCellHeader(const QString& cellPath, bool& ok);
 
+  /** Kick off the oexserverd FIFO server if it isn't already up, WITHOUT
+   *  waiting. Call on the GUI thread (QProcess spawning is reliable there);
+   *  the chart worker's decrypt then finds the daemon ready. */
+  void prespawnDaemon();
+
 Q_SIGNALS:
   void changed();
 

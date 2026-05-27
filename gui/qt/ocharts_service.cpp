@@ -245,6 +245,17 @@ bool OChartsService::ensureDaemon() {
   return readerPresent();
 }
 
+void OChartsService::prespawnDaemon() {
+  const int fd = ::open(kPublicPipe, O_WRONLY | O_NONBLOCK);
+  if (fd >= 0) {  // a reader is already present -> server up
+    ::close(fd);
+    return;
+  }
+  const QString daemon = daemonPath();
+  if (!daemon.isEmpty())
+    QProcess::startDetached(daemon, {}, QFileInfo(daemon).absolutePath());
+}
+
 QByteArray OChartsService::decryptCell(const QString& cellPath, bool& ok) {
   return decrypt(cellPath, kCmdReadOesu, ok);
 }
@@ -257,8 +268,14 @@ QByteArray OChartsService::decrypt(const QString& cellPath, unsigned char cmd,
                                    bool& ok) {
   ok = false;
   const QString key = keyForCell(cellPath);
-  if (key.isEmpty()) return {};
-  if (!ensureDaemon()) return {};
+  if (key.isEmpty()) {
+    qWarning("decrypt: no key for %s", qPrintable(cellPath));
+    return {};
+  }
+  if (!ensureDaemon()) {
+    qWarning("decrypt: daemon unavailable");
+    return {};
+  }
 
   // Unique private return FIFO for the daemon to stream the plaintext into.
   static QAtomicInt seq(0);
