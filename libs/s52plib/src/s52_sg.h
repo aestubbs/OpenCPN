@@ -113,6 +113,7 @@ struct Symbol {
   QPointF pos;     // (lon, lat) anchor
   QImage image;    // RGBA symbol bitmap
   QPointF pivot;   // pixel offset of the anchor within image
+  double rotationDeg = 0.0;  // symbol rotation about the pivot (S-52 SY angle)
   // S-52 SCAMIN: the 1:N chart scale beyond which (more zoomed out) this
   // item is hidden. The s52plib "unset" sentinel (~1e8) means always show.
   int scamin = 100000002;

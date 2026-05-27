@@ -257,6 +257,31 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     Rule *prule = rules->razRule;
     if (!prule) return;
 
+    // Symbol rotation (mirrors RenderSY): a supplementary angle in the SY()
+    // instruction (e.g. SY(LIGHTS11,135) -> the standard ATON flare lean) is
+    // overridden by an ORIENT attribute (the object's own bearing; +180 for
+    // LIGHTS). Without this, every point symbol drew upright at 0 deg.
+    float angle = 0.0f;
+    if (rules->INSTstr && rules->INSTstr[8] == ',') {
+      char sangle[16];
+      int cp = 0;
+      while (rules->INSTstr[cp + 9] && rules->INSTstr[cp + 9] != ')' &&
+             cp < 15) {
+        sangle[cp] = rules->INSTstr[cp + 9];
+        ++cp;
+      }
+      sangle[cp] = 0;
+      angle = static_cast<float>(atoi(sangle));
+    }
+    double orient;
+    if (rzRules->obj && GetDoubleAttr(rzRules->obj, "ORIENT", orient)) {
+      angle = static_cast<float>(orient);
+      if (strncmp(rzRules->obj->FeatureName, "LIGHTS", 6) == 0) {
+        angle += 180.0f;
+        if (angle > 360.0f) angle -= 360.0f;
+      }
+    }
+
     if (prule->definition.SYDF == 'R') {  // raster symbol from the atlas
       QImage qimg = cachedAtlasImage(m_chartSymbols, prule->name.SYNM);
       if (qimg.isNull()) return;
@@ -265,6 +290,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
       sym.image = qimg;
       sym.pivot = QPointF(prule->pos.symb.pivot_x.SYCL,
                           prule->pos.symb.pivot_y.SYRW);
+      sym.rotationDeg = angle;
       sym.scamin = scamin;
       sym.dispCat = dc;
       sym.viewGroup = vg;
@@ -288,8 +314,10 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                     prule->pos.symb.pivot_y.SYRW);
       wxPoint origin(prule->pos.symb.bnbox_x.SBXC,
                      prule->pos.symb.bnbox_y.SBXR);
+      // Bake the symbol rotation into the captured ops (SG symbols are screen
+      // billboards, so the angle is fixed, not viewport-relative).
       HPGL->Render(prule->vector.SVCT, prule->colRef.SCRF, r0, pivot, origin,
-                   1.0f, 0.0, true);
+                   1.0f, angle, true);
       if (!vsym.ops.isEmpty()) out.vectorSymbols.push_back(std::move(vsym));
     }
   };

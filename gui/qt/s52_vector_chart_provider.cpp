@@ -510,7 +510,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   m_billboards.clear();
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
                           QPointF pivotPx, int scamin, BbKind kind,
-                          float depth) {
+                          float depth, double rotationDeg = 0.0) {
     if (image.isNull() || !window) return;
     QSGTexture* tex = root->texture(image);  // cache-owned, deduped by name
     if (!tex) return;
@@ -524,7 +524,18 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     img->setRect(QRectF(-pivotPx.x(), -pivotPx.y(), w, h));
     img->setFiltering(QSGTexture::Linear);
     auto* xform = new QSGTransformNode();
-    xform->appendChildNode(img);
+    if (rotationDeg != 0.0) {
+      // Fixed rotation about the pivot (which sits at the node origin), e.g.
+      // an S-52 SY angle. Sits inside the per-frame placement xform.
+      auto* rot = new QSGTransformNode();
+      QMatrix4x4 m;
+      m.rotate(static_cast<float>(rotationDeg), 0.0f, 0.0f, 1.0f);
+      rot->setMatrix(m);
+      rot->appendChildNode(img);
+      xform->appendChildNode(rot);
+    } else {
+      xform->appendChildNode(img);
+    }
     auto* opacity = new QSGOpacityNode();
     opacity->appendChildNode(xform);
     root->appendChildNode(opacity);
@@ -547,7 +558,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     if (sym.dispCat > m_displayCategory) continue;
     if (!viewGroupEnabled(sym.viewGroup)) continue;  // Lights/Buoys toggle
     addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot,
-                 sym.scamin, BbKind::Symbol, /*depth=*/0.0f);
+                 sym.scamin, BbKind::Symbol, /*depth=*/0.0f, sym.rotationDeg);
   }
 
   // Vector (HPGL) symbols -- billboarded geometry. The op coords are
