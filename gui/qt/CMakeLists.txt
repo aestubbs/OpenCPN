@@ -118,6 +118,8 @@ qt_add_qml_module(opencpn-qt
     ui_config.cpp
     chart_config.h
     chart_config.cpp
+    ocharts_service.h
+    ocharts_service.cpp
     nmea_monitor_model.h
     nmea_monitor_model.cpp
     wind_decoder.h
@@ -159,6 +161,17 @@ if (NOT DEFINED OCPN_QT_NMEA_LOG)
 endif ()
 target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_NMEA_LOG="${OCPN_QT_NMEA_LOG}"
+)
+
+# o-charts decryption daemon (closed-source but redistributable; vendored
+# under third_party/oexserverd). OChartsService runs it to generate the
+# machine fingerprint and, later, to decrypt .oesenc/.oeu cells over a FIFO.
+# Overridable; falls back at runtime to the installed o-charts_pi plugin copy.
+if (NOT DEFINED OCPN_QT_OEXSERVERD)
+  set(OCPN_QT_OEXSERVERD "${CMAKE_SOURCE_DIR}/third_party/oexserverd/oexserverd")
+endif ()
+target_compile_definitions(opencpn-qt PRIVATE
+  OCPN_QT_OEXSERVERD="${OCPN_QT_OEXSERVERD}"
 )
 
 # wx_qt_string.h lives in the model layer; we use it from s52_engine.cpp

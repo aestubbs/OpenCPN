@@ -844,6 +844,7 @@ ApplicationWindow {
                             TabButton { text: qsTr("Vector Display") }
                             TabButton { text: qsTr("Groups") }
                             TabButton { text: qsTr("Tides") }
+                            TabButton { text: qsTr("o-charts") }
                         }
 
                         StackLayout {
@@ -1124,6 +1125,56 @@ ApplicationWindow {
                                         color: palette.placeholderText
                                     }
                                     Item { Layout.fillHeight: true }
+                                }
+                            }
+
+                            // --- o-charts (built-in, native -- not a plugin) ---
+                            Item {
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+                                    Label { text: qsTr("o-charts (encrypted)"); font.bold: true }
+                                    Label {
+                                        text: OCharts.daemonAvailable
+                                            ? qsTr("Decryption helper found: ") + OCharts.daemonVersion
+                                            : qsTr("oexserverd decryption helper not found.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: OCharts.daemonAvailable ? "#34a853"
+                                                                       : palette.placeholderText
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("System fingerprint"); font.bold: true }
+                                    Label {
+                                        text: qsTr("Generate this computer's fingerprint, then upload the .fpr file at o-charts.org to licence a chart set to this machine.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Button {
+                                            text: qsTr("Generate fingerprint")
+                                            enabled: OCharts.daemonAvailable && !OCharts.busy
+                                            onClicked: OCharts.generateFingerprint()
+                                        }
+                                        BusyIndicator {
+                                            running: OCharts.busy; visible: running
+                                            implicitWidth: 22; implicitHeight: 22
+                                        }
+                                    }
+                                    Label {
+                                        text: OCharts.status
+                                        visible: OCharts.status.length > 0
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        font.family: "monospace"; font.pointSize: 11
+                                    }
+                                    Item { Layout.fillHeight: true }
+                                    Label {
+                                        text: qsTr("Decryption + chart loading is built into the app (no plugin); install a licensed o-charts set, then add its folder under Chart Files.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
                                 }
                             }
                         }
