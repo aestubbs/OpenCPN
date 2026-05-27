@@ -40,6 +40,9 @@
 
 #include "app_controller.h"
 #include "nav_core.h"
+#include <QFileInfo>
+
+#include "ocharts_service.h"
 #include "s52_engine.h"
 #if defined(Q_OS_MACOS)
 #include "macos_titlebar.h"
@@ -106,6 +109,28 @@ int main(int argc, char* argv[]) {
     double n = 0, s = 0, e = 0, w = 0;
     s52.loadOsencCell(QString::fromUtf8(t), &n, &s, &e, &w);
     qInfo("OSENC_TEST extent N%.4f S%.4f E%.4f W%.4f", n, s, e, w);
+  }
+  // Dev one-shot: decrypt an o-charts .oesu cell via oexserverd, then decode.
+  // Set OCPN_QT_OESU_TEST=/path/to/charts/CELL.oesu (its dir holds the keyList).
+  if (const QByteArray t = qgetenv("OCPN_QT_OESU_TEST"); !t.isEmpty()) {
+    const QString cell = QString::fromUtf8(t);
+    auto& oc = ocpn::qtui::OChartsService::instance();
+    const int nkeys = oc.loadKeyList(QFileInfo(cell).absolutePath());
+    bool ok = false;
+    const QByteArray osenc = oc.decryptCell(cell, ok);
+    qInfo("OESU_TEST keys=%d decrypt ok=%d bytes=%lld", nkeys, ok,
+          static_cast<long long>(osenc.size()));
+    if (ok && osenc.size() < 2000) {
+      QFile dump(QStringLiteral("/tmp/oesu_decrypt.bin"));
+      if (dump.open(QIODevice::WriteOnly)) dump.write(osenc);
+      qInfo("OESU_TEST dumped %lld bytes to /tmp/oesu_decrypt.bin",
+            static_cast<long long>(osenc.size()));
+    }
+    if (ok) {
+      double n = 0, s = 0, e = 0, w = 0;
+      s52.decodeOsenc(osenc, &n, &s, &e, &w);
+      qInfo("OESU_TEST extent N%.4f S%.4f E%.4f W%.4f", n, s, e, w);
+    }
   }
 
   // Shared QML<->native state (vessel-data drawer). Exposed as "app".

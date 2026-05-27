@@ -24,6 +24,8 @@
 #ifndef OCPN_QT_OCHARTS_SERVICE_H_
 #define OCPN_QT_OCHARTS_SERVICE_H_
 
+#include <QByteArray>
+#include <QHash>
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
@@ -66,6 +68,21 @@ public:
    *  printFile + emits changed(). */
   Q_INVOKABLE void generateFingerprint();
 
+  /** Parse every keyList *.XML in `chartDir` (FileName -> RInstallKey) into
+   *  the in-memory key map. Returns the number of keys loaded. Skips `-sgl`
+   *  dongle key files for now (system keys only). */
+  int loadKeyList(const QString& chartDir);
+
+  /** The RInstallKey for a cell file (matched by base name without extension),
+   *  or empty if not in the loaded keyList. */
+  QString keyForCell(const QString& cellPath) const;
+
+  /** Decrypt an o-charts cell (*.oesu / *.oesenc) to a plaintext OSENC byte
+   *  stream via oexserverd over the FIFO. BLOCKING -- call off the GUI thread
+   *  (the chart worker). `ok` is set to the result. Empty on failure. The key
+   *  is looked up from the loaded keyList (call loadKeyList first). */
+  QByteArray decryptCell(const QString& cellPath, bool& ok);
+
 Q_SIGNALS:
   void changed();
 
@@ -74,10 +91,14 @@ private:
   void setStatus(const QString& text, bool busy);
   void probeVersion();
 
+  // Ensure the daemon is running (its FIFO exists), spawning it if needed.
+  bool ensureDaemon();
+
   QString m_version;
   QString m_status;
   bool m_busy = false;
   QString m_fpr_file;
+  QHash<QString, QString> m_keys;  // cell base name -> RInstallKey
 };
 
 }  // namespace ocpn::qtui

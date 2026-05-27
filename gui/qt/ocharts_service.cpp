@@ -15,17 +15,44 @@
 
 #include "ocharts_service.h"
 
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <cstring>
+
+#include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QThread>
+#include <QXmlStreamReader>
 
 #ifndef OCPN_QT_OEXSERVERD
 #define OCPN_QT_OEXSERVERD ""
 #endif
 
 namespace ocpn::qtui {
+
+namespace {
+// oexserverd (current OESU) public request FIFO + protocol constants.
+constexpr char kPublicPipe[] = "/tmp/OCPN_PIPEX";
+constexpr unsigned char kCmdReadOesu = 8;  // decrypt .oesu body to pipe
+
+// The request message written to the public FIFO. All char arrays, so it is
+// naturally packed (1025 bytes). Mirrors o-charts_pi src/Osenc.h fifo_msg.
+struct OexFifoMsg {
+  unsigned char cmd;
+  char fifo_name[256];
+  char senc_name[256];
+  char senc_key[512];
+};
+}  // namespace
 
 OChartsService& OChartsService::instance() {
   static OChartsService s;
@@ -149,6 +176,134 @@ void OChartsService::generateFingerprint() {
           });
   // `oexserverd -g "<dir>"` -- the normal (non-dongle) machine fingerprint.
   proc->start(daemon, {QStringLiteral("-g"), out_dir});
+}
+
+int OChartsService::loadKeyList(const QString& chartDir) {
+  m_keys.clear();
+  const QStringList xmls =
+      QDir(chartDir).entryList({QStringLiteral("*.XML"), QStringLiteral("*.xml")},
+                               QDir::Files);
+  for (const QString& name : xmls) {
+    // `-sgl` files are dongle key lists; system keys live in the rest.
+    if (name.contains(QStringLiteral("-sgl"), Qt::CaseInsensitive)) continue;
+    QFile f(chartDir + QStringLiteral("/") + name);
+    if (!f.open(QIODevice::ReadOnly)) continue;
+    QXmlStreamReader xml(&f);
+    QString fileName, key;
+    bool inChart = false;
+    while (!xml.atEnd()) {
+      const auto tok = xml.readNext();
+      if (tok == QXmlStreamReader::StartElement) {
+        const QStringView n = xml.name();
+        if (n == QStringLiteral("Chart")) {
+          inChart = true; fileName.clear(); key.clear();
+        } else if (inChart && n == QStringLiteral("FileName")) {
+          fileName = xml.readElementText().trimmed();
+        } else if (inChart && n == QStringLiteral("RInstallKey")) {
+          key = xml.readElementText().trimmed();
+        }
+      } else if (tok == QXmlStreamReader::EndElement &&
+                 xml.name() == QStringLiteral("Chart")) {
+        if (!fileName.isEmpty() && !key.isEmpty()) m_keys.insert(fileName, key);
+        inChart = false;
+      }
+    }
+  }
+  return m_keys.size();
+}
+
+QString OChartsService::keyForCell(const QString& cellPath) const {
+  return m_keys.value(QFileInfo(cellPath).completeBaseName());
+}
+
+bool OChartsService::ensureDaemon() {
+  // A live server means the public FIFO can be opened for writing (a reader is
+  // present). A stale pipe with no reader returns ENXIO -- treat as not-up and
+  // (re)spawn, else the write-open would block forever.
+  auto readerPresent = []() {
+    const int fd = ::open(kPublicPipe, O_WRONLY | O_NONBLOCK);
+    if (fd >= 0) {
+      ::close(fd);
+      return true;
+    }
+    return false;
+  };
+  if (readerPresent()) return true;
+  const QString daemon = daemonPath();
+  if (daemon.isEmpty()) return false;
+  // Bare invocation = FIFO server mode; run from its own dir so it finds
+  // libsglmac via dlopen.
+  QProcess::startDetached(daemon, {}, QFileInfo(daemon).absolutePath());
+  QElapsedTimer t;
+  t.start();
+  while (t.elapsed() < 5000) {
+    QThread::msleep(100);
+    if (readerPresent()) return true;
+  }
+  return readerPresent();
+}
+
+QByteArray OChartsService::decryptCell(const QString& cellPath, bool& ok) {
+  ok = false;
+  const QString key = keyForCell(cellPath);
+  if (key.isEmpty()) return {};
+  if (!ensureDaemon()) return {};
+
+  // Unique private return FIFO for the daemon to stream the plaintext into.
+  const QString fifo = QStringLiteral("/tmp/ocpn_qt_%1_%2")
+                           .arg(QCoreApplication::applicationPid())
+                           .arg(reinterpret_cast<quintptr>(&ok), 0, 16);
+  const QByteArray fifo_c = fifo.toUtf8();
+  ::unlink(fifo_c.constData());
+  if (::mkfifo(fifo_c.constData(), 0666) != 0) return {};
+
+  // Build + send the request to the public FIFO.
+  OexFifoMsg msg;
+  std::memset(&msg, 0, sizeof(msg));
+  msg.cmd = kCmdReadOesu;
+  std::strncpy(msg.fifo_name, fifo_c.constData(), sizeof(msg.fifo_name) - 1);
+  const QByteArray cell_c = cellPath.toUtf8();
+  std::strncpy(msg.senc_name, cell_c.constData(), sizeof(msg.senc_name) - 1);
+  const QByteArray key_c = key.toUtf8();
+  std::strncpy(msg.senc_key, key_c.constData(), sizeof(msg.senc_key) - 1);
+
+  int wfd = ::open(kPublicPipe, O_WRONLY);
+  if (wfd < 0) { ::unlink(fifo_c.constData()); return {}; }
+  const ssize_t wn = ::write(wfd, &msg, sizeof(msg));
+  ::close(wfd);
+  if (wn != static_cast<ssize_t>(sizeof(msg))) {
+    ::unlink(fifo_c.constData());
+    return {};
+  }
+
+  // Read the decrypted stream from our private FIFO. The daemon writes the
+  // SERVER_STATUS_RECORD and the OSENC body in SEPARATE FIFO open/close
+  // sessions, so an EOF (read==0) is NOT necessarily the end -- it may just be
+  // the gap before the body session. Keep the fd open and retry across EOF
+  // (mirrors the wx "slow server" retry), stopping only after an idle period
+  // with no further data. Non-blocking so we never hang on a dead daemon.
+  QByteArray out;
+  int rfd = ::open(fifo_c.constData(), O_RDONLY | O_NONBLOCK);
+  if (rfd >= 0) {
+    char chunk[65536];
+    int idle_ms = 0;
+    // Wait up to 8s for the first byte; once streaming, 1.5s of silence ends.
+    while (idle_ms < (out.isEmpty() ? 8000 : 1500)) {
+      const ssize_t r = ::read(rfd, chunk, sizeof(chunk));
+      if (r > 0) {
+        out.append(chunk, static_cast<int>(r));
+        idle_ms = 0;
+      } else {
+        // r == 0 (EOF / no writer yet) or r < 0 EAGAIN: wait for more.
+        QThread::msleep(20);
+        idle_ms += 20;
+      }
+    }
+    ::close(rfd);
+  }
+  ::unlink(fifo_c.constData());
+  ok = out.size() > 18;  // more than the SERVER_STATUS_RECORD alone
+  return out;
 }
 
 }  // namespace ocpn::qtui
