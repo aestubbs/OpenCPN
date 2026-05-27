@@ -23,6 +23,7 @@
 
 #include <cstring>
 
+#include <QAtomicInt>
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
@@ -42,7 +43,8 @@ namespace ocpn::qtui {
 namespace {
 // oexserverd (current OESU) public request FIFO + protocol constants.
 constexpr char kPublicPipe[] = "/tmp/OCPN_PIPEX";
-constexpr unsigned char kCmdReadOesu = 8;  // decrypt .oesu body to pipe
+constexpr unsigned char kCmdReadOesu = 8;     // decrypt .oesu body to pipe
+constexpr unsigned char kCmdReadOesuHdr = 9;  // decrypt only the header
 
 // The request message written to the public FIFO. All char arrays, so it is
 // naturally packed (1025 bytes). Mirrors o-charts_pi src/Osenc.h fifo_msg.
@@ -244,15 +246,25 @@ bool OChartsService::ensureDaemon() {
 }
 
 QByteArray OChartsService::decryptCell(const QString& cellPath, bool& ok) {
+  return decrypt(cellPath, kCmdReadOesu, ok);
+}
+
+QByteArray OChartsService::decryptCellHeader(const QString& cellPath, bool& ok) {
+  return decrypt(cellPath, kCmdReadOesuHdr, ok);
+}
+
+QByteArray OChartsService::decrypt(const QString& cellPath, unsigned char cmd,
+                                   bool& ok) {
   ok = false;
   const QString key = keyForCell(cellPath);
   if (key.isEmpty()) return {};
   if (!ensureDaemon()) return {};
 
   // Unique private return FIFO for the daemon to stream the plaintext into.
+  static QAtomicInt seq(0);
   const QString fifo = QStringLiteral("/tmp/ocpn_qt_%1_%2")
                            .arg(QCoreApplication::applicationPid())
-                           .arg(reinterpret_cast<quintptr>(&ok), 0, 16);
+                           .arg(seq.fetchAndAddRelaxed(1));
   const QByteArray fifo_c = fifo.toUtf8();
   ::unlink(fifo_c.constData());
   if (::mkfifo(fifo_c.constData(), 0666) != 0) return {};
@@ -260,7 +272,7 @@ QByteArray OChartsService::decryptCell(const QString& cellPath, bool& ok) {
   // Build + send the request to the public FIFO.
   OexFifoMsg msg;
   std::memset(&msg, 0, sizeof(msg));
-  msg.cmd = kCmdReadOesu;
+  msg.cmd = cmd;
   std::strncpy(msg.fifo_name, fifo_c.constData(), sizeof(msg.fifo_name) - 1);
   const QByteArray cell_c = cellPath.toUtf8();
   std::strncpy(msg.senc_name, cell_c.constData(), sizeof(msg.senc_name) - 1);
@@ -282,21 +294,38 @@ QByteArray OChartsService::decryptCell(const QString& cellPath, bool& ok) {
   // the gap before the body session. Keep the fd open and retry across EOF
   // (mirrors the wx "slow server" retry), stopping only after an idle period
   // with no further data. Non-blocking so we never hang on a dead daemon.
+  // The daemon writes the SERVER_STATUS_RECORD and the OSENC body in SEPARATE
+  // FIFO sessions (open/write/close). With O_NONBLOCK: read==0 means no writer
+  // attached (EOF / between sessions); read<0 EAGAIN means a writer is present
+  // but no data yet. Count writer sessions that actually delivered data and
+  // stop after the second (status + body), so there is no fixed idle tail. A
+  // grace after the first data-session and an overall cap keep us safe against
+  // single-session daemons and a dead daemon.
   QByteArray out;
   int rfd = ::open(fifo_c.constData(), O_RDONLY | O_NONBLOCK);
   if (rfd >= 0) {
     char chunk[65536];
-    int idle_ms = 0;
-    // Wait up to 8s for the first byte; once streaming, 1.5s of silence ends.
-    while (idle_ms < (out.isEmpty() ? 8000 : 1500)) {
+    int sessions = 0;          // data-bearing writer sessions that closed
+    bool data_this_session = false;
+    int idle_ms = 0, total_ms = 0;
+    for (;;) {
       const ssize_t r = ::read(rfd, chunk, sizeof(chunk));
       if (r > 0) {
         out.append(chunk, static_cast<int>(r));
+        data_this_session = true;
         idle_ms = 0;
       } else {
-        // r == 0 (EOF / no writer yet) or r < 0 EAGAIN: wait for more.
-        QThread::msleep(20);
-        idle_ms += 20;
+        if (r == 0 && data_this_session) {  // a writer session closed
+          ++sessions;
+          data_this_session = false;
+          if (sessions >= 2) break;  // status + body done
+        }
+        QThread::msleep(10);
+        idle_ms += 10;
+        total_ms += 10;
+        // After the body session, a brief grace ends a single-session daemon.
+        if (sessions >= 1 && idle_ms > 300) break;
+        if (total_ms > 8000) break;  // overall safety (no/slow daemon)
       }
     }
     ::close(rfd);

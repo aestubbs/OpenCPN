@@ -40,6 +40,7 @@
 
 #include "app_controller.h"
 #include "nav_core.h"
+#include <QElapsedTimer>
 #include <QFileInfo>
 
 #include "ocharts_service.h"
@@ -116,6 +117,11 @@ int main(int argc, char* argv[]) {
     const QString cell = QString::fromUtf8(t);
     auto& oc = ocpn::qtui::OChartsService::instance();
     const int nkeys = oc.loadKeyList(QFileInfo(cell).absolutePath());
+    bool hok = false;
+    QElapsedTimer ht; ht.start();
+    const QByteArray hdr = oc.decryptCellHeader(cell, hok);
+    qInfo("OESU_TEST header ok=%d bytes=%lld in %lldms", hok,
+          static_cast<long long>(hdr.size()), (long long)ht.elapsed());
     bool ok = false;
     const QByteArray osenc = oc.decryptCell(cell, ok);
     qInfo("OESU_TEST keys=%d decrypt ok=%d bytes=%lld", nkeys, ok,

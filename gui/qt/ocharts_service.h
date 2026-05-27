@@ -83,6 +83,10 @@ public:
    *  is looked up from the loaded keyList (call loadKeyList first). */
   QByteArray decryptCell(const QString& cellPath, bool& ok);
 
+  /** Decrypt only the cell HEADER (CMD_READ_OESU_HDR) -- cheap, for catalogue
+   *  extent scans (the header carries CELL_EXTENT + native scale). */
+  QByteArray decryptCellHeader(const QString& cellPath, bool& ok);
+
 Q_SIGNALS:
   void changed();
 
@@ -93,6 +97,9 @@ private:
 
   // Ensure the daemon is running (its FIFO exists), spawning it if needed.
   bool ensureDaemon();
+  // Shared decrypt over the FIFO with the given command (8 = full OESU body,
+  // 9 = header only). BLOCKING.
+  QByteArray decrypt(const QString& cellPath, unsigned char cmd, bool& ok);
 
   QString m_version;
   QString m_status;

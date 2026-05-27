@@ -85,6 +85,10 @@ bool scanOsencHeader(QIODevice& in, OsencHeader& out);
 /** Convenience: open `path` (a *.S57 / *.oesenc / *.oeu SENC file) and scan. */
 bool scanOsencHeaderFile(const QString& path, OsencHeader& out);
 
+/** Scan header records from an in-memory OSENC stream (e.g. a decrypted
+ *  o-charts cell header). */
+bool scanOsencHeaderBytes(const QByteArray& bytes, OsencHeader& out);
+
 }  // namespace ocpn::qtui
 
 #endif  // OCPN_QT_OSENC_READER_H_

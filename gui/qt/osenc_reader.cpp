@@ -20,6 +20,7 @@
 
 #include <cstring>
 
+#include <QBuffer>
 #include <QFile>
 #include <QIODevice>
 
@@ -114,6 +115,16 @@ bool scanOsencHeaderFile(const QString& path, OsencHeader& out) {
     return false;
   }
   return scanOsencHeader(f, out);
+}
+
+bool scanOsencHeaderBytes(const QByteArray& bytes, OsencHeader& out) {
+  QBuffer buf;
+  buf.setData(bytes);
+  if (!buf.open(QIODevice::ReadOnly)) {
+    out = OsencHeader{};
+    return false;
+  }
+  return scanOsencHeader(buf, out);
 }
 
 }  // namespace ocpn::qtui

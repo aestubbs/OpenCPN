@@ -58,6 +58,7 @@
 #include "display_config.h"
 #include "model_nav_data_provider.h"
 #include "nav_state_view_model.h"
+#include "ocharts_service.h"
 #include "layer.h"
 #include "object_query_view_model.h"
 #include "raster_chart_provider.h"
@@ -373,13 +374,19 @@ void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
 
 void ChartCanvas::reloadCharts() {
   if (!m_s52_engine || !m_s52_engine->isOk() || !m_chart_source) return;
-  // Enumerate .000 cells under each configured directory (or a directly
-  // configured .000 file).
+  // Enumerate chart cells under each configured directory: raw S-57 (.000),
+  // plaintext SENC (.S57), and o-charts (.oesu/.oesenc, decrypted on load).
+  static const QStringList kCellGlobs = {
+      QStringLiteral("*.000"), QStringLiteral("*.oesu"),
+      QStringLiteral("*.oesenc"), QStringLiteral("*.S57")};
   QStringList cells;
   for (const QString& path : m_chart_source->directories()) {
     QFileInfo fi(path);
     if (fi.isDir()) {
-      QDirIterator it(path, {"*.000"}, QDir::Files,
+      // o-charts dirs carry a keyList *.XML; load it so the worker can
+      // decrypt the cells it finds here.
+      OChartsService::instance().loadKeyList(path);
+      QDirIterator it(path, kCellGlobs, QDir::Files,
                       QDirIterator::Subdirectories);
       while (it.hasNext()) cells << it.next();
     } else if (fi.isFile()) {
