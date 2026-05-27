@@ -53,6 +53,7 @@
 #include "route_overlay_layers.h"
 #include "layer_compositor.h"
 #include "model/ocpn_config.h"
+#include "model/georef.h"  // DistanceBearingMercator -- cursor brg/rng
 #include "model/track.h"  // g_pActiveTrack -- own-ship track recording
 #include "display_config.h"
 #include "model_nav_data_provider.h"
@@ -1126,6 +1127,18 @@ void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {
     m_viewport->screenToLatLon(p.x(), p.y(), static_cast<int>(width()),
                                static_cast<int>(height()), lat, lon);
     m_cursor_text = DisplayConfig::instance().formatLatLon(lat, lon);
+    // Bearing + range from own ship to the cursor (wx STAT_FIELD_CURSOR_BRGRNG).
+    m_cursor_brgrng_text.clear();
+    if (m_nav_provider) {
+      const OwnShipState s = m_nav_provider->ownShip();
+      if (s.valid) {
+        double brg = 0.0, rng = 0.0;
+        DistanceBearingMercator(lat, lon, s.lat, s.lon, &brg, &rng);
+        DisplayConfig& dc = DisplayConfig::instance();
+        m_cursor_brgrng_text =
+            dc.formatBearing(brg) + QStringLiteral("  ") + dc.formatDistance(rng);
+      }
+    }
     Q_EMIT cursorMoved();
     // Live rubber-band segment to the cursor while drawing a route.
     if (m_route_build_mode && m_nav_provider)

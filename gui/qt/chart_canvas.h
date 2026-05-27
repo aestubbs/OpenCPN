@@ -146,6 +146,9 @@ class ChartCanvas : public QQuickItem {
   // Cursor geographic position for the window status bar (formatted lat/lon),
   // updated on hover. Empty until the cursor enters the canvas.
   Q_PROPERTY(QString cursorText READ cursorText NOTIFY cursorMoved)
+  // Bearing + range from own ship to the cursor (wx STAT_FIELD_CURSOR_BRGRNG),
+  // formatted per the Display units. Empty when own-ship fix is invalid.
+  Q_PROPERTY(QString cursorBrgRngText READ cursorBrgRngText NOTIFY cursorMoved)
 
   // Interactive route-building mode (Create Route, #28). While on, a left
   // click drops a route vertex and a right click finishes the route.
@@ -215,6 +218,7 @@ public:
 
   QString scaleText() const;
   QString cursorText() const { return m_cursor_text; }
+  QString cursorBrgRngText() const { return m_cursor_brgrng_text; }
   bool routeBuildMode() const { return m_route_build_mode; }
   void setRouteBuildMode(bool on);
   bool trackRecording() const { return m_track_recording; }
@@ -453,6 +457,7 @@ private:
 
   // Formatted cursor lat/lon for the status bar, updated on hover.
   QString m_cursor_text;
+  QString m_cursor_brgrng_text;
   bool m_route_build_mode = false;
   bool m_track_recording = false;
   int m_color_scheme = 0;  // 0 day, 1 dusk, 2 night

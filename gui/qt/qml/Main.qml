@@ -38,9 +38,23 @@ ApplicationWindow {
     // wx "Hide Toolbar": collapse the floating master toolbar to its toggle.
     property bool toolbarCollapsed: false
 
-    // Native window status bar: cursor lat/lon (left) + chart scale (right).
+    // Native window status bar -- mirrors the wx 5-field bar: ship position
+    // (+ NMEA heartbeat tick), SOG/COG, cursor lat/lon, cursor bearing/range
+    // from own ship, and chart scale. Proportional widths 6:5:5:6:4 as in wx.
     footer: ToolBar {
+        id: statusBar
         visible: UIConfig.showStatusBar  // Options > User Interface
+
+        // NMEA heartbeat: advance a spinner glyph on each nav update, so a
+        // live feed is visibly "ticking" (wx STAT_FIELD_TICK).
+        readonly property var spinner: ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧"]
+        property int tick: 0
+        readonly property var nav: chart.navState
+        Connections {
+            target: chart.navState
+            function onChanged() { statusBar.tick = (statusBar.tick + 1) % 8 }
+        }
+
         // macOS bottom bars carry a faint hairline separator along their top.
         Rectangle {
             anchors.top: parent.top
@@ -54,13 +68,55 @@ ApplicationWindow {
             anchors.fill: parent
             anchors.leftMargin: 8
             anchors.rightMargin: 8
-            Label {
-                text: chart.cursorText.length > 0 ? chart.cursorText
-                                                  : qsTr("—")
+            spacing: 8
+
+            component Sep: Rectangle {
+                Layout.preferredWidth: 1
+                Layout.fillHeight: true
+                Layout.topMargin: 4; Layout.bottomMargin: 4
+                color: Qt.rgba(palette.windowText.r, palette.windowText.g,
+                               palette.windowText.b, 0.15)
+            }
+            component Field: Label {
+                Layout.fillWidth: true
+                elide: Text.ElideRight
                 font.family: "monospace"
             }
-            Item { Layout.fillWidth: true }
-            Label { text: chart.scaleText }
+
+            // 0: Ship position + heartbeat tick.
+            Field {
+                Layout.preferredWidth: 6
+                text: (statusBar.nav && statusBar.nav.ownShipValid
+                       ? statusBar.spinner[statusBar.tick] + " " : "  ") +
+                      qsTr("Ship ") +
+                      (statusBar.nav ? statusBar.nav.positionText : "---")
+            }
+            Sep {}
+            // 1: SOG / COG.
+            Field {
+                Layout.preferredWidth: 5
+                text: qsTr("SOG ") + (statusBar.nav ? statusBar.nav.sogText : "--") +
+                      qsTr("  COG ") + (statusBar.nav ? statusBar.nav.cogText : "--")
+            }
+            Sep {}
+            // 2: Cursor lat/lon.
+            Field {
+                Layout.preferredWidth: 5
+                text: chart.cursorText.length > 0 ? chart.cursorText : qsTr("—")
+            }
+            Sep {}
+            // 3: Cursor bearing/range from own ship.
+            Field {
+                Layout.preferredWidth: 6
+                text: chart.cursorBrgRngText
+            }
+            Sep {}
+            // 4: Chart scale.
+            Field {
+                Layout.preferredWidth: 4
+                horizontalAlignment: Text.AlignRight
+                text: chart.scaleText
+            }
         }
     }
 

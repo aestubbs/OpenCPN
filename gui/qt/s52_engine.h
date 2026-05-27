@@ -102,6 +102,24 @@ public:
                              double* out_east = nullptr,
                              double* out_west = nullptr);
 
+  /** Decode an OSENC ("SENC") record stream into world-coordinate geometry
+   *  through s52plib, the same scene-graph buffer the OGR loader produces.
+   *  `osenc` is the full plaintext OSENC bytes (a wx SENC cache *.S57, our
+   *  SENC cache, or an o-charts cell decrypted by oexserverd). Cell extent is
+   *  written to the out params. Emits point + line features now; area fills
+   *  and soundings follow. Returns an empty buffer if not initialised. */
+  s52sg::Buffer decodeOsenc(const QByteArray& osenc, double* out_north = nullptr,
+                            double* out_south = nullptr,
+                            double* out_east = nullptr,
+                            double* out_west = nullptr);
+
+  /** Convenience: read an OSENC file (*.S57 / decrypted *.oesenc/*.oeu) and
+   *  decode it via decodeOsenc(). */
+  s52sg::Buffer loadOsencCell(const QString& path, double* out_north = nullptr,
+                              double* out_south = nullptr,
+                              double* out_east = nullptr,
+                              double* out_west = nullptr);
+
   /** Decode-free catalog scan: open each cell via the OGR S-57 driver and
    *  union its feature envelopes into a CellExtent, WITHOUT running the
    *  s52plib symbology decode / tessellation. Much cheaper than a full load
