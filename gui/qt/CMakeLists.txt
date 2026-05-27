@@ -104,6 +104,8 @@ qt_add_qml_module(opencpn-qt
     chart_source_model.cpp
     chart_catalog_db.h
     chart_catalog_db.cpp
+    senc_cache.h
+    senc_cache.cpp
     config_store.h
     config_store.cpp
     own_ship_config.h

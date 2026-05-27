@@ -32,6 +32,8 @@
 #ifndef OCPN_QT_CHART_WORKER_H_
 #define OCPN_QT_CHART_WORKER_H_
 
+#include <memory>
+
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -53,6 +55,7 @@ public:
   // worker thread after construction (init() stays on main). Not owned.
   explicit ChartWorker(S52Engine* engine, QString s57data_dir,
                        QObject* parent = nullptr);
+  ~ChartWorker() override;  // out-of-line for the unique_ptr<SencCache> pimpl
 
 public Q_SLOTS:
   /** Open every cell, union feature envelopes (no decode), and emit the
@@ -76,6 +79,8 @@ Q_SIGNALS:
 private:
   S52Engine* m_engine;
   QString m_s57data_dir;
+  // Decrypted-OSENC cache (o-charts), created lazily on the worker thread.
+  std::unique_ptr<class SencCache> m_senc_cache;
 };
 
 }  // namespace ocpn::qtui

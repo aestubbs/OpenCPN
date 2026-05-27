@@ -22,6 +22,7 @@
 #include "ocharts_service.h"
 #include "osenc_reader.h"
 #include "s52_engine.h"
+#include "senc_cache.h"
 
 namespace ocpn::qtui {
 
@@ -52,6 +53,8 @@ CellExtent extentFromOsenc(const OsencHeader& h, const QString& path) {
 ChartWorker::ChartWorker(S52Engine* engine, QString s57data_dir,
                          QObject* parent)
     : QObject(parent), m_engine(engine), m_s57data_dir(std::move(s57data_dir)) {}
+
+ChartWorker::~ChartWorker() = default;
 
 void ChartWorker::scanExtents(const QStringList& paths_000) {
   if (!m_engine) return;
@@ -122,12 +125,18 @@ void ChartWorker::loadCell(const CellExtent& cell) {
   s52sg::Buffer buf;
   switch (kindOf(cell.path)) {
     case CellKind::Ocharts: {
-      bool ok = false;
-      const QByteArray osenc =
-          OChartsService::instance().decryptCell(cell.path, ok);
-      qWarning("loadCell ocharts %s: decrypt ok=%d bytes=%lld",
-               qPrintable(cell.name), ok, (long long)osenc.size());
-      if (ok) buf = m_engine->decodeOsenc(osenc, &n, &s, &e, &w);
+      if (!m_senc_cache) m_senc_cache = std::make_unique<SencCache>();
+      const qint64 mtime =
+          QFileInfo(cell.path).lastModified().toSecsSinceEpoch();
+      // Cache hit -> skip the (slow) daemon decrypt; just re-decode.
+      QByteArray osenc = m_senc_cache->get(cell.path, mtime);
+      if (osenc.isEmpty()) {
+        bool ok = false;
+        osenc = OChartsService::instance().decryptCell(cell.path, ok);
+        if (ok && !osenc.isEmpty())
+          m_senc_cache->put(cell.path, mtime, osenc);
+      }
+      if (!osenc.isEmpty()) buf = m_engine->decodeOsenc(osenc, &n, &s, &e, &w);
       break;
     }
     case CellKind::SencPlain:
