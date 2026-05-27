@@ -100,6 +100,14 @@ int main(int argc, char* argv[]) {
   const QString s57data = QString::fromUtf8(OCPN_QT_S57DATA_DIR);
   if (!s57data.isEmpty()) s52.init(s57data);
 
+  // Dev one-shot: decode an OSENC/.S57 file and log feature counts, to
+  // validate the native OSENC reader. Set OCPN_QT_OSENC_TEST=/path/to/cell.S57
+  if (const QByteArray t = qgetenv("OCPN_QT_OSENC_TEST"); !t.isEmpty()) {
+    double n = 0, s = 0, e = 0, w = 0;
+    s52.loadOsencCell(QString::fromUtf8(t), &n, &s, &e, &w);
+    qInfo("OSENC_TEST extent N%.4f S%.4f E%.4f W%.4f", n, s, e, w);
+  }
+
   // Shared QML<->native state (vessel-data drawer). Exposed as "app".
   ocpn::qtui::AppController appController;
 

@@ -21,7 +21,11 @@
 #include <cstring>
 #include <vector>
 
+#include <QByteArray>
+#include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QList>
 #include <QPointF>
 #include <QPolygonF>
 
@@ -43,6 +47,9 @@
 // features with assembled lon/lat geometry (P2.8d).
 #include "ogr_s57.h"
 #include "s57class_registrar.h"
+#include "s57registrar_mgr.h"  // typecode -> acronym for OSENC decode
+
+#include "osenc_reader.h"  // OSENC record-type enums
 
 namespace ocpn::qtui {
 
@@ -55,10 +62,16 @@ public:
   // / attribute CSVs) and immutable once loaded, so it's cached here and
   // shared across every cell load/scan rather than rebuilt per cell.
   S57ClassRegistrar* registrar = nullptr;
+  // Maps OSENC numeric feature/attribute type codes back to S-57 acronyms
+  // (the OGR path gets acronyms from field names instead). Built lazily on
+  // first OSENC decode from the s57data CSVs.
+  s57RegistrarMgr* regmgr = nullptr;
+  QString s57data_dir;  // for the registrar manager CSVs
 
   ~Impl() {
     delete lib;
     delete registrar;
+    delete regmgr;
     if (wx_initialised) wxUninitialize();
   }
 };
@@ -87,6 +100,7 @@ bool S52Engine::init(const QString& data_dir) {
     wxImage::AddHandler(new wxPNGHandler());
   }
 
+  m_impl->s57data_dir = data_dir;  // registrar-manager CSVs live here too
   const QString rle_path = data_dir + QStringLiteral("/S52RAZDS.RLE");
   m_impl->lib = new s52plib(QString_to_wxString(rle_path));
   if (!m_impl->lib->m_bOK) {
@@ -590,6 +604,250 @@ s52sg::Buffer S52Engine::loadEncCells(const QStringList& paths_000,
           .arg(ext.e, 0, 'f', 3)
           .arg(err.isEmpty() ? QString() : QStringLiteral(" [%1]").arg(err));
   Q_EMIT changed();
+  return buf;
+}
+
+s52sg::Buffer S52Engine::loadOsencCell(const QString& path, double* on,
+                                       double* os, double* oe, double* ow) {
+  QFile f(path);
+  if (!f.open(QIODevice::ReadOnly)) return s52sg::Buffer{};
+  return decodeOsenc(f.readAll(), on, os, oe, ow);
+}
+
+s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
+                                     double* os, double* oe, double* ow) {
+  s52sg::Buffer buf;
+  if (!m_impl->lib || !m_impl->lib->m_bOK) return buf;
+  s52plib* plib = m_impl->lib;
+  ps52plib = plib;  // CS procedures reach for the global
+
+  // Registrar manager (typecode -> acronym): built once from the s57data CSVs.
+  if (!m_impl->regmgr && !m_impl->s57data_dir.isEmpty())
+    m_impl->regmgr =
+        new s57RegistrarMgr(QString_to_wxString(m_impl->s57data_dir), nullptr);
+  s57RegistrarMgr* reg = m_impl->regmgr;
+  if (!reg) return buf;
+
+  const char* p = bytes.constData();
+  const qint64 N = bytes.size();
+  qint64 off = 0;
+
+  double ref_lat = 0, ref_lon = 0;
+  double nlat = 0, slat = 0, elon = 0, wlon = 0;
+  bool have_extent = false;
+  chart_context* ctx = nullptr;
+  S57Obj* cur = nullptr;
+  std::vector<S57Obj*> objects;
+  // Edge tables: VE index -> interleaved (lon,lat) floats; VC index -> point.
+  QHash<int, QVector<float>> ve;
+  QHash<int, QPointF> vc;
+
+  while (off + 6 <= N) {
+    uint16_t type;
+    uint32_t length;
+    std::memcpy(&type, p + off, 2);
+    std::memcpy(&length, p + off + 2, 4);
+    if (length < 6 || off + static_cast<qint64>(length) > N) break;
+    const char* pl = p + off + 6;
+    const uint32_t plen = length - 6;
+    off += length;
+
+    switch (type) {
+      case CELL_EXTENT_RECORD: {
+        if (plen >= 8 * sizeof(double)) {
+          double d[8];
+          std::memcpy(d, pl, 8 * sizeof(double));
+          nlat = d[2]; slat = d[6]; wlon = d[3]; elon = d[5];
+          have_extent = true;
+          ref_lat = (nlat + slat) / 2.0;
+          ref_lon = (elon + wlon) / 2.0;
+          if (!ctx) ctx = MakeMinimalChartContext(ref_lat, ref_lon);
+        }
+        break;
+      }
+      case FEATURE_ID_RECORD: {
+        cur = nullptr;
+        if (plen >= 5) {
+          uint16_t ftc;
+          std::memcpy(&ftc, pl, 2);
+          const std::string acr = reg->getFeatureAcronym(ftc);
+          if (!acr.empty()) {
+            if (!ctx) ctx = MakeMinimalChartContext(ref_lat, ref_lon);
+            cur = new S57Obj(acr.c_str());
+            cur->m_chart_context = ctx;
+            cur->Primitive_type = GEO_META;  // sentinel until geometry seen
+            objects.push_back(cur);
+          }
+        }
+        break;
+      }
+      case FEATURE_ATTRIBUTE_RECORD: {
+        if (cur && plen >= 3) {
+          uint16_t atc;
+          std::memcpy(&atc, pl, 2);
+          const uint8_t vt = static_cast<uint8_t>(pl[2]);
+          const std::string acr = reg->getAttributeAcronym(atc);
+          if (!acr.empty()) {
+            if (vt == 0 && plen >= 3 + sizeof(uint32_t)) {
+              uint32_t v;
+              std::memcpy(&v, pl + 3, 4);
+              cur->AddIntegerAttribute(acr.c_str(), static_cast<int>(v));
+            } else if (vt == 2 && plen >= 3 + sizeof(double)) {
+              double v;
+              std::memcpy(&v, pl + 3, 8);
+              cur->AddDoubleAttribute(acr.c_str(), v);
+            } else if (vt == 4 && plen > 3) {
+              QByteArray s(pl + 3, static_cast<int>(plen - 3));
+              const int z = s.indexOf('\0');
+              if (z >= 0) s.truncate(z);
+              std::vector<char> vb(s.constData(), s.constData() + s.size() + 1);
+              cur->AddStringAttribute(acr.c_str(), vb.data());
+            }
+          }
+        }
+        break;
+      }
+      case FEATURE_GEOMETRY_RECORD_POINT: {
+        if (cur && plen >= 2 * sizeof(double)) {
+          double lat, lon;
+          std::memcpy(&lat, pl, 8);
+          std::memcpy(&lon, pl + 8, 8);
+          cur->SetPointGeometry(lat, lon, ref_lat, ref_lon);
+          cur->Primitive_type = GEO_POINT;
+        }
+        break;
+      }
+      case FEATURE_GEOMETRY_RECORD_LINE: {
+        // payload: 4 doubles (extent) + uint32 edgeVector_count + index table.
+        if (cur && plen >= 4 * sizeof(double) + sizeof(uint32_t)) {
+          double ext[4];
+          std::memcpy(ext, pl, 4 * sizeof(double));
+          uint32_t ec;
+          std::memcpy(&ec, pl + 32, 4);
+          const qint64 tbl_bytes = static_cast<qint64>(ec) * 3 * sizeof(int);
+          if (plen >= 36 + tbl_bytes && ec > 0) {
+            LineGeometryDescriptor lD;
+            lD.extent_s_lat = ext[0]; lD.extent_n_lat = ext[1];
+            lD.extent_w_lon = ext[2]; lD.extent_e_lon = ext[3];
+            lD.indexCount = static_cast<int>(ec);
+            // SetLineGeometry ALIASES this table (no copy); keep it alive for
+            // the object's lifetime (intentionally leaked, like the OGR path).
+            lD.indexTable = static_cast<int*>(malloc(tbl_bytes));
+            std::memcpy(lD.indexTable, pl + 36, tbl_bytes);
+            cur->SetLineGeometry(&lD, GEO_LINE, ref_lat, ref_lon);
+          }
+        }
+        break;
+      }
+      case VECTOR_EDGE_NODE_TABLE_RECORD: {
+        const char* r = pl;
+        qint64 rem = plen;
+        if (rem >= 4) {
+          int nCount;
+          std::memcpy(&nCount, r, 4);
+          r += 4; rem -= 4;
+          for (int i = 0; i < nCount && rem >= 8; ++i) {
+            int fi, pc;
+            std::memcpy(&fi, r, 4); std::memcpy(&pc, r + 4, 4);
+            r += 8; rem -= 8;
+            const qint64 nb = static_cast<qint64>(pc) * 2 * sizeof(float);
+            QVector<float> pts;
+            if (pc > 0 && rem >= nb) {
+              pts.resize(pc * 2);
+              std::memcpy(pts.data(), r, nb);
+              r += nb; rem -= nb;
+            }
+            ve.insert(fi, pts);
+          }
+        }
+        break;
+      }
+      case VECTOR_CONNECTED_NODE_TABLE_RECORD: {
+        const char* r = pl;
+        qint64 rem = plen;
+        if (rem >= 4) {
+          int nCount;
+          std::memcpy(&nCount, r, 4);
+          r += 4; rem -= 4;
+          for (int i = 0; i < nCount && rem >= 12; ++i) {
+            int fi;
+            float xy[2];
+            std::memcpy(&fi, r, 4);
+            std::memcpy(xy, r + 4, 8);
+            r += 12; rem -= 12;
+            vc.insert(fi, QPointF(xy[0], xy[1]));
+          }
+        }
+        break;
+      }
+      default:
+        break;  // headers, area, multipoint, coverage -- not yet emitted
+    }
+  }
+
+  // --- Emit pass: point symbols/text + resolved line geometry. ---
+  auto appendDedup = [](QList<QPointF>& list, const QPointF& pt) {
+    if (list.isEmpty() || list.last() != pt) list.append(pt);
+  };
+  int n_points = 0, n_lines = 0;
+  for (S57Obj* obj : objects) {
+    if (obj->Primitive_type == GEO_POINT) {
+      LUPrec* lup = plib->S52_LUPLookup(PAPER_CHART, obj->FeatureName, obj);
+      if (!lup) continue;
+      plib->_LUP2rules(lup, obj);
+      ObjRazRules rz;
+      rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
+      rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
+      plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
+      plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
+      ++n_points;
+    } else if (obj->Primitive_type == GEO_LINE) {
+      // Resolve each segment triple [startVC, ±edgeVE, endVC] into points.
+      QList<QPointF> pts;
+      for (int iseg = 0; iseg < obj->m_n_lsindex; ++iseg) {
+        const int* idx = &obj->m_lsindex_array[iseg * 3];
+        const int inode = idx[0];
+        int ven = idx[1];
+        bool fwd = true;
+        if (ven < 0) { ven = -ven; fwd = false; }
+        const int enode = idx[2];
+        auto itv = vc.constFind(inode);
+        if (itv != vc.constEnd()) appendDedup(pts, itv.value());
+        if (ven) {
+          auto ite = ve.constFind(ven);
+          if (ite != ve.constEnd()) {
+            const QVector<float>& e = ite.value();
+            const int n = e.size() / 2;
+            if (fwd)
+              for (int k = 0; k < n; ++k)
+                appendDedup(pts, QPointF(e[k * 2], e[k * 2 + 1]));
+            else
+              for (int k = n - 1; k >= 0; --k)
+                appendDedup(pts, QPointF(e[k * 2], e[k * 2 + 1]));
+          }
+        }
+        auto ite2 = vc.constFind(enode);
+        if (ite2 != vc.constEnd()) appendDedup(pts, ite2.value());
+      }
+      if (pts.size() < 2) continue;
+      LUPrec* lup = plib->S52_LUPLookup(LINES, obj->FeatureName, obj);
+      if (!lup) continue;
+      plib->_LUP2rules(lup, obj);
+      ObjRazRules rz;
+      rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
+      rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
+      plib->RenderLineToSG(buf, &rz, pts);
+      ++n_lines;
+    }
+  }
+
+  if (on) *on = nlat;
+  if (os) *os = slat;
+  if (oe) *oe = elon;
+  if (ow) *ow = wlon;
+  qWarning("decodeOsenc: %d objects -- %d points, %d lines (%d edges, %d nodes)%s",
+           static_cast<int>(objects.size()), n_points, n_lines, ve.size(),
+           vc.size(), have_extent ? "" : " [no extent]");
   return buf;
 }
 
