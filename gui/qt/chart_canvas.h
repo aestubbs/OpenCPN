@@ -167,6 +167,9 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(QString scaleText READ scaleText NOTIFY viewChanged)
   Q_PROPERTY(bool followOwnShip READ followOwnShip WRITE setFollowOwnShip
                  NOTIFY followOwnShipChanged)
+  // Current chart rotation (degrees), for the compass overlay. 0 = north-up;
+  // non-zero in Course-Up / Head-Up. NOTIFY viewChanged (fires on rotation).
+  Q_PROPERTY(double chartRotationDeg READ chartRotationDeg NOTIFY viewChanged)
 
 public:
   explicit ChartCanvas(QQuickItem* parent = nullptr);
@@ -225,6 +228,7 @@ public:
   Q_INVOKABLE void deleteRoute(int index);
   bool followOwnShip() const { return m_follow_own_ship; }
   void setFollowOwnShip(bool on);
+  double chartRotationDeg() const;
 
   // Center + zoom the viewport to a lat/lon bounding box (route/mark "zoom
   // to"). A near-zero span zooms in to a sensible harbour scale.
@@ -364,6 +368,14 @@ private:
   bool m_demo_mode = false;
   bool m_live_centered = false;  // recentre on own ship once per live session
   bool m_follow_own_ship = false;  // MUIBar follow mode
+
+  // Chart orientation (North-Up / Course-Up / Head-Up). Recomputes the
+  // viewport rotation from DisplayConfig.navMode + the own-ship COG/HDT.
+  // Course-Up smooths COG into m_cog_avg (circular EMA, window from
+  // DisplayConfig.chartRotationAveraging). Mirrors wx DoCanvasCOGSet.
+  void updateChartRotation();
+  double m_cog_avg = 0.0;
+  bool m_cog_avg_valid = false;
 
   // Non-owning; set from QML. nullptr until bound.
   S52Engine* m_s52_engine = nullptr;

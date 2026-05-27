@@ -144,6 +144,11 @@ ApplicationWindow {
                     checked: DisplayConfig.navMode === 1
                     onClicked: DisplayConfig.navMode = 1
                 }
+                RadioButton {
+                    text: qsTr("H-Up")
+                    checked: DisplayConfig.navMode === 2
+                    onClicked: DisplayConfig.navMode = 2
+                }
             }
             Item { Layout.fillHeight: true }
         }
@@ -539,6 +544,11 @@ ApplicationWindow {
                                             text: qsTr("Course-Up")
                                             checked: DisplayConfig.navMode === 1
                                             onClicked: DisplayConfig.navMode = 1
+                                        }
+                                        RadioButton {
+                                            text: qsTr("Head-Up")
+                                            checked: DisplayConfig.navMode === 2
+                                            onClicked: DisplayConfig.navMode = 2
                                         }
                                     }
                                     CheckBox {
@@ -2219,6 +2229,10 @@ ApplicationWindow {
             width: 72; height: 72; radius: width / 2
             color: "#cc101418"
             border.color: "#3affffff"
+            // The compass card rotates with the chart so "N" always indicates
+            // true north on screen (Course-Up / Head-Up). North-Up = 0.
+            rotation: chart.chartRotationDeg
+            Behavior on rotation { RotationAnimation { duration: 120; direction: RotationAnimation.Shortest } }
 
             readonly property var nav: chart.navState
 

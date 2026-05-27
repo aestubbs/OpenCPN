@@ -248,12 +248,33 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
             // Keep the open AIS info popup's CPA/TCPA live as the fix updates.
             if (m_ais_selection && m_ais_selection->valid())
               m_ais_selection->refresh(m_nav_provider->aisTargets());
+            // Course-Up / Head-Up track the live COG/HDT.
+            updateChartRotation();
             // Track recording is handled by the model ActiveTrack itself
             // (its own timer off the own-ship fix); here we only follow.
             if (!m_follow_own_ship) return;
             const OwnShipState s = m_nav_provider->ownShip();
-            if (s.valid) m_viewport->setCenter(s.lat, s.lon);
+            if (!s.valid) return;
+            double clat = s.lat, clon = s.lon;
+            // Look-ahead: shift the view ahead along the course so more water
+            // is shown ahead of the boat (wx m_bLookAhead; >=2 kn, ~1/4 view).
+            if (DisplayConfig::instance().lookAhead() && s.sog >= 2.0) {
+              const double course =
+                  (DisplayConfig::instance().navMode() == 2 && s.hdg < 360.0)
+                      ? s.hdg : s.cog;
+              const double chh = height() > 0 ? height() : 720.0;
+              const double dist_deg = (chh * 0.25) / m_viewport->scale();
+              const double r = course * M_PI / 180.0;
+              const double coslat =
+                  std::max(0.2, std::cos(s.lat * M_PI / 180.0));
+              clat += dist_deg * std::cos(r);
+              clon += dist_deg * std::sin(r) / coslat;
+            }
+            m_viewport->setCenter(clat, clon);
           });
+  // Recompute the chart rotation when the orientation mode / averaging changes.
+  connect(&DisplayConfig::instance(), &DisplayConfig::changed, this,
+          [this]() { updateChartRotation(); });
   // On resize, repaint AND re-evaluate visible cells: the initial fit +
   // selection can run before the canvas has its real size (the catalog scan
   // starts at launch), sampling a too-small view rect and missing cells in
@@ -463,10 +484,14 @@ void ChartCanvas::updateVisibleCells() {
   const double scale = m_viewport->scale();
   const double cw = width() > 0 ? width() : 1024.0;
   const double ch = height() > 0 ? height() : 720.0;
-  // Widen the working view by 30% so cells just off-screen stay resident
-  // (pan hysteresis) and decode ahead of being scrolled into view.
-  const double half_lon = (cw / 2.0) / scale * 1.3;
-  const double half_lat = (ch / 2.0) / scale * 1.3;
+  // Half-extents of the visible rectangle in degrees. Under chart rotation the
+  // axis-aligned bounding box of the (rotated) view is larger, so widen by the
+  // rotated-corner extent: |hw·cos|+|hh·sin| etc. Plus 30% pan hysteresis.
+  const double rot = m_viewport->rotation();
+  const double ac = std::abs(std::cos(rot)), as = std::abs(std::sin(rot));
+  const double hw = (cw / 2.0) / scale, hh = (ch / 2.0) / scale;
+  const double half_lon = (hw * ac + hh * as) * 1.3;
+  const double half_lat = (hw * as + hh * ac) * 1.3;
   const double lat0 = m_viewport->centerLat() - half_lat;
   const double lat1 = m_viewport->centerLat() + half_lat;
   const double lon0 = m_viewport->centerLon() - half_lon;
@@ -1228,6 +1253,51 @@ void ChartCanvas::setFollowOwnShip(bool on) {
   }
   Q_EMIT followOwnShipChanged();
   update();
+}
+
+double ChartCanvas::chartRotationDeg() const {
+  return m_viewport ? m_viewport->rotation() * 180.0 / M_PI : 0.0;
+}
+
+void ChartCanvas::updateChartRotation() {
+  if (!m_viewport) return;
+  const int mode = DisplayConfig::instance().navMode();  // 0 N, 1 Course, 2 Head
+  if (mode == 0) {  // North-Up
+    m_cog_avg_valid = false;
+    m_viewport->setRotation(0.0);
+    Q_EMIT viewChanged();
+    return;
+  }
+  const OwnShipState s =
+      m_nav_provider ? m_nav_provider->ownShip() : OwnShipState{};
+  if (!s.valid) return;  // keep the last rotation until a fix arrives
+
+  double heading_deg = -1.0;
+  if (mode == 2) {  // Head-Up: live heading (fall back to COG if no HDT)
+    heading_deg = (s.hdg < 360.0) ? s.hdg : s.cog;
+    m_cog_avg_valid = false;
+  } else {  // Course-Up: circular-smoothed COG over the averaging window
+    const double tau = DisplayConfig::instance().chartRotationAveraging();
+    if (tau <= 0.0 || !m_cog_avg_valid) {
+      m_cog_avg = s.cog;
+      m_cog_avg_valid = true;
+    } else {
+      // Assume ~1 Hz fixes: alpha ~ 1/tau, clamped. Shortest-arc blend.
+      const double alpha = std::clamp(1.0 / tau, 0.02, 1.0);
+      double diff = s.cog - m_cog_avg;
+      while (diff > 180.0) diff -= 360.0;
+      while (diff < -180.0) diff += 360.0;
+      m_cog_avg += alpha * diff;
+      while (m_cog_avg >= 360.0) m_cog_avg -= 360.0;
+      while (m_cog_avg < 0.0) m_cog_avg += 360.0;
+    }
+    heading_deg = m_cog_avg;
+  }
+  if (heading_deg < 0.0) return;
+  // Rotate the chart so the heading/course points up (mirrors wx: rotation =
+  // -heading). The viewport stores radians.
+  m_viewport->setRotation(-heading_deg * M_PI / 180.0);
+  Q_EMIT viewChanged();
 }
 
 void ChartCanvas::fitBounds(double north, double south, double east,

@@ -37,6 +37,8 @@
 #ifndef OCPN_QT_VIEWPORT_H_
 #define OCPN_QT_VIEWPORT_H_
 
+#include <cmath>
+
 #include <QMatrix4x4>
 #include <QObject>
 
@@ -52,6 +54,9 @@ public:
   double centerLon() const { return m_center_lon; }
   /** Pixels per degree of lon/lat. Higher = more zoomed in. */
   double scale() const { return m_scale; }
+  /** Chart rotation, radians. 0 = north-up. Positive rotates the chart so a
+   *  heading/course points up (Course-Up / Head-Up). */
+  double rotation() const { return m_rotation; }
 
   void setCenter(double lat, double lon) {
     if (m_center_lat == lat && m_center_lon == lon) return;
@@ -66,15 +71,24 @@ public:
     Q_EMIT changed();
   }
 
+  void setRotation(double radians) {
+    if (m_rotation == radians) return;
+    m_rotation = radians;
+    Q_EMIT changed();
+  }
+
   /** Pan by a screen-pixel delta (e.g. from a mouse drag). dx/dy are in
-   *  Qt's screen coords (x right, y down). */
+   *  Qt's screen coords (x right, y down). Accounts for chart rotation. */
   void panBy(double dx_pixels, double dy_pixels) {
     if (dx_pixels == 0.0 && dy_pixels == 0.0) return;
-    m_center_lon -= dx_pixels / m_scale;
+    // Un-rotate the screen delta into world axes before scaling to degrees.
+    const double c = std::cos(m_rotation), s = std::sin(m_rotation);
+    const double wdx = (c * dx_pixels + s * dy_pixels) / m_scale;
+    const double wdy = (-s * dx_pixels + c * dy_pixels) / m_scale;
+    m_center_lon -= wdx;
     // Y is "down" in screen and in our world convention (y = -lat), so a
-    // mouse drag DOWN moves the viewport to look further SOUTH (lat
-    // decreases).
-    m_center_lat += dy_pixels / m_scale;
+    // mouse drag DOWN moves the viewport to look further SOUTH.
+    m_center_lat += wdy;
     Q_EMIT changed();
   }
 
@@ -83,24 +97,29 @@ public:
   void zoomAt(double sx, double sy, double factor,
               int canvas_w, int canvas_h) {
     if (factor <= 0.0 || factor == 1.0) return;
-    // World point under the cursor before:
-    const double world_x = m_center_lon + (sx - canvas_w / 2.0) / m_scale;
-    const double world_y_down = -m_center_lat
-                                + (sy - canvas_h / 2.0) / m_scale;
+    // World point under the cursor before the zoom.
+    double w_lat, w_lon;
+    screenToLatLon(sx, sy, canvas_w, canvas_h, w_lat, w_lon);
     m_scale *= factor;
     if (m_scale < kMinScale) m_scale = kMinScale;
     if (m_scale > kMaxScale) m_scale = kMaxScale;
     // Recompute centre so that the same world point lands under (sx, sy).
-    m_center_lon = world_x - (sx - canvas_w / 2.0) / m_scale;
-    m_center_lat = -(world_y_down - (sy - canvas_h / 2.0) / m_scale);
+    const double c = std::cos(m_rotation), s = std::sin(m_rotation);
+    const double srx = sx - canvas_w / 2.0, sry = sy - canvas_h / 2.0;
+    const double wrx = (c * srx + s * sry) / m_scale;
+    const double wry = (-s * srx + c * sry) / m_scale;
+    m_center_lon = w_lon - wrx;
+    m_center_lat = w_lat + wry;
     Q_EMIT changed();
   }
 
   /** Build the world→screen matrix for the WorldAnchored root.
-   *  World coords: x = lon, y = -lat. */
+   *  World coords: x = lon, y = -lat. Order: centre, rotate, scale, -world. */
   QMatrix4x4 transformMatrix(int canvas_w, int canvas_h) const {
     QMatrix4x4 m;
     m.translate(canvas_w / 2.0f, canvas_h / 2.0f);
+    if (m_rotation != 0.0)
+      m.rotate(static_cast<float>(m_rotation * 180.0 / M_PI), 0.0f, 0.0f, 1.0f);
     m.scale(static_cast<float>(m_scale), static_cast<float>(m_scale));
     // World coords are Y-down (y = -lat). With centre_lat above the
     // equator, world centre y is negative; translating by -world_centre
@@ -114,11 +133,16 @@ public:
   static inline double latToWorldY(double lat) { return -lat; }
 
   /** Inverse of the world->screen mapping: the geographic position under a
-   *  screen-pixel point (item-local coords). */
+   *  screen-pixel point (item-local coords). Inverts the chart rotation. */
   void screenToLatLon(double sx, double sy, int canvas_w, int canvas_h,
                       double& lat, double& lon) const {
-    lon = m_center_lon + (sx - canvas_w / 2.0) / m_scale;
-    lat = m_center_lat - (sy - canvas_h / 2.0) / m_scale;
+    const double c = std::cos(m_rotation), s = std::sin(m_rotation);
+    const double srx = sx - canvas_w / 2.0, sry = sy - canvas_h / 2.0;
+    // R(-rotation) * screen_rel / scale.
+    const double wrx = (c * srx + s * sry) / m_scale;
+    const double wry = (-s * srx + c * sry) / m_scale;
+    lon = m_center_lon + wrx;
+    lat = m_center_lat - wry;
   }
 
 Q_SIGNALS:
@@ -131,6 +155,7 @@ private:
   double m_center_lat = 52.5;   // sensible default: somewhere in the
   double m_center_lon = 5.0;    // North Sea, for the test chart
   double m_scale = 60.0;        // pixels per degree
+  double m_rotation = 0.0;      // chart rotation, radians (0 = north-up)
 };
 
 }  // namespace ocpn::qtui
