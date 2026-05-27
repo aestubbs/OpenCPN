@@ -100,6 +100,8 @@ qt_add_qml_module(opencpn-qt
     route_list_view_model.cpp
     connections_view_model.h
     connections_view_model.cpp
+    chart_source_model.h
+    chart_source_model.cpp
     config_store.h
     config_store.cpp
     own_ship_config.h

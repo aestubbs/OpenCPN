@@ -851,18 +851,71 @@ ApplicationWindow {
                             Layout.fillHeight: true
                             currentIndex: chartsSubTabs.currentIndex
 
-                            // --- Chart Files (pending runtime chart-dir backend) ---
+                            // --- Chart Files: runtime chart-directory manager ---
                             Item {
+                                FolderDialog {
+                                    id: chartFolderDialog
+                                    title: qsTr("Add chart directory")
+                                    onAccepted: chart.chartSource.addDirectory(
+                                                    selectedFolder.toString())
+                                }
                                 ColumnLayout {
                                     anchors.fill: parent
                                     spacing: 8
-                                    Label { text: qsTr("Chart files"); font.bold: true }
-                                    Label {
-                                        text: qsTr("The Qt build loads its chart set from a path fixed at build time, so the chart-directory list, database scan/rebuild and ENC pre-processing controls are not yet available. They arrive with the runtime chart-directory manager.")
-                                        wrapMode: Text.Wrap; Layout.fillWidth: true
-                                        color: palette.placeholderText
+                                    readonly property var cs: chart.chartSource
+
+                                    Label { text: qsTr("Chart directories"); font.bold: true }
+                                    ListView {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        clip: true
+                                        model: parent.cs ? parent.cs.directories : []
+                                        delegate: ItemDelegate {
+                                            required property var modelData
+                                            required property int index
+                                            width: ListView.view.width
+                                            contentItem: RowLayout {
+                                                spacing: 8
+                                                Label {
+                                                    text: modelData
+                                                    Layout.fillWidth: true
+                                                    elide: Text.ElideMiddle
+                                                }
+                                                ToolButton {
+                                                    text: "✕"
+                                                    onClicked: chart.chartSource.removeDirectory(index)
+                                                }
+                                            }
+                                        }
                                     }
-                                    Item { Layout.fillHeight: true }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Button {
+                                            text: qsTr("Add directory…")
+                                            onClicked: chartFolderDialog.open()
+                                        }
+                                        Button {
+                                            text: qsTr("Rescan")
+                                            enabled: chart.chartSource &&
+                                                     chart.chartSource.directories.length > 0
+                                            onClicked: chart.chartSource.rescan()
+                                        }
+                                        BusyIndicator {
+                                            running: chart.chartSource && chart.chartSource.scanning
+                                            visible: running
+                                            implicitWidth: 22; implicitHeight: 22
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Label {
+                                            text: chart.chartSource ? chart.chartSource.status : ""
+                                            color: palette.placeholderText
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Add folders of S-57 ENC (.000) cells. Charts are catalogued on scan and stream in as you zoom/pan.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
                                 }
                             }
 

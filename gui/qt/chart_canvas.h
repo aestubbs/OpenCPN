@@ -43,6 +43,7 @@
 
 #include "ais_selection_view_model.h"  // complete type needed for Q_PROPERTY
 #include "chart_extent.h"  // CellExtent -- catalog entry (value type)
+#include "chart_source_model.h"  // complete type needed for Q_PROPERTY
 #include "connections_view_model.h"  // complete type needed for Q_PROPERTY
 #include "nmea_monitor_model.h"  // complete type needed for Q_PROPERTY
 #include "nav_state_view_model.h"  // complete type needed for Q_PROPERTY
@@ -128,6 +129,10 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(ocpn::qtui::ConnectionsViewModel* connections READ connections
                  CONSTANT)
 
+  // Chart directories for the Options > Charts > Chart Files page.
+  Q_PROPERTY(ocpn::qtui::ChartSourceModel* chartSource READ chartSource
+                 CONSTANT)
+
   // Decoded-message stream for the Data Monitor view.
   Q_PROPERTY(ocpn::qtui::NmeaMonitorModel* nmeaMonitor READ nmeaMonitor
                  CONSTANT)
@@ -198,6 +203,7 @@ public:
   ObjectQueryViewModel* objectQuery() const { return m_object_query.get(); }
   RouteListViewModel* routeList() const { return m_route_list.get(); }
   ConnectionsViewModel* connections() const { return m_connections.get(); }
+  ChartSourceModel* chartSource() const { return m_chart_source.get(); }
   NmeaMonitorModel* nmeaMonitor() const { return m_nmea_monitor.get(); }
 
   bool showRoutes() const;
@@ -306,6 +312,10 @@ private:
   // Spin up the worker thread + ChartWorker and kick off the catalog scan
   // for the configured chart set. Called once from setS52Engine().
   void startAsyncLoad(const QStringList& cell_paths, const QString& s57data);
+  // Enumerate .000 cells under the configured chart directories and (re)run
+  // the catalog scan. Creates the worker on first use; evicts cells that fall
+  // out of the catalog on a later rescan. Bound to ChartSourceModel changes.
+  void reloadCharts();
   // Worker results (delivered to the main thread via queued connections).
   void onExtentsScanned(const QList<CellExtent>& cells);
   void onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
@@ -348,6 +358,8 @@ private:
   std::unique_ptr<RouteListViewModel> m_route_list;
   // Data-source connections (Options > Connections, #34).
   std::unique_ptr<ConnectionsViewModel> m_connections;
+  // Chart directories (Options > Charts > Chart Files); drives the scan.
+  std::unique_ptr<ChartSourceModel> m_chart_source;
   // Decoded-message stream for the Data Monitor view.
   std::unique_ptr<NmeaMonitorModel> m_nmea_monitor;
 

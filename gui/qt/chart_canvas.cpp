@@ -173,6 +173,12 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // session (auto-reconnect) so live data flows on launch.
   m_connections->activatePersisted();
 
+  // Chart directories (Options > Charts > Chart Files): a change or an
+  // explicit rescan re-runs the catalog scan over the configured set.
+  m_chart_source = std::make_unique<ChartSourceModel>();
+  connect(m_chart_source.get(), &ChartSourceModel::rescanRequested, this,
+          [this]() { reloadCharts(); });
+
   // Decoded-message stream for the Data Monitor (taps all comm messages).
   m_nmea_monitor = std::make_unique<NmeaMonitorModel>();
 
@@ -312,26 +318,17 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
   Q_EMIT s52EngineChanged();
   if (!m_s52_engine || !m_s52_engine->isOk()) return;
 
-  // Real ENC cells if configured at build time (OCPN_QT_TEST_ENC -- a single
-  // .000 file or a DIRECTORY of them); otherwise the synthetic demo chart.
-  const QString enc_path = QString::fromUtf8(OCPN_QT_TEST_ENC);
   m_s57data_dir = QString::fromUtf8(OCPN_QT_S57DATA_DIR);
 
-  if (!enc_path.isEmpty()) {
-    // Async path: enumerate the cell set and hand it to the worker thread.
-    // The catalog scan comes back first (boundaries + world navigation);
-    // per-cell content streams in on demand as the user zooms/pans.
-    QStringList cells;
-    QFileInfo fi(enc_path);
-    if (fi.isDir()) {
-      QDirIterator it(enc_path, {"*.000"}, QDir::Files,
-                      QDirIterator::Subdirectories);
-      while (it.hasNext()) cells << it.next();
-      cells.sort();
-    } else {
-      cells << enc_path;
-    }
-    if (!cells.isEmpty()) startAsyncLoad(cells, m_s57data_dir);
+  // First run: migrate the build-time OCPN_QT_TEST_ENC path into the runtime
+  // chart-directory list, so existing dev setups keep working. After that the
+  // list is user-managed via Options > Charts > Chart Files.
+  if (m_chart_source) m_chart_source->seedIfEmpty(QString::fromUtf8(OCPN_QT_TEST_ENC));
+
+  // If any chart directories are configured, scan them; per-cell content
+  // streams in on demand as the user zooms/pans.
+  if (m_chart_source && !m_chart_source->directories().isEmpty()) {
+    reloadCharts();
     return;
   }
 
@@ -373,9 +370,61 @@ void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
                             Q_ARG(QStringList, cell_paths));
 }
 
+void ChartCanvas::reloadCharts() {
+  if (!m_s52_engine || !m_s52_engine->isOk() || !m_chart_source) return;
+  // Enumerate .000 cells under each configured directory (or a directly
+  // configured .000 file).
+  QStringList cells;
+  for (const QString& path : m_chart_source->directories()) {
+    QFileInfo fi(path);
+    if (fi.isDir()) {
+      QDirIterator it(path, {"*.000"}, QDir::Files,
+                      QDirIterator::Subdirectories);
+      while (it.hasNext()) cells << it.next();
+    } else if (fi.isFile()) {
+      cells << path;
+    }
+  }
+  cells.removeDuplicates();
+  cells.sort();
+
+  if (cells.isEmpty()) {
+    m_chart_source->setStatus(tr("No ENC cells found"), false);
+    return;
+  }
+  m_chart_source->setStatus(tr("Scanning %1 cells…").arg(cells.size()), true);
+  if (!m_worker) {
+    startAsyncLoad(cells, m_s57data_dir);
+  } else {
+    // Re-scan on the existing worker; onExtentsScanned rebuilds the catalog
+    // and evicts cells that are no longer part of it.
+    QMetaObject::invokeMethod(m_worker, "scanExtents", Qt::QueuedConnection,
+                              Q_ARG(QStringList, cells));
+  }
+}
+
 void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
   m_catalog.clear();
   for (const CellExtent& c : cells) m_catalog.insert(c.name, c);
+
+  // Evict any resident cell that is no longer in the catalog (e.g. its
+  // directory was removed). "demo" has no catalog entry and is never evicted.
+  const QStringList loaded_names = m_loaded.keys();
+  for (const QString& name : loaded_names) {
+    if (name == QStringLiteral("demo.s52-chart")) continue;
+    if (!m_catalog.contains(name)) {
+      m_compositor->removeLayer(m_loaded.value(name).layerId);
+      m_loaded.remove(name);
+      m_requested.remove(name);
+    }
+  }
+  if (m_chart_source)
+    m_chart_source->setStatus(
+        tr("%1 cells in %2 director%3")
+            .arg(cells.size())
+            .arg(m_chart_source->directories().size())
+            .arg(m_chart_source->directories().size() == 1 ? "y" : "ies"),
+        false);
 
   // Boundary overlay: created once, drawn on top so the cell grid stays
   // visible over loaded chart content.
