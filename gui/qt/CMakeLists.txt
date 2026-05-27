@@ -120,6 +120,8 @@ qt_add_qml_module(opencpn-qt
     chart_config.cpp
     ocharts_service.h
     ocharts_service.cpp
+    osenc_reader.h
+    osenc_reader.cpp
     nmea_monitor_model.h
     nmea_monitor_model.cpp
     wind_decoder.h
