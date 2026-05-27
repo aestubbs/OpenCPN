@@ -2268,11 +2268,28 @@ ApplicationWindow {
                     }
                 }
             }
+            // Active-orientation badge (N / COG / HDG). Counter-rotated so it
+            // stays upright while the card turns.
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 7
-                text: "N"; color: "#e0e0e0"; font.pointSize: 9; font.bold: true
+                anchors.bottomMargin: 6
+                rotation: -compass.rotation
+                text: ["N", "COG", "HDG"][DisplayConfig.navMode]
+                color: DisplayConfig.navMode === 0 ? "#e0e0e0" : "#90c8ff"
+                font.pointSize: 9; font.bold: true
+            }
+
+            // Click the rose to cycle North-Up -> Course-Up -> Head-Up.
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: DisplayConfig.navMode = (DisplayConfig.navMode + 1) % 3
+                ToolTip.visible: containsMouse
+                ToolTip.text: [qsTr("North-Up (click to change)"),
+                               qsTr("Course-Up (click to change)"),
+                               qsTr("Head-Up (click to change)")][DisplayConfig.navMode]
             }
         }
 
