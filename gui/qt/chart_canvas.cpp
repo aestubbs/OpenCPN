@@ -996,6 +996,7 @@ void ChartCanvas::applyDisplaySettings(
   provider->setShowLights(m_show_lights);
   provider->setShowBuoys(m_show_buoys);
   provider->setDetailScale(m_detail_scale);
+  provider->setDeclutter(ChartConfig::instance().declutterText());  // P2.23a
 }
 
 void ChartCanvas::setDetailScale(double n) {

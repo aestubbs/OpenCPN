@@ -259,6 +259,15 @@ void S52VectorChartProvider::setDetailScale(double n) {
   Q_EMIT changed();
 }
 
+void S52VectorChartProvider::setDeclutter(bool on) {
+  if (on == m_declutter) return;
+  m_declutter = on;
+  // Label overlap-avoid is part of the per-frame billboard cull; just re-run
+  // it (no geometry rebuild). Reset the scale gate so updateBillboards works.
+  m_last_line_scale = -1.0;
+  Q_EMIT changed();
+}
+
 bool S52VectorChartProvider::viewGroupEnabled(int vg) const {
   switch (vg) {
     case s52sg::VgLights: return m_showLights;
@@ -457,6 +466,9 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
       if (it == cellShallowest.end() || b.depth < m_billboards[it.value()].depth)
         cellShallowest[key] = i;
     } else if (b.kind == BbKind::Label) {
+      // De-clutter (P2.23a): only suppress overlapping labels when the toggle
+      // is on. Off (the wx default) keeps every label -- overlap allowed.
+      if (!m_declutter) { labelKeep[i] = true; continue; }
       // Screen-pixel bbox of the label (centred on the anchor), in occupancy
       // cells.
       const double sx = b.worldPos.x() * s, sy = b.worldPos.y() * s;

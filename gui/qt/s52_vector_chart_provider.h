@@ -92,6 +92,12 @@ public:
   bool showLights() const { return m_showLights; }
   void setShowBuoys(bool on);
   bool showBuoys() const { return m_showBuoys; }
+  // De-cluttered text (P2.23a): when true, drop labels whose screen bounding
+  // box overlaps one already placed (wx m_bDeClutterText). Default false ==
+  // wx default: all labels shown, overlap allowed. Consumer-side per-frame
+  // cull, so toggling is cheap (no re-decode).
+  void setDeclutter(bool on);
+  bool declutter() const { return m_declutter; }
   // Default minimum-display scale (1:N) for objects that carry no SCAMIN, so
   // un-SCAMIN'd detail (buoys, lights, sector arcs) thins out when zoomed out.
   void setDetailScale(double n);
@@ -181,6 +187,7 @@ private:
   bool m_showText = true;
   bool m_showLights = true;
   bool m_showBuoys = true;
+  bool m_declutter = false;  // P2.23a: label overlap-avoid (wx default off)
   double m_unset_scamin_n = 100000.0;  // default min display scale (no SCAMIN)
   // True if the symbol/vector-symbol's viewing group is currently enabled.
   bool viewGroupEnabled(int vg) const;
