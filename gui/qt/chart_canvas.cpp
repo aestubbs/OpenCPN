@@ -112,9 +112,12 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
       m_layer_config->value("display/category", m_display_category).toInt();
   m_show_soundings =
       m_layer_config->value("display/soundings", m_show_soundings).toBool();
-  m_show_text = m_layer_config->value("display/text", m_show_text).toBool();
-  m_show_lights = m_layer_config->value("display/lights", m_show_lights).toBool();
-  m_show_buoys = m_layer_config->value("display/buoys", m_show_buoys).toBool();
+  // P2.16: text / lights / buoys symbol visibility is no longer a per-provider
+  // live toggle (those were Qt-invented and duplicated the wx S-52 text flags
+  // + Display Category). They stay true here; cartography text is governed by
+  // the s52plib flags (ChartConfig -> applyDisplaySettings) and symbol
+  // visibility by the Display Category, matching wx. The stale display/{text,
+  // lights,buoys} keys are intentionally no longer loaded.
 
   // World background -- OpenCPN's shapefile basemap, always present under
   // everything (lowest z) so the canvas shows a land/sea world map at any

@@ -1003,68 +1003,25 @@ ApplicationWindow {
 
                                     MenuSeparator { Layout.fillWidth: true }
 
-                                    Label { text: qsTr("Detail (live)"); font.bold: true }
+                                    // One flat list mirroring the wx "Vector Chart
+                                    // Display" panel (no Qt-invented Lights/Buoys
+                                    // symbol toggles or master Text toggle -- buoy/
+                                    // light symbols follow the Display Category, as
+                                    // in wx). Soundings stays a live (instant)
+                                    // toggle; the rest re-decode via ChartConfig.
+                                    Label { text: qsTr("Vector chart detail"); font.bold: true }
                                     CheckBox {
                                         text: qsTr("Soundings")
                                         checked: chart.showSoundings
                                         onToggled: chart.showSoundings = checked
                                     }
                                     CheckBox {
-                                        text: qsTr("Text labels")
-                                        checked: chart.showText
-                                        onToggled: chart.showText = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Lights")
-                                        checked: chart.showLights
-                                        onToggled: chart.showLights = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Buoys & beacons")
-                                        checked: chart.showBuoys
-                                        onToggled: chart.showBuoys = checked
-                                    }
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        Label {
-                                            text: qsTr("Hide un-scaled detail beyond 1:")
-                                            Layout.fillWidth: true
-                                        }
-                                        SpinBox {
-                                            from: 5000
-                                            to: 2000000
-                                            stepSize: 5000
-                                            editable: true
-                                            value: chart.detailScale
-                                            onValueModified: chart.detailScale = value
-                                        }
-                                    }
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        Label {
-                                            text: qsTr("Detail over-zoom (1 = at scale … 5 = max)")
-                                            Layout.fillWidth: true
-                                        }
-                                        SpinBox {
-                                            from: 1
-                                            to: 5
-                                            stepSize: 1
-                                            editable: true
-                                            value: chart.overzoomFactor
-                                            onValueModified: chart.overzoomFactor = value
-                                        }
-                                    }
-
-                                    MenuSeparator { Layout.fillWidth: true }
-
-                                    Label { text: qsTr("Cartography & text"); font.bold: true }
-                                    CheckBox {
                                         text: qsTr("Chart information objects")
                                         checked: ChartConfig.chartInfoObjects
                                         onToggled: ChartConfig.chartInfoObjects = checked
                                     }
                                     CheckBox {
-                                        text: qsTr("Buoy & light labels")
+                                        text: qsTr("Buoy / light labels")
                                         checked: ChartConfig.buoyLightLabels
                                         onToggled: ChartConfig.buoyLightLabels = checked
                                     }
@@ -1099,9 +1056,43 @@ ApplicationWindow {
                                         onToggled: ChartConfig.reducedDetailSmallScale = checked
                                     }
                                     CheckBox {
-                                        text: qsTr("Super SCAMIN")
+                                        text: qsTr("Additional detail reduction (super SCAMIN)")
                                         checked: ChartConfig.superScamin
                                         onToggled: ChartConfig.superScamin = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Quilt (Qt-specific)"); font.bold: true }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Detail over-zoom (1 = at scale … 5 = max)")
+                                            Layout.fillWidth: true
+                                        }
+                                        SpinBox {
+                                            from: 1
+                                            to: 5
+                                            stepSize: 1
+                                            editable: true
+                                            value: chart.overzoomFactor
+                                            onValueModified: chart.overzoomFactor = value
+                                        }
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Hide un-SCAMIN'd detail beyond 1:")
+                                            Layout.fillWidth: true
+                                        }
+                                        SpinBox {
+                                            from: 5000
+                                            to: 2000000
+                                            stepSize: 5000
+                                            editable: true
+                                            value: chart.detailScale
+                                            onValueModified: chart.detailScale = value
+                                        }
                                     }
 
                                     MenuSeparator { Layout.fillWidth: true }

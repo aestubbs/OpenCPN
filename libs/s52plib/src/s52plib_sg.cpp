@@ -227,20 +227,40 @@ int s52plib::RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                             double anchor_lon, double anchor_lat) {
   if (!rzRules || !rzRules->LUP) return 0;
 
+  // P2.16 -- text-detail gates, mirroring the legacy TextRenderCheck dispatch
+  // (s52plib.cpp:2419-2428). Buoy/beacon NAME labels and light-description text
+  // are plain TX(OBJNAM)/CS-generated text on AtoN objects; the legacy renderer
+  // suppresses them here by object class (NOT inside the CS procedure), so the
+  // scene-graph emit must apply the same gate or the chart-options toggles have
+  // no effect. Legacy splits the gate by class: LIGHTS text is governed by
+  // Show-Ldis-Text; other AtoN (buoys/beacons) text by Show-Aton-Text.
+  const char *obcl = rzRules->LUP->OBCL;
+  const bool isLights = !strncmp(obcl, "LIGHTS", 6);
+  const bool isBuoyBeacon = !strncmp(obcl, "BOY", 3) || !strncmp(obcl, "BCN", 3);
+  if (isLights) {
+    if (!m_bShowLdisText) return 0;
+  } else if (isBuoyBeacon) {
+    if (!m_bShowAtonText) return 0;
+  }
+
   const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
   const int dc = dispRank(rzRules->LUP->DISC);
   const int vg =
       rzRules->obj ? viewGroupFor(rzRules->obj->FeatureName) : s52sg::VgOther;
   auto handle = [&](Rules *rules) {
-    if (rules->ruleType == RUL_TXT_TX) {
-      S52_TextC *t = S52_PL_parseTX(rzRules, rules, (char *)rules->INSTstr);
+    S52_TextC *t = nullptr;
+    if (rules->ruleType == RUL_TXT_TX)
+      t = S52_PL_parseTX(rzRules, rules, (char *)rules->INSTstr);
+    else if (rules->ruleType == RUL_TXT_TE)
+      t = S52_PL_parseTE(rzRules, rules, (char *)rules->INSTstr);
+    if (!t) return;
+    // Important-text-only: legacy (s52plib.cpp:2504) skips text whose display
+    // group `dis` >= 20 (the non-"important" tiers). National-language
+    // substitution (NOBJNM vs OBJNAM) is already handled inside
+    // S52_PL_parseTX, which honours m_bShowNationalTexts.
+    if (!(m_bShowS57ImportantTextOnly && t->dis >= 20))
       EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc, vg);
-      delete t;
-    } else if (rules->ruleType == RUL_TXT_TE) {
-      S52_TextC *t = S52_PL_parseTE(rzRules, rules, (char *)rules->INSTstr);
-      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc, vg);
-      delete t;
-    }
+    delete t;
   };
 
   Rules *rules = rzRules->LUP->ruleList;
@@ -420,8 +440,12 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     band(rad - half - edge, rad - half, QColor(0, 0, 0));
     band(rad + half, rad + half + edge, QColor(0, 0, 0));
 
-    // Dashed black sector legs (wx: ~1.2 mm dash / 0.6 mm gap).
-    if (leg > 0.0) {
+    // Dashed black sector legs (wx: ~1.2 mm dash / 0.6 mm gap). P2.16: when
+    // "Extended light sectors" is off, shorten the legs to a stub at the arc
+    // radius (wx draws abbreviated legs); when on (the default), draw the full
+    // nominal leg length out from the light.
+    const double legLen = m_bExtendLightSectors ? leg : std::min(leg, rad);
+    if (legLen > 0.0) {
       const double on = 1.2 * ppmm, period = on + 0.6 * ppmm;
       for (const double b : {sectr1, sectr2}) {
         const double a = (b - 90.0) * kPi / 180.0;
@@ -429,8 +453,8 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
         s52sg::VectorOp legOp;
         legOp.filled = false;
         legOp.color = QColor(0, 0, 0);
-        for (double d = 0.0; d < leg; d += period) {
-          const double d2 = std::min(d + on, leg);
+        for (double d = 0.0; d < legLen; d += period) {
+          const double d2 = std::min(d + on, legLen);
           legOp.verts << QPointF(d * cs, d * sn) << QPointF(d2 * cs, d2 * sn);
         }
         if (legOp.verts.size() >= 2) vsym.ops.push_back(legOp);

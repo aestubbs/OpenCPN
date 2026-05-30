@@ -1159,6 +1159,14 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
   };
   int n_points = 0, n_lines = 0, n_areas = 0;
   for (S57Obj* obj : objects) {
+    // P2.16 -- "Chart information objects" gate. Legacy ObjectRenderCheckCat
+    // (s52plib.cpp:10680) suppresses M_* meta objects (M_QUAL/M_COVR/M_NSYS/...)
+    // when Show-Meta is off; skip the whole object so none of its
+    // area/line/symbol/text emits. (Object-query snapshots, built in the
+    // separate pass below, are unaffected.)
+    if (plib && !plib->m_bShowMeta && obj->FeatureName[0] == 'M' &&
+        obj->FeatureName[1] == '_')
+      continue;
     if (obj->Primitive_type == GEO_POINT) {
       LUPrec* lup = plib->S52_LUPLookup(PAPER_CHART, obj->FeatureName, obj);
       if (!lup) continue;
