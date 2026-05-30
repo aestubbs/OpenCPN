@@ -1213,6 +1213,18 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
       rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
       rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
       plib->RenderAreaToSG(buf, &rz);
+      // P2.15: area BOUNDARY lines. RenderAreaToSG emits only the AC/AP fill;
+      // the area's S-52 boundary line rules (RUL_SIM_LN / RUL_COM_LN in its
+      // PLAIN_/SYMBOLIZED_BOUNDARIES LUP -- depth-area edges, DRGARE/RESARE
+      // borders, ...) are not. Walk the boundary edge-triples (the same ones
+      // used for the LNDARE coast-shade below) and feed each to RenderLineToSG
+      // with the area's rz; it dispatches those boundary rules exactly as for a
+      // line feature (priority-sorted, so the border draws over the fill).
+      // Mirrors wx's second RenderObjectToGL pass over area objects.
+      for (int iseg = 0; iseg < obj->m_n_lsindex; ++iseg) {
+        const QList<QPointF> bpts = resolveSeg(&obj->m_lsindex_array[iseg * 3]);
+        if (bpts.size() >= 2) plib->RenderLineToSG(buf, &rz, bpts);
+      }
       // Area features also carry centroid SY symbols and TX/TE text via their
       // LUP/CS (restricted-area markers, anchorage symbols, area names, the
       // depth label of a DEPARE, etc.), anchored at the area base point (extent

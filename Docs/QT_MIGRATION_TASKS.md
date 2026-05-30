@@ -66,10 +66,16 @@ chart-info, buoy/light labels, light descriptions, important-text-only,
 national text, extended light sectors), the dialog was de-duplicated to match
 wx (removed Qt-invented Lights/Buoys/Text live toggles), and de-clutter +
 super-SCAMIN are split to **P2.23** (both default-off, so common case matches).
-Both build clean. **Next: P2.23** (finish the 2 remaining flags) or **P2.15**
-(emit area boundary LS/LC lines), then **P2.7** (raster KAP/BSB — the largest
-remaining *capability* gap) and the live `NavDataProvider` adapter over
-`g_pAIS`/`pRouteList`. P2.20 = Show Grid + Show Depth Units (new render paths).
+Both build clean. **P2.23a DONE** (de-clutter text gated; default off = wx).
+**P2.15 OSENC DONE** (area boundary LS/LC lines on the o-charts/OSENC path).
+Two follow-ups surfaced during that work: **P2.23b** (super-SCAMIN — needs the
+cell native scale plumbed into `chart_context`, currently 0) and **P2.24**
+(OGR/.000 path: it never decodes per-object SCAMIN onto `obj->Scamin`, which
+also makes P2.14's cull inert on NOAA charts; + OGR area boundary lines from
+polygon rings). **Next: P2.24** (highest-value — restores SCAMIN on NOAA
+charts + their area borders) or **P2.7** (raster KAP/BSB — largest capability
+gap), then the live `NavDataProvider` adapter. P2.20 = Show Grid + Show Depth
+Units (new render paths).
 See [`QT_MIGRATION_MATERIALS.md`](./QT_MIGRATION_MATERIALS.md) and
 [`QT_MIGRATION_PERF.md`](./QT_MIGRATION_PERF.md).
 **Last updated:** 2026-05-30.
@@ -925,12 +931,20 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       pass (scale-gated, like the LC/billboard cull) and hides a node once
       `chart_scale_n > scamin`. Build: `opencpn-qt` links clean, 0 errors / 0
       warnings. *(was: severity high — most visible overview defect)*
-- [ ] **P2.15** Emit **area boundary lines** (RUL_SIM_LN / RUL_COM_LN). Area
-      objects emit only their AC/AP **fill** on the SG path (s52plib_sg.cpp area
-      dispatch + s52_engine.cpp per-object sequence); the S-52 boundary line
-      rules (depth-area edges, RESARE/restricted-area styled borders) are
-      silently dropped. wx renders them in a second `RenderObjectToGL` pass.
-      *(severity: med)*
+- [~] **P2.15** Emit **area boundary lines** (RUL_SIM_LN / RUL_COM_LN).
+      `RenderAreaToSG` emits only the AC/AP fill; the area's S-52 boundary line
+      rules (depth-area edges, DRGARE/RESARE borders, ...) were dropped. **OSENC
+      path done 2026-05-30:** the `decodeOsenc` per-object GEO_AREA branch now
+      walks the area's boundary edge-triples (the same `m_lsindex_array` used
+      for the LNDARE coast-shade) and feeds each to `RenderLineToSG` with the
+      area's `rz`, which dispatches the boundary rules as for a line feature
+      (priority-sorted, so the border draws over the fill) — mirrors wx's second
+      `RenderObjectToGL` pass. Covers o-charts/OSENC (`.oesu`) + plaintext
+      OSENC. **OGR/.000 path (NOAA ENC) still TODO:** `loadOneCell`/`EmitAreaPoly`
+      render areas inline from an `OGRPolygon` + `PolyTessGeo` with no
+      `m_lsindex` edge list, so the boundary must come from the polygon rings
+      (`getExteriorRing`/`getInteriorRing` → `RenderLineToSG`) — tracked as
+      **P2.24**. *(severity: med)*
 - [~] **P2.16** Wire the **built-but-inert chart-dialog vector options** to the
       renderer + **de-duplicate the dialog vs wx**. **Mostly done 2026-05-30.**
       First pass set the s52plib flags via `applyDisplaySettings` but they had
@@ -996,21 +1010,37 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       intentionally NOT added** — it is `[—]` N/A under the Qt scene graph
       (pan/zoom is GPU-smooth and zoom already tracks the cursor; see the
       Display → General notes in P3.6). *(severity: low)*
-- [ ] **P2.23** Finish the last 2 chart-dialog flags (split from P2.16; both
-      default-OFF in wx, so the common case already matches). **De-cluttered
-      text** (`m_bDeClutterText`): the Qt provider *always* runs the label
-      bounding-box declutter in `S52VectorChartProvider::updateBillboards`;
-      make that occupancy-grid pass conditional on the flag (push it to the
-      provider like `setShowSoundings`, or read it from the engine) — it is a
-      per-frame consumer-side cull, not decode-time, so wire it through the
-      provider rather than `applyDisplaySettings`. **Super-SCAMIN**
-      (`m_bUseSUPER_SCAMIN`): port the legacy `ObjectRenderCheckCat` SuperScamin
-      synthesis (`chart_scale × 4` if `Scamin > 1e8`, `× 2` if `> 9e6`, with the
-      LNDARE/DEPARE/SWPARE/RECTRK/TSS/TSEZNE/DRGARE/COALNE exemptions;
-      `s52plib.cpp:10782-10829`) into the `s52_engine` per-object loop and skip
-      the object when `chart_scale > SuperScamin`. The flag is already plumbed
-      to `m_bUseSUPER_SCAMIN` via `applyDisplaySettings`; only the emit-side
-      enforcement is missing. *(severity: low)*
+- [~] **P2.23** Finish the last 2 chart-dialog flags (split from P2.16; both
+      default-OFF in wx, so the common case already matches).
+      - [x] **P2.23a De-cluttered text** (`m_bDeClutterText`) — **done
+        2026-05-30**. The Qt provider *always* ran the label bounding-box
+        declutter in `updateBillboards`; gated it on a new
+        `S52VectorChartProvider::setDeclutter` flag (default false = wx default,
+        all labels shown). `ChartCanvas::applyDisplaySettings` pushes
+        `ChartConfig.declutterText()`; toggling re-runs the per-frame cull (no
+        re-decode).
+      - [ ] **P2.23b Super-SCAMIN** (`m_bUseSUPER_SCAMIN`): port the legacy
+        `ObjectRenderCheckCat` SuperScamin synthesis (`chart_scale × 4` if
+        `Scamin > 1e8`, `× 2` if `> 9e6`, with the LNDARE/DEPARE/SWPARE/RECTRK/
+        TSS/TSEZNE/DRGARE/COALNE exemptions; `s52plib.cpp:10782-10829`). Two
+        prerequisites surfaced 2026-05-30: (1) the cell **native scale** must be
+        plumbed into `chart_context->chart_scale` (currently 0 —
+        `MakeMinimalChartContext` zeroes it; `cell.nativeScale` is available in
+        `ChartWorker::loadCell` and must thread through
+        `decodeOsenc`/`loadEncCell(s)`/`loadOsencCell`); (2) implement as a
+        decode-time **SCAMIN synthesis** (write the synthesized value onto
+        `obj->Scamin` before render) so the existing P2.14 per-frame cull
+        enforces it — no new per-frame machinery. *(severity: low)*
+- [ ] **P2.24** OGR/.000 (NOAA ENC) **per-object SCAMIN decode + area boundary
+      lines** (split from P2.15/P2.16, discovered 2026-05-30). The OGR
+      `loadOneCell` path never reads the S-57 **SCAMIN** attribute onto
+      `obj->Scamin` (it stays the `S57Obj` ctor default 1e7), so P2.14's
+      AC/LS/AP SCAMIN cull and the future P2.23b super-SCAMIN are inert on NOAA
+      charts — wire `feat->GetFieldAsInteger("SCAMIN")` (and `bIsAton`) onto the
+      object when building it. Separately, the OGR area path renders inline from
+      an `OGRPolygon`+`PolyTessGeo` with no `m_lsindex` edge list, so P2.15's
+      area boundary lines need the boundary taken from the polygon rings
+      (`getExteriorRing`/`getInteriorRing` → `RenderLineToSG`). *(severity: med)*
 
 > **P2.7 (re-confirmed open, high):** `RasterChartProvider` is still a
 > placeholder with no decoder, so Qt cannot render **raster KAP/BSB** charts at
