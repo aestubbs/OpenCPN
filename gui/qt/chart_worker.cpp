@@ -149,11 +149,12 @@ void ChartWorker::loadCell(const CellExtent& cell) {
         if (ok && !osenc.isEmpty())
           m_senc_cache->put(cell.path, mtime, osenc);
       }
-      if (!osenc.isEmpty()) buf = m_engine->decodeOsenc(osenc, &n, &s, &e, &w);
+      if (!osenc.isEmpty())
+        buf = m_engine->decodeOsenc(osenc, &n, &s, &e, &w, cell.nativeScale);
       break;
     }
     case CellKind::SencPlain:
-      buf = m_engine->loadOsencCell(cell.path, &n, &s, &e, &w);
+      buf = m_engine->loadOsencCell(cell.path, &n, &s, &e, &w, cell.nativeScale);
       break;
     case CellKind::Enc000:
       buf = m_engine->loadEncCell(cell.path, m_s57data_dir, &n, &s, &e, &w);

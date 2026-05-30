@@ -1009,27 +1009,28 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       intentionally NOT added** — it is `[—]` N/A under the Qt scene graph
       (pan/zoom is GPU-smooth and zoom already tracks the cursor; see the
       Display → General notes in P3.6). *(severity: low)*
-- [~] **P2.23** Finish the last 2 chart-dialog flags (split from P2.16; both
-      default-OFF in wx, so the common case already matches).
-      - [x] **P2.23a De-cluttered text** (`m_bDeClutterText`) — **done
-        2026-05-30**. The Qt provider *always* ran the label bounding-box
-        declutter in `updateBillboards`; gated it on a new
-        `S52VectorChartProvider::setDeclutter` flag (default false = wx default,
-        all labels shown). `ChartCanvas::applyDisplaySettings` pushes
-        `ChartConfig.declutterText()`; toggling re-runs the per-frame cull (no
-        re-decode).
-      - [ ] **P2.23b Super-SCAMIN** (`m_bUseSUPER_SCAMIN`): port the legacy
-        `ObjectRenderCheckCat` SuperScamin synthesis (`chart_scale × 4` if
-        `Scamin > 1e8`, `× 2` if `> 9e6`, with the LNDARE/DEPARE/SWPARE/RECTRK/
-        TSS/TSEZNE/DRGARE/COALNE exemptions; `s52plib.cpp:10782-10829`). Two
-        prerequisites surfaced 2026-05-30: (1) the cell **native scale** must be
-        plumbed into `chart_context->chart_scale` (currently 0 —
-        `MakeMinimalChartContext` zeroes it; `cell.nativeScale` is available in
-        `ChartWorker::loadCell` and must thread through
-        `decodeOsenc`/`loadEncCell(s)`/`loadOsencCell`); (2) implement as a
-        decode-time **SCAMIN synthesis** (write the synthesized value onto
-        `obj->Scamin` before render) so the existing P2.14 per-frame cull
-        enforces it — no new per-frame machinery. *(severity: low)*
+- [x] **P2.23** The last 2 chart-dialog flags (split from P2.16; both
+      default-OFF in wx, so the common case already matched). **Done 2026-05-30.**
+      - [x] **P2.23a De-cluttered text** (`m_bDeClutterText`). The Qt provider
+        *always* ran the label bounding-box declutter in `updateBillboards`;
+        gated it on a new `S52VectorChartProvider::setDeclutter` flag (default
+        false = wx default, all labels shown). `ChartCanvas::applyDisplaySettings`
+        pushes `ChartConfig.declutterText()`; toggling re-runs the per-frame
+        cull (no re-decode).
+      - [x] **P2.23b Super-SCAMIN** (`m_bUseSUPER_SCAMIN`). Implemented as a
+        decode-time **SCAMIN synthesis**: a free `ApplySuperScamin(obj,
+        nativeScale, useSuper)` helper in `s52_engine` writes `native × 2` onto
+        `obj->Scamin` for objects with no real SCAMIN (wx `>9e6` = unset), with
+        wx's LNDARE/DEPARE/SWPARE/RECTRK/TSS/TSEZNE/DRGARE/COALNE exemptions, so
+        the existing **P2.14 per-frame cull** enforces it — no new per-frame
+        machinery, no SuperScamin field. (Net wx behaviour for the undefined
+        default is `×2`; we fold the `×4`-then-`×2` cascade into the single `×2`
+        result. LNDARE fully exempt vs wx's RUL_ARE_CO-only — safe-direction.)
+        Called per-object on **both paths**: OGR/.000 uses
+        `reader->GetCSCL()` (also stored on `ctx->chart_scale`); OSENC threads
+        `cell.nativeScale` through new `native_scale` params on `decodeOsenc` /
+        `loadOsencCell`, supplied by `ChartWorker::loadCell`. Build clean; runs.
+        *(was: severity low)*
 - [x] **P2.24** OGR/.000 (NOAA ENC) area boundary lines — **done under P2.15**
       (the OGR half: `EmitAreaPoly` now emits the `OGRPolygon` exterior +
       interior rings through `RenderLineToSG`). **SCAMIN-decode concern

@@ -139,17 +139,20 @@ public:
    *  SENC cache, or an o-charts cell decrypted by oexserverd). Cell extent is
    *  written to the out params. Emits point + line features now; area fills
    *  and soundings follow. Returns an empty buffer if not initialised. */
+  //  `native_scale` is the cell's compilation scale (1:N); when > 0 and the
+  //  super-SCAMIN mariner option is on, objects with no real SCAMIN get a
+  //  synthesized one (P2.23b). 0 disables the synthesis.
   s52sg::Buffer decodeOsenc(const QByteArray& osenc, double* out_north = nullptr,
                             double* out_south = nullptr,
                             double* out_east = nullptr,
-                            double* out_west = nullptr);
+                            double* out_west = nullptr, int native_scale = 0);
 
   /** Convenience: read an OSENC file (*.S57 / decrypted *.oesenc/*.oeu) and
    *  decode it via decodeOsenc(). */
   s52sg::Buffer loadOsencCell(const QString& path, double* out_north = nullptr,
                               double* out_south = nullptr,
                               double* out_east = nullptr,
-                              double* out_west = nullptr);
+                              double* out_west = nullptr, int native_scale = 0);
 
   /** Decode-free catalog scan: open each cell via the OGR S-57 driver and
    *  union its feature envelopes into a CellExtent, WITHOUT running the

@@ -297,6 +297,30 @@ int* repackEdgeIndex(const char* tbl, uint32_t ec, qint64 avail_bytes,
   return dst;
 }
 
+// P2.23b -- super-SCAMIN. wx (ObjectRenderCheckCat, s52plib.cpp:10782) gives
+// objects that carry NO real SCAMIN a synthesized one derived from the cell's
+// compilation scale, so over-zoomed-out detail thins out. Net wx behaviour for
+// the undefined-SCAMIN default (1e8+2): SuperScamin = native x 2, with a set of
+// base/coverage classes exempt (always shown). We replicate it by writing the
+// synthesized value straight onto obj->Scamin for currently-unset objects, so
+// the existing per-frame SCAMIN cull (P2.14 / the billboard cull) enforces it
+// -- no separate SuperScamin field or per-frame test. Runs only when the
+// mariner toggle m_bUseSUPER_SCAMIN is on; objects with a real SCAMIN keep it.
+void ApplySuperScamin(S57Obj* obj, int nativeScale, bool useSuper) {
+  if (!useSuper || !obj || nativeScale <= 0) return;
+  if (obj->Scamin <= 9000000) return;  // real SCAMIN present (wx >9e6 = unset)
+  const char* fn = obj->FeatureName;
+  // Exempt classes (wx list). LNDARE is fully exempt here; wx exempts it only
+  // for its RUL_ARE_CO fill rule -- a negligible, safe-direction divergence
+  // (land always shows).
+  if (!strncmp(fn, "LNDARE", 6) || !strncmp(fn, "DEPARE", 6) ||
+      !strncmp(fn, "SWPARE", 6) || !strncmp(fn, "RECTRK", 6) ||
+      !strncmp(fn, "TSS", 3) || !strncmp(fn, "TSEZNE", 6) ||
+      !strncmp(fn, "DRGARE", 6) || !strncmp(fn, "COALNE", 6))
+    return;
+  obj->Scamin = nativeScale * 2;
+}
+
 void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
                   OGRPolygon* poly, double ref_lat, double ref_lon,
                   S57Obj* obj, chart_context* ctx) {
@@ -487,6 +511,10 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
   // straight from the S57Reader module instead, like the legacy ingest.
   chart_context* ctx = MakeMinimalChartContext(0.0, 0.0);
   S57Reader* reader = ds.GetModule(0);
+  // Cell compilation scale (DSPM:CSCL) for the P2.23b super-SCAMIN synthesis.
+  const int cellNativeScale = reader ? reader->GetCSCL() : 0;
+  ctx->chart_scale = cellNativeScale;
+  const bool useSuper = plib->m_bUseSUPER_SCAMIN;
   if (reader) {
     reader->Rewind();
     OGRFeature* feat;
@@ -565,6 +593,7 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             if (!ext || ext->getNumPoints() < 3) return;  // skip degenerate
             auto* obj = new S57Obj(className);
             CopyFeatureAttributes(feat, obj);
+            ApplySuperScamin(obj, cellNativeScale, useSuper);  // P2.23b
             EmitAreaPoly(plib, buf, className, poly, 0.0, 0.0, obj, ctx);
             ++n_areas;
             // Capture land-area exterior rings (lon, lat) for the coastline
@@ -597,6 +626,7 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             obj->m_chart_context = ctx;
             obj->Primitive_type = GEO_LINE;
             CopyFeatureAttributes(feat, obj);
+            ApplySuperScamin(obj, cellNativeScale, useSuper);  // P2.23b
             LUPrec* lup = plib->S52_LUPLookup(LINES, obj->FeatureName, obj);
             if (!lup) {
               delete obj;
@@ -785,14 +815,16 @@ s52sg::Buffer S52Engine::loadEncCells(const QStringList& paths_000,
 }
 
 s52sg::Buffer S52Engine::loadOsencCell(const QString& path, double* on,
-                                       double* os, double* oe, double* ow) {
+                                       double* os, double* oe, double* ow,
+                                       int native_scale) {
   QFile f(path);
   if (!f.open(QIODevice::ReadOnly)) return s52sg::Buffer{};
-  return decodeOsenc(f.readAll(), on, os, oe, ow);
+  return decodeOsenc(f.readAll(), on, os, oe, ow, native_scale);
 }
 
 s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
-                                     double* os, double* oe, double* ow) {
+                                     double* os, double* oe, double* ow,
+                                     int native_scale) {
   s52sg::Buffer buf;
   if (!m_impl->lib || !m_impl->lib->m_bOK) return buf;
   s52plib* plib = m_impl->lib;
@@ -1189,6 +1221,9 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
     if (plib && !plib->m_bShowMeta && obj->FeatureName[0] == 'M' &&
         obj->FeatureName[1] == '_')
       continue;
+    // P2.23b -- super-SCAMIN: synthesize a SCAMIN for un-SCAMIN'd objects from
+    // the cell native scale so the per-frame cull thins over-zoomed-out detail.
+    ApplySuperScamin(obj, native_scale, plib->m_bUseSUPER_SCAMIN);
     if (obj->Primitive_type == GEO_POINT) {
       LUPrec* lup = plib->S52_LUPLookup(PAPER_CHART, obj->FeatureName, obj);
       if (!lup) continue;

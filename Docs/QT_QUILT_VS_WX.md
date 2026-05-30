@@ -443,7 +443,7 @@ it is already solved.**
 | SCAMIN: AC fills, LS lines, AP fills | yes (P2.14, 2026-05-30) | yes | ✅ |
 | Area boundary LS/LC lines | yes — OSENC + OGR/.000 (P2.15, 2026-05-30) | yes | ✅ |
 | AC/AP fills, LS lines, SY symbols, CARC arcs, TX/TE text, depth shading (2/4-shade, shallow/safety/deep), CS recolour (UDWHAZ03/SNDFRM02/DEPCNT02), day/dusk/night palette | yes | yes | ✅ |
-| Chart-options dialog → renderer | 14/15 wired + dialog de-dup'd to match wx (P2.16 + de-clutter P2.23a, 2026-05-30); super-SCAMIN pending (P2.23b) | full | **near (P2.23b)** |
+| Chart-options dialog → renderer | all 15 wired + dialog de-dup'd to match wx (P2.16 + de-clutter P2.23a + super-SCAMIN P2.23b, 2026-05-30) | full | ✅ |
 | Per-object SCAMIN: OSENC + OGR/.000 (NOAA) | yes (OGR driver emits the SCAMIN field; routed to obj->Scamin) | yes | ✅ |
 | Overscale indication | no | yes | **gap (P2.18)** |
 | Chart types: S-57/OSENC/o-charts | yes | yes | ✅ |
