@@ -630,40 +630,15 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     appendMaybeScamin(node, prim.scamin);
   }
 
-  // Coastline land-shade: an inland gradient just inside LNDARE boundaries
-  // (over the land fill), matching the world basemap effect so detailed-chart
-  // land lifts off the water too. landContours are (lon, lat) -> world
-  // (x=lon, y=-lat).
-  if (!m_buffer.landContours.isEmpty()) {
-    QList<QList<QPointF>> rings;
-    rings.reserve(m_buffer.landContours.size());
-    for (const QList<QPointF>& c : m_buffer.landContours) {
-      QList<QPointF> w;
-      w.reserve(c.size());
-      for (const QPointF& p : c)
-        w.append(QPointF(p.x(), Viewport::latToWorldY(p.y())));
-      rings.append(std::move(w));
-    }
-    // Skip segments lying on the cell boundary: LNDARE is clipped to the
-    // ENC cell, so those are artificial cuts (often along a chart boundary),
-    // not real coastline. World coords: x = lon, y = -lat.
-    const double west = m_west, east = m_east;
-    const double ytop = -m_north, ybot = -m_south;
-    const auto onSameBoundary = [=](const QPointF& a, const QPointF& b) {
-      constexpr double t = 1e-4;
-      auto both = [&](double av, double bv, double line) {
-        return std::abs(av - line) < t && std::abs(bv - line) < t;
-      };
-      return both(a.x(), b.x(), west) || both(a.x(), b.x(), east) ||
-             both(a.y(), b.y(), ytop) || both(a.y(), b.y(), ybot);
-    };
-    if (auto* shade = makeCoastShadeNode(
-            rings, QColor(0, 0, 0), /*width_px=*/6.0f, /*max_alpha=*/0.35f,
-            [&](const QPointF& a, const QPointF& b) {
-              return !onSameBoundary(a, b);
-            }))
-      content->appendChildNode(shade);
-  }
+  // Coastline land-shade REMOVED: the inland gradient band followed the LNDARE
+  // ring, but that ring is clipped to the ENC cell, so the band also drew
+  // around the (often diagonal) chart-cell boundary -- a spurious shaded edge
+  // mid-water (e.g. Monterey). The axis-aligned onSameBoundary filter only
+  // caught N/S/E/W bbox edges, not the diagonal cell boundary. Per the agreed
+  // approach, drop the shade entirely; the coastline now renders as its plain
+  // S-52 boundary line (LNDARE/COALNE LS/LC, emitted by P2.15) over the LANDA
+  // fill -- the originally-intended rendering. `m_buffer.landContours` is no
+  // longer consumed here (left populated; harmless).
 
   // AP pattern fills: tessellated triangles drawn with a tiling texture.
   // Positions are static; rebuildPatternUVs() lays out screen-fixed UVs
