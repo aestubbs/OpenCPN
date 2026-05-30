@@ -931,20 +931,19 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       pass (scale-gated, like the LC/billboard cull) and hides a node once
       `chart_scale_n > scamin`. Build: `opencpn-qt` links clean, 0 errors / 0
       warnings. *(was: severity high — most visible overview defect)*
-- [~] **P2.15** Emit **area boundary lines** (RUL_SIM_LN / RUL_COM_LN).
-      `RenderAreaToSG` emits only the AC/AP fill; the area's S-52 boundary line
-      rules (depth-area edges, DRGARE/RESARE borders, ...) were dropped. **OSENC
-      path done 2026-05-30:** the `decodeOsenc` per-object GEO_AREA branch now
-      walks the area's boundary edge-triples (the same `m_lsindex_array` used
-      for the LNDARE coast-shade) and feeds each to `RenderLineToSG` with the
-      area's `rz`, which dispatches the boundary rules as for a line feature
-      (priority-sorted, so the border draws over the fill) — mirrors wx's second
-      `RenderObjectToGL` pass. Covers o-charts/OSENC (`.oesu`) + plaintext
-      OSENC. **OGR/.000 path (NOAA ENC) still TODO:** `loadOneCell`/`EmitAreaPoly`
-      render areas inline from an `OGRPolygon` + `PolyTessGeo` with no
-      `m_lsindex` edge list, so the boundary must come from the polygon rings
-      (`getExteriorRing`/`getInteriorRing` → `RenderLineToSG`) — tracked as
-      **P2.24**. *(severity: med)*
+- [x] **P2.15** Emit **area boundary lines** (RUL_SIM_LN / RUL_COM_LN).
+      **Done 2026-05-30, both paths.** `RenderAreaToSG` emits only the AC/AP
+      fill; the area's S-52 boundary line rules (depth-area edges, DRGARE/RESARE
+      borders, ...) were dropped, so each area is fed to `RenderLineToSG` with
+      its own `rz` (priority-sorted, so the border draws over the fill —
+      mirrors wx's second `RenderObjectToGL` pass).
+      - **OSENC / o-charts** (`decodeOsenc` GEO_AREA branch): walks the area's
+        boundary edge-triples (the same `m_lsindex_array` the LNDARE
+        coast-shade uses).
+      - **OGR / .000 (NOAA ENC)** (`EmitAreaPoly`): the OGR path has no
+        `m_lsindex` edge list, so the boundary comes from the `OGRPolygon`
+        rings — `getExteriorRing` + `getInteriorRing(k)` (geographic lon/lat)
+        → `RenderLineToSG`. Verified rendering at Santa Barbara US5.
 - [~] **P2.16** Wire the **built-but-inert chart-dialog vector options** to the
       renderer + **de-duplicate the dialog vs wx**. **Mostly done 2026-05-30.**
       First pass set the s52plib flags via `applyDisplaySettings` but they had
@@ -1031,16 +1030,19 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
         decode-time **SCAMIN synthesis** (write the synthesized value onto
         `obj->Scamin` before render) so the existing P2.14 per-frame cull
         enforces it — no new per-frame machinery. *(severity: low)*
-- [ ] **P2.24** OGR/.000 (NOAA ENC) **per-object SCAMIN decode + area boundary
-      lines** (split from P2.15/P2.16, discovered 2026-05-30). The OGR
-      `loadOneCell` path never reads the S-57 **SCAMIN** attribute onto
-      `obj->Scamin` (it stays the `S57Obj` ctor default 1e7), so P2.14's
-      AC/LS/AP SCAMIN cull and the future P2.23b super-SCAMIN are inert on NOAA
-      charts — wire `feat->GetFieldAsInteger("SCAMIN")` (and `bIsAton`) onto the
-      object when building it. Separately, the OGR area path renders inline from
-      an `OGRPolygon`+`PolyTessGeo` with no `m_lsindex` edge list, so P2.15's
-      area boundary lines need the boundary taken from the polygon rings
-      (`getExteriorRing`/`getInteriorRing` → `RenderLineToSG`). *(severity: med)*
+- [x] **P2.24** OGR/.000 (NOAA ENC) area boundary lines — **done under P2.15**
+      (the OGR half: `EmitAreaPoly` now emits the `OGRPolygon` exterior +
+      interior rings through `RenderLineToSG`). **SCAMIN-decode concern
+      RETRACTED 2026-05-30:** a first instrumented pass suggested the OGR driver
+      didn't surface SCAMIN, but a corrected probe in `CopyFeatureAttributes`
+      showed the opposite — the vendored OGR S-57 driver **does** emit a
+      `SCAMIN` integer field (`name=SCAMIN type=OFTInteger set=1`), and the
+      existing `AddIntegerAttribute` path already routes it onto `obj->Scamin`
+      (`s57obj.cpp:196`). So per-object SCAMIN **is** decoded on NOAA charts and
+      P2.14's cull is **not** inert there (the earlier "inert on NOAA" note was
+      a measurement error — the first probe's `%50` counter never reached its
+      print threshold in the small harbour cell, not an absence of SCAMIN).
+      Nothing to do here; closed.
 
 > **P2.7 (re-confirmed open, high):** `RasterChartProvider` is still a
 > placeholder with no decoder, so Qt cannot render **raster KAP/BSB** charts at

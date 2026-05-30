@@ -325,6 +325,28 @@ void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
   rzRules.mps = nullptr;
 
   plib->RenderAreaToSG(buf, &rzRules);
+  // P2.15 (OGR/.000 half): area BOUNDARY lines. RenderAreaToSG emits only the
+  // AC/AP fill; the area's S-52 boundary line rules (RUL_SIM_LN / RUL_COM_LN --
+  // depth-area edges, DRGARE/RESARE borders, ...) are not. The OGR path has no
+  // m_lsindex edge list (unlike OSENC), so take the boundary from the
+  // OGRPolygon rings (exterior + holes; geographic lon/lat, as the LNDARE
+  // coast-shade capture does) and feed each to RenderLineToSG with the area's
+  // rzRules -- it dispatches the boundary rules as for a line feature
+  // (priority-sorted, so the border draws over the fill). Mirrors wx's second
+  // RenderObjectToGL pass over area objects.
+  auto emitRing = [&](const OGRLinearRing* r) {
+    if (!r) return;
+    const int np = r->getNumPoints();
+    if (np < 2) return;
+    QList<QPointF> pts;
+    pts.reserve(np);
+    for (int i = 0; i < np; ++i)
+      pts.append(QPointF(r->getX(i), r->getY(i)));  // (lon, lat)
+    plib->RenderLineToSG(buf, &rzRules, pts);
+  };
+  emitRing(poly->getExteriorRing());
+  for (int k = 0; k < poly->getNumInteriorRings(); ++k)
+    emitRing(poly->getInteriorRing(k));
   // Area centroid SY symbols + TX/TE text (area names, restricted-area markers,
   // etc.) via the LUP/CS, anchored at the area base point -- parity with the
   // OSENC path and with wx (which walks every rule type per object).

@@ -441,10 +441,10 @@ it is already solved.**
 | Render clip | per-cell **bbox** | M_COVR `ActiveRegion` | partial — bbox present; M_COVR clip is **P2.17** (polish; underlay covers holes) |
 | SCAMIN: SY/TX/LC/SOUNDG | yes | yes | ✅ |
 | SCAMIN: AC fills, LS lines, AP fills | yes (P2.14, 2026-05-30) | yes | ✅ |
-| Area boundary LS/LC lines | OSENC/o-charts: yes (P2.15, 2026-05-30); OGR/.000: not yet (P2.24) | yes | **partial (P2.24)** |
+| Area boundary LS/LC lines | yes — OSENC + OGR/.000 (P2.15, 2026-05-30) | yes | ✅ |
 | AC/AP fills, LS lines, SY symbols, CARC arcs, TX/TE text, depth shading (2/4-shade, shallow/safety/deep), CS recolour (UDWHAZ03/SNDFRM02/DEPCNT02), day/dusk/night palette | yes | yes | ✅ |
 | Chart-options dialog → renderer | 14/15 wired + dialog de-dup'd to match wx (P2.16 + de-clutter P2.23a, 2026-05-30); super-SCAMIN pending (P2.23b) | full | **near (P2.23b)** |
-| SCAMIN on NOAA (OGR/.000) charts | **no** — OGR path never decodes per-object SCAMIN | yes | **gap (P2.24)** |
+| Per-object SCAMIN: OSENC + OGR/.000 (NOAA) | yes (OGR driver emits the SCAMIN field; routed to obj->Scamin) | yes | ✅ |
 | Overscale indication | no | yes | **gap (P2.18)** |
 | Chart types: S-57/OSENC/o-charts | yes | yes | ✅ |
 | Chart types: raster KAP/BSB, MBTiles | no | yes | **gap (P2.7)** |
