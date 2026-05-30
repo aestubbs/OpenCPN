@@ -122,6 +122,67 @@ ApplicationWindow {
 
     // --- Canvas options: slide-out display panel from the right (mirrors
     //     OpenCPN's MUIBar CanvasOptions). Native right-edge Drawer.
+    // Shared "Vector chart detail" checklist -- used by BOTH the quick
+    // pull-out drawer (MUIBar canvas options) and the Options > Charts >
+    // Vector Display tab, so the two surfaces can never drift (the bug that
+    // left the drawer showing the old 4-toggle list). Soundings is a live
+    // ChartCanvas toggle; the rest bind ChartConfig (re-decode via
+    // applyChartConfig). Mirrors the wx "Vector Chart Display" detail list.
+    component VectorDetailList: ColumnLayout {
+        spacing: 6
+        Label { text: qsTr("Vector chart detail"); font.bold: true }
+        CheckBox {
+            text: qsTr("Soundings")
+            checked: chart.showSoundings
+            onToggled: chart.showSoundings = checked
+        }
+        CheckBox {
+            text: qsTr("Chart information objects")
+            checked: ChartConfig.chartInfoObjects
+            onToggled: ChartConfig.chartInfoObjects = checked
+        }
+        CheckBox {
+            text: qsTr("Buoy / light labels")
+            checked: ChartConfig.buoyLightLabels
+            onToggled: ChartConfig.buoyLightLabels = checked
+        }
+        CheckBox {
+            text: qsTr("Light descriptions")
+            checked: ChartConfig.lightDescriptions
+            onToggled: ChartConfig.lightDescriptions = checked
+        }
+        CheckBox {
+            text: qsTr("Extended light sectors")
+            checked: ChartConfig.extendedLightSectors
+            onToggled: ChartConfig.extendedLightSectors = checked
+        }
+        CheckBox {
+            text: qsTr("National text")
+            checked: ChartConfig.nationalText
+            onToggled: ChartConfig.nationalText = checked
+        }
+        CheckBox {
+            text: qsTr("Important text only")
+            checked: ChartConfig.importantTextOnly
+            onToggled: ChartConfig.importantTextOnly = checked
+        }
+        CheckBox {
+            text: qsTr("De-cluttered text")
+            checked: ChartConfig.declutterText
+            onToggled: ChartConfig.declutterText = checked
+        }
+        CheckBox {
+            text: qsTr("Reduced detail at small scale")
+            checked: ChartConfig.reducedDetailSmallScale
+            onToggled: ChartConfig.reducedDetailSmallScale = checked
+        }
+        CheckBox {
+            text: qsTr("Additional detail reduction (super SCAMIN)")
+            checked: ChartConfig.superScamin
+            onToggled: ChartConfig.superScamin = checked
+        }
+    }
+
     Drawer {
         id: canvasOptions
         edge: Qt.RightEdge
@@ -150,27 +211,9 @@ ApplicationWindow {
 
             MenuSeparator { Layout.fillWidth: true }
 
-            Label { text: qsTr("Detail"); font.bold: true }
-            CheckBox {
-                text: qsTr("Soundings")
-                checked: chart.showSoundings
-                onToggled: chart.showSoundings = checked
-            }
-            CheckBox {
-                text: qsTr("Text labels")
-                checked: chart.showText
-                onToggled: chart.showText = checked
-            }
-            CheckBox {
-                text: qsTr("Lights")
-                checked: chart.showLights
-                onToggled: chart.showLights = checked
-            }
-            CheckBox {
-                text: qsTr("Buoys & beacons")
-                checked: chart.showBuoys
-                onToggled: chart.showBuoys = checked
-            }
+            // Same vector-detail checklist as Options > Charts > Vector
+            // Display, via the shared VectorDetailList component (kept in sync).
+            VectorDetailList { Layout.fillWidth: true }
 
             MenuSeparator { Layout.fillWidth: true }
 
@@ -1003,63 +1046,11 @@ ApplicationWindow {
 
                                     MenuSeparator { Layout.fillWidth: true }
 
-                                    // One flat list mirroring the wx "Vector Chart
-                                    // Display" panel (no Qt-invented Lights/Buoys
-                                    // symbol toggles or master Text toggle -- buoy/
-                                    // light symbols follow the Display Category, as
-                                    // in wx). Soundings stays a live (instant)
-                                    // toggle; the rest re-decode via ChartConfig.
-                                    Label { text: qsTr("Vector chart detail"); font.bold: true }
-                                    CheckBox {
-                                        text: qsTr("Soundings")
-                                        checked: chart.showSoundings
-                                        onToggled: chart.showSoundings = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Chart information objects")
-                                        checked: ChartConfig.chartInfoObjects
-                                        onToggled: ChartConfig.chartInfoObjects = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Buoy / light labels")
-                                        checked: ChartConfig.buoyLightLabels
-                                        onToggled: ChartConfig.buoyLightLabels = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Light descriptions")
-                                        checked: ChartConfig.lightDescriptions
-                                        onToggled: ChartConfig.lightDescriptions = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Extended light sectors")
-                                        checked: ChartConfig.extendedLightSectors
-                                        onToggled: ChartConfig.extendedLightSectors = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("National text")
-                                        checked: ChartConfig.nationalText
-                                        onToggled: ChartConfig.nationalText = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Important text only")
-                                        checked: ChartConfig.importantTextOnly
-                                        onToggled: ChartConfig.importantTextOnly = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("De-cluttered text")
-                                        checked: ChartConfig.declutterText
-                                        onToggled: ChartConfig.declutterText = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Reduced detail at small scale")
-                                        checked: ChartConfig.reducedDetailSmallScale
-                                        onToggled: ChartConfig.reducedDetailSmallScale = checked
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Additional detail reduction (super SCAMIN)")
-                                        checked: ChartConfig.superScamin
-                                        onToggled: ChartConfig.superScamin = checked
-                                    }
+                                    // Same vector-detail checklist as the quick
+                                    // pull-out drawer, via the shared
+                                    // VectorDetailList component (single source
+                                    // of truth -- the two surfaces stay in sync).
+                                    VectorDetailList { Layout.fillWidth: true }
 
                                     MenuSeparator { Layout.fillWidth: true }
 
