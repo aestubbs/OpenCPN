@@ -443,7 +443,7 @@ it is already solved.**
 | SCAMIN: AC fills, LS lines, AP fills | yes (P2.14, 2026-05-30) | yes | ✅ |
 | Area boundary LS/LC lines | not emitted (fill only) | yes | **gap (P2.15)** |
 | AC/AP fills, LS lines, SY symbols, CARC arcs, TX/TE text, depth shading (2/4-shade, shallow/safety/deep), CS recolour (UDWHAZ03/SNDFRM02/DEPCNT02), day/dusk/night palette | yes | yes | ✅ |
-| Chart-options dialog → renderer | all 15 vector toggles wired (P2.16, 2026-05-30) | full | ✅ |
+| Chart-options dialog → renderer | 13/15 wired + dialog de-dup'd to match wx (P2.16, 2026-05-30); de-clutter + super-SCAMIN pending (P2.23) | full | **near (P2.23)** |
 | Overscale indication | no | yes | **gap (P2.18)** |
 | Chart types: S-57/OSENC/o-charts | yes | yes | ✅ |
 | Chart types: raster KAP/BSB, MBTiles | no | yes | **gap (P2.7)** |

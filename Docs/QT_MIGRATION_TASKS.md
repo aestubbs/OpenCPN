@@ -59,14 +59,17 @@ soundings already honour it) — **P2.14**; area **boundary lines** not emitted 
 **P2.16**; and raster/CM93 chart **types** — **P2.7/P2.19**.
 
 Progress (2026-05-30): **P2.14 DONE** (SCAMIN-cull the `Prim`/`PatternFill`
-families — AC/LS/AP now honour SCAMIN per-frame) and **P2.16 DONE** (the 7
-built-but-inert chart-dialog vector toggles are wired through to s52plib + live
-re-decode — all 15 vector options now take effect). Both build clean.
-**Next: P2.15** (emit area boundary LS/LC lines), then **P2.7** (raster KAP/BSB
-— the largest remaining *capability* gap) and the live `NavDataProvider`
-adapter over `g_pAIS`/`pRouteList`. The three display controls once bundled in
-P2.16 are split to **P2.20** (Show Grid + Show Depth Units — new render paths;
-Smooth Pan/Zoom is N/A under the scene graph).
+families — AC/LS/AP now honour SCAMIN per-frame). **P2.16 MOSTLY DONE**: the
+chart-dialog toggles were inert because the *scene-graph emit never consulted*
+the s52plib flags — fixed by adding the gates to the SG emit (6 of 8 work now:
+chart-info, buoy/light labels, light descriptions, important-text-only,
+national text, extended light sectors), the dialog was de-duplicated to match
+wx (removed Qt-invented Lights/Buoys/Text live toggles), and de-clutter +
+super-SCAMIN are split to **P2.23** (both default-off, so common case matches).
+Both build clean. **Next: P2.23** (finish the 2 remaining flags) or **P2.15**
+(emit area boundary LS/LC lines), then **P2.7** (raster KAP/BSB — the largest
+remaining *capability* gap) and the live `NavDataProvider` adapter over
+`g_pAIS`/`pRouteList`. P2.20 = Show Grid + Show Depth Units (new render paths).
 See [`QT_MIGRATION_MATERIALS.md`](./QT_MIGRATION_MATERIALS.md) and
 [`QT_MIGRATION_PERF.md`](./QT_MIGRATION_PERF.md).
 **Last updated:** 2026-05-30.
@@ -928,26 +931,44 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       rules (depth-area edges, RESARE/restricted-area styled borders) are
       silently dropped. wx renders them in a second `RenderObjectToGL` pass.
       *(severity: med)*
-- [x] **P2.16** Wire the **built-but-inert chart-dialog vector options** to the
-      renderer. **Done 2026-05-30.** The 7 saved-only toggles now bake into the
-      decode: `chartInfoObjects`→`m_bShowMeta`, `buoyLightLabels`→
-      `SetShowAtonText`, `lightDescriptions`→`SetShowLdisText`,
-      `extendedLightSectors`→`SetExtendLightSectors`, `nationalText`→
-      `SetShowNationalText`, `declutterText`→`SetTextOverlapAvoid`,
-      `superScamin`→`m_bUseSUPER_SCAMIN`. Plumbing: 7 fields added to
-      `ChartDisplaySettings` (`s52_engine.h`), applied in
-      `S52Engine::applyDisplaySettings` (`s52_engine.cpp`), and mapped from
-      `ChartConfig` at both call sites in `chart_canvas.cpp` (startup push +
-      `applyChartConfig`). The QML `Connections{ target: ChartConfig;
-      onChanged → chart.applyChartConfig() }` already drives a live re-decode
-      (`reloadResidentCells`), so toggling now takes effect. The s52plib
-      setters/members were already public (pre-annotated "P2.16"). Build:
-      `opencpn-qt` links clean, 0 errors. (The 8 previously-wired toggles +
-      these 7 = all 15 vector options now live.) The three *new* display
-      controls originally bundled here are split to **P2.20** (Show Grid + Show
-      Depth Units are new render paths, not dialog wiring; Smooth Pan/Zoom is
-      `[—]` N/A under the Qt scene graph). This closes the **charts-dialog →
-      pipeline** parity item. *(was: severity high)*
+- [~] **P2.16** Wire the **built-but-inert chart-dialog vector options** to the
+      renderer + **de-duplicate the dialog vs wx**. **Mostly done 2026-05-30.**
+      First pass set the s52plib flags via `applyDisplaySettings` but they had
+      **no visible effect** — the *scene-graph emit path never consulted them*
+      (the legacy gates live in `RenderText`/`ObjectRenderCheckCat`, not in the
+      CS procedures). Fixed by adding the gates to the SG emit:
+      - **Working now** (6): `chartInfoObjects`→ skip `M_*` objects in the
+        `s52_engine` per-object loop (`m_bShowMeta`); `buoyLightLabels`→
+        `RenderTextToSG` suppresses TX/TE on `BOY*`/`BCN*` when
+        `!m_bShowAtonText`; `lightDescriptions`→ suppresses text on `LIGHTS`
+        when `!m_bShowLdisText`; `importantTextOnly`→ `EmitTextC` skips
+        `text->dis >= 20`; `nationalText`→ already honoured inside
+        `S52_PL_parseTX` (NOBJNM↔OBJNAM), which the SG path calls;
+        `extendedLightSectors`→ `emitCARC` shortens the sector legs to a stub
+        when off. All gated on a live re-decode (`reloadResidentCells`).
+      - **Still deferred** (2): `declutterText` — the Qt provider *always*
+        runs label-overlap declutter (wx defaults it OFF), so the toggle needs
+        a consumer-side gate on the occupancy grid in
+        `S52VectorChartProvider::updateBillboards` (per-frame, not decode-time);
+        `superScamin` — needs the legacy `ObjectRenderCheckCat` SuperScamin
+        synthesis (`chart_scale × 2/4` with class exemptions) ported into the
+        `s52_engine` object loop. Both default OFF in wx, so the common case
+        already matches. Tracked as **P2.23**.
+      - **Dialog de-dup (wx-match):** the Qt panel had a Qt-invented "Detail
+        (live)" section (Soundings / **Text labels** / **Lights** / **Buoys &
+        beacons**) that duplicated/conflicted with the wx-style cartography
+        flags — e.g. the live "Text labels" master hid buoy names that the
+        "Buoy/light labels" flag was *also* meant to control, and wx has no
+        Lights/Buoys *symbol* toggles in its Vector Chart Display panel (symbol
+        visibility follows the Display Category). Restructured `Main.qml` to one
+        flat list matching wx; removed the invented Text/Lights/Buoys live
+        toggles (kept Soundings live); the stale `display/{text,lights,buoys}`
+        config keys are no longer loaded (`chart_canvas.cpp`); the Qt-specific
+        over-zoom + un-SCAMIN'd-detail spinboxes moved under a "Quilt
+        (Qt-specific)" sub-heading. Build: `opencpn-qt` links clean, 0 errors.
+      The 3 *new* display controls once bundled here are split to **P2.20**
+      (Show Grid + Show Depth Units — new render paths; Smooth Pan/Zoom N/A).
+      Remaining for [x]: P2.23 (declutter + super-SCAMIN). *(was: severity high)*
 - [ ] **P2.17** **M_COVR polygon render clip** (wx `ActiveRegion` parity).
       Today each cell clips to its geographic **bounding box** (`QSGClipNode`,
       `s52_vector_chart_provider.cpp`), not its M_COVR coverage, and M_COVR
@@ -975,6 +996,21 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       intentionally NOT added** — it is `[—]` N/A under the Qt scene graph
       (pan/zoom is GPU-smooth and zoom already tracks the cursor; see the
       Display → General notes in P3.6). *(severity: low)*
+- [ ] **P2.23** Finish the last 2 chart-dialog flags (split from P2.16; both
+      default-OFF in wx, so the common case already matches). **De-cluttered
+      text** (`m_bDeClutterText`): the Qt provider *always* runs the label
+      bounding-box declutter in `S52VectorChartProvider::updateBillboards`;
+      make that occupancy-grid pass conditional on the flag (push it to the
+      provider like `setShowSoundings`, or read it from the engine) — it is a
+      per-frame consumer-side cull, not decode-time, so wire it through the
+      provider rather than `applyDisplaySettings`. **Super-SCAMIN**
+      (`m_bUseSUPER_SCAMIN`): port the legacy `ObjectRenderCheckCat` SuperScamin
+      synthesis (`chart_scale × 4` if `Scamin > 1e8`, `× 2` if `> 9e6`, with the
+      LNDARE/DEPARE/SWPARE/RECTRK/TSS/TSEZNE/DRGARE/COALNE exemptions;
+      `s52plib.cpp:10782-10829`) into the `s52_engine` per-object loop and skip
+      the object when `chart_scale > SuperScamin`. The flag is already plumbed
+      to `m_bUseSUPER_SCAMIN` via `applyDisplaySettings`; only the emit-side
+      enforcement is missing. *(severity: low)*
 
 > **P2.7 (re-confirmed open, high):** `RasterChartProvider` is still a
 > placeholder with no decoder, so Qt cannot render **raster KAP/BSB** charts at
