@@ -42,6 +42,31 @@
 
 namespace ocpn::qtui {
 
+/** The S-52 decode-time display settings from the Vector Chart Display options
+ *  (those that bake into the decoded geometry, so changing them requires a
+ *  re-decode -- unlike the live per-provider filters: display category,
+ *  soundings/text/lights/buoys). Mirrors the wx Options > Charts panel. */
+struct ChartDisplaySettings {
+  bool importantTextOnly = false;  // SetShowS57ImportantTextOnly
+  bool useScamin = true;           // m_bUseSCAMIN (reduced detail at small scale)
+  int symbolStyle = 0;             // 0 = paper chart, 1 = simplified (m_nSymbolStyle)
+  int boundaryStyle = 0;           // 0 = plain, 1 = symbolised (m_nBoundaryStyle)
+  int twoShades = 0;               // 0 = four-colour depth, 1 = two-colour
+  double safetyContour = 5.0;      // metres (S52_MAR_SAFETY_CONTOUR/_DEPTH)
+  double shallowContour = 2.0;     // metres (S52_MAR_SHALLOW_CONTOUR)
+  double deepContour = 10.0;       // metres (S52_MAR_DEEP_CONTOUR)
+  // P2.16 -- the cartography toggles previously persisted-but-inert. All bake
+  // into the decode (object/text selection + SCAMIN), so they ride the same
+  // re-decode path as the fields above.
+  bool chartInfoObjects = false;     // m_bShowMeta (M_* meta-object display)
+  bool buoyLightLabels = true;       // SetShowAtonText (AtoN names)
+  bool lightDescriptions = false;    // SetShowLdisText (light character text)
+  bool extendedLightSectors = true;  // SetExtendLightSectors (full sector legs)
+  bool nationalText = false;         // SetShowNationalText (NOBJNM etc.)
+  bool declutterText = false;        // SetTextOverlapAvoid (m_bDeClutterText)
+  bool superScamin = false;          // m_bUseSUPER_SCAMIN (extra-aggressive cull)
+};
+
 class S52Engine : public QObject {
   Q_OBJECT
   Q_PROPERTY(bool ok READ isOk NOTIFY changed)
@@ -69,6 +94,12 @@ public:
    *  shared s52plib colour table, so call it on the decode (worker) thread;
    *  already-decoded cells must be re-decoded to pick up the new palette. */
   void setColorScheme(int scheme);
+
+  /** Apply the S-52 decode-time display settings to the shared s52plib (symbol/
+   *  boundary style, depth shading + contours, important-text-only, SCAMIN).
+   *  Like setColorScheme it mutates global s52plib state, so call it on the
+   *  decode thread and re-decode resident cells afterwards. */
+  void applyDisplaySettings(const ChartDisplaySettings& settings);
 
   /** Build a small synthetic S-57 chart covering [north,south]x[west,east]
    *  and decode it through s52plib into world-coordinate geometry (P2.8c).

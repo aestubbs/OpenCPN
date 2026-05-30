@@ -26,10 +26,12 @@
 
 #include <wx/wx.h>
 
+#include <cmath>
 #include <cstring>
 
 #include <QHash>
 #include <QString>
+#include <QStringList>
 
 #include "model/wx_qt_ui_types.h"  // WxImageToQImage
 
@@ -114,10 +116,19 @@ int s52plib::RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules,
   const bool is_double = (ppg->data_type == DATA_TYPE_DOUBLE);
   const QColor color(c->R, c->G, c->B);
   const int dc = dispRank(rzRules->LUP->DISC);
+  const int prio = rzRules->LUP->DPRI - '0';
+  // SCAMIN (P2.14): only carry a real value when the Use-SCAMIN toggle is on;
+  // otherwise the unset sentinel keeps the fill always visible. An un-SCAMIN'd
+  // area fill intentionally keeps the sentinel so the consumer never culls it
+  // (it must persist as the composite underlay).
+  const int scamin =
+      (m_bUseSCAMIN && rzRules->obj) ? rzRules->obj->Scamin : 100000002;
 
   for (TriPrim *p_tp = ppg->tri_prim_head; p_tp; p_tp = p_tp->p_next) {
     s52sg::Prim prim;
     prim.dispCat = dc;
+    prim.priority = prio;
+    prim.scamin = scamin;
     switch (p_tp->type) {
       case PTG_TRIANGLE_STRIP:
         prim.type = s52sg::PrimType::TriangleStrip;
@@ -160,7 +171,8 @@ int s52plib::RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules,
 // coloured line strip. INSTstr format: "<style:4>,<width>,<colour>" e.g.
 // "SOLD,2,CHGRD" -- style at [0..3], width at [5], colour token at [7].
 int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
-                          const QList<QPointF> &pts, int dispCat) {
+                          const QList<QPointF> &pts, int dispCat, int priority,
+                          int scamin) {
   if (pts.size() < 2 || !rules->INSTstr) return 0;
   char *str = (char *)rules->INSTstr;
   S52color *c = getColor(str + 7);
@@ -171,8 +183,19 @@ int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
   prim.color = QColor(c->R, c->G, c->B);
   prim.width = static_cast<float>(atoi(str + 5));
   if (prim.width < 1.0f) prim.width = 1.0f;
+  // Line style is the 4-char token at the start of INSTstr (SOLD/DASH/DOTT).
+  // wx: DASH ~3mm period 66% on; DOTT ~1mm period 50% (RenderLS_Dash_GLSL).
+  if (!strncmp(str, "DASH", 4)) {
+    prim.dashOnMm = 2.0f;
+    prim.dashOffMm = 1.0f;
+  } else if (!strncmp(str, "DOTT", 4)) {
+    prim.dashOnMm = 0.5f;
+    prim.dashOffMm = 0.5f;
+  }
   prim.verts = pts;
   prim.dispCat = dispCat;
+  prim.priority = priority;
+  prim.scamin = scamin;
   out.prims.push_back(std::move(prim));
   return 1;
 }
@@ -181,7 +204,7 @@ int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
 // colour and nominal point size come from s52plib's text parse; the
 // consumer renders it with a system font (not TexFont/DepthFont).
 static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
-                      double anchor_lat, int scamin, int dispCat) {
+                      double anchor_lat, int scamin, int dispCat, int viewGroup) {
   if (!text || text->frmtd.IsEmpty()) return;
   s52sg::Label label;
   label.pos = QPointF(anchor_lon, anchor_lat);
@@ -196,6 +219,7 @@ static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
   label.vjust = text->vjust;
   label.scamin = scamin;
   label.dispCat = dispCat;
+  label.viewGroup = viewGroup;
   out.labels.push_back(std::move(label));
 }
 
@@ -205,14 +229,16 @@ int s52plib::RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
 
   const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
   const int dc = dispRank(rzRules->LUP->DISC);
+  const int vg =
+      rzRules->obj ? viewGroupFor(rzRules->obj->FeatureName) : s52sg::VgOther;
   auto handle = [&](Rules *rules) {
     if (rules->ruleType == RUL_TXT_TX) {
       S52_TextC *t = S52_PL_parseTX(rzRules, rules, (char *)rules->INSTstr);
-      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc);
+      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc, vg);
       delete t;
     } else if (rules->ruleType == RUL_TXT_TE) {
       S52_TextC *t = S52_PL_parseTE(rzRules, rules, (char *)rules->INSTstr);
-      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc);
+      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc, vg);
       delete t;
     }
   };
@@ -322,10 +348,103 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     }
   };
 
+  // Sector-light arcs (CARC / RUL_ARC_2C): a coloured arc at a screen-fixed
+  // radius around the light + radial sector-leg lines. wx draws these with a
+  // dedicated ring shader (RenderCARC); here we emit them as VectorSymbol
+  // billboard geometry (screen-fixed, world-anchored), like the HPGL symbols.
+  // INSTstr = outline_col,outline_w,arc_col,arc_w,sectr1,sectr2,radius_mm,
+  // sector_radius_mm (',' or ';' separated).
+  auto emitCARC = [&](Rules *r) {
+    if (!r->INSTstr) return;
+    constexpr double kPi = 3.14159265358979323846;
+    QString inst = QString::fromLatin1((const char *)r->INSTstr);
+    inst.replace(';', ',');
+    const QStringList tk = inst.split(',');
+    if (tk.size() < 8) return;
+    const float ppmm = GetPPMM();
+    const double sectr1 = tk[4].toDouble();
+    const double sectr2 = tk[5].toDouble();
+    const double rad = tk[6].toDouble() * ppmm;
+    const double leg = tk[7].toDouble() * ppmm;
+    if (rad <= 0.0) return;
+    // Coloured band ~1 mm (wx clamps to 1 mm on large displays); a thin black
+    // edge each side -- wx's outline only extends outline_width/2 (px) beyond
+    // the colour, NOT outline_width * px/mm (that swamped the band in black).
+    double arcw = tk[3].toDouble() * ppmm;
+    if (arcw > ppmm) arcw = ppmm;
+    if (arcw < 1.0) arcw = 1.0;
+    const double edge = std::max(1.0, tk[1].toDouble() * 0.5);
+
+    QByteArray acol = tk[2].trimmed().toLatin1();
+    S52color *c = getColor(acol.data());
+    const QColor arcColor = c ? QColor(c->R, c->G, c->B) : QColor(0, 0, 0);
+
+    s52sg::VectorSymbol vsym;
+    vsym.pos = QPointF(anchor_lon, anchor_lat);
+    vsym.scamin = scamin;
+    vsym.dispCat = dc;
+    vsym.viewGroup = s52sg::VgLights;
+
+    // Bearing is S-52 "from seaward", clockwise from north. Screen angle =
+    // bearing - 90 with the billboard's y-down: north -> up, east -> right.
+    // Wrap when the lit sector crosses north (se <= sb).
+    double sb = sectr1, se = sectr2;
+    if (se <= sb) se += 360.0;
+
+    // Filled annulus band [inner,outer] over [sb,se] as a triangle list.
+    auto band = [&](double inner, double outer, const QColor &col) {
+      s52sg::VectorOp op;
+      op.filled = true;
+      op.color = col;
+      bool have = false;
+      QPointF pin0, pout0;
+      for (double ang = sb; ang < se + 0.01; ang += 6.0) {
+        const double a = (std::min(ang, se) - 90.0) * kPi / 180.0;
+        const double cs = std::cos(a), sn = std::sin(a);
+        const QPointF pin(inner * cs, inner * sn), pout(outer * cs, outer * sn);
+        if (have) {
+          op.verts << pin0 << pout0 << pout;  // quad -> 2 triangles
+          op.verts << pin0 << pout << pin;
+        }
+        pin0 = pin;
+        pout0 = pout;
+        have = true;
+      }
+      if (op.verts.size() >= 3) vsym.ops.push_back(op);
+    };
+    const double half = arcw / 2.0;
+    // Coloured band, plus a black edge band on each radial side (drawn as
+    // separate non-overlapping bands so draw order never matters -- the colour
+    // is never covered, and white sectors stay visible against the sea).
+    band(rad - half, rad + half, arcColor);
+    band(rad - half - edge, rad - half, QColor(0, 0, 0));
+    band(rad + half, rad + half + edge, QColor(0, 0, 0));
+
+    // Dashed black sector legs (wx: ~1.2 mm dash / 0.6 mm gap).
+    if (leg > 0.0) {
+      const double on = 1.2 * ppmm, period = on + 0.6 * ppmm;
+      for (const double b : {sectr1, sectr2}) {
+        const double a = (b - 90.0) * kPi / 180.0;
+        const double cs = std::cos(a), sn = std::sin(a);
+        s52sg::VectorOp legOp;
+        legOp.filled = false;
+        legOp.color = QColor(0, 0, 0);
+        for (double d = 0.0; d < leg; d += period) {
+          const double d2 = std::min(d + on, leg);
+          legOp.verts << QPointF(d * cs, d * sn) << QPointF(d2 * cs, d2 * sn);
+        }
+        if (legOp.verts.size() >= 2) vsym.ops.push_back(legOp);
+      }
+    }
+    if (!vsym.ops.isEmpty()) out.vectorSymbols.push_back(std::move(vsym));
+  };
+
   Rules *rules = rzRules->LUP->ruleList;
   while (rules != NULL) {
     if (rules->ruleType == RUL_SYM_PT) {
       emitSY(rules);
+    } else if (rules->ruleType == RUL_ARC_2C) {
+      emitCARC(rules);
     } else if (rules->ruleType == RUL_CND_SY) {
       if (!rzRules->obj->bCS_Added) {
         rzRules->obj->CSrules = NULL;
@@ -336,6 +455,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
       Rules *cs = rzRules->obj->CSrules;
       while (NULL != cs) {
         if (cs->ruleType == RUL_SYM_PT) emitSY(cs);
+        else if (cs->ruleType == RUL_ARC_2C) emitCARC(cs);
         rules_last = cs;
         cs = cs->next;
       }
@@ -355,25 +475,69 @@ int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
                             const QList<QPointF> &pts) {
   if (!rzRules || !rzRules->LUP) return 0;
   const int dc = dispRank(rzRules->LUP->DISC);
+  const int prio = rzRules->LUP->DPRI - '0';
 
-  // LC fallback: resolve the line-symbol's colour (HPGL colRef "nXXX",
-  // skip the leading count char) and draw a plain line strip.
+  const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
+  const int vg =
+      rzRules->obj ? viewGroupFor(rzRules->obj->FeatureName) : s52sg::VgOther;
+
+  // LC: an HPGL line-symbol repeated along the line (cables, pipelines,
+  // restricted-area borders, recommended tracks). Capture the symbol's glyph
+  // geometry once (local px, pivot at origin) + its repeat length, and hand it
+  // to the consumer as a ComplexLine to walk along the path (wx draw_lc_poly).
+  // If the symbol has no HPGL vector, fall back to a dashed line.
   auto emitLC = [&](Rules *r) {
-    if (pts.size() < 2 || !r->razRule || !r->razRule->colRef.LCRF) return;
-    S52color *c = getColor(r->razRule->colRef.LCRF + 1);
-    if (!c) return;
+    if (pts.size() < 2 || !r->razRule) return;
+    Rule *pr = r->razRule;
+    S52color *c = pr->colRef.LCRF ? getColor(pr->colRef.LCRF + 1) : nullptr;
+    const QColor col = c ? QColor(c->R, c->G, c->B) : QColor(0, 0, 0);
+    const int isym = pr->pos.line.bnbox_w.SYHL;       // repeat length, 0.01 mm
+    const float lengthPx = isym > 0 ? isym * GetPPMM() / 100.0f : 0.0f;
+    if (pr->vector.LVCT && lengthPx >= 1.0f) {
+      extern float g_scaminScale;
+      g_scaminScale = 1.0f;
+      s52sg::VectorSymbol vsym;  // reuse the HPGL->SG capture
+      HPGL->SetVP(&vp_plib);
+      HPGL->SetTargetSG(&vsym);
+      wxPoint r0(0, 0);
+      wxPoint pivot(pr->pos.line.pivot_x.LICL, pr->pos.line.pivot_y.LIRW);
+      HPGL->Render(pr->vector.LVCT, pr->colRef.LCRF, r0, pivot, pivot, 1.0f,
+                   0.0f, true);
+      if (!vsym.ops.isEmpty()) {
+        s52sg::ComplexLine cl;
+        cl.path = pts;
+        cl.symbol = std::move(vsym.ops);
+        cl.lengthPx = lengthPx;
+        cl.color = col;
+        cl.dispCat = dc;
+        cl.priority = prio;
+        cl.scamin = scamin;
+        cl.viewGroup = vg;
+        out.complexLines.push_back(std::move(cl));
+        return;
+      }
+    }
+    // Fallback: dashed line in the LC colour.
     s52sg::Prim prim;
     prim.type = s52sg::PrimType::LineStrip;
-    prim.color = QColor(c->R, c->G, c->B);
+    prim.color = col;
     prim.width = 1.0f;
+    prim.dashOnMm = 1.8f;
+    prim.dashOffMm = 1.2f;
     prim.verts = pts;
     prim.dispCat = dc;
+    prim.priority = prio;
+    prim.scamin = m_bUseSCAMIN ? scamin : 100000002;  // P2.14
     out.prims.push_back(std::move(prim));
   };
 
+  // SCAMIN for LS lines (P2.14): pass a real value only while Use-SCAMIN is on;
+  // the unset sentinel keeps an un-SCAMIN'd line always visible (the consumer
+  // SCAMIN-culls a Prim only when it carries a real value).
+  const int ls_scamin = m_bUseSCAMIN ? scamin : 100000002;
   auto handle = [&](Rules *r) {
     if (r->ruleType == RUL_SIM_LN)
-      RenderToSGLS(out, r, pts, dc);
+      RenderToSGLS(out, r, pts, dc, prio, ls_scamin);
     else if (r->ruleType == RUL_COM_LN)
       emitLC(r);
   };
@@ -455,7 +619,9 @@ int s52plib::RenderToSGAP(s52sg::Buffer &out, ObjRazRules *rzRules,
   if (pf.tris.isEmpty()) return 0;
   pf.pattern = qpat;
   pf.dispCat = dispRank(rzRules->LUP->DISC);
-  pf.scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
+  // SCAMIN (P2.14): real value only while Use-SCAMIN is on; the consumer
+  // SCAMIN-culls a pattern fill only when it carries a real value.
+  pf.scamin = (m_bUseSCAMIN && rzRules->obj) ? rzRules->obj->Scamin : 100000002;
   out.patternFills.push_back(std::move(pf));
   return 1;
 }

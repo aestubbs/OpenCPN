@@ -103,6 +103,16 @@ class ChartCanvas : public QQuickItem {
                  showLightsChanged)
   Q_PROPERTY(bool showBuoys READ showBuoys WRITE setShowBuoys NOTIFY
                  showBuoysChanged)
+  // 1:N below which (more zoomed out) objects lacking a SCAMIN are hidden, so
+  // un-SCAMIN'd buoys/lights/sector arcs thin out at small scale. Configurable.
+  Q_PROPERTY(double detailScale READ detailScale WRITE setDetailScale NOTIFY
+                 detailScaleChanged)
+  // Quilt over-zoom factor k: a chart's content renders once the view is zoomed
+  // in to within k x of its natural scale (1 = strictly at native scale .. 5 =
+  // wx's range). Lower keeps the scale-appropriate chart longer; higher pulls in
+  // detail earlier. Configurable in the chart-settings dialog.
+  Q_PROPERTY(double overzoomFactor READ overzoomFactor WRITE setOverzoomFactor
+                 NOTIFY overzoomFactorChanged)
 
   // Demo mode: feed the nav overlays (AIS / own-ship) from the synthetic
   // DemoNavDataProvider (animated). When off, the demo animation freezes;
@@ -197,6 +207,10 @@ public:
   void setShowLights(bool on);
   bool showBuoys() const { return m_show_buoys; }
   void setShowBuoys(bool on);
+  double detailScale() const { return m_detail_scale; }
+  void setDetailScale(double n);
+  double overzoomFactor() const { return m_overzoom_k; }
+  void setOverzoomFactor(double k);
 
   bool demoMode() const { return m_demo_mode; }
   void setDemoMode(bool on);
@@ -286,6 +300,8 @@ Q_SIGNALS:
   void showTextChanged();
   void showLightsChanged();
   void showBuoysChanged();
+  void detailScaleChanged();
+  void overzoomFactorChanged();
   void demoModeChanged();
   void overlayVisibilityChanged();
   void viewChanged();
@@ -320,6 +336,14 @@ private:
   // the catalog scan. Creates the worker on first use; evicts cells that fall
   // out of the catalog on a later rescan. Bound to ChartSourceModel changes.
   void reloadCharts();
+  // Push the ChartConfig (Vector Chart Display options: depth shading/contours,
+  // symbol/boundary style, important-text, SCAMIN) to the decode thread and
+  // re-decode resident cells. Debounced off ChartConfig::changed.
+  void applyChartConfig();
+  // Evict every resident S-52 cell layer and re-run the quilt so they
+  // re-decode with the current global s52plib settings. Shared by
+  // setColorScheme / applyChartConfig.
+  void reloadResidentCells();
   // Worker results (delivered to the main thread via queued connections).
   void onExtentsScanned(const QList<CellExtent>& cells);
   void onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
@@ -332,7 +356,7 @@ private:
   // The ~1:N display-scale denominator for a viewport scale (px/degree), at
   // a nominal display density. Compared against cells' native CSCL to pick
   // the quilt tier.
-  static double displayScaleN(double scale);
+  static double displayScaleN(double scale, double centerLat = 0.0);
   // Layer z-order for a cell of the given native scale: finer (smaller 1:N)
   // draws over coarser, so overlaps hide the coarse cell.
   static int zOrderForScale(int native_scale);
@@ -400,6 +424,8 @@ private:
   bool m_show_text = true;
   bool m_show_lights = true;
   bool m_show_buoys = true;
+  double m_detail_scale = 100000.0;  // default min display scale (no SCAMIN)
+  double m_overzoom_k = 2.0;  // quilt over-zoom factor (render at <= native*k)
   // Push the current display category + viewing-group toggles onto a newly
   // created provider (called at both provider-creation sites).
   void applyDisplaySettings(S52VectorChartProvider* provider) const;
@@ -433,6 +459,7 @@ private:
   QSet<QString> m_requested;
   // Coalesces a burst of pan/zoom into one visible-cell evaluation.
   QTimer* m_load_debounce = nullptr;
+  QTimer* m_chart_cfg_debounce = nullptr;  // coalesces ChartConfig edits
   QString m_s57data_dir;
   // The catalog scan publishes progressively; fit the viewport to the set
   // only on the first batch (refitting each batch would jump the view).

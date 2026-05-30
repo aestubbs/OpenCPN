@@ -97,8 +97,10 @@ protected:
     return true;
   }
 
-  // Geographic (lat, lon) -> world point (x = lon, y = -lat).
-  static QPointF world(double lat, double lon) { return QPointF(lon, -lat); }
+  // Geographic (lat, lon) -> world point (x = lon, y = Mercator-lat).
+  static QPointF world(double lat, double lon) {
+    return QPointF(Viewport::lonToWorldX(lon), Viewport::latToWorldY(lat));
+  }
 
   // Screen-correct heading unit vector in world space.
   static QPointF headingVec(double cog_deg) {

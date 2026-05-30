@@ -44,6 +44,7 @@
 
 #include "ais_layer.h"
 #include "chart_boundary_provider.h"
+#include "chart_config.h"
 #include "chart_layer.h"
 #include "chart_worker.h"
 #include "config_store.h"
@@ -186,6 +187,12 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
 
   // Restore the persisted colour scheme (#35).
   setColorScheme(ConfigStore::instance().getInt("display/colorScheme", 0));
+  // Restore the persisted detail scale (default min display 1:N for un-SCAMIN'd
+  // objects). Set the member directly; providers are seeded via
+  // applyDisplaySettings as they load.
+  m_detail_scale = ConfigStore::instance().getInt("display/detailScale", 100000);
+  m_overzoom_k = ConfigStore::instance().getDouble("display/overzoomFactor", 2.0);
+  if (m_overzoom_k < 1.0 || m_overzoom_k > 5.0) m_overzoom_k = 2.0;
 
   m_ais_layer = new AisLayer(m_nav_provider.get(), m_viewport.get());
   m_ais_layer->setZOrder(2000);
@@ -232,6 +239,19 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   qRegisterMetaType<ocpn::qtui::CellExtent>();
   qRegisterMetaType<QList<ocpn::qtui::CellExtent>>();
   qRegisterMetaType<s52sg::Buffer>();
+  qRegisterMetaType<ocpn::qtui::ChartDisplaySettings>();
+
+  // S-52 decode-time display settings (depth shading/contours, symbol/boundary
+  // style, important-text, SCAMIN): pushed to the decode thread + a resident
+  // re-decode whenever the Vector Chart Display options change. Debounced so a
+  // burst of edits (e.g. typing a contour depth) coalesces into one re-decode.
+  m_chart_cfg_debounce = new QTimer(this);
+  m_chart_cfg_debounce->setSingleShot(true);
+  m_chart_cfg_debounce->setInterval(350);
+  connect(m_chart_cfg_debounce, &QTimer::timeout, this,
+          [this]() { applyChartConfig(); });
+  connect(&ChartConfig::instance(), &ChartConfig::changed, this,
+          [this]() { m_chart_cfg_debounce->start(); });
 
   // Pan/zoom fires Viewport::changed at mouse-move / wheel rate; coalesce a
   // burst into one visible-cell evaluation once the gesture settles.
@@ -367,6 +387,33 @@ void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
 
   m_worker_thread->start();
 
+  // Push the persisted S-52 display options + colour scheme to the decode
+  // thread BEFORE any cell decodes, so the first render already reflects them.
+  QMetaObject::invokeMethod(m_worker, "setColorScheme", Qt::QueuedConnection,
+                            Q_ARG(int, m_color_scheme));
+  {
+    const ChartConfig& c = ChartConfig::instance();
+    ChartDisplaySettings s;
+    s.importantTextOnly = c.importantTextOnly();
+    s.useScamin = c.reducedDetailSmallScale();
+    s.symbolStyle = c.graphicsStyle();
+    s.boundaryStyle = c.boundaryStyle();
+    s.twoShades = c.colourCount();
+    s.safetyContour = c.safetyContour();
+    s.shallowContour = c.shallowContour();
+    s.deepContour = c.deepContour();
+    s.chartInfoObjects = c.chartInfoObjects();          // P2.16
+    s.buoyLightLabels = c.buoyLightLabels();            // P2.16
+    s.lightDescriptions = c.lightDescriptions();        // P2.16
+    s.extendedLightSectors = c.extendedLightSectors();  // P2.16
+    s.nationalText = c.nationalText();                  // P2.16
+    s.declutterText = c.declutterText();                // P2.16
+    s.superScamin = c.superScamin();                    // P2.16
+    QMetaObject::invokeMethod(m_worker, "applyDisplaySettings",
+                              Qt::QueuedConnection,
+                              Q_ARG(ocpn::qtui::ChartDisplaySettings, s));
+  }
+
   // Kick off the catalog scan on the worker.
   QMetaObject::invokeMethod(m_worker, "scanExtents", Qt::QueuedConnection,
                             Q_ARG(QStringList, cell_paths));
@@ -380,6 +427,9 @@ void ChartCanvas::reloadCharts() {
       QStringLiteral("*.000"), QStringLiteral("*.oesu"),
       QStringLiteral("*.oesenc"), QStringLiteral("*.S57")};
   QStringList cells;
+  // Reset the key map once, then accumulate each o-charts dir's keyList below
+  // (loadKeyList merges; a keyList-less dir must not wipe another dir's keys).
+  OChartsService::instance().clearKeys();
   for (const QString& path : m_chart_source->directories()) {
     QFileInfo fi(path);
     if (fi.isDir()) {
@@ -481,10 +531,19 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
   // initial scale (and the view rect the selection samples) is correct.
   if (!m_world_fitted && width() > 0 && height() > 0 && e > w && n > s) {
     m_world_fitted = true;
-    m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
-    const double fit =
-        std::min(width() / (e - w), height() / (n - s)) * 0.9;
-    m_viewport->setScale(fit);
+    // DEBUG: open at a fixed view (OCPN_QT_VIEW_LAT/LON/SCALE) to reproduce a
+    // specific location/zoom for diagnosis without manual navigation.
+    const QByteArray dvlat = qgetenv("OCPN_QT_VIEW_LAT");
+    if (!dvlat.isEmpty()) {
+      m_viewport->setCenter(dvlat.toDouble(),
+                            qgetenv("OCPN_QT_VIEW_LON").toDouble());
+      m_viewport->setScale(qgetenv("OCPN_QT_VIEW_SCALE").toDouble());
+    } else {
+      m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
+      const double fit =
+          std::min(width() / (e - w), height() / (n - s)) * 0.9;
+      m_viewport->setScale(fit);
+    }
   }
   update();
 
@@ -505,6 +564,9 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   CellExtent cat = m_catalog.value(id, c);
   // Dropped if the per-location selection moved off it while it was decoding.
   if (buffer.empty() || !m_needed.contains(id)) {
+    qWarning("onCellLoaded: DROP %s (%s)", qPrintable(id),
+             buffer.empty() ? "empty buffer"
+                            : "no longer needed (panned off / out-competed)");
     m_requested.remove(id);  // allow a future re-request when needed again
     return;
   }
@@ -521,17 +583,23 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   lc.layerId = layerId;
   lc.provider = provider;
   m_loaded.insert(id, lc);
+  qWarning("onCellLoaded: ADD %s scale=%d cov=%lld", qPrintable(id),
+           cat.nativeScale, static_cast<long long>(cat.coverage.size()));
   Q_EMIT chartCoverageChanged();
   update();
 }
 
-double ChartCanvas::displayScaleN(double scale) {
+double ChartCanvas::displayScaleN(double scale, double centerLat) {
   // ~1:N display-scale denominator at a nominal 96 dpi (3.78 px/mm):
-  //   N = (ground metres per degree) / (screen metres per pixel)
-  //     = (111320 / scale) / (1 / (ppmm*1000))
+  //   N = (ground metres per degree of longitude) / (screen metres per pixel)
+  // Under Mercator, scale is px per degree of LONGITUDE, whose ground distance
+  // is 111320*cos(lat), so include the cos(centre_lat) factor to get the true
+  // scale (else high-latitude charts read ~1/cos too coarse -> wrong quilt
+  // tier + SCAMIN).
   if (scale <= 0.0) return 1.0e12;
   constexpr double kPpmm = 3.78;
-  return 111320.0 * kPpmm * 1000.0 / scale;  // ~ 4.21e8 / scale
+  const double clat = std::max(0.05, std::cos(centerLat * M_PI / 180.0));
+  return 111320.0 * clat * kPpmm * 1000.0 / scale;
 }
 
 int ChartCanvas::zOrderForScale(int native_scale) {
@@ -575,75 +643,79 @@ void ChartCanvas::updateVisibleCells() {
       cands.append(&c);
   }
 
-  // Per-location quilt: sample the view on a grid; at each sample point pick
-  // the candidate cell COVERING that point that best suits the zoom, then
-  // union the per-point winners into the needed set. This guarantees a
-  // location only falls through to the GSHHS world backdrop when NO ENC cell
-  // covers it.
-  //
-  // Pick the chart for each sampled location (mirrors ECDIS quilting: show
-  // the most detailed *useful* chart, fall back to coarser where finer is
-  // absent). A chart is "eligible" if it's no more than kMaxUnderzoom times
-  // finer than the display -- so we don't pull a harbour cell in at coastal
-  // zoom -- but coarser charts are always eligible.
-  //
-  // Among eligible cells covering the point we take the FINEST, except: where
-  // several overlap at *comparable* scale (within kComparable x of the finest)
-  // we prefer the one with the higher chart-content DENSITY (features per
-  // square degree -- not raw count, which would favour a coarser cell merely
-  // for spanning more area). That stops a finer-but-sparse cell (e.g. a deep
-  // channel cell with few soundings) being chosen over a comparably-scaled
-  // neighbour that's rich with soundings, while still favouring detail. If a
-  // point's only cover is finer than the threshold (zoomed right out past
-  // every chart there), the coarsest is used so it still shows something.
-  constexpr double kMaxUnderzoom = 8.0;
-  constexpr double kComparable = 4.0;  // scale ratio treated as "same detail"
-  const double threshold = displayScaleN(scale) / kMaxUnderzoom;
-  const auto density = [](const CellExtent* c) -> double {
-    const double a = (c->north - c->south) * (c->east - c->west);
-    return a > 0.0 ? c->navFeatures / a : 0.0;
+  // Composite quilt (see Docs/QT_QUILT_VS_WX.md "Display rules"). At any zoom we
+  // render the finest scale-appropriate chart PLUS coarser charts beneath it
+  // (finer on top, by z-order), each clipped to its M_COVR coverage -- so a
+  // coarser chart always fills any gap in a finer chart's coverage and the
+  // basemap shows only where NO chart covers. A chart's CONTENT renders only
+  // once the view is zoomed in to within k x of its natural scale; finer (not-
+  // yet-reached) charts show only their bbox rectangle (ChartBoundaryProvider).
+  const double displayN =
+      displayScaleN(scale, m_viewport ? m_viewport->centerLat() : 0.0);
+  const double k = m_overzoom_k > 0.0 ? m_overzoom_k : 2.0;  // 1 (at native)..5
+  // Content-eligible: the view is zoomed in to within k x of the chart's native
+  // scale (wx's GetNormalScaleMin / vector detail modifier; configurable).
+  const auto eligible = [&](const CellExtent* c) {
+    return c->nativeScale > 0 && displayN <= c->nativeScale * k;
   };
+
+  // Candidates finest -> coarsest.
+  std::sort(cands.begin(), cands.end(),
+            [](const CellExtent* a, const CellExtent* b) {
+              return a->nativeScale < b->nativeScale;
+            });
+
+  // Sample the view on a grid for the coverage tests below.
   constexpr int kGrid = 24;
-  m_needed.clear();
+  struct GridPt {
+    double lat, lon;
+  };
+  QVarLengthArray<GridPt, kGrid * kGrid> pts;
   for (int gy = 0; gy < kGrid; ++gy) {
     const double plat = lat0 + (gy + 0.5) / kGrid * (lat1 - lat0);
-    for (int gx = 0; gx < kGrid; ++gx) {
-      const double plon = lon0 + (gx + 0.5) / kGrid * (lon1 - lon0);
-      // Gather cells whose actual coverage contains the point.
-      QVarLengthArray<const CellExtent*, 16> cov;
-      int finestEligible = 0;        // smallest 1:N among eligible
-      const CellExtent* coarsest = nullptr;
-      for (const CellExtent* c : cands) {
-        if (!c->covers(plat, plon)) continue;
-        cov.append(c);
-        if (!coarsest || c->nativeScale > coarsest->nativeScale) coarsest = c;
-        if (c->nativeScale >= threshold &&
-            (finestEligible == 0 || c->nativeScale < finestEligible))
-          finestEligible = c->nativeScale;
-      }
-      if (cov.isEmpty()) continue;  // no chart here -> GSHHS backdrop
-
-      const CellExtent* pick = nullptr;
-      if (finestEligible > 0) {
-        // Among eligible cells within kComparable x of the finest, the
-        // densest (richest per area); tie-break finer.
-        const double band = finestEligible * kComparable;
-        double bestDensity = -1.0;
-        for (const CellExtent* c : cov) {
-          if (c->nativeScale < threshold || c->nativeScale > band) continue;
-          const double d = density(c);
-          if (d > bestDensity + 1e-12 ||
-              (std::abs(d - bestDensity) <= 1e-12 && pick &&
-               c->nativeScale < pick->nativeScale)) {
-            bestDensity = d;
-            pick = c;
-          }
-        }
-      }
-      if (!pick) pick = coarsest;  // zoomed past every chart -> coarsest
-      if (pick) m_needed.insert(pick->name);
-    }
+    for (int gx = 0; gx < kGrid; ++gx)
+      pts.push_back({plat, lon0 + (gx + 0.5) / kGrid * (lon1 - lon0)});
   }
+  m_needed.clear();
+  // Render EVERY content-eligible chart that covers any part of the view,
+  // composited finer-on-top (zOrderForScale, set in onCellLoaded). This is the
+  // guaranteed coarser UNDERLAY (Rule 3): a finer chart's opaque area-fills hide
+  // the coarser exactly where the finer actually has data; where the finer has
+  // NO data (a coverage/data gap, e.g. open water it doesn't chart) the coarser
+  // chart beneath paints instead -- so the basemap is never exposed inside chart
+  // coverage. The earlier greedy stopped at the first cell whose M_COVR covered
+  // a sample point and selected no underlay; because M_COVR over-claims the
+  // painted footprint, an unpainted spot then fell through to the basemap (the
+  // "hole"). Selection (covers) and render (decoded fills) are reconciled here
+  // by the underlay, not by clipping selection to render.
+  for (const CellExtent* c : cands) {
+    if (!eligible(c)) continue;  // too detailed for this zoom -> rectangle only
+    for (const GridPt& p : pts)
+      if (c->covers(p.lat, p.lon)) {
+        m_needed.insert(c->name);
+        break;
+      }
+  }
+  // Fallback: a sample point that NO eligible chart covers (zoomed out past
+  // every covering chart's threshold there) gets its coarsest covering chart, so
+  // existing coverage is never dropped to the basemap.
+  for (const GridPt& p : pts) {
+    bool anyEligible = false;
+    const CellExtent* coarsest = nullptr;
+    for (const CellExtent* c : cands) {
+      if (!c->covers(p.lat, p.lon)) continue;
+      if (eligible(c)) {
+        anyEligible = true;
+        break;
+      }
+      if (!coarsest || c->nativeScale > coarsest->nativeScale) coarsest = c;
+    }
+    if (!anyEligible && coarsest) m_needed.insert(coarsest->name);
+  }
+
+  qWarning("quilt: displayN=%.0f k=%.1f | %lld cells: %s", displayN, k,
+           static_cast<long long>(m_needed.size()),
+           qPrintable(QStringList(m_needed.values()).join(QLatin1Char(','))));
 
   // --- Load: needed cells not already requested. ---
   for (const QString& name : m_needed) {
@@ -722,9 +794,12 @@ void ChartCanvas::selectChart(const QString& name) {
   // Autoscale to the chart's native compilation scale, keeping the current
   // centre (mirrors wx SelectQuiltRefdbChart with autoscale). Setting the
   // viewport scale rebases the quilt so this chart's band becomes the one
-  // rendered here. scale (px/deg) is the inverse of displayScaleN: N = K/scale.
+  // rendered here. scale (px/deg-lon) is the inverse of displayScaleN:
+  // N = K*cos(lat)/scale, so scale = K*cos(lat)/N.
   constexpr double kK = 111320.0 * 3.78 * 1000.0;  // see displayScaleN()
-  m_viewport->setScale(kK / it->nativeScale);
+  const double clat = std::max(0.05, std::cos(m_viewport->centerLat() *
+                                              M_PI / 180.0));
+  m_viewport->setScale(kK * clat / it->nativeScale);
   Q_EMIT viewChanged();
   update();  // viewport::changed also kicks the debounced quilt rebuild
 }
@@ -733,8 +808,8 @@ QVariantMap ChartCanvas::scaleBar() const {
   QVariantMap out;
   if (!m_viewport || width() <= 1.0) return out;
   constexpr double kPi = 3.14159265358979323846;
-  // Equirectangular: scale is px per degree (lon and lat equal). Ground NM per
-  // horizontal pixel at the centre latitude (1° lon = 60·cos(lat) NM).
+  // Mercator: scale is px per degree of longitude. Ground NM per horizontal
+  // pixel at the centre latitude (1° lon = 60·cos(lat) NM).
   const double coslat = std::max(0.05, std::cos(m_viewport->centerLat()
                                                 * kPi / 180.0));
   const double nm_per_px = 60.0 * coslat / m_viewport->scale();
@@ -789,7 +864,8 @@ bool ChartCanvas::hitRouteNode(const QPointF& sp, int& route, int& node) const {
   for (int ri = 0; ri < rs.size(); ++ri) {
     const NavRoute& r = rs[ri];
     for (int pi = 0; pi < r.points.size(); ++pi) {
-      const QPointF s = m.map(QPointF(r.points[pi].x(), -r.points[pi].y()));
+      const QPointF s = m.map(QPointF(
+          r.points[pi].x(), Viewport::latToWorldY(r.points[pi].y())));
       const double dx = s.x() - sp.x(), dy = s.y() - sp.y();
       const double d2 = dx * dx + dy * dy;
       if (d2 < best) {
@@ -815,9 +891,10 @@ bool ChartCanvas::hitRouteSegment(const QPointF& sp, int& route, int& seg,
   for (int ri = 0; ri < rs.size(); ++ri) {
     const NavRoute& r = rs[ri];
     for (int si = 0; si + 1 < r.points.size(); ++si) {
-      const QPointF a = m.map(QPointF(r.points[si].x(), -r.points[si].y()));
-      const QPointF bp =
-          m.map(QPointF(r.points[si + 1].x(), -r.points[si + 1].y()));
+      const QPointF a = m.map(QPointF(
+          r.points[si].x(), Viewport::latToWorldY(r.points[si].y())));
+      const QPointF bp = m.map(QPointF(
+          r.points[si + 1].x(), Viewport::latToWorldY(r.points[si + 1].y())));
       const QPointF ab = bp - a;
       const double l2 = ab.x() * ab.x() + ab.y() * ab.y();
       double t = l2 > 0.0 ? ((sp.x() - a.x()) * ab.x() +
@@ -915,6 +992,29 @@ void ChartCanvas::applyDisplaySettings(
   provider->setShowText(m_show_text);
   provider->setShowLights(m_show_lights);
   provider->setShowBuoys(m_show_buoys);
+  provider->setDetailScale(m_detail_scale);
+}
+
+void ChartCanvas::setDetailScale(double n) {
+  if (n <= 0.0 || n == m_detail_scale) return;
+  m_detail_scale = n;
+  ConfigStore::instance().setInt("display/detailScale", static_cast<int>(n));
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().provider) it.value().provider->setDetailScale(n);
+  Q_EMIT detailScaleChanged();
+  update();
+}
+
+void ChartCanvas::setOverzoomFactor(double k) {
+  k = std::clamp(k, 1.0, 5.0);
+  if (k == m_overzoom_k) return;
+  m_overzoom_k = k;
+  ConfigStore::instance().setDouble("display/overzoomFactor", k);
+  // The over-zoom factor changes which charts the quilt selects, so re-run the
+  // per-view selection (loads/evicts as needed). Cheap; only on a settings edit.
+  if (!m_catalog.isEmpty()) updateVisibleCells();
+  Q_EMIT overzoomFactorChanged();
+  update();
 }
 
 void ChartCanvas::setDisplayCategory(int cat) {
@@ -1186,27 +1286,60 @@ void ChartCanvas::setColorScheme(int scheme) {
   if (m_route_layer) m_route_layer->setColorScheme(scheme);
 
   // S-52 cells bake their colours in at decode time, so switch the palette on
-  // the decode thread and re-decode the resident cells: evict their layers,
-  // forget them as requested, then re-run the quilt to re-request them. The
-  // setColorScheme is queued before the loadCell re-requests, so the worker
-  // applies the palette first.
+  // the decode thread (queued before the loadCell re-requests so the worker
+  // applies it first), then re-decode the resident cells.
   if (m_worker) {
     QMetaObject::invokeMethod(m_worker, "setColorScheme", Qt::QueuedConnection,
                               Q_ARG(int, scheme));
-    QList<QString> resident;
-    for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
-      if (it.value().extent.valid()) resident.append(it.key());  // skip demo
-    for (const QString& name : resident) {
-      m_compositor->removeLayer(m_loaded.value(name).layerId);
-      m_loaded.remove(name);
-      m_requested.remove(name);
-    }
-    m_needed.clear();
-    if (!m_catalog.isEmpty()) m_load_debounce->start();
+    reloadResidentCells();
   }
 
   Q_EMIT colorSchemeChanged();
   update();
+}
+
+void ChartCanvas::applyChartConfig() {
+  if (!m_worker) return;
+  const ChartConfig& c = ChartConfig::instance();
+  ChartDisplaySettings s;
+  s.importantTextOnly = c.importantTextOnly();
+  s.useScamin = c.reducedDetailSmallScale();
+  s.symbolStyle = c.graphicsStyle();
+  s.boundaryStyle = c.boundaryStyle();
+  s.twoShades = c.colourCount();
+  s.safetyContour = c.safetyContour();
+  s.shallowContour = c.shallowContour();
+  s.deepContour = c.deepContour();
+  s.chartInfoObjects = c.chartInfoObjects();          // P2.16
+  s.buoyLightLabels = c.buoyLightLabels();            // P2.16
+  s.lightDescriptions = c.lightDescriptions();        // P2.16
+  s.extendedLightSectors = c.extendedLightSectors();  // P2.16
+  s.nationalText = c.nationalText();                  // P2.16
+  s.declutterText = c.declutterText();                // P2.16
+  s.superScamin = c.superScamin();                    // P2.16
+  // Apply on the decode thread (queued before the re-requests), then re-decode
+  // resident cells so the new symbology/shading bakes in.
+  QMetaObject::invokeMethod(m_worker, "applyDisplaySettings",
+                            Qt::QueuedConnection,
+                            Q_ARG(ocpn::qtui::ChartDisplaySettings, s));
+  reloadResidentCells();
+  update();
+}
+
+// Evict every resident S-52 cell layer and re-run the quilt so they re-decode
+// with the current global s52plib settings (palette / display options). Shared
+// by setColorScheme and applyChartConfig.
+void ChartCanvas::reloadResidentCells() {
+  QList<QString> resident;
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().extent.valid()) resident.append(it.key());  // skip demo
+  for (const QString& name : resident) {
+    m_compositor->removeLayer(m_loaded.value(name).layerId);
+    m_loaded.remove(name);
+    m_requested.remove(name);
+  }
+  m_needed.clear();
+  if (!m_catalog.isEmpty()) m_load_debounce->start();
 }
 
 void ChartCanvas::setTrackRecording(bool on) {
@@ -1228,7 +1361,7 @@ bool ChartCanvas::pickAisAt(const QPointF& screen_pos) {
   const AisTarget* hit = nullptr;
   const QList<AisTarget> targets = m_nav_provider->aisTargets();
   for (const AisTarget& t : targets) {
-    const QPointF sp = m.map(QPointF(t.lon, -t.lat));
+    const QPointF sp = m.map(QPointF(t.lon, Viewport::latToWorldY(t.lat)));
     const double dx = sp.x() - screen_pos.x();
     const double dy = sp.y() - screen_pos.y();
     const double d2 = dx * dx + dy * dy;
@@ -1318,7 +1451,7 @@ void ChartCanvas::setShowWaypoints(bool on) {
 
 QString ChartCanvas::scaleText() const {
   if (!m_viewport || m_viewport->scale() <= 0.0) return QString();
-  const double n = displayScaleN(m_viewport->scale());
+  const double n = displayScaleN(m_viewport->scale(), m_viewport->centerLat());
   return QStringLiteral("1:%1").arg(static_cast<qlonglong>(n));
 }
 

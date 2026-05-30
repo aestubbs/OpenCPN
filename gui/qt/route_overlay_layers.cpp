@@ -25,12 +25,14 @@
 #include <QImage>
 #include <QTransform>
 
+#include "viewport.h"
+
 namespace ocpn::qtui {
 
 namespace {
-// (lon, lat) geographic point -> world (x = lon, y = -lat).
+// (lon, lat) geographic point -> world (x = lon, y = Mercator-lat).
 inline QPointF lonLatToWorld(const QPointF& ll) {
-  return QPointF(ll.x(), -ll.y());
+  return QPointF(ll.x(), Viewport::latToWorldY(ll.y()));
 }
 
 // True compass bearing (deg, 0..360) from a to b, both (lon, lat) degrees.

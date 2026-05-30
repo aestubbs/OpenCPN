@@ -34,12 +34,11 @@ RasterChartProvider::RasterChartProvider(QString id, QImage image,
       m_south(south_lat),
       m_west(west_lon),
       m_east(east_lon) {
-  // World-space rect: x = lon, y = -lat (Y-down). Top-left of the
-  // QSGImageNode rect is the chart's north-west corner; positive width
-  // (lon span) and positive height (north-south span in Y-down).
-  m_world_rect = QRectF(west_lon, -north_lat,
-                        east_lon - west_lon,
-                        north_lat - south_lat);
+  // World-space rect: x = lon, y = Mercator-lat (Y-down). Top-left is the
+  // chart's north-west corner; height is the Mercator span north->south.
+  const double yt = Viewport::latToWorldY(north_lat);  // top (north)
+  const double yb = Viewport::latToWorldY(south_lat);  // bottom (south)
+  m_world_rect = QRectF(west_lon, yt, east_lon - west_lon, yb - yt);
 }
 
 RasterChartProvider::~RasterChartProvider() {

@@ -25,7 +25,15 @@
 namespace ocpn::qtui {
 
 namespace {
-constexpr qint64 kMtimeHeader = static_cast<qint64>(sizeof(qint64));  // 8 bytes
+// Cache file header: a format magic + the source mtime. BUMP the magic whenever
+// the decode/decrypt changes in a way that makes existing cache files wrong --
+// it invalidates every stale entry automatically (the alternative, the source
+// mtime, never changes for a re-fetched cell). 'SEN' + version.
+//   v2 (2026-05): fixed the truncated decrypt read that dropped large trailing
+//                 AREA records (missing deep-water polygons).
+constexpr quint32 kCacheMagic = 0x53454E32;  // "SEN2"
+constexpr qint64 kHeaderLen =
+    static_cast<qint64>(sizeof(quint32) + sizeof(qint64));  // magic + mtime
 }
 
 SencCache::SencCache() {
@@ -48,9 +56,15 @@ QByteArray SencCache::get(const QString& cellPath, qint64 mtime) const {
   if (m_dir.isEmpty()) return {};
   QFile f(fileFor(cellPath));
   if (!f.open(QIODevice::ReadOnly)) return {};
-  if (f.size() < kMtimeHeader) return {};
+  if (f.size() < kHeaderLen) return {};
+  quint32 magic = 0;
   qint64 stored = 0;
-  if (f.read(reinterpret_cast<char*>(&stored), kMtimeHeader) != kMtimeHeader)
+  if (f.read(reinterpret_cast<char*>(&magic), sizeof(magic)) !=
+      sizeof(magic))
+    return {};
+  if (magic != kCacheMagic) return {};  // old format -> stale
+  if (f.read(reinterpret_cast<char*>(&stored), sizeof(stored)) !=
+      sizeof(stored))
     return {};
   if (stored != mtime) return {};  // source changed -> stale
   return f.readAll();
@@ -61,7 +75,8 @@ void SencCache::put(const QString& cellPath, qint64 mtime,
   if (m_dir.isEmpty() || osenc.isEmpty()) return;
   QSaveFile f(fileFor(cellPath));  // atomic: no torn cache file on crash
   if (!f.open(QIODevice::WriteOnly)) return;
-  f.write(reinterpret_cast<const char*>(&mtime), kMtimeHeader);
+  f.write(reinterpret_cast<const char*>(&kCacheMagic), sizeof(kCacheMagic));
+  f.write(reinterpret_cast<const char*>(&mtime), sizeof(mtime));
   f.write(osenc);
   f.commit();
 }

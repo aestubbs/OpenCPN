@@ -17,11 +17,37 @@
 
 #include <sqlite3.h>
 
+#include <QByteArray>
+#include <QDataStream>
 #include <QDir>
+#include <QIODevice>
 
 #include "model/base_platform.h"  // g_BasePlatform
 
 namespace ocpn::qtui {
+
+namespace {
+// Serialise the cell's M_COVR coverage polygons (QList<QPolygonF>, lon/lat)
+// into a compact blob for the cache, and back. QDataStream handles the nested
+// QList<QPolygonF> directly; the version is pinned so a future Qt can still
+// read old rows.
+QByteArray serializeCoverage(const QList<QPolygonF>& cov) {
+  QByteArray out;
+  QDataStream ds(&out, QIODevice::WriteOnly);
+  ds.setVersion(QDataStream::Qt_5_15);
+  ds << cov;
+  return out;
+}
+QList<QPolygonF> deserializeCoverage(const void* data, int len) {
+  QList<QPolygonF> cov;
+  if (!data || len <= 0) return cov;
+  const QByteArray buf(static_cast<const char*>(data), len);
+  QDataStream ds(buf);
+  ds.setVersion(QDataStream::Qt_5_15);
+  ds >> cov;
+  return cov;
+}
+}  // namespace
 
 ChartCatalogCache::ChartCatalogCache() {
   if (!g_BasePlatform) return;
@@ -39,7 +65,14 @@ ChartCatalogCache::ChartCatalogCache() {
                "CREATE TABLE IF NOT EXISTS chart_catalog ("
                "path TEXT PRIMARY KEY, mtime INTEGER, name TEXT, "
                "north REAL, south REAL, east REAL, west REAL, "
-               "scale INTEGER, band INTEGER, navfeatures INTEGER)",
+               "scale INTEGER, band INTEGER, navfeatures INTEGER, "
+               "coverage BLOB)",
+               nullptr, nullptr, nullptr);
+  // Migrate an existing (pre-coverage) table: add the column if missing. The
+  // ALTER errors harmlessly when the column already exists -- ignore it. Old
+  // rows get a NULL coverage, which get() treats as a miss so they re-scan
+  // once and back-fill their real M_COVR polygons.
+  sqlite3_exec(m_db, "ALTER TABLE chart_catalog ADD COLUMN coverage BLOB",
                nullptr, nullptr, nullptr);
 }
 
@@ -54,11 +87,16 @@ bool ChartCatalogCache::get(const QString& path, qint64 mtime,
   bool hit = false;
   if (sqlite3_prepare_v2(m_db,
                          "SELECT mtime,name,north,south,east,west,scale,band,"
-                         "navfeatures FROM chart_catalog WHERE path=?1",
+                         "navfeatures,coverage FROM chart_catalog WHERE path=?1",
                          -1, &st, nullptr) == SQLITE_OK) {
     sqlite3_bind_text(st, 1, path.toUtf8().constData(), -1, SQLITE_TRANSIENT);
+    // A NULL coverage column is a pre-coverage row: treat it as a miss so the
+    // caller re-scans the cell and back-fills its M_COVR polygons (without
+    // them the quilt falls back to the bbox -- the cause of fine cells blanking
+    // out the rest of their bounding box).
     if (sqlite3_step(st) == SQLITE_ROW &&
-        sqlite3_column_int64(st, 0) == mtime) {
+        sqlite3_column_int64(st, 0) == mtime &&
+        sqlite3_column_type(st, 9) != SQLITE_NULL) {
       out.path = path;
       out.name = QString::fromUtf8(
           reinterpret_cast<const char*>(sqlite3_column_text(st, 1)));
@@ -69,6 +107,8 @@ bool ChartCatalogCache::get(const QString& path, qint64 mtime,
       out.nativeScale = sqlite3_column_int(st, 6);
       out.band = sqlite3_column_int(st, 7);
       out.navFeatures = sqlite3_column_int(st, 8);
+      out.coverage = deserializeCoverage(sqlite3_column_blob(st, 9),
+                                         sqlite3_column_bytes(st, 9));
       hit = true;
     }
   }
@@ -79,13 +119,15 @@ bool ChartCatalogCache::get(const QString& path, qint64 mtime,
 void ChartCatalogCache::put(const CellExtent& ce, qint64 mtime) {
   if (!m_db) return;
   sqlite3_stmt* st = nullptr;
+  const QByteArray cov = serializeCoverage(ce.coverage);
   if (sqlite3_prepare_v2(
           m_db,
           "INSERT INTO chart_catalog"
-          "(path,mtime,name,north,south,east,west,scale,band,navfeatures) "
-          "VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) "
+          "(path,mtime,name,north,south,east,west,scale,band,navfeatures,"
+          "coverage) "
+          "VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) "
           "ON CONFLICT(path) DO UPDATE SET mtime=?2,name=?3,north=?4,south=?5,"
-          "east=?6,west=?7,scale=?8,band=?9,navfeatures=?10",
+          "east=?6,west=?7,scale=?8,band=?9,navfeatures=?10,coverage=?11",
           -1, &st, nullptr) == SQLITE_OK) {
     sqlite3_bind_text(st, 1, ce.path.toUtf8().constData(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int64(st, 2, mtime);
@@ -97,6 +139,9 @@ void ChartCatalogCache::put(const CellExtent& ce, qint64 mtime) {
     sqlite3_bind_int(st, 8, ce.nativeScale);
     sqlite3_bind_int(st, 9, ce.band);
     sqlite3_bind_int(st, 10, ce.navFeatures);
+    // Stored even when empty (o-charts headers carry no M_COVR) so the row is
+    // non-NULL and not re-scanned every launch; empty -> covers() uses bbox.
+    sqlite3_bind_blob(st, 11, cov.constData(), cov.size(), SQLITE_TRANSIENT);
     sqlite3_step(st);
   }
   sqlite3_finalize(st);

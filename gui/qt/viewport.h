@@ -21,17 +21,22 @@
  * World-coordinate convention used by Layers attached to the World-anchored
  * root:
  *   x = longitude (degrees east, positive)
- *   y = -latitude (south positive) -- "Y-down" world space so that
- *       QSGImageNode rectangles (which take positive width/height starting
- *       at top-left) end up oriented with north at the top of the screen
- *       without needing a Y-flip in the transform matrix.
+ *   y = -(Mercator latitude) -- "Y-down" world space so north is up without a
+ *       Y-flip in the transform matrix.
  *
- * Helpers:
- *   - `lonToWorldX(double lon)` = lon
- *   - `latToWorldY(double lat)` = -lat
+ * Projection: SPHERICAL MERCATOR, matching the wx app's toSM (georef.cpp):
+ * y_merc = ln(tan(pi/4 + lat/2)) = atanh(sin lat). We express it in
+ * DEGREE-EQUIVALENT units (x = lon in degrees, y = mercator-lat scaled so
+ * dy/dlat = 1 at the equator), so a single `m_scale` (px per degree of
+ * longitude) drives both axes -- conformal: local shapes are correct and
+ * rhumb lines are straight, eliminating the plate-carrée high-latitude skew.
+ * Latitude is clamped near the poles where Mercator diverges (~±85.05°).
  *
- * Equirectangular for the prototype (lat and lon scaled equally). Mercator
- * / proper latitude scaling comes later when real chart projections matter.
+ * Helpers (the SINGLE place the projection lives -- every layer routes its
+ * lat/lon -> world conversion through these):
+ *   - `lonToWorldX(lon)` = lon
+ *   - `latToWorldY(lat)` = -(180/pi) ln(tan(pi/4 + lat/2))
+ *   - `worldYToLat(y)`   = inverse of the above
  */
 
 #ifndef OCPN_QT_VIEWPORT_H_
@@ -86,9 +91,9 @@ public:
     const double wdx = (c * dx_pixels + s * dy_pixels) / m_scale;
     const double wdy = (-s * dx_pixels + c * dy_pixels) / m_scale;
     m_center_lon -= wdx;
-    // Y is "down" in screen and in our world convention (y = -lat), so a
-    // mouse drag DOWN moves the viewport to look further SOUTH.
-    m_center_lat += wdy;
+    // Pan in world (Mercator) Y, then invert back to latitude. A mouse drag
+    // DOWN moves the viewport to look further SOUTH.
+    m_center_lat = worldYToLat(latToWorldY(m_center_lat) - wdy);
     Q_EMIT changed();
   }
 
@@ -109,7 +114,7 @@ public:
     const double wrx = (c * srx + s * sry) / m_scale;
     const double wry = (-s * srx + c * sry) / m_scale;
     m_center_lon = w_lon - wrx;
-    m_center_lat = w_lat + wry;
+    m_center_lat = worldYToLat(latToWorldY(w_lat) - wry);
     Q_EMIT changed();
   }
 
@@ -121,16 +126,26 @@ public:
     if (m_rotation != 0.0)
       m.rotate(static_cast<float>(m_rotation * 180.0 / M_PI), 0.0f, 0.0f, 1.0f);
     m.scale(static_cast<float>(m_scale), static_cast<float>(m_scale));
-    // World coords are Y-down (y = -lat). With centre_lat above the
-    // equator, world centre y is negative; translating by -world_centre
-    // moves it to the screen centre.
+    // Translate by -worldCentre. World Y = latToWorldY(centre_lat) (Mercator,
+    // Y-down), so the Y translation is -that.
     m.translate(static_cast<float>(-m_center_lon),
-                static_cast<float>(m_center_lat));
+                static_cast<float>(-latToWorldY(m_center_lat)));
     return m;
   }
 
+  // Near the poles Mercator -> +/-infinity; clamp like web-mercator.
+  static constexpr double kMercMaxLat = 85.05113;
   static inline double lonToWorldX(double lon) { return lon; }
-  static inline double latToWorldY(double lat) { return -lat; }
+  static inline double latToWorldY(double lat) {
+    const double L = lat < -kMercMaxLat ? -kMercMaxLat
+                                        : (lat > kMercMaxLat ? kMercMaxLat : lat);
+    // -(180/pi) ln(tan(pi/4 + L/2)); degree-equivalent, Y-down.
+    return -(180.0 / M_PI) * std::log(std::tan(M_PI / 4.0 + L * M_PI / 360.0));
+  }
+  static inline double worldYToLat(double y) {
+    // Inverse: lat = (360/pi) atan(exp(-y*pi/180)) - 90.
+    return (360.0 / M_PI) * std::atan(std::exp(-y * M_PI / 180.0)) - 90.0;
+  }
 
   /** Inverse of the world->screen mapping: the geographic position under a
    *  screen-pixel point (item-local coords). Inverts the chart rotation. */
@@ -142,7 +157,7 @@ public:
     const double wrx = (c * srx + s * sry) / m_scale;
     const double wry = (-s * srx + c * sry) / m_scale;
     lon = m_center_lon + wrx;
-    lat = m_center_lat - wry;
+    lat = worldYToLat(latToWorldY(m_center_lat) + wry);
   }
 
 Q_SIGNALS:

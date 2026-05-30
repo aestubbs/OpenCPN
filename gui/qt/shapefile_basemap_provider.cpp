@@ -40,15 +40,34 @@ namespace {
 // those clip edges are axis-aligned segments lying on a grid line and are
 // NOT real coastline. Detect them so we can skip outlining + shading them
 // (the wx app sidesteps this by only filling, never stroking the rings).
-// World coords: x = lon, y = -lat (integer lat -> integer -lat).
+// World coords: x = lon (whole-degree meridians stay integer), but y is now
+// Mercator: y = latToWorldY(lat), which is NOT integer at integer latitude.
+// So the horizontal (parallel) clip edges must be tested back in LATITUDE
+// space via worldYToLat -- testing the raw world-Y (as before the Mercator
+// change) no longer recognised them, so every whole-degree parallel clip edge
+// leaked into the outline/shade passes as a dark horizontal line.
 inline bool isGridEdge(const QPointF& a, const QPointF& b) {
   constexpr double kAxis = 1e-4;   // treat as axis-aligned
-  constexpr double kGrid = 3e-3;   // distance to a whole-degree grid line
+  constexpr double kGrid = 3e-3;   // distance to a whole-degree grid line (deg)
   const auto nearInt = [](double v) {
     return std::abs(v - std::round(v)) < kGrid;
   };
-  if (std::abs(a.x() - b.x()) < kAxis && nearInt(a.x())) return true;
-  if (std::abs(a.y() - b.y()) < kAxis && nearInt(a.y())) return true;
+  // Vertical clip edge: x ~constant on a tile meridian. The basemap tile cuts
+  // are loxodromes (basemap_low.shp), so the longitude bows away from the whole
+  // degree toward the poles (meridian convergence) -- the offset crosses kGrid
+  // around |lat| 80, which is why uncorrected meridian cuts leak as dark
+  // vertical lines in the far N/S but not near the equator. Widen the tolerance
+  // by sec(lat) (using the edge midpoint's latitude) so high-latitude meridian
+  // cuts are still recognised, while staying tight near the equator.
+  if (std::abs(a.x() - b.x()) < kAxis) {
+    const double lat = Viewport::worldYToLat(0.5 * (a.y() + b.y()));
+    const double sec = 1.0 / std::max(0.05, std::cos(lat * M_PI / 180.0));
+    if (std::abs(a.x() - std::round(a.x())) < kGrid * sec) return true;
+  }
+  // Horizontal clip edge: world-Y constant; map back to latitude (Mercator
+  // world-Y is non-integer at integer latitude) and test for a whole degree.
+  if (std::abs(a.y() - b.y()) < kAxis && nearInt(Viewport::worldYToLat(a.y())))
+    return true;
   return false;
 }
 }  // namespace
@@ -116,7 +135,8 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
       contour.reserve(static_cast<int>(pts.size()) * 2);
       for (const shp::Point& p : pts) {
         contour.append(static_cast<float>(p.getX()));    // lon
-        contour.append(static_cast<float>(-p.getY()));   // -lat
+        contour.append(
+            static_cast<float>(Viewport::latToWorldY(p.getY())));  // Mercator
       }
       feature_contours.push_back(std::move(contour));
       ++rings;
@@ -192,7 +212,10 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
   {
     auto* sea = sg::makeFlatColorNode(m_sea, QSGGeometry::DrawTriangles, 6);
     QSGGeometry::Point2D* v = sea->geometry()->vertexDataAsPoint2D();
-    const float xl = -180, xr = 180, yt = -90, yb = 90;
+    // World Y spans the clamped Mercator range (lat +/-kMercMaxLat).
+    const float xl = -180, xr = 180;
+    const float yt = static_cast<float>(Viewport::latToWorldY(90.0));
+    const float yb = static_cast<float>(Viewport::latToWorldY(-90.0));
     v[0].set(xl, yt); v[1].set(xr, yt); v[2].set(xr, yb);
     v[3].set(xl, yt); v[4].set(xr, yb); v[5].set(xl, yb);
     root->appendChildNode(sea);

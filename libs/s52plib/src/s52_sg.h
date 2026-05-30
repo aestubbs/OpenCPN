@@ -66,7 +66,23 @@ struct Prim {
   QList<QPointF> verts;  // (lon, lat) per point
   QColor color;
   float width = 1.0f;
+  // S-52 line dash, in MILLIMETRES (physical, screen-fixed). 0 = solid. For
+  // LineStrip only: the consumer converts to logical px and runs the pattern
+  // along the line's screen arc length. DASH ~ 2mm on / 1mm off; DOTT ~ 0.5/0.5.
+  float dashOnMm = 0.0f;
+  float dashOffMm = 0.0f;
   int dispCat = CatStandard;
+  // S-52 SCAMIN: the 1:N chart scale beyond which (more zoomed out) this
+  // fill/line is hidden. The "unset" sentinel (~1e8) means always show -- the
+  // consumer only SCAMIN-culls a Prim that carries a real value, so an
+  // un-SCAMIN'd area fill never vanishes (it must persist as the composite
+  // underlay -- see Docs/QT_QUILT_VS_WX.md §10.3, P2.14).
+  int scamin = 100000002;
+  // S-52 display priority (0..9, from LUP DPRI). Lower draws first; group-1
+  // areas sit at 1..3, line/area symbols above. The consumer draws prims in
+  // priority order so a depth-area fill never paints over the pontoon/berth
+  // lines that lie on it (wx renders via the same per-priority pass).
+  int priority = 5;
 };
 
 /** An area filled with a repeated (tiled) pattern bitmap -- S-52 AP fills
@@ -101,6 +117,24 @@ struct VectorSymbol {
   QList<VectorOp> ops;
   int scamin = 100000002;
   int dispCat = CatStandard;
+  int viewGroup = VgOther;
+};
+
+/** A complex (LC) line: an HPGL line-symbol walked along the polyline -- the
+ *  wavy submarine-cable glyph, the T-shapes of a restricted-area border, etc.
+ *  `symbol` is the glyph's geometry in symbol-local pixels (pivot at origin),
+ *  `lengthPx` its repeat length along the line. The consumer walks `path` in
+ *  screen space, stamping the rotated symbol every `lengthPx`, rebuilt on zoom
+ *  so the glyph stays screen-fixed (like wx draw_lc_poly). `color` backs the
+ *  geometry node when the ops are uncoloured. */
+struct ComplexLine {
+  QList<QPointF> path;      // (lon, lat) polyline
+  QList<VectorOp> symbol;   // local screen-px ops (pivot at origin)
+  float lengthPx = 10.0f;   // repeat length along the line, screen px
+  QColor color;
+  int dispCat = CatStandard;
+  int priority = 5;
+  int scamin = 100000002;
   int viewGroup = VgOther;
 };
 
@@ -140,6 +174,9 @@ struct Label {
   bool isSounding = false;
   float depth = 0.0f;
   int dispCat = CatStandard;
+  // Per-feature-class viewing group (Lights/BuoysBeacons/Other), so the
+  // consumer can apply the nav-aid detail-scale cap to a light/buoy name too.
+  int viewGroup = VgOther;
 };
 
 /** One S-57 attribute (acronym + value as text), for object query. */
@@ -169,6 +206,7 @@ public:
   QList<PatternFill> patternFills;
   QList<Symbol> symbols;
   QList<VectorSymbol> vectorSymbols;
+  QList<ComplexLine> complexLines;
   QList<Label> labels;
   // Land-area (LNDARE) exterior rings, (lon, lat), closed -- for the
   // coastline land-shade pass. Not symbology; a cartographic emphasis.
@@ -180,6 +218,7 @@ public:
     patternFills.clear();
     symbols.clear();
     vectorSymbols.clear();
+    complexLines.clear();
     labels.clear();
     landContours.clear();
     queryObjects.clear();

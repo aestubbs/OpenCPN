@@ -1024,6 +1024,36 @@ ApplicationWindow {
                                         checked: chart.showBuoys
                                         onToggled: chart.showBuoys = checked
                                     }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Hide un-scaled detail beyond 1:")
+                                            Layout.fillWidth: true
+                                        }
+                                        SpinBox {
+                                            from: 5000
+                                            to: 2000000
+                                            stepSize: 5000
+                                            editable: true
+                                            value: chart.detailScale
+                                            onValueModified: chart.detailScale = value
+                                        }
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Detail over-zoom (1 = at scale … 5 = max)")
+                                            Layout.fillWidth: true
+                                        }
+                                        SpinBox {
+                                            from: 1
+                                            to: 5
+                                            stepSize: 1
+                                            editable: true
+                                            value: chart.overzoomFactor
+                                            onValueModified: chart.overzoomFactor = value
+                                        }
+                                    }
 
                                     MenuSeparator { Layout.fillWidth: true }
 

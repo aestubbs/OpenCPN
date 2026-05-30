@@ -18,6 +18,7 @@
 
 #include "s52_engine.h"
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -26,6 +27,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QList>
+#include <QMultiHash>
 #include <QPointF>
 #include <QPolygonF>
 
@@ -42,6 +44,7 @@
 #include "mygeom.h"        // PolyTessGeo
 #include "s52plib.h"
 #include "s52s57.h"        // S57Obj, ObjRazRules, LUPrec
+#include "s52utils.h"      // S52_setMarinerParam, S52_MAR_* (depth shading)
 
 // OGR S-57 driver (libs/s57-charts) -- reads a .000 cell into OGR
 // features with assembled lon/lat geometry (P2.8d).
@@ -167,7 +170,10 @@ chart_context* MakeMinimalChartContext(double ref_lat, double ref_lon) {
 // edge counts}, then the per-contour point-count array (contour×int) and the
 // triangle primitives, then the edge index table (ignored here). Returns
 // nullptr on a malformed/too-short payload.
-PolyTessGeo* buildOsencPolyTessGeo(const char* p, uint32_t plen) {
+PolyTessGeo* buildOsencPolyTessGeo(const char* p, uint32_t plen,
+                                   double ref_lat, double ref_lon,
+                                   const char** boundary_edges = nullptr) {
+  if (boundary_edges) *boundary_edges = nullptr;
   constexpr uint32_t kFixed = 4 * sizeof(double) + 3 * sizeof(uint32_t);  // 44
   if (plen < kFixed) return nullptr;
   double ext[4];
@@ -182,6 +188,14 @@ PolyTessGeo* buildOsencPolyTessGeo(const char* p, uint32_t plen) {
 
   auto* pPTG = new PolyTessGeo();
   pPTG->SetExtents(ext[2], ext[0], ext[3], ext[1]);  // w, s, e, n
+  // The TriPrim vertices are SM metres relative to the CELL reference (the
+  // OSENC writer used the cell-extent centroid as m_ref_lat/lon). The SG emit
+  // (RenderToSGAC) inverts SM->lon/lat via GetChartRefPos(), so the ptg MUST
+  // carry that ref -- the default ctor leaves it 0,0 and the fill lands off
+  // the coast of Africa. (NOAA's PolyTessGeo(poly,ref...) ctor sets it; this
+  // hand-built ptg must set it explicitly.)
+  pPTG->m_ref_lat = ref_lat;
+  pPTG->m_ref_lon = ref_lon;
   auto* ppg = new PolyTriGroup;
   ppg->m_bSMSENC = true;
   ppg->data_type = DATA_TYPE_DOUBLE;
@@ -215,7 +229,7 @@ PolyTessGeo* buildOsencPolyTessGeo(const char* p, uint32_t plen) {
     run += 4 * sizeof(double);
     tp->tri_box.Set(bb[2], bb[0], bb[3], bb[1]);
     const size_t vbytes = static_cast<size_t>(nvert) * 2 * sizeof(float);
-    if (run + vbytes > end) { bad = true; break; }
+    if (run + vbytes > end) { bad = true; tp->nVert = 0; break; }
     tp->p_vertex = reinterpret_cast<double*>(const_cast<char*>(run));
     run += vbytes;
     total_bytes += vbytes;
@@ -238,7 +252,49 @@ PolyTessGeo* buildOsencPolyTessGeo(const char* p, uint32_t plen) {
   pPTG->SetPPGHead(ppg);
   pPTG->SetnVertexMax(nvert_max);
   pPTG->Set_OK(true);
+  // `run` now points just past the triangle vertices -- i.e. at the boundary
+  // edge-index table (nEdge triples of [startVC, ±edgeVE, endVC]), which the
+  // caller resolves into the area outline / coastline. Only valid if every
+  // triprim parsed cleanly (otherwise the offset is meaningless).
+  if (boundary_edges && !bad) *boundary_edges = run;
   return pPTG;
+}
+
+// Edge-index tables (line features + area boundaries) are arrays of edge
+// entries; we only need the first 3 ints of each: [startVC, ±edgeVE, endVC].
+// CRITICAL: o-charts OESU stores **4 ints per entry** (a trailing reserved/0
+// field), whereas the open-source OSENC in gui/src/o_senc.cpp stores 3. Reading
+// 4-int data at stride 3 drifts every entry -> edges paired with the wrong
+// nodes (the chart-wide "spider web") and unresolved entries (missing lines).
+// Detect the stride from the record length and repack into a canonical stride-3
+// table (caller owns the malloc'd result). `avail_bytes` is the table size.
+int* repackEdgeIndex(const char* tbl, uint32_t ec, qint64 avail_bytes,
+                     int* count_out) {
+  *count_out = 0;
+  if (ec == 0 || !tbl) return nullptr;
+  const qint64 per = avail_bytes / (static_cast<qint64>(ec) * sizeof(int));
+  if (per < 3) return nullptr;  // malformed / too short
+  const int* src = reinterpret_cast<const int*>(tbl);
+  int* dst = static_cast<int*>(malloc(static_cast<size_t>(ec) * 3 * sizeof(int)));
+  for (uint32_t i = 0; i < ec; ++i) {
+    dst[i * 3 + 0] = src[i * per + 0];  // start connected-node (VC) index
+    dst[i * 3 + 2] = src[i * per + 2];  // end connected-node (VC) index
+    // Edge index + traversal direction. Open OSENC (stride 3) carries the
+    // direction in the SIGN of the edge field. OESU (stride 4) carries an
+    // UNSIGNED edge index plus a separate 4th "direction" int (0 = forward,
+    // non-zero = reverse) -- the topology field we previously discarded, which
+    // left every reverse edge drawn forward (the "X" connector artifacts).
+    // Normalise both to the canonical signed form [in, ±edgeVE, en].
+    const int edge = src[i * per + 1];
+    if (per >= 4) {
+      const int dir = src[i * per + 3];
+      dst[i * 3 + 1] = dir ? -std::abs(edge) : std::abs(edge);
+    } else {
+      dst[i * 3 + 1] = edge;
+    }
+  }
+  *count_out = static_cast<int>(ec);
+  return dst;
 }
 
 void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
@@ -269,6 +325,11 @@ void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
   rzRules.mps = nullptr;
 
   plib->RenderAreaToSG(buf, &rzRules);
+  // Area centroid SY symbols + TX/TE text (area names, restricted-area markers,
+  // etc.) via the LUP/CS, anchored at the area base point -- parity with the
+  // OSENC path and with wx (which walks every rule type per object).
+  plib->RenderPointSymbolToSG(buf, &rzRules, obj->m_lon, obj->m_lat);
+  plib->RenderTextToSG(buf, &rzRules, obj->m_lon, obj->m_lat);
   // obj/ptg intentionally leaked for this proof-of-pipeline; real chart
   // loading owns these in the chart-object set.
 }
@@ -532,6 +593,13 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             for (int pi = 0; pi < np; ++pi)
               pts.append(QPointF(ls->getX(pi), ls->getY(pi)));  // (lon, lat)
             plib->RenderLineToSG(buf, &rz, pts);
+            // Line SY symbols + TX/TE text (names along cables/pipes, etc.) via
+            // the LUP/CS, anchored at the line midpoint -- parity with the
+            // OSENC path. The OGR obj has no base point set, so use the mid
+            // vertex.
+            const QPointF anchor = pts.at(np / 2);
+            plib->RenderPointSymbolToSG(buf, &rz, anchor.x(), anchor.y());
+            plib->RenderTextToSG(buf, &rz, anchor.x(), anchor.y());
             ++n_lines;
           };
           if (gt == wkbLineString) {
@@ -659,9 +727,15 @@ s52sg::Buffer S52Engine::loadEncCells(const QStringList& paths_000,
     else if (err.isEmpty())
       err = cellErr;
   }
+  // S-52 display-priority order (see decodeOsenc): area fills under line/area
+  // symbols, stable within a priority.
+  std::stable_sort(buf.prims.begin(), buf.prims.end(),
+                   [](const s52sg::Prim& a, const s52sg::Prim& b) {
+                     return a.priority < b.priority;
+                   });
   qWarning(
       "loadEncCells: %d/%lld cells -- %d areas, %d lines, %d points; "
-      "%lld pattern fills, %lld raster symbols, %lld vector symbols",
+      "%lld pattern fills, %lld raster symbols, %lld vector symbols (pre-sort)",
       n_cells, (long long)paths_000.size(), cc.areas, cc.lines, cc.points,
       (long long)buf.patternFills.size(), (long long)buf.symbols.size(),
       (long long)buf.vectorSymbols.size());
@@ -719,7 +793,9 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
   chart_context* ctx = nullptr;
   S57Obj* cur = nullptr;
   std::vector<S57Obj*> objects;
-  // Edge tables: VE index -> interleaved (lon,lat) floats; VC index -> point.
+  // Edge tables, as stored in the OSENC: VE index -> interleaved SM-metre
+  // (easting,northing) floats; VC index -> SM-metre point. Converted to
+  // (lon,lat) after the read loop (see below) before line geometry is emitted.
   QHash<int, QVector<float>> ve;
   QHash<int, QPointF> vc;
 
@@ -738,7 +814,11 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
         if (plen >= 8 * sizeof(double)) {
           double d[8];
           std::memcpy(d, pl, 8 * sizeof(double));
-          nlat = d[2]; slat = d[6]; wlon = d[3]; elon = d[5];
+          // 8 doubles = the 4 corners (sw,nw,ne,se) as lat/lon pairs. Match the
+          // wx Osenc reader exactly: NLAT=nw_lat[2] SLAT=se_lat[6]
+          // WLON=nw_lon[3] ELON=se_lon[7]. (Was d[5]=ne_lon; equal to se_lon
+          // only for axis-aligned cells, but d[7] is the canonical field.)
+          nlat = d[2]; slat = d[6]; wlon = d[3]; elon = d[7];
           have_extent = true;
           ref_lat = (nlat + slat) / 2.0;
           ref_lon = (elon + wlon) / 2.0;
@@ -800,10 +880,33 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
       }
       case FEATURE_GEOMETRY_RECORD_AREA: {
         if (cur) {
-          PolyTessGeo* ptg = buildOsencPolyTessGeo(pl, plen);
+          const char* bedges = nullptr;
+          PolyTessGeo* ptg =
+              buildOsencPolyTessGeo(pl, plen, ref_lat, ref_lon, &bedges);
           if (ptg && ptg->IsOk()) {
             cur->SetAreaGeometry(ptg, ref_lat, ref_lon);
-            cur->Primitive_type = GEO_AREA;
+            // The area also carries its boundary as an edge-index table after
+            // the triangles (same [startVC, ±edgeVE, endVC] triples as a line).
+            // Attach it as GEO_AREA line geometry so the emit pass can resolve
+            // the outline (coastline land-shade, area borders) -- mirrors the
+            // wx Osenc reader doing SetAreaGeometry + SetLineGeometry(GEO_AREA).
+            uint32_t nEdge = 0;
+            std::memcpy(&nEdge, pl + 40, 4);
+            int n = 0;
+            int* tbl = repackEdgeIndex(
+                bedges, nEdge,
+                bedges ? static_cast<qint64>(pl + plen - bedges) : 0, &n);
+            if (tbl && n > 0) {
+              double aext[4];
+              std::memcpy(aext, pl, 4 * sizeof(double));  // s_lat,n_lat,w,e
+              LineGeometryDescriptor lD;
+              lD.extent_s_lat = aext[0]; lD.extent_n_lat = aext[1];
+              lD.extent_w_lon = aext[2]; lD.extent_e_lon = aext[3];
+              lD.indexCount = n;
+              lD.indexTable = tbl;
+              cur->SetLineGeometry(&lD, GEO_AREA, ref_lat, ref_lon);
+            }
+            cur->Primitive_type = GEO_AREA;  // keep AREA (SetLineGeometry reset it)
           } else {
             delete ptg;
           }
@@ -817,16 +920,20 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
           std::memcpy(ext, pl, 4 * sizeof(double));
           uint32_t ec;
           std::memcpy(&ec, pl + 32, 4);
-          const qint64 tbl_bytes = static_cast<qint64>(ec) * 3 * sizeof(int);
-          if (plen >= 36 + tbl_bytes && ec > 0) {
+          // The table is the rest of the payload; repackEdgeIndex auto-detects
+          // 3- vs 4-int stride and yields a canonical signed stride-3
+          // [in, ±edge, en] (4th OESU int folded into the edge sign).
+          int n = 0;
+          int* tbl = repackEdgeIndex(pl + 36, ec,
+                                     static_cast<qint64>(plen) - 36, &n);
+          if (tbl && n > 0) {
             LineGeometryDescriptor lD;
             lD.extent_s_lat = ext[0]; lD.extent_n_lat = ext[1];
             lD.extent_w_lon = ext[2]; lD.extent_e_lon = ext[3];
-            lD.indexCount = static_cast<int>(ec);
+            lD.indexCount = n;
             // SetLineGeometry ALIASES this table (no copy); keep it alive for
             // the object's lifetime (intentionally leaked, like the OGR path).
-            lD.indexTable = static_cast<int*>(malloc(tbl_bytes));
-            std::memcpy(lD.indexTable, pl + 36, tbl_bytes);
+            lD.indexTable = tbl;
             cur->SetLineGeometry(&lD, GEO_LINE, ref_lat, ref_lon);
           }
         }
@@ -873,14 +980,182 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
         }
         break;
       }
+      case FEATURE_GEOMETRY_RECORD_MULTIPOINT: {
+        // Soundings: extent(4 doubles) + point_count(uint32) + per point
+        // (easting, northing, depth) as SM-metre floats relative to the cell
+        // ref. Emit each as a depth label, mirroring the NOAA SOUNDG path; the
+        // provider declutters them (shallowest-per-cell) and applies SCAMIN.
+        if (cur && plen >= 4 * sizeof(double) + sizeof(uint32_t)) {
+          uint32_t pc = 0;
+          std::memcpy(&pc, pl + 32, 4);
+          const char* tbl = pl + 36;
+          const qint64 need = static_cast<qint64>(pc) * 3 * sizeof(float);
+          if (static_cast<qint64>(plen) - 36 >= need) {
+            const int scamin = cur->Scamin;
+            for (uint32_t i = 0; i < pc; ++i) {
+              float v[3];
+              std::memcpy(v, tbl + i * 3 * sizeof(float), 3 * sizeof(float));
+              double lat, lon;
+              fromSM_plib(v[0], v[1], ref_lat, ref_lon, &lat, &lon);
+              const double depth = v[2];
+              s52sg::Label lab;
+              lab.pos = QPointF(lon, lat);
+              lab.color = QColor(60, 60, 60);
+              lab.pointSize = 9.0f;
+              lab.text = depth < 10.0 ? QString::number(depth, 'f', 1)
+                                      : QString::number(qRound(depth));
+              lab.scamin = scamin;
+              lab.isSounding = true;
+              lab.depth = static_cast<float>(depth);
+              buf.labels.push_back(lab);
+              // Make each sounding queryable (right-click depth -> SOUNDG with
+              // its value), mirroring the OGR SPLIT_MULTIPOINT path. The SOUNDG
+              // S57Obj stays GEO_META, so it is skipped by the feature pass
+              // above -- capture the point here where lon/lat/depth are in hand.
+              s52sg::QueryObject sq;
+              sq.className = QStringLiteral("SOUNDG");
+              sq.geom = s52sg::QueryGeom::Point;
+              sq.shape.append(QPointF(lon, lat));
+              sq.minLon = sq.maxLon = lon;
+              sq.minLat = sq.maxLat = lat;
+              sq.attrs.append(
+                  {QStringLiteral("VALSOU"), QString::number(depth, 'f', 1)});
+              buf.queryObjects.append(std::move(sq));
+            }
+          }
+        }
+        // Leave Primitive_type as the META sentinel so the emit pass skips this
+        // object -- the labels above already carry the soundings.
+        break;
+      }
       default:
-        break;  // headers, area, multipoint, coverage -- not yet emitted
+        break;  // headers, coverage -- not yet emitted
+    }
+  }
+
+  // The VE/VC tables store SM (easting/northing) metres relative to the cell
+  // reference, NOT lon/lat (the OSENC writer runs toSM on every node). Invert
+  // them to (lon, lat) now so the resolved line strips feed RenderLineToSG --
+  // which emits its points verbatim as geographic coords -- in the same space
+  // as the OGR/NOAA path. Without this, lines land at SM-metre "coordinates"
+  // far off the chart and never draw. Points are unaffected (their geometry
+  // record carries lat/lon doubles directly).
+  for (auto it = vc.begin(); it != vc.end(); ++it) {
+    double lat, lon;
+    fromSM_plib(it.value().x(), it.value().y(), ref_lat, ref_lon, &lat, &lon);
+    it.value() = QPointF(lon, lat);
+  }
+  for (auto it = ve.begin(); it != ve.end(); ++it) {
+    QVector<float>& e = it.value();
+    for (int k = 0; k + 1 < e.size(); k += 2) {
+      double lat, lon;
+      fromSM_plib(e[k], e[k + 1], ref_lat, ref_lon, &lat, &lon);
+      e[k] = static_cast<float>(lon);
+      e[k + 1] = static_cast<float>(lat);
     }
   }
 
   // --- Emit pass: point symbols/text + resolved line geometry. ---
   auto appendDedup = [](QList<QPointF>& list, const QPointF& pt) {
     if (list.isEmpty() || list.last() != pt) list.append(pt);
+  };
+  // Resolve one edge-index triple [startVC, ±edgeVE, endVC] (vc/ve already in
+  // lon/lat) into a polyline: startNode -> edge points (orientation per sign)
+  // -> endNode. Shared by line features and area-boundary outlines.
+  // Resolve one edge-index triple [startVC, ±edgeVE, endVC] (vc/ve already in
+  // lon/lat) into a polyline: startNode -> edge points (forward if the edge
+  // index is positive, reversed if negative -- the OESU direction flag is
+  // folded into the sign by repackEdgeIndex) -> endNode. This mirrors wx's
+  // CE/EE/EE_REV/EC/CC connector logic. Shared by lines and area boundaries.
+  auto resolveSeg = [&](const int* idx) {
+    QList<QPointF> pts;
+    const int inode = idx[0];
+    int ven = idx[1];
+    bool fwd = true;
+    if (ven < 0) { ven = -ven; fwd = false; }
+    const int enode = idx[2];
+    const auto itin = vc.constFind(inode);
+    if (itin != vc.constEnd()) appendDedup(pts, itin.value());
+    if (ven) {
+      auto ite = ve.constFind(ven);
+      if (ite != ve.constEnd() && !ite.value().isEmpty()) {
+        const QVector<float>& e = ite.value();
+        const int n = e.size() / 2;
+        if (fwd)
+          for (int k = 0; k < n; ++k)
+            appendDedup(pts, QPointF(e[k * 2], e[k * 2 + 1]));
+        else
+          for (int k = n - 1; k >= 0; --k)
+            appendDedup(pts, QPointF(e[k * 2], e[k * 2 + 1]));
+      }
+    }
+    const auto iten = vc.constFind(enode);
+    if (iten != vc.constEnd()) appendDedup(pts, iten.value());
+    return pts;
+  };
+  // Stitch an area's boundary edge-triples into closed rings. The triples
+  // [startVC, ±edgeVE, endVC] are NOT stored in geometric order and an area
+  // may have several disjoint loops (mainland + islets, holes), so naively
+  // concatenating them in stream order joins non-adjacent points -- producing
+  // the crossing "X" slivers the coast-shade band then renders. Chain instead
+  // by the connected-node (VC) indices: an exact topological join (no float
+  // matching), following each directed edge so the ring keeps its winding.
+  // Returns one closed ring per loop (lon/lat).
+  auto stitchRings = [&](const int* lsindex, int nseg) {
+    QList<QList<QPointF>> rings;
+    if (!lsindex || nseg <= 0) return rings;
+    // Adjacency on BOTH endpoints: the SENC boundary edges are not guaranteed
+    // to be stored already oriented in ring order, so chain orientation-
+    // agnostically -- match either VC endpoint and reverse the segment when we
+    // enter it at its end node.
+    QMultiHash<int, int> incident;  // VC node -> segment index (either end)
+    for (int i = 0; i < nseg; ++i) {
+      incident.insert(lsindex[i * 3], i);
+      incident.insert(lsindex[i * 3 + 2], i);
+    }
+    QVector<bool> used(nseg, false);
+    for (int s = 0; s < nseg; ++s) {
+      if (used[s]) continue;
+      QList<QPointF> ring;
+      const int startNode = lsindex[s * 3];
+      int node = startNode, cur = s;
+      for (int guard = 0; cur >= 0 && !used[cur] && guard <= nseg; ++guard) {
+        used[cur] = true;
+        const int a = lsindex[cur * 3], b = lsindex[cur * 3 + 2];
+        QList<QPointF> seg = resolveSeg(&lsindex[cur * 3]);
+        int other;
+        if (node == a) {
+          other = b;  // traverse forward
+        } else {
+          std::reverse(seg.begin(), seg.end());  // entered at the end node
+          other = a;
+        }
+        for (const QPointF& p : seg) appendDedup(ring, p);
+        if (other == startNode) break;  // ring closed
+        int next = -1;  // first unused edge incident to `other`
+        for (auto it = incident.constFind(other);
+             it != incident.constEnd() && it.key() == other; ++it)
+          if (!used[it.value()]) { next = it.value(); break; }
+        node = other;
+        cur = next;
+      }
+      // Drop a duplicate closing vertex; makeCoastShadeNode wraps with modulo.
+      if (ring.size() >= 2 && ring.first() == ring.last()) ring.removeLast();
+      if (ring.size() < 3) continue;
+      // Force CW (negative signed area in lon/lat) so the coast-shade builder's
+      // left normal points into the land (not the water) after the provider's
+      // y-flip to world coords. The stitch start orientation is arbitrary, so a
+      // consistent forced winding is required; CW matches the land side.
+      double area = 0.0;
+      for (int i = 0, n = ring.size(); i < n; ++i) {
+        const QPointF& p = ring[i];
+        const QPointF& q = ring[(i + 1) % n];
+        area += p.x() * q.y() - q.x() * p.y();
+      }
+      if (area > 0.0) std::reverse(ring.begin(), ring.end());
+      rings.append(std::move(ring));
+    }
+    return rings;
   };
   int n_points = 0, n_lines = 0, n_areas = 0;
   for (S57Obj* obj : objects) {
@@ -895,42 +1170,33 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
       plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
       ++n_points;
     } else if (obj->Primitive_type == GEO_LINE) {
-      // Resolve each segment triple [startVC, ±edgeVE, endVC] into points.
-      QList<QPointF> pts;
-      for (int iseg = 0; iseg < obj->m_n_lsindex; ++iseg) {
-        const int* idx = &obj->m_lsindex_array[iseg * 3];
-        const int inode = idx[0];
-        int ven = idx[1];
-        bool fwd = true;
-        if (ven < 0) { ven = -ven; fwd = false; }
-        const int enode = idx[2];
-        auto itv = vc.constFind(inode);
-        if (itv != vc.constEnd()) appendDedup(pts, itv.value());
-        if (ven) {
-          auto ite = ve.constFind(ven);
-          if (ite != ve.constEnd()) {
-            const QVector<float>& e = ite.value();
-            const int n = e.size() / 2;
-            if (fwd)
-              for (int k = 0; k < n; ++k)
-                appendDedup(pts, QPointF(e[k * 2], e[k * 2 + 1]));
-            else
-              for (int k = n - 1; k >= 0; --k)
-                appendDedup(pts, QPointF(e[k * 2], e[k * 2 + 1]));
-          }
-        }
-        auto ite2 = vc.constFind(enode);
-        if (ite2 != vc.constEnd()) appendDedup(pts, ite2.value());
-      }
-      if (pts.size() < 2) continue;
+      // Each edge-triple [startVC, ±edgeVE, endVC] is an INDEPENDENT segment:
+      // startNode -> edge points -> endNode (the start/end "connectors" of the
+      // wx s57chart line_segment_element list, types CE/EE/EC/CC). Mirror that
+      // by emitting one polyline per triple -- the triples within a feature are
+      // NOT guaranteed to be listed in geometrically contiguous order, so
+      // concatenating them into a single strip draws spurious connector lines
+      // between unrelated nodes (the chart-wide "spider web").
       LUPrec* lup = plib->S52_LUPLookup(LINES, obj->FeatureName, obj);
       if (!lup) continue;
-      plib->_LUP2rules(lup, obj);
+      plib->_LUP2rules(lup, obj);  // resolve symbology + CS rules once per obj
       ObjRazRules rz;
       rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
       rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
-      plib->RenderLineToSG(buf, &rz, pts);
-      ++n_lines;
+      bool any = false;
+      for (int iseg = 0; iseg < obj->m_n_lsindex; ++iseg) {
+        const QList<QPointF> pts = resolveSeg(&obj->m_lsindex_array[iseg * 3]);
+        if (pts.size() < 2) continue;
+        plib->RenderLineToSG(buf, &rz, pts);
+        any = true;
+      }
+      if (any) ++n_lines;
+      // Line features also carry SY symbols and TX/TE text via their LUP/CS
+      // (e.g. a name along a fairway, a cable/pipe label), anchored at the
+      // feature's base point (extent centre). wx walks every rule type per
+      // object; mirror that.
+      plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
+      plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
     } else if (obj->Primitive_type == GEO_AREA) {
       LUPrec* lup = plib->S52_LUPLookup(PLAIN_BOUNDARIES, obj->FeatureName, obj);
       if (!lup) continue;
@@ -939,14 +1205,89 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
       rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
       rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
       plib->RenderAreaToSG(buf, &rz);
+      // Area features also carry centroid SY symbols and TX/TE text via their
+      // LUP/CS (restricted-area markers, anchorage symbols, area names, the
+      // depth label of a DEPARE, etc.), anchored at the area base point (extent
+      // centre). wx walks every rule type per object; mirror that.
+      plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
+      plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
       ++n_areas;
+      // LNDARE boundary -> coastline land-shade. Stitch the boundary edges
+      // into proper closed, contiguous rings (by VC node index). Concatenating
+      // the triples in stream order joined non-adjacent points, so the shade
+      // band drew crossing slivers across the polygon (the "X" artifacts).
+      if (strncmp(obj->FeatureName, "LNDARE", 6) == 0) {
+        for (QList<QPointF>& ring :
+             stitchRings(obj->m_lsindex_array, obj->m_n_lsindex))
+          buf.landContours.append(std::move(ring));
+      }
     }
+  }
+
+  // --- Object-query snapshots: one QueryObject per feature (class + attrs +
+  // bbox + shape, in lon/lat) so the right-click "Object query" popup works for
+  // o-charts/OSENC cells too -- the OGR/.000 path builds these in loadOneCell,
+  // this path never did (object query was always blank for o-charts). Built as
+  // a SEPARATE pass so it is not gated by the LUP lookups in the emit loop
+  // (which `continue` past unsymbolised objects). The vc/ve tables are already
+  // inverted to lon/lat above, so resolveSeg/stitchRings yield geographic
+  // shapes that S52VectorChartProvider::objectsAt hit-tests directly. Soundings
+  // are captured in the MULTIPOINT case (their S57Obj stays GEO_META here).
+  for (S57Obj* obj : objects) {
+    s52sg::QueryObject qo;
+    qo.className = QString::fromLatin1(obj->FeatureName).trimmed();
+    if (obj->att_array)
+      for (int i = 0; i < obj->n_attr; ++i) {
+        char acr[7] = {0};
+        std::memcpy(acr, obj->att_array + 6 * i, 6);
+        const QString name = QString::fromLatin1(acr).trimmed();
+        if (name.isEmpty()) continue;
+        const QString val =
+            wxString_to_QString(obj->GetAttrValueAsString(acr)).trimmed();
+        if (!val.isEmpty()) qo.attrs.append({name, val});
+      }
+    if (obj->Primitive_type == GEO_POINT) {
+      qo.geom = s52sg::QueryGeom::Point;
+      qo.shape.append(QPointF(obj->m_lon, obj->m_lat));
+    } else if (obj->Primitive_type == GEO_LINE) {
+      qo.geom = s52sg::QueryGeom::Line;
+      for (int iseg = 0; iseg < obj->m_n_lsindex; ++iseg)
+        for (const QPointF& p : resolveSeg(&obj->m_lsindex_array[iseg * 3]))
+          qo.shape.append(p);
+    } else if (obj->Primitive_type == GEO_AREA) {
+      qo.geom = s52sg::QueryGeom::Area;
+      const QList<QList<QPointF>> rings =
+          stitchRings(obj->m_lsindex_array, obj->m_n_lsindex);
+      if (!rings.isEmpty()) qo.shape = rings.first();
+    } else {
+      continue;  // GEO_META / unhandled -- nothing to hit-test
+    }
+    if (qo.shape.isEmpty()) continue;
+    double mnx = qo.shape[0].x(), mxx = mnx, mny = qo.shape[0].y(), mxy = mny;
+    for (const QPointF& p : qo.shape) {
+      mnx = std::min(mnx, p.x());
+      mxx = std::max(mxx, p.x());
+      mny = std::min(mny, p.y());
+      mxy = std::max(mxy, p.y());
+    }
+    qo.minLon = mnx;
+    qo.maxLon = mxx;
+    qo.minLat = mny;
+    qo.maxLat = mxy;
+    buf.queryObjects.append(std::move(qo));
   }
 
   if (on) *on = nlat;
   if (os) *os = slat;
   if (oe) *oe = elon;
   if (ow) *ow = wlon;
+  // Draw in S-52 display-priority order (group-1 area fills under line/area
+  // symbols), stable so same-priority objects keep emit order. Without this,
+  // an object's area fill emitted after a line painted over it (pontoon cut).
+  std::stable_sort(buf.prims.begin(), buf.prims.end(),
+                   [](const s52sg::Prim& a, const s52sg::Prim& b) {
+                     return a.priority < b.priority;
+                   });
   qWarning(
       "decodeOsenc: %d objects -- %d areas, %d points, %d lines (%d edges, "
       "%d nodes)%s",
@@ -1075,6 +1416,36 @@ void S52Engine::setColorScheme(int scheme) {
   ChartCtx ctx(false, 0);
   m_impl->lib->SetPLIBColorScheme(cs, ctx);
   m_impl->lib->UpdateMarinerParams();
+}
+
+void S52Engine::applyDisplaySettings(const ChartDisplaySettings& s) {
+  if (!m_impl || !m_impl->lib) return;
+  s52plib* lib = m_impl->lib;
+  // Symbol + boundary LUP selection (consulted at decode time).
+  lib->m_nSymbolStyle = s.symbolStyle == 1 ? SIMPLIFIED : PAPER_CHART;
+  lib->m_nBoundaryStyle =
+      s.boundaryStyle == 1 ? SYMBOLIZED_BOUNDARIES : PLAIN_BOUNDARIES;
+  lib->SetShowS57ImportantTextOnly(s.importantTextOnly);
+  lib->m_bUseSCAMIN = s.useScamin;
+  // P2.16 -- cartography / text-detail toggles. These select which objects and
+  // text strings are turned into geometry at decode time, so a re-decode
+  // (reloadResidentCells) is what makes a change take effect.
+  lib->m_bShowMeta = s.chartInfoObjects;
+  lib->SetShowAtonText(s.buoyLightLabels);
+  lib->SetShowLdisText(s.lightDescriptions);
+  lib->SetExtendLightSectors(s.extendedLightSectors);
+  lib->SetShowNationalText(s.nationalText);
+  lib->SetTextOverlapAvoid(s.declutterText);
+  lib->m_bUseSUPER_SCAMIN = s.superScamin;
+  // Depth shading + contours (the DEPARE/DEPCNT colour-fill conditional
+  // symbology reads these mariner params). Safety contour drives the
+  // safety-depth shade too.
+  S52_setMarinerParam(S52_MAR_TWO_SHADES, s.twoShades ? 1.0 : 0.0);
+  S52_setMarinerParam(S52_MAR_SAFETY_CONTOUR, s.safetyContour);
+  S52_setMarinerParam(S52_MAR_SAFETY_DEPTH, s.safetyContour);
+  S52_setMarinerParam(S52_MAR_SHALLOW_CONTOUR, s.shallowContour);
+  S52_setMarinerParam(S52_MAR_DEEP_CONTOUR, s.deepContour);
+  lib->UpdateMarinerParams();
 }
 
 }  // namespace ocpn::qtui

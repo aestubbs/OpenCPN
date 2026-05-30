@@ -59,6 +59,12 @@ QSGNode* ChartBoundaryProvider::renderChart(QSGNode* old_subtree,
   if (!node)
     node = sg::makeFlatColorNode(m_color, QSGGeometry::DrawLines, 0);
 
+  // The availability grid: draw each cell's BOUNDING-BOX rectangle (the chart's
+  // extent), always on, for every catalogued cell -- a simple "a chart exists
+  // here" indicator (per the display rules in Docs/QT_QUILT_VS_WX.md). The
+  // rendered CONTENT of a cell is separately clipped to its M_COVR coverage, so
+  // a cell's data may fill less than its rectangle; the rectangle still marks
+  // where the chart is, including finer charts not yet rendered at this zoom.
   int valid = 0;
   for (const CellExtent& c : m_extents)
     if (c.valid()) ++valid;
@@ -76,8 +82,8 @@ QSGNode* ChartBoundaryProvider::renderChart(QSGNode* old_subtree,
     // World coords: x = lon, y = -lat. Corners (clockwise).
     const float xl = static_cast<float>(c.west);
     const float xr = static_cast<float>(c.east);
-    const float yt = static_cast<float>(-c.north);  // top  (north)
-    const float yb = static_cast<float>(-c.south);  // bottom (south)
+    const float yt = static_cast<float>(Viewport::latToWorldY(c.north));  // N
+    const float yb = static_cast<float>(Viewport::latToWorldY(c.south));  // S
     auto edge = [&](float x0, float y0, float x1, float y1) {
       v[i++].set(x0, y0);
       v[i++].set(x1, y1);
@@ -115,8 +121,8 @@ QSGNode* ChartBoundaryProvider::renderChart(QSGNode* old_subtree,
       if (n < 2) return;
       for (int k = 0; k < n; ++k) {
         const QPointF a = poly[k], b = poly[(k + 1) % n];
-        segs.append(QPointF(a.x(), -a.y()));  // world: x=lon, y=-lat
-        segs.append(QPointF(b.x(), -b.y()));
+        segs.append(QPointF(a.x(), Viewport::latToWorldY(a.y())));  // Mercator
+        segs.append(QPointF(b.x(), Viewport::latToWorldY(b.y())));
       }
     };
     if (!sel->coverage.isEmpty())

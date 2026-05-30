@@ -39,9 +39,11 @@
 #include <QStringList>
 
 #include "chart_extent.h"
+#include "s52_engine.h"  // ChartDisplaySettings
 #include "s52_sg.h"
 
 Q_DECLARE_METATYPE(s52sg::Buffer)
+Q_DECLARE_METATYPE(ocpn::qtui::ChartDisplaySettings)
 
 namespace ocpn::qtui {
 
@@ -71,6 +73,11 @@ public Q_SLOTS:
    *  canvas re-requests the loaded cells afterwards to re-emit with it. */
   void setColorScheme(int scheme);
 
+  /** Apply the S-52 decode-time display settings (depth shading/contours,
+   *  symbol/boundary style, important-text-only, SCAMIN) on the decode thread,
+   *  serialised against loadCell. The canvas re-requests loaded cells after. */
+  void applyDisplaySettings(const ocpn::qtui::ChartDisplaySettings& settings);
+
 Q_SIGNALS:
   void extentsScanned(const QList<ocpn::qtui::CellExtent>& cells);
   void cellLoaded(const QString& id, const s52sg::Buffer& buffer, double north,
@@ -81,6 +88,11 @@ private:
   QString m_s57data_dir;
   // Decrypted-OSENC cache (o-charts), created lazily on the worker thread.
   std::unique_ptr<class SencCache> m_senc_cache;
+  // True while scanExtents is running. The scan pumps the worker's event
+  // queue between cells so queued loadCell requests are serviced during a long
+  // (o-charts decrypt) scan instead of waiting for it to finish; this guards
+  // against a re-entrant scanExtents arriving on that pump.
+  bool m_scanning = false;
 };
 
 }  // namespace ocpn::qtui

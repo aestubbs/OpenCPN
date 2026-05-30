@@ -15,6 +15,7 @@
 
 #include "chart_worker.h"
 
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFileInfo>
 
@@ -58,6 +59,11 @@ ChartWorker::~ChartWorker() = default;
 
 void ChartWorker::scanExtents(const QStringList& paths_000) {
   if (!m_engine) return;
+  // The scan pumps the worker's event queue between cells (see below), which
+  // can re-deliver a queued scanExtents; ignore that re-entry so scans never
+  // nest. A genuinely-needed re-scan is re-triggered by the next dir change.
+  if (m_scanning) return;
+  m_scanning = true;
   // Scan cell-by-cell and publish the growing catalog in batches, so the
   // boundary grid fills in progressively for a big set instead of after a
   // single long blocking scan. The accumulated list is re-emitted each time
@@ -112,11 +118,18 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
       qWarning("ChartWorker: scan progress %lld cells, %lld ms",
                (long long)cells.size(), (long long)timer.elapsed());
     }
+    // Service queued work (notably loadCell for the cells the user is looking
+    // at) between cells, so a long o-charts decrypt scan doesn't block chart
+    // rendering for minutes. This thread's event loop is otherwise stuck
+    // inside this slot until the whole scan returns. Cheap when nothing is
+    // queued; a queued loadCell runs to completion here, then the scan resumes.
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
   Q_EMIT extentsScanned(cells);  // final (also covers the empty case)
   qWarning("ChartWorker: catalog scan %lld/%lld cells (%d cached) in %lld ms",
            (long long)cells.size(), (long long)paths_000.size(), n_cached,
            (long long)timer.elapsed());
+  m_scanning = false;
 }
 
 void ChartWorker::loadCell(const CellExtent& cell) {
@@ -146,12 +159,39 @@ void ChartWorker::loadCell(const CellExtent& cell) {
       buf = m_engine->loadEncCell(cell.path, m_s57data_dir, &n, &s, &e, &w);
       break;
   }
-  if (buf.empty()) return;
+  if (buf.empty()) {
+    // A needed cell that decodes to nothing leaves its boundary rectangle on
+    // screen with no content -- make that visible rather than silent.
+    qWarning("loadCell: EMPTY decode name=%s kind=%d cov=%lld path=%s",
+             qPrintable(cell.name), static_cast<int>(kindOf(cell.path)),
+             static_cast<long long>(cell.coverage.size()),
+             qPrintable(cell.path));
+    return;
+  }
+  int n_snd = 0, sc_min = 2000000000, sc_max = 0;
+  for (const s52sg::Label& l : buf.labels)
+    if (l.isSounding) {
+      ++n_snd;
+      if (l.scamin < sc_min) sc_min = l.scamin;
+      if (l.scamin > sc_max) sc_max = l.scamin;
+    }
+  qWarning(
+      "loadCell: name=%s kind=%d scale=%d cov=%lld prims=%lld labels=%lld "
+      "soundings=%d sndScamin=[%d..%d] query=%lld",
+      qPrintable(cell.name), static_cast<int>(kindOf(cell.path)),
+      cell.nativeScale, static_cast<long long>(cell.coverage.size()),
+      static_cast<long long>(buf.prims.size()),
+      static_cast<long long>(buf.labels.size()), n_snd,
+      n_snd ? sc_min : 0, sc_max, static_cast<long long>(buf.queryObjects.size()));
   Q_EMIT cellLoaded(cell.name, buf, n, s, e, w);
 }
 
 void ChartWorker::setColorScheme(int scheme) {
   if (m_engine) m_engine->setColorScheme(scheme);
+}
+
+void ChartWorker::applyDisplaySettings(const ChartDisplaySettings& settings) {
+  if (m_engine) m_engine->applyDisplaySettings(settings);
 }
 
 }  // namespace ocpn::qtui

@@ -538,7 +538,7 @@ private:
   // (simple line) rule's pen and appends `pts` as a coloured line strip.
   int RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules, Rules *rules);
   int RenderToSGLS(s52sg::Buffer &out, Rules *rules, const QList<QPointF> &pts,
-                   int dispCat);
+                   int dispCat, int priority = 5, int scamin = 100000002);
   // RenderToSGAP resolves an AP (area pattern) rule -- for raster patterns,
   // appends the object's tessellated triangles + the tile bitmap as a
   // PatternFill (the consumer tiles it screen-fixed). Vector patterns are

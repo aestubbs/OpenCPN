@@ -19,9 +19,13 @@
  * changed.
  *
  * Lives in the same navobj.db as ConfigStore, in a `chart_catalog` table, on
- * its own connection (created/used on the chart-worker thread). Coverage
- * polygons are not cached (the bbox is used) -- a minor quilting precision
- * trade-off for cache simplicity.
+ * its own connection (created/used on the chart-worker thread). The cell's
+ * actual M_COVR coverage polygons are cached alongside the bbox (serialised
+ * into a BLOB column): the quilt's per-location pick tests against the
+ * coverage (CellExtent::covers), so dropping it made every warm launch fall
+ * back to the bbox -- letting a small-coverage cell "win" (and blank) the rest
+ * of its bounding box. A pre-coverage row (NULL blob) is treated as a miss so
+ * it is re-scanned once and back-filled.
  */
 
 #ifndef OCPN_QT_CHART_CATALOG_DB_H_

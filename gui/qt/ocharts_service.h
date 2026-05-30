@@ -68,10 +68,16 @@ public:
    *  printFile + emits changed(). */
   Q_INVOKABLE void generateFingerprint();
 
-  /** Parse every keyList *.XML in `chartDir` (FileName -> RInstallKey) into
-   *  the in-memory key map. Returns the number of keys loaded. Skips `-sgl`
-   *  dongle key files for now (system keys only). */
+  /** Parse every keyList *.XML in `chartDir` (FileName -> RInstallKey) and
+   *  MERGE them into the in-memory key map (does not clear existing keys, so
+   *  it is safe to call once per chart directory). Returns the total number of
+   *  keys held after the merge. Skips `-sgl` dongle key files for now (system
+   *  keys only). Call clearKeys() before re-scanning all directories. */
   int loadKeyList(const QString& chartDir);
+
+  /** Drop all loaded keys. Call once before re-loading every chart directory's
+   *  keyList, so stale keys from removed dirs don't linger. */
+  void clearKeys() { m_keys.clear(); }
 
   /** The RInstallKey for a cell file (matched by base name without extension),
    *  or empty if not in the loaded keyList. */

@@ -31,6 +31,7 @@
 
 #include <QList>
 #include <QPointF>
+#include <QPolygonF>
 #include <QString>
 
 #include "chart_provider.h"
@@ -91,6 +92,9 @@ public:
   bool showLights() const { return m_showLights; }
   void setShowBuoys(bool on);
   bool showBuoys() const { return m_showBuoys; }
+  // Default minimum-display scale (1:N) for objects that carry no SCAMIN, so
+  // un-SCAMIN'd detail (buoys, lights, sector arcs) thins out when zoomed out.
+  void setDetailScale(double n);
 
 private:
   // One billboarded point item (symbol or text): a transform node placed at
@@ -106,6 +110,7 @@ private:
     QPointF worldPos;  // (x=lon, y=-lat)
     int scamin = 100000002;  // hidden when chart scale 1:N > scamin
     BbKind kind = BbKind::Symbol;
+    int viewGroup = 0;        // s52sg::ViewGroup -- nav aids get the detail cap
     float depth = 0.0f;       // sounding depth (metres) for shallowest-wins
     float screenW = 0.0f;     // on-screen size (logical px) -- for label
     float screenH = 0.0f;     // bounding-box declutter
@@ -121,14 +126,43 @@ private:
     double tileH = 16.0;
   };
 
+  // A complex (LC) line: the HPGL glyph is walked along the path, rebuilt on
+  // zoom so the glyph stays screen-fixed (like the pattern UVs). The node's
+  // geometry is regenerated each scale change; opacity culls it by SCAMIN.
+  struct ComplexLineGeom {
+    QSGGeometryNode* node = nullptr;
+    QSGOpacityNode* opacity = nullptr;
+    s52sg::ComplexLine src;
+  };
+
+  // A static fill/line/pattern node that carries a real S-52 SCAMIN (P2.14).
+  // The geometry is built once; this opacity node hides it (opacity 0, so the
+  // renderer skips the subtree) once the chart scale is more zoomed out than
+  // its SCAMIN. Only Prims/PatternFills with a real SCAMIN are wrapped --
+  // un-SCAMIN'd fills go straight into the tree and always draw (so an area
+  // fill never vanishes from the composite underlay).
+  struct ScaminNode {
+    QSGOpacityNode* opacity = nullptr;
+    int scamin = 100000002;
+  };
+
   void updateBillboards(const Viewport& viewport);
   void rebuildPatternUVs(double scale);
+  // Walk each LC glyph along its path at the given scale (px/deg) + centre
+  // latitude, regenerating the geometry (screen-fixed glyph) and SCAMIN cull.
+  void rebuildComplexLines(double scale, double chart_scale_n);
+  // Hide/show the static fills & lines that carry a real SCAMIN, by the
+  // current 1:N chart scale. Scale-only, so it runs in the updateBillboards
+  // pass (skipped while the scale is unchanged).
+  void updateScaminNodes(double chart_scale_n);
 
   // Pixels per millimetre of the display, for the 1:N chart-scale
   // denominator used by SCAMIN. Set from the window's QScreen each build;
   // falls back to a 96-dpi nominal until then.
   double m_screen_ppmm = 3.8;
   QList<PatternGeom> m_patterns;
+  QList<ComplexLineGeom> m_complex_lines;
+  QList<ScaminNode> m_scamin_nodes;  // static fills/lines with a real SCAMIN
   // Scale at the last full billboard/line/pattern update; updates are
   // skipped while it's unchanged (so panning is free). Reset to -1 on build.
   double m_last_line_scale = -1.0;
@@ -147,6 +181,7 @@ private:
   bool m_showText = true;
   bool m_showLights = true;
   bool m_showBuoys = true;
+  double m_unset_scamin_n = 100000.0;  // default min display scale (no SCAMIN)
   // True if the symbol/vector-symbol's viewing group is currently enabled.
   bool viewGroupEnabled(int vg) const;
 

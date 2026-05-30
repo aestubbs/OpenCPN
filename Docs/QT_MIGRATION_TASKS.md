@@ -42,11 +42,34 @@ persistence via `OcpnConfig` + `Layer::persistState()`), **P2.11a/b**
 overlays, static route/track/waypoint overlays — live model adapter is
 the remaining seam), and **P2.12** (perf profiling notes + split
 dynamic/static nav signals). **P2.13** stays deferred (no deficit found).
-Next: **P2.7** (raster KAP/BSB Layer, dep P2.5), the live `NavDataProvider`
-adapter over `g_pAIS`/`pRouteList`, and deeper P2.9 display categories.
+
+A renderer-parity audit vs the legacy wx S-52 renderer (2026-05-30, every
+finding adversarially re-verified against code) added **P2.14–P2.19** — see
+"Renderer parity gaps vs wx" below. Headline: the Qt renderer is **at parity
+on S-52 primitive emission** (AC/AP fills, LS/LC lines, SY symbols, CARC arcs,
+TX/TE text, depth shading incl. 2-/4-shade + shallow/safety/deep thresholds,
+conditional-symbology recolour incl. DEPCNT02/UDWHAZ03/SNDFRM02, and full
+day/dusk/night palette switching), and the **composite quilt is a deliberate,
+working divergence** from wx's reference-scale tiers (it fixes the wx
+"coarse chart loses its soundings in one zoom step" symptom). Genuine open
+gaps are narrower than first thought: SCAMIN on **AC solid fills, LS simple
+lines and AP pattern fills** (the `Prim`/`PatternFill` families — SY/TX/LC/
+soundings already honour it) — **P2.14**; area **boundary lines** not emitted —
+**P2.15**; **7 of 15** built-but-inert chart-dialog vector options —
+**P2.16**; and raster/CM93 chart **types** — **P2.7/P2.19**.
+
+Progress (2026-05-30): **P2.14 DONE** (SCAMIN-cull the `Prim`/`PatternFill`
+families — AC/LS/AP now honour SCAMIN per-frame) and **P2.16 DONE** (the 7
+built-but-inert chart-dialog vector toggles are wired through to s52plib + live
+re-decode — all 15 vector options now take effect). Both build clean.
+**Next: P2.15** (emit area boundary LS/LC lines), then **P2.7** (raster KAP/BSB
+— the largest remaining *capability* gap) and the live `NavDataProvider`
+adapter over `g_pAIS`/`pRouteList`. The three display controls once bundled in
+P2.16 are split to **P2.20** (Show Grid + Show Depth Units — new render paths;
+Smooth Pan/Zoom is N/A under the scene graph).
 See [`QT_MIGRATION_MATERIALS.md`](./QT_MIGRATION_MATERIALS.md) and
 [`QT_MIGRATION_PERF.md`](./QT_MIGRATION_PERF.md).
-**Last updated:** 2026-05-24.
+**Last updated:** 2026-05-30.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
 Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
@@ -772,7 +795,10 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
       GL path → `QSGGeometryNode` with built-in materials.
 - [ ] **P2.7** Raster chart (KAP/BSB) Layer — `QSGImageNode` (built-in
       textured quad), one per chart-cell tile. No shader code.
-      *(dep: P2.5)*
+      *(dep: P2.5; 2026-05-30 audit: `RasterChartProvider` is still a
+      placeholder with no file-format decoder — Qt renders no raster charts
+      yet. Extend scope to MBTiles + raster de-skew; see "Renderer parity
+      gaps vs wx" below. severity: high)*
 - [x] **P2.8** Vector-chart pipeline through `libs/s52plib`. **DONE** for
       the major S-52 feature classes (areas, lines, text, symbols)
       rendering from a real NOAA ENC cell through a scene-graph emit path.
@@ -861,6 +887,108 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
 - [ ] **P2.13** *Optional* — drop to raw RHI via `beforeRendering`/
       `afterRendering` for any hotspot that needs it (sounding-symbol
       instancing, AA-line shader). Only if P2.12 finds genuine deficits.
+
+### Renderer parity gaps vs wx — audit 2026-05-30
+
+A multi-agent audit (Qt vs the legacy wx S-52 renderer) read the actual
+`gui/qt`, `libs/s52plib/src` and `gui/src` code; every finding below was
+adversarially re-verified. **Verdict: not yet full parity, but closer than the
+older docs implied — and several suspected gaps were proven already-done.**
+
+**Confirmed at parity / NOT gaps** (verified — do not raise as tasks): the
+composite quilt vs wx's reference-scale gate is a *deliberate* divergence
+(QT_QUILT_VS_WX §8/§10) that fixes the wx "lost soundings on zoom" symptom and
+resolves the Santa-Cruz empty box via the coarser **underlay**; conditional-
+symbology **recolour** (UDWHAZ03 / SNDFRM02 / **DEPCNT02**) *is* applied on the
+SG path; **day/dusk/night** colour-scheme switching *does* rebuild the scene
+with the swapped palette (`reloadResidentCells`); the `display/overzoomFactor`
+*is* consumed by `updateVisibleCells`; and SCAMIN *is* honoured for SY symbols,
+TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
+
+- [x] **P2.14** SCAMIN for **AC solid fills, LS simple lines, AP pattern
+      fills** (the `Prim` / `PatternFill` families). **Done 2026-05-30.**
+      Emit side (`libs/s52plib/src`): added a `scamin` field to `s52sg::Prim`
+      (`s52_sg.h`); `RenderToSGAC` now sets it from `obj->Scamin`, `RenderToSGLS`
+      takes a `scamin` param threaded from `RenderLineToSG` (and its LC-fallback
+      dashed `Prim`), and all three (AC/LS/AP) gate the value on the global
+      `m_bUseSCAMIN` toggle — when Use-SCAMIN is off they emit the "unset"
+      sentinel so everything shows (re-decode on toggle via `applyChartConfig`
+      → `reloadResidentCells`). Consumer side (`s52_vector_chart_provider`):
+      `renderChart` wraps **only** fills/lines/pattern-fills that carry a *real*
+      SCAMIN in a `QSGOpacityNode` (tracked in `m_scamin_nodes`); un-SCAMIN'd
+      fills append directly and always draw (so an area fill never vanishes from
+      the composite underlay — no empty-box regression). New
+      `updateScaminNodes(chart_scale_n)` runs in the per-frame `updateBillboards`
+      pass (scale-gated, like the LC/billboard cull) and hides a node once
+      `chart_scale_n > scamin`. Build: `opencpn-qt` links clean, 0 errors / 0
+      warnings. *(was: severity high — most visible overview defect)*
+- [ ] **P2.15** Emit **area boundary lines** (RUL_SIM_LN / RUL_COM_LN). Area
+      objects emit only their AC/AP **fill** on the SG path (s52plib_sg.cpp area
+      dispatch + s52_engine.cpp per-object sequence); the S-52 boundary line
+      rules (depth-area edges, RESARE/restricted-area styled borders) are
+      silently dropped. wx renders them in a second `RenderObjectToGL` pass.
+      *(severity: med)*
+- [x] **P2.16** Wire the **built-but-inert chart-dialog vector options** to the
+      renderer. **Done 2026-05-30.** The 7 saved-only toggles now bake into the
+      decode: `chartInfoObjects`→`m_bShowMeta`, `buoyLightLabels`→
+      `SetShowAtonText`, `lightDescriptions`→`SetShowLdisText`,
+      `extendedLightSectors`→`SetExtendLightSectors`, `nationalText`→
+      `SetShowNationalText`, `declutterText`→`SetTextOverlapAvoid`,
+      `superScamin`→`m_bUseSUPER_SCAMIN`. Plumbing: 7 fields added to
+      `ChartDisplaySettings` (`s52_engine.h`), applied in
+      `S52Engine::applyDisplaySettings` (`s52_engine.cpp`), and mapped from
+      `ChartConfig` at both call sites in `chart_canvas.cpp` (startup push +
+      `applyChartConfig`). The QML `Connections{ target: ChartConfig;
+      onChanged → chart.applyChartConfig() }` already drives a live re-decode
+      (`reloadResidentCells`), so toggling now takes effect. The s52plib
+      setters/members were already public (pre-annotated "P2.16"). Build:
+      `opencpn-qt` links clean, 0 errors. (The 8 previously-wired toggles +
+      these 7 = all 15 vector options now live.) The three *new* display
+      controls originally bundled here are split to **P2.20** (Show Grid + Show
+      Depth Units are new render paths, not dialog wiring; Smooth Pan/Zoom is
+      `[—]` N/A under the Qt scene graph). This closes the **charts-dialog →
+      pipeline** parity item. *(was: severity high)*
+- [ ] **P2.17** **M_COVR polygon render clip** (wx `ActiveRegion` parity).
+      Today each cell clips to its geographic **bounding box** (`QSGClipNode`,
+      `s52_vector_chart_provider.cpp`), not its M_COVR coverage, and M_COVR
+      interior rings are discarded at catalog-scan time. Clipping to
+      `M_COVR − union(finer coverage)` removes coastline **slivers** at cell
+      edges and honours coverage holes. **Low priority** — the composite
+      underlay already prevents holes, so this is polish. *(severity: low)*
+- [ ] **P2.18** **Overscale / overzoom indication.** Draw the S-52 overscale
+      hatch/text when a cell is shown beyond its compilation scale (wx draws an
+      overscale marker; QT_QUILT_VS_WX §8 rule 5 lists it deferred).
+      *(severity: low)*
+- [ ] **P2.19** **CM93 / CM93COMP** vector chart support. Qt's `S52Engine`
+      loads only `.000` / `.S57` / `.oesu` / `.oesenc`; wx renders CM93
+      worldwide vector (`cm93chart` / `cm93compchart`, incl. next-smaller-cell
+      dashed outlines). The Qt CM93 detail / offset controls already exist but
+      drive nothing. Add a CM93 decode path feeding the s52plib SG emit.
+      *(severity: low — large effort)*
+- [ ] **P2.20** **Show Grid + Show Depth Units** display controls (split from
+      P2.16). Both are wx options Qt lacks, but each needs a new *render path*,
+      not just dialog wiring: Show Grid is a lat/lon graticule overlay (a
+      display- or world-anchored Layer with labelled meridians/parallels);
+      Show Depth Units is an on-chart legend showing the sounding unit
+      (m / ft / fm) the active cell uses. Add the `DisplayConfig`/`ChartConfig`
+      property + QML control alongside the render path. **Smooth Pan/Zoom is
+      intentionally NOT added** — it is `[—]` N/A under the Qt scene graph
+      (pan/zoom is GPU-smooth and zoom already tracks the cursor; see the
+      Display → General notes in P3.6). *(severity: low)*
+
+> **P2.7 (re-confirmed open, high):** `RasterChartProvider` is still a
+> placeholder with no decoder, so Qt cannot render **raster KAP/BSB** charts at
+> all — a hard parity gap for raster-only regions. Extend its scope to cover
+> **MBTiles** raster/overlay and raster **de-skew** reprojection (wx:
+> `ChartKAP` / `ChartGEO` / `ChartMBTiles`). See the P2.7 entry above.
+
+> **Doc upkeep:** `Docs/QT_QUILT_VS_WX.md` carried three contradictory quilt
+> models (§5 reference-gate plan, §8 composite-with-M_COVR-clip, §9 no-clip
+> underlay). Reconciled against verified code on 2026-05-30 via a new §10
+> ("Current implementation — verified ground truth"); the true model is
+> **composite + coarser underlay + per-cell bounding-box clip, no reference
+> gate, no M_COVR clip**. §4/§5/§6 and the clip claims in §8/§9 are now flagged
+> historical. No task needed.
 
 ### Future / post-Phase-2 follow-ups (capture, not scheduled)
 

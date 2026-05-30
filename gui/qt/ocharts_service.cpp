@@ -181,7 +181,9 @@ void OChartsService::generateFingerprint() {
 }
 
 int OChartsService::loadKeyList(const QString& chartDir) {
-  m_keys.clear();
+  // Merge into m_keys (do NOT clear): reloadCharts calls this once per chart
+  // directory, and a dir without a keyList (e.g. free NOAA ENC) must not wipe
+  // the keys loaded for an o-charts dir. clearKeys() resets before a re-scan.
   const QStringList xmls =
       QDir(chartDir).entryList({QStringLiteral("*.XML"), QStringLiteral("*.xml")},
                                QDir::Files);
@@ -211,6 +213,9 @@ int OChartsService::loadKeyList(const QString& chartDir) {
       }
     }
   }
+  qWarning("loadKeyList: dir=%s xmls=%lld -> total keys=%lld",
+           qPrintable(chartDir), (long long)xmls.size(),
+           (long long)m_keys.size());
   return m_keys.size();
 }
 
@@ -318,31 +323,35 @@ QByteArray OChartsService::decrypt(const QString& cellPath, unsigned char cmd,
   // stop after the second (status + body), so there is no fixed idle tail. A
   // grace after the first data-session and an overall cap keep us safe against
   // single-session daemons and a dead daemon.
+  // The daemon delivers the SERVER_STATUS_RECORD then the (possibly large)
+  // OSENC body, and a big body arrives as MULTIPLE writer sessions/chunks with
+  // gaps between them. Counting sessions and stopping at "status + one body
+  // session" truncated large cells -- breaking before the final chunk dropped
+  // the last (large) AREA record, losing big deep-water polygons. Instead read
+  // until a *sustained* idle with no new data: inter-chunk gaps are short, the
+  // true end is a long quiet. Non-blocking so a dead daemon can't hang us.
   QByteArray out;
   int rfd = ::open(fifo_c.constData(), O_RDONLY | O_NONBLOCK);
   if (rfd >= 0) {
     char chunk[65536];
-    int sessions = 0;          // data-bearing writer sessions that closed
-    bool data_this_session = false;
+    constexpr int kEndIdleMs = 1500;   // quiet span that marks the true end
+    constexpr int kNoDataMs = 5000;    // give up if no data ever arrives
+    constexpr int kTotalCapMs = 60000; // overall safety for very large cells
     int idle_ms = 0, total_ms = 0;
+    bool got_data = false;
     for (;;) {
       const ssize_t r = ::read(rfd, chunk, sizeof(chunk));
       if (r > 0) {
         out.append(chunk, static_cast<int>(r));
-        data_this_session = true;
+        got_data = true;
         idle_ms = 0;
       } else {
-        if (r == 0 && data_this_session) {  // a writer session closed
-          ++sessions;
-          data_this_session = false;
-          if (sessions >= 2) break;  // status + body done
-        }
         QThread::msleep(10);
         idle_ms += 10;
         total_ms += 10;
-        // After the body session, a brief grace ends a single-session daemon.
-        if (sessions >= 1 && idle_ms > 300) break;
-        if (total_ms > 8000) break;  // overall safety (no/slow daemon)
+        if (got_data && idle_ms > kEndIdleMs) break;   // end of stream
+        if (!got_data && total_ms > kNoDataMs) break;  // dead/slow daemon
+        if (total_ms > kTotalCapMs) break;             // overall safety
       }
     }
     ::close(rfd);

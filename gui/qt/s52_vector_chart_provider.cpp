@@ -29,6 +29,7 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QScreen>
+#include <QSGClipNode>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSGImageNode>
@@ -73,7 +74,8 @@ QImage renderLabelImage(const s52sg::Label& lab) {
 // are QPointF(lon, lat).
 QSGGeometry::Point2D worldPoint(const QPointF& v) {
   QSGGeometry::Point2D p;
-  p.set(static_cast<float>(v.x()), static_cast<float>(-v.y()));
+  p.set(static_cast<float>(v.x()),
+        static_cast<float>(Viewport::latToWorldY(v.y())));
   return p;
 }
 
@@ -249,6 +251,14 @@ void S52VectorChartProvider::setShowBuoys(bool on) {
   Q_EMIT changed();
 }
 
+void S52VectorChartProvider::setDetailScale(double n) {
+  if (n <= 0.0 || n == m_unset_scamin_n) return;
+  m_unset_scamin_n = n;
+  // Pure scale cull -- no geometry rebuild; just re-run the billboard cull.
+  m_last_line_scale = -1.0;
+  Q_EMIT changed();
+}
+
 bool S52VectorChartProvider::viewGroupEnabled(int vg) const {
   switch (vg) {
     case s52sg::VgLights: return m_showLights;
@@ -272,11 +282,87 @@ void S52VectorChartProvider::rebuildPatternUVs(double scale) {
     const double kv = scale / pg.tileH;
     for (qsizetype i = 0; i < pg.tris.size(); ++i) {
       const double wx = pg.tris[i].x();
-      const double wy = -pg.tris[i].y();  // world y = -lat
+      const double wy = Viewport::latToWorldY(pg.tris[i].y());  // Mercator
       v[i].set(static_cast<float>(wx), static_cast<float>(wy),
                static_cast<float>(wx * ku), static_cast<float>(wy * kv));
     }
     pg.node->markDirty(QSGNode::DirtyGeometry);
+  }
+}
+
+void S52VectorChartProvider::rebuildComplexLines(double scale,
+                                                 double chart_scale_n) {
+  if (scale <= 0.0) return;
+  constexpr double kScaminUnset = 1.0e8;
+  constexpr int kMaxVerts = 60000;  // safety cap per LC feature
+  const double k = 1.0 / scale;     // screen px -> world units (deg-equiv)
+  for (ComplexLineGeom& g : m_complex_lines) {
+    const s52sg::ComplexLine& cl = g.src;
+    const double eff =
+        cl.scamin >= kScaminUnset ? m_unset_scamin_n : double(cl.scamin);
+    const bool hidden = chart_scale_n > eff || cl.lengthPx < 1.0;
+    if (g.opacity) g.opacity->setOpacity(hidden ? 0.0 : 1.0);
+    if (hidden || !g.node) {
+      if (g.node) g.node->geometry()->allocate(0);
+      continue;
+    }
+    const double stepW = cl.lengthPx * k;  // glyph repeat in world units
+    std::vector<QSGGeometry::Point2D> verts;  // DrawLines: segment-pair list
+    double carry = 0.0;  // distance into the next glyph, carried across segs
+    QPointF prevW(cl.path[0].x(), Viewport::latToWorldY(cl.path[0].y()));
+    for (qsizetype i = 1;
+         i < cl.path.size() && verts.size() < (size_t)kMaxVerts; ++i) {
+      const QPointF curW(cl.path[i].x(), Viewport::latToWorldY(cl.path[i].y()));
+      const QPointF d = curW - prevW;
+      const double segLen = std::hypot(d.x(), d.y());
+      if (segLen > 1e-12) {
+        const double ux = d.x() / segLen, uy = d.y() / segLen;
+        // Rotate a local glyph point (screen px) to the segment direction,
+        // scale px->world, translate to the stamp origin.
+        for (double sdist = carry;
+             sdist + stepW <= segLen && verts.size() < (size_t)kMaxVerts;
+             sdist += stepW) {
+          const double ox = prevW.x() + ux * sdist;
+          const double oy = prevW.y() + uy * sdist;
+          for (const s52sg::VectorOp& op : cl.symbol) {
+            if (op.filled || op.verts.size() < 2) continue;  // line ops only
+            for (const QPointF& lp : op.verts) {
+              // (ux,uy) is the segment dir; rotate (lp.x,lp.y) by it.
+              const double rx = lp.x() * ux - lp.y() * uy;
+              const double ry = lp.x() * uy + lp.y() * ux;
+              QSGGeometry::Point2D p;
+              p.set(static_cast<float>(ox + rx * k),
+                    static_cast<float>(oy + ry * k));
+              verts.push_back(p);
+            }
+          }
+        }
+        // Carry the leftover so the glyph phase is continuous across segments.
+        const double walked =
+            std::floor((segLen - carry) / stepW) * stepW + carry;
+        carry = (segLen > carry) ? segLen - walked : carry - segLen;
+      }
+      prevW = curW;
+    }
+    // DrawLines needs an even vertex count (segment pairs).
+    if (verts.size() & 1) verts.pop_back();
+    QSGGeometry* geo = g.node->geometry();
+    geo->allocate(static_cast<int>(verts.size()));
+    if (!verts.empty())
+      std::memcpy(geo->vertexDataAsPoint2D(), verts.data(),
+                  verts.size() * sizeof(QSGGeometry::Point2D));
+    g.node->markDirty(QSGNode::DirtyGeometry);
+  }
+}
+
+void S52VectorChartProvider::updateScaminNodes(double chart_scale_n) {
+  // Only fills/lines with a REAL SCAMIN are wrapped (un-SCAMIN'd fills are
+  // never in this list), so a node is hidden exactly when the chart is more
+  // zoomed out than its SCAMIN -- the wx rule, applied per-frame via opacity
+  // (the renderer skips opacity-0 subtrees, so no draw call). P2.14.
+  for (const ScaminNode& sn : m_scamin_nodes) {
+    if (!sn.opacity) continue;
+    sn.opacity->setOpacity(chart_scale_n > sn.scamin ? 0.0 : 1.0);
   }
 }
 
@@ -297,9 +383,43 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   //   ground m/px = (metres per degree of lat) / (pixels per degree)
   //   screen m/px = 1 / (m_screen_ppmm * 1000)
   // m_screen_ppmm is the real display density (set from QScreen at build).
+  // Mercator: s is px per degree of LONGITUDE (ground 111320*cos(lat) m), so
+  // include cos(centre_lat) for the true 1:N (matches displayScaleN).
   constexpr double kMetresPerDegLat = 111320.0;
+  const double clat =
+      std::max(0.05, std::cos(viewport.centerLat() * M_PI / 180.0));
   const double chart_scale_n =
-      (kMetresPerDegLat / s) * m_screen_ppmm * 1000.0;
+      (kMetresPerDegLat * clat / s) * m_screen_ppmm * 1000.0;
+
+  rebuildComplexLines(s, chart_scale_n);  // screen-fixed LC glyphs along lines
+  updateScaminNodes(chart_scale_n);       // hide static fills/lines past SCAMIN
+
+  // Effective SCAMIN: many ENC objects (esp. buoys, lights, their sector arcs)
+  // carry NO SCAMIN, so they'd pile up at every zoom. Give those a configurable
+  // default minimum-display scale (m_unset_scamin_n) so detail thins out when
+  // zoomed out -- objects with a real SCAMIN keep it. The s52sg "unset"
+  // sentinel is ~1e8.
+  constexpr double kScaminUnset = 1.0e8;
+  const auto effScamin = [&](const Billboard& b) -> double {
+    // Soundings follow the CHART, not a separate SCAMIN cliff. A cell is only
+    // rendered while it is content-eligible (within k x native, decided in
+    // ChartCanvas::updateVisibleCells), so while it is on screen its soundings
+    // stay visible and the shallowest-per-cell declutter below thins them
+    // progressively as you zoom out -- instead of every sounding in the cell
+    // vanishing the instant the single shared SOUNDG SCAMIN is crossed (the
+    // "coarse chart loses all its soundings in one zoom step" symptom). So
+    // soundings are never SCAMIN-culled here (declutter still applies).
+    if (b.kind == BbKind::Sounding) return 1.0e12;
+    const double base = b.scamin >= kScaminUnset ? m_unset_scamin_n
+                                                 : static_cast<double>(b.scamin);
+    // Nav aids (lights, buoys/beacons, sector arcs, their labels) are HARD-
+    // capped at the detail scale even if they carry a large real SCAMIN -- many
+    // ENC overview-cell aids have a huge SCAMIN so they'd otherwise pile up at
+    // small scale (the NOAA west-coast clutter). Other features keep their own.
+    if (b.viewGroup == s52sg::VgLights || b.viewGroup == s52sg::VgBuoysBeacons)
+      return std::min(base, m_unset_scamin_n);
+    return base;
+  };
 
   // Screen-density declutter (progressive detail). Cells are screen pixels =
   // worldPos * s / cellPx; the constant canvas-centre offset doesn't change
@@ -330,7 +450,7 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   QHash<int, bool> labelKeep;         // label billboard index -> keep?
   for (int i = 0; i < m_billboards.size(); ++i) {
     const Billboard& b = m_billboards[i];
-    if (chart_scale_n > b.scamin) continue;  // SCAMIN-culled anyway
+    if (chart_scale_n > effScamin(b)) continue;  // SCAMIN-culled anyway
     if (b.kind == BbKind::Sounding) {
       const qint64 key = soundKey(b.worldPos);
       auto it = cellShallowest.find(key);
@@ -360,7 +480,7 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   for (int i = 0; i < m_billboards.size(); ++i) {
     const Billboard& b = m_billboards[i];
     if (!b.opacity || !b.xform) continue;
-    bool hidden = chart_scale_n > b.scamin;  // SCAMIN hard floor
+    bool hidden = chart_scale_n > effScamin(b);  // SCAMIN hard floor
     if (!hidden && b.kind == BbKind::Sounding)
       hidden = (cellShallowest.value(soundKey(b.worldPos), -1) != i);
     else if (!hidden && b.kind == BbKind::Label)
@@ -380,6 +500,7 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
   }
 }
 
+
 QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                                              const Viewport& viewport,
                                              QQuickWindow* window) {
@@ -397,7 +518,39 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // them (on the render thread) when the compositor releases this subtree.
   auto* root = new TextureCacheNode(window);
   m_patterns.clear();
+  m_scamin_nodes.clear();
   m_last_line_scale = -1.0;
+
+  // Clip each chart to its own BOUNDING BOX -- a simple, reliable rectangle (the
+  // chart's extent). A chart's geometry already lies within its bbox, so this
+  // removes no real content; it only bounds a finer chart to its box so it can't
+  // bleed past it over the coarser chart beneath (the composite display rules,
+  // Docs/QT_QUILT_VS_WX.md). It replaces the earlier M_COVR-polygon clip, whose
+  // complex boundary tessellated incompletely -- deleting valid content (the
+  // offshore "hole") and cutting symbols at the irregular coverage edge. The
+  // bbox works uniformly for NOAA/OSENC/raster (all carry bounds; not all carry
+  // M_COVR). World coords: x = lon, y = latToWorldY(lat) (north -> smaller y).
+  QSGNode* content = root;
+  {
+    const float xl = static_cast<float>(m_west);
+    const float xr = static_cast<float>(m_east);
+    const float yt = static_cast<float>(Viewport::latToWorldY(m_north));
+    const float yb = static_cast<float>(Viewport::latToWorldY(m_south));
+    if (xr > xl && yb > yt) {
+      auto* clipGeom =
+          new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 6);
+      clipGeom->setDrawingMode(QSGGeometry::DrawTriangles);
+      QSGGeometry::Point2D* cv = clipGeom->vertexDataAsPoint2D();
+      cv[0].set(xl, yt); cv[1].set(xr, yt); cv[2].set(xr, yb);
+      cv[3].set(xl, yt); cv[4].set(xr, yb); cv[5].set(xl, yb);
+      auto* clip = new QSGClipNode();
+      clip->setGeometry(clipGeom);
+      clip->setFlag(QSGNode::OwnsGeometry, true);
+      clip->setIsRectangular(false);  // a rotated viewport makes it a quad
+      root->appendChildNode(clip);
+      content = clip;
+    }
+  }
 
   // Logical pixels per millimetre, for both physical-size line widths and
   // the SCAMIN scale denominator. logicalDotsPerInch gives a consistent
@@ -410,6 +563,24 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // S-52 pen unit ~0.32mm -> logical px.
   constexpr double kS52PenWidthMM = 0.32;
 
+  // Route a static fill/line node into the tree (P2.14). If it carries a real
+  // S-52 SCAMIN, wrap it in an opacity node so updateScaminNodes can hide it by
+  // chart scale; otherwise append it directly -- no per-frame cost, and an
+  // un-SCAMIN'd area fill always draws (it must persist as the composite
+  // underlay). The opacity node is appended in place, so draw/priority order
+  // is preserved.
+  constexpr double kScaminUnset = 1.0e8;
+  auto appendMaybeScamin = [&](QSGNode* node, int scamin) {
+    if (static_cast<double>(scamin) < kScaminUnset) {
+      auto* op = new QSGOpacityNode();
+      op->appendChildNode(node);
+      content->appendChildNode(op);
+      m_scamin_nodes.append({op, scamin});
+    } else {
+      content->appendChildNode(node);
+    }
+  };
+
   for (const s52sg::Prim& prim : m_buffer.prims) {
     if (prim.verts.isEmpty()) continue;
     if (prim.dispCat > m_displayCategory) continue;  // display-category filter
@@ -420,13 +591,20 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     if (prim.type == s52sg::PrimType::LineStrip) {
       const double widthPx =
           std::max(1.0, prim.width * kS52PenWidthMM * m_screen_ppmm);
+      // S-52 dash, mm -> logical px (the AA-line shader runs it along the
+      // screen arc length, so it stays a constant physical size at any zoom).
+      const float dashOn =
+          static_cast<float>(prim.dashOnMm * m_screen_ppmm);
+      const float dashOff =
+          static_cast<float>(prim.dashOffMm * m_screen_ppmm);
       QList<QPointF> world;
       world.reserve(prim.verts.size());
       for (const QPointF& p : prim.verts)
-        world.append(QPointF(p.x(), -p.y()));  // world (x=lon, y=-lat)
+        world.append(QPointF(p.x(), Viewport::latToWorldY(p.y())));  // Mercator
       if (auto* node = makeAaLineNode(world, prim.color,
-                                      static_cast<float>(widthPx)))
-        root->appendChildNode(node);
+                                      static_cast<float>(widthPx),
+                                      /*closed=*/false, dashOn, dashOff))
+        appendMaybeScamin(node, prim.scamin);
       continue;
     }
 
@@ -437,7 +615,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                                        static_cast<int>(tris.size()));
     QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
     for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
-    root->appendChildNode(node);
+    appendMaybeScamin(node, prim.scamin);
   }
 
   // Coastline land-shade: an inland gradient just inside LNDARE boundaries
@@ -450,7 +628,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     for (const QList<QPointF>& c : m_buffer.landContours) {
       QList<QPointF> w;
       w.reserve(c.size());
-      for (const QPointF& p : c) w.append(QPointF(p.x(), -p.y()));
+      for (const QPointF& p : c)
+        w.append(QPointF(p.x(), Viewport::latToWorldY(p.y())));
       rings.append(std::move(w));
     }
     // Skip segments lying on the cell boundary: LNDARE is clipped to the
@@ -471,7 +650,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
             [&](const QPointF& a, const QPointF& b) {
               return !onSameBoundary(a, b);
             }))
-      root->appendChildNode(shade);
+      content->appendChildNode(shade);
   }
 
   // AP pattern fills: tessellated triangles drawn with a tiling texture.
@@ -492,7 +671,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     auto* node = sg::makeTextureNode(tex, QSGGeometry::DrawTriangles,
                                      static_cast<int>(pf.tris.size()),
                                      /*blending=*/true);
-    root->appendChildNode(node);
+    appendMaybeScamin(node, pf.scamin);  // SCAMIN-cull when it carries one (P2.14)
 
     const qreal dpr =
         pf.pattern.devicePixelRatio() > 0 ? pf.pattern.devicePixelRatio() : 1.0;
@@ -504,13 +683,33 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     m_patterns.append(pg);
   }
 
+  // Complex (LC) lines: one node per glyph-line; geometry is (re)generated by
+  // rebuildComplexLines on each scale change (screen-fixed glyph walked along
+  // the path). Drawn over fills, under the point symbols/labels.
+  m_complex_lines.clear();
+  for (const s52sg::ComplexLine& cl : m_buffer.complexLines) {
+    if (cl.dispCat > m_displayCategory || cl.path.size() < 2 ||
+        cl.symbol.isEmpty())
+      continue;
+    auto* node = sg::makeFlatColorNode(cl.color, QSGGeometry::DrawLines, 0);
+    auto* opacity = new QSGOpacityNode();
+    opacity->appendChildNode(node);
+    content->appendChildNode(opacity);
+    ComplexLineGeom g;
+    g.node = node;
+    g.opacity = opacity;
+    g.src = cl;
+    m_complex_lines.append(g);
+  }
+
   // Billboarded point items: one QSGTransformNode (placed at the world
   // anchor, counter-scaled per viewport) wrapping a textured quad. Built
   // once with their textures; updateBillboards only touches the transform.
   m_billboards.clear();
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
                           QPointF pivotPx, int scamin, BbKind kind,
-                          float depth, double rotationDeg = 0.0) {
+                          float depth, double rotationDeg = 0.0,
+                          int viewGroup = 0) {
     if (image.isNull() || !window) return;
     QSGTexture* tex = root->texture(image);  // cache-owned, deduped by name
     if (!tex) return;
@@ -538,13 +737,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     }
     auto* opacity = new QSGOpacityNode();
     opacity->appendChildNode(xform);
-    root->appendChildNode(opacity);
+    content->appendChildNode(opacity);
     Billboard b;
     b.opacity = opacity;
     b.xform = xform;
     b.worldPos = worldPos;
     b.scamin = scamin;
     b.kind = kind;
+    b.viewGroup = viewGroup;
     b.depth = depth;
     b.screenW = static_cast<float>(w);
     b.screenH = static_cast<float>(h);
@@ -557,8 +757,10 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
     if (sym.dispCat > m_displayCategory) continue;
     if (!viewGroupEnabled(sym.viewGroup)) continue;  // Lights/Buoys toggle
-    addBillboard(sym.image, QPointF(sym.pos.x(), -sym.pos.y()), sym.pivot,
-                 sym.scamin, BbKind::Symbol, /*depth=*/0.0f, sym.rotationDeg);
+    addBillboard(sym.image,
+                 QPointF(sym.pos.x(), Viewport::latToWorldY(sym.pos.y())),
+                 sym.pivot, sym.scamin, BbKind::Symbol, /*depth=*/0.0f,
+                 sym.rotationDeg, sym.viewGroup);
   }
 
   // Vector (HPGL) symbols -- billboarded geometry. The op coords are
@@ -587,13 +789,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     }
     auto* opacity = new QSGOpacityNode();
     opacity->appendChildNode(xform);
-    root->appendChildNode(opacity);
+    content->appendChildNode(opacity);
     Billboard b;
     b.opacity = opacity;
     b.xform = xform;
-    b.worldPos = QPointF(vs.pos.x(), -vs.pos.y());
+    b.worldPos = QPointF(vs.pos.x(), Viewport::latToWorldY(vs.pos.y()));
     b.scamin = vs.scamin;
     b.kind = BbKind::Vector;
+    b.viewGroup = vs.viewGroup;
     m_billboards.append(b);
   }
 
@@ -607,10 +810,10 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     if (lab.isSounding ? !m_showSoundings : !m_showText) continue;
     QImage img = renderLabelImage(lab);
     const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
-    addBillboard(img, QPointF(lab.pos.x(), -lab.pos.y()),
+    addBillboard(img, QPointF(lab.pos.x(), Viewport::latToWorldY(lab.pos.y())),
                  QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0),
                  lab.scamin, lab.isSounding ? BbKind::Sounding : BbKind::Label,
-                 lab.depth);
+                 lab.depth, /*rotationDeg=*/0.0, lab.viewGroup);
   }
 
   updateBillboards(viewport);
