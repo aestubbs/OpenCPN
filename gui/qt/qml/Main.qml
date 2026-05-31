@@ -1118,28 +1118,36 @@ ApplicationWindow {
 
                                     MenuSeparator { Layout.fillWidth: true }
 
-                                    Label { text: qsTr("Depth contours (m)"); font.bold: true }
+                                    // Contours are stored in metres but entered + shown in the
+                                    // user's depth unit (ECDIS: the unit governs all depth I/O).
+                                    Label { text: qsTr("Depth contours (%1)").arg(DisplayConfig.depthUnitLabel()); font.bold: true }
                                     GridLayout {
                                         columns: 2
                                         columnSpacing: 8; rowSpacing: 8
                                         Layout.fillWidth: true
                                         Label { text: qsTr("Shallow:"); Layout.alignment: Qt.AlignRight }
                                         SpinBox {
-                                            from: 0; to: 50
-                                            value: Math.round(ChartConfig.shallowContour)
-                                            onValueModified: ChartConfig.shallowContour = value
+                                            from: 0
+                                            to: { DisplayConfig.depthUnit; return Math.round(DisplayConfig.toUserDepth(50)); }
+                                            value: { DisplayConfig.depthUnit;  // re-derive when the unit changes
+                                                     return Math.round(DisplayConfig.toUserDepth(ChartConfig.shallowContour)); }
+                                            onValueModified: ChartConfig.shallowContour = DisplayConfig.fromUserDepth(value)
                                         }
                                         Label { text: qsTr("Safety:"); Layout.alignment: Qt.AlignRight }
                                         SpinBox {
-                                            from: 0; to: 50
-                                            value: Math.round(ChartConfig.safetyContour)
-                                            onValueModified: ChartConfig.safetyContour = value
+                                            from: 0
+                                            to: { DisplayConfig.depthUnit; return Math.round(DisplayConfig.toUserDepth(50)); }
+                                            value: { DisplayConfig.depthUnit;
+                                                     return Math.round(DisplayConfig.toUserDepth(ChartConfig.safetyContour)); }
+                                            onValueModified: ChartConfig.safetyContour = DisplayConfig.fromUserDepth(value)
                                         }
                                         Label { text: qsTr("Deep:"); Layout.alignment: Qt.AlignRight }
                                         SpinBox {
-                                            from: 0; to: 100
-                                            value: Math.round(ChartConfig.deepContour)
-                                            onValueModified: ChartConfig.deepContour = value
+                                            from: 0
+                                            to: { DisplayConfig.depthUnit; return Math.round(DisplayConfig.toUserDepth(200)); }
+                                            value: { DisplayConfig.depthUnit;
+                                                     return Math.round(DisplayConfig.toUserDepth(ChartConfig.deepContour)); }
+                                            onValueModified: ChartConfig.deepContour = DisplayConfig.fromUserDepth(value)
                                         }
                                     }
 
@@ -1320,18 +1328,59 @@ ApplicationWindow {
                                 }
                             }
 
-                            // --- Tides & Currents (pending) ---
+                            // --- Tides & Currents data sets ---
                             Item {
+                                FileDialog {
+                                    id: tideFileDialog
+                                    title: qsTr("Add tide / current data set")
+                                    nameFilters: [qsTr("Harmonic data (*.tcd *.IDX *.idx)"),
+                                                  qsTr("All files (*)")]
+                                    onAccepted: tides.addSource(selectedFile.toString())
+                                }
                                 ColumnLayout {
                                     anchors.fill: parent
                                     spacing: 8
-                                    Label { text: qsTr("Tides & currents"); font.bold: true }
-                                    Label {
-                                        text: qsTr("Tide & current predictions need the harmonics engine (wx tcmgr, ~7.5k lines) ported to the Qt core — tracked as a dedicated task. The data-set list and on-chart tide/current stations will live here once it lands.")
-                                        wrapMode: Text.Wrap; Layout.fillWidth: true
-                                        color: palette.placeholderText
+                                    Label { text: qsTr("Tide & current data sets"); font.bold: true }
+                                    ListView {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        clip: true
+                                        model: tides ? tides.dataSources : []
+                                        delegate: ItemDelegate {
+                                            required property var modelData
+                                            required property int index
+                                            width: ListView.view.width
+                                            contentItem: RowLayout {
+                                                spacing: 8
+                                                Label {
+                                                    text: modelData
+                                                    Layout.fillWidth: true
+                                                    elide: Text.ElideMiddle
+                                                }
+                                                ToolButton {
+                                                    text: "✕"
+                                                    onClicked: tides.removeSource(index)
+                                                }
+                                            }
+                                        }
                                     }
-                                    Item { Layout.fillHeight: true }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Button {
+                                            text: qsTr("Add data set…")
+                                            onClicked: tideFileDialog.open()
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Label {
+                                            text: tides ? tides.status : ""
+                                            color: palette.placeholderText
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Add harmonic data sets (a .tcd, or a HARMONIC .IDX). Stations are predicted by the built-in engine and drawn on the chart when Tides (≋) is on — scrub the timeline to see them change.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
                                 }
                             }
 
@@ -1855,6 +1904,20 @@ ApplicationWindow {
                                             from: 0; to: 100
                                             value: Math.round(OwnShipConfig.minScreenSize)
                                             onValueModified: OwnShipConfig.minScreenSize = value
+                                        }
+                                        Label {
+                                            // Stored in metres; entered + shown in the user's depth unit.
+                                            text: qsTr("Safety depth (%1):").arg(DisplayConfig.depthUnitLabel())
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0
+                                            to: { DisplayConfig.depthUnit; return Math.round(DisplayConfig.toUserDepth(100)); }
+                                            value: { DisplayConfig.depthUnit;  // re-derive when the unit changes
+                                                     return Math.round(DisplayConfig.toUserDepth(OwnShipConfig.safetyDepth)); }
+                                            onValueModified: OwnShipConfig.safetyDepth = DisplayConfig.fromUserDepth(value)
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("ENC soundings at or shallower than this are shown bold")
                                         }
                                     }
                                     CheckBox {

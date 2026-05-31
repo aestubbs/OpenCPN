@@ -47,6 +47,7 @@
 #include "s52_engine.h"
 #include "tcmgr.h"      // P3.14 tide/current prediction engine (libs/tides)
 #include "idx_entry.h"
+#include "tide_model.h"  // P3.14 phase B: tide data-set list + engine bridge
 #include <ctime>
 #include <string>
 #include <vector>
@@ -56,6 +57,9 @@
 
 #ifndef OCPN_QT_S57DATA_DIR
 #define OCPN_QT_S57DATA_DIR ""
+#endif
+#ifndef OCPN_QT_TCDATA
+#define OCPN_QT_TCDATA ""
 #endif
 
 int main(int argc, char* argv[]) {
@@ -179,9 +183,17 @@ int main(int argc, char* argv[]) {
   // Shared QML<->native state (vessel-data drawer). Exposed as "app".
   ocpn::qtui::AppController appController;
 
+  // Tide/current data sets + engine bridge (P3.14 B). Seed the bundled data
+  // set on first run, then load so the global ptcmgr is ready for the tide
+  // Layer. Exposed as "tides".
+  ocpn::qtui::TideModel tideModel;
+  tideModel.seedIfEmpty(QString::fromUtf8(OCPN_QT_TCDATA));
+  tideModel.reload();
+
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty("s52", &s52);
   engine.rootContext()->setContextProperty("app", &appController);
+  engine.rootContext()->setContextProperty("tides", &tideModel);
   // The settings backends (DisplayConfig, OwnShipConfig, AisConfig,
   // RouteDefaultsConfig) are QML singletons (QML_SINGLETON) -- referenced by
   // type name in QML, so they need no context property. Singletons are

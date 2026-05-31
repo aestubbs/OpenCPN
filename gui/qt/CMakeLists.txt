@@ -124,6 +124,8 @@ qt_add_qml_module(opencpn-qt
     sound_player.cpp
     time_controller.h
     time_controller.cpp
+    tide_model.h
+    tide_model.cpp
     chart_config.h
     chart_config.cpp
     ocharts_service.h
@@ -142,6 +144,8 @@ qt_add_qml_module(opencpn-qt
 # Production installs will discover via QStandardPaths::AppDataLocation.
 target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_S57DATA_DIR="${CMAKE_SOURCE_DIR}/data/s57data"
+  # Bundled tide/current harmonic data set, seeded on first run (P3.14 B).
+  OCPN_QT_TCDATA="${CMAKE_SOURCE_DIR}/data/tcdata/harmonics-dwf-20210110-free.tcd"
   # OpenCPN shapefile basemap -- the always-on world background chart, read
   # by ShapefileBasemapProvider. basemap_low is the better default map;
   # basemap_crude_10x10 is the fallback.
