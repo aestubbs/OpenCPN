@@ -42,10 +42,12 @@
 #ifndef OCPN_QT_VIEWPORT_H_
 #define OCPN_QT_VIEWPORT_H_
 
+#include <algorithm>
 #include <cmath>
 
 #include <QMatrix4x4>
 #include <QObject>
+#include <QRectF>
 
 namespace ocpn::qtui {
 
@@ -147,6 +149,47 @@ public:
     return (360.0 / M_PI) * std::atan(std::exp(-y * M_PI / 180.0)) - 90.0;
   }
 
+  /** The canvas pixel size, set by ChartCanvas on resize. Lets layers compute
+   *  the visible world rectangle for view-frustum culling without each having
+   *  to know the canvas geometry. */
+  void setCanvasSize(int w, int h) {
+    if (m_canvas_w == w && m_canvas_h == h) return;
+    m_canvas_w = w;
+    m_canvas_h = h;
+    Q_EMIT changed();  // re-cull at the new extent
+  }
+  int canvasWidth() const { return m_canvas_w; }
+  int canvasHeight() const { return m_canvas_h; }
+
+  /** Axis-aligned world-space bounding box of the visible view, grown by
+   *  `marginPx` screen pixels (so symbols straddling the edge aren't culled).
+   *  World coords: x = lon, y = Mercator-lat (see latToWorldY). Accounts for
+   *  chart rotation by taking the AABB of the four rotated view corners.
+   *  Returns a huge rect (no culling) until the canvas size is known. */
+  QRectF visibleWorldBounds(double marginPx = 0.0) const {
+    if (m_canvas_w <= 0 || m_canvas_h <= 0 || m_scale <= 0.0)
+      return QRectF(-1e9, -1e9, 2e9, 2e9);
+    const double c = std::cos(m_rotation), s = std::sin(m_rotation);
+    const double cx = m_center_lon, cy = latToWorldY(m_center_lat);
+    const double m = marginPx;
+    const double corners[4][2] = {{-m, -m},
+                                  {m_canvas_w + m, -m},
+                                  {m_canvas_w + m, m_canvas_h + m},
+                                  {-m, m_canvas_h + m}};
+    double minX = 1e18, minY = 1e18, maxX = -1e18, maxY = -1e18;
+    for (const auto& cor : corners) {
+      const double srx = cor[0] - m_canvas_w / 2.0;
+      const double sry = cor[1] - m_canvas_h / 2.0;
+      const double wx = cx + (c * srx + s * sry) / m_scale;
+      const double wy = cy + (-s * srx + c * sry) / m_scale;
+      minX = std::min(minX, wx);
+      maxX = std::max(maxX, wx);
+      minY = std::min(minY, wy);
+      maxY = std::max(maxY, wy);
+    }
+    return QRectF(QPointF(minX, minY), QPointF(maxX, maxY));
+  }
+
   /** Inverse of the world->screen mapping: the geographic position under a
    *  screen-pixel point (item-local coords). Inverts the chart rotation. */
   void screenToLatLon(double sx, double sy, int canvas_w, int canvas_h,
@@ -171,6 +214,8 @@ private:
   double m_center_lon = 5.0;    // North Sea, for the test chart
   double m_scale = 60.0;        // pixels per degree
   double m_rotation = 0.0;      // chart rotation, radians (0 = north-up)
+  int m_canvas_w = 0;           // canvas pixel size, set by ChartCanvas; 0 until
+  int m_canvas_h = 0;           // known (visibleWorldBounds then declines to cull)
 };
 
 }  // namespace ocpn::qtui

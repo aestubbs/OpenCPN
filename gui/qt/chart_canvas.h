@@ -34,6 +34,7 @@
 
 #include <memory>
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QList>
 #include <QPointF>
@@ -181,6 +182,10 @@ class ChartCanvas : public QQuickItem {
   // a segment inserts a point and a right-click on a node opens a menu.
   Q_PROPERTY(int selectedRoute READ selectedRoute NOTIFY selectedRouteChanged)
 
+  // Debug perf readout for the HUD: smoothed fps + last frame time, updated
+  // from the render thread (throttled). Frozen while idle (render-on-demand).
+  Q_PROPERTY(QString perfText READ perfText NOTIFY perfTextChanged)
+
   // MUIBar (P3.x): current chart scale "1:N" + follow-own-ship mode.
   Q_PROPERTY(QString scaleText READ scaleText NOTIFY viewChanged)
   Q_PROPERTY(bool followOwnShip READ followOwnShip WRITE setFollowOwnShip
@@ -231,6 +236,7 @@ public:
   void setShowWaypoints(bool on);
 
   QString scaleText() const;
+  QString perfText() const { return m_perf_text; }
   QString cursorText() const { return m_cursor_text; }
   QString cursorBrgRngText() const { return m_cursor_brgrng_text; }
   bool routeBuildMode() const { return m_route_build_mode; }
@@ -306,6 +312,7 @@ Q_SIGNALS:
   void overlayVisibilityChanged();
   void viewChanged();
   void followOwnShipChanged();
+  void perfTextChanged();
   void cursorMoved();
   void routeBuildModeChanged();
   void trackRecordingChanged();
@@ -481,6 +488,15 @@ private:
   QPointF m_ctx_pos;
   double m_ctx_lat = 0.0;
   double m_ctx_lon = 0.0;
+
+  // Debug perf readout (fps + frame ms). m_frame_clock + m_fps_smooth +
+  // m_frame_count are touched ONLY on the render thread (updatePaintNode);
+  // m_perf_text ONLY on the GUI thread (published via a queued invoke), so
+  // there's no shared-state race.
+  QElapsedTimer m_frame_clock;
+  double m_fps_smooth = 0.0;
+  quint64 m_frame_count = 0;
+  QString m_perf_text;
 
   // Formatted cursor lat/lon for the status bar, updated on hover.
   QString m_cursor_text;

@@ -54,13 +54,19 @@
 #endif
 
 int main(int argc, char* argv[]) {
-  // Enable 4x MSAA for the scene graph so chart geometry edges -- line
-  // quads and area-fill boundaries alike -- are anti-aliased by the GPU.
-  // Must be set before the QQuickWindow is created. Default to the
-  // platform's preferred surface otherwise (Metal via RHI on macOS,
-  // D3D11 on Windows, Vulkan/OpenGL on Linux).
+  // MSAA sample count for the scene graph. It anti-aliases chart geometry
+  // edges (area-fill boundaries especially; line features are already AA'd by
+  // the AA-line shader), but every sample multiplies the fill-rate / MSAA-
+  // buffer bandwidth -- the dominant cost when zoomed in or over a dense quilt.
+  // 4x is the prettiest; 2x roughly halves that cost for a small edge-quality
+  // loss; 1x disables it (only area-fill edges alias). Tunable live via
+  // OCPN_QT_MSAA (1/2/4/8) without a rebuild. Must be set before the
+  // QQuickWindow is created.
+  int samples = 2;
+  if (const QByteArray env = qgetenv("OCPN_QT_MSAA"); !env.isEmpty())
+    samples = qBound(1, env.toInt(), 8);
   QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
-  fmt.setSamples(4);
+  fmt.setSamples(samples);
   QSurfaceFormat::setDefaultFormat(fmt);
 
   QGuiApplication app(argc, argv);

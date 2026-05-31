@@ -2702,7 +2702,8 @@ ApplicationWindow {
             Text {
                 id: dbgText
                 anchors.centerIn: parent
-                text: (s52 ? s52.status : qsTr("S-52: (no engine)")) +
+                text: (chart.perfText.length ? chart.perfText + "    " : "") +
+                      (s52 ? s52.status : qsTr("S-52: (no engine)")) +
                       (chart.demoMode ? qsTr("   [DEMO]") : qsTr("   [LIVE]"))
                 color: s52 && s52.ok ? "#a8e0a8" : "#e0a0a0"
                 font.pointSize: 10

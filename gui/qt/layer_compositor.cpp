@@ -17,9 +17,11 @@
 
 #include <algorithm>
 
+#include <QSet>
 #include <QSGNode>
 #include <QSGOpacityNode>
 #include <QSGTransformNode>
+#include <QVarLengthArray>
 
 #include "model/ocpn_config.h"
 
@@ -56,11 +58,21 @@ void LayerCompositor::addLayer(Layer* layer) {
   connect(layer, &Layer::dirty, this, [this, layer]() {
     onLayerDirty(layer);
   });
-  // Property changes already dirty the Layer via setters' Q_EMIT dirty();
-  // but z-order changes also need composition re-sort, so trigger an
-  // overall composition change too.
-  connect(layer, &Layer::zOrderChanged, this, &LayerCompositor::changed);
+  // Visibility / z-order / opacity changes alter the *structure* of a root's
+  // child list (which nodes attach, in what order, whether wrapped in an
+  // opacity node), so they must trigger the re-attach path -- unlike a plain
+  // data dirty(), which only re-runs updateSubtree in place. setVisible /
+  // setOpacity also emit dirty() (handled above for the subtree refresh); the
+  // structural flag is what makes syncOneRoot actually re-attach.
+  auto markStructural = [this]() {
+    m_structure_dirty = true;
+    Q_EMIT changed();
+  };
+  connect(layer, &Layer::visibleChanged, this, markStructural);
+  connect(layer, &Layer::zOrderChanged, this, markStructural);
+  connect(layer, &Layer::opacityChanged, this, markStructural);
 
+  m_structure_dirty = true;  // a newly added layer must be attached next sync
   Q_EMIT changed();
 }
 
@@ -79,6 +91,7 @@ void LayerCompositor::removeLayer(const QString& id) {
   m_entries_by_id.erase(it);
   delete l;
 
+  m_structure_dirty = true;  // the removed layer's subtree must be detached
   Q_EMIT changed();
 }
 
@@ -135,6 +148,8 @@ void LayerCompositor::syncToScene(QSGTransformNode* world_root,
                                   QQuickWindow* window) {
   if (world_root) syncOneRoot(world_root, Layer::WorldAnchored, window);
   if (display_root) syncOneRoot(display_root, Layer::DisplayAnchored, window);
+  // Any structural change has now been applied to both roots.
+  m_structure_dirty = false;
 }
 
 void LayerCompositor::syncOneRoot(QSGTransformNode* root,
@@ -151,46 +166,96 @@ void LayerCompositor::syncOneRoot(QSGTransformNode* root,
   // Update each dirty Layer's subtree. The compositor takes ownership of
   // whatever updateSubtree returns; if a new node, the old one is freed
   // when its parent (the wrapper or root) drops it below.
+  //
+  // `structural` tracks whether the root's child list must be rebuilt this
+  // frame. It starts from the composition flag (add/remove/visible/zorder/
+  // opacity) and additionally trips if any dirty layer hands back a *new*
+  // node pointer -- the only cases that change the attached node set or order.
+  // A layer that mutates its subtree in place (returns the same pointer) does
+  // NOT trip it, so the renderer keeps its batches.
+  bool structural = m_structure_dirty;
   for (Layer* l : to_render) {
     Entry& e = m_entries_by_id[l->id()];
     if (e.dirty || !e.subtree) {
       QSGNode* updated = l->updateSubtree(e.subtree, window);
-      if (updated != e.subtree && e.subtree) {
+      if (updated != e.subtree) {
         // Layer returned a different node; the old one is detached from
         // any wrapper next, so we can safely delete it here.
-        delete e.subtree;
+        if (e.subtree) delete e.subtree;
+        structural = true;
       }
       e.subtree = updated;
       e.dirty = false;
     }
   }
 
-  // Detach all current children of the root so we can re-attach in the
-  // new order. Detaches do not delete; the nodes stay alive via our
-  // Entry pointers (subtree and wrapper).
-  root->removeAllChildNodes();
+  // Pure pan/zoom (no dirty layer) and in-place subtree updates leave the
+  // root's children exactly as attached last frame. Re-attaching them every
+  // frame is what forced the Qt scene-graph renderer to rebuild all batches
+  // and made pan/zoom/route-drag "step": skip it unless something structural
+  // actually changed. When nothing changed, only the world-root matrix (set
+  // by ChartCanvas) moves, and the whole subtree follows on the GPU.
+  if (!structural) return;
 
+  // Build the desired ordered list of nodes to attach (each layer's subtree,
+  // or its opacity wrapper when opacity < 1). Node IDENTITY is kept stable
+  // across frames -- the same subtree/wrapper pointer is reused -- so the
+  // reconcile below can detect "already in place" and leave it untouched.
+  QVarLengthArray<QSGNode*, 32> desired;
+  desired.reserve(to_render.size());
   for (Layer* l : to_render) {
     Entry& e = m_entries_by_id[l->id()];
     if (!e.subtree) continue;
-
-    // Move subtree out of any previous parent (the wrapper from the prior
-    // frame, if any) before re-parenting now.
-    if (e.subtree->parent()) e.subtree->parent()->removeChildNode(e.subtree);
-
+    QSGNode* node;
     if (l->opacity() < 1.0) {
       if (!e.wrapper) e.wrapper = new QSGOpacityNode();
       e.wrapper->setOpacity(l->opacity());
-      // If wrapper was previously parented elsewhere, detach.
-      if (e.wrapper->parent())
-        e.wrapper->parent()->removeChildNode(e.wrapper);
-      e.wrapper->removeAllChildNodes();
-      e.wrapper->appendChildNode(e.subtree);
-      root->appendChildNode(e.wrapper);
+      // Ensure the subtree is the wrapper's sole child.
+      if (e.subtree->parent() != e.wrapper) {
+        if (e.subtree->parent()) e.subtree->parent()->removeChildNode(e.subtree);
+        e.wrapper->removeAllChildNodes();
+        e.wrapper->appendChildNode(e.subtree);
+      }
+      node = e.wrapper;
     } else {
-      // Full opacity: skip the wrapper for slightly cheaper traversal.
-      root->appendChildNode(e.subtree);
+      // Full opacity: attach the subtree directly. Unwrap if it was wrapped.
+      if (e.wrapper && e.subtree->parent() == e.wrapper)
+        e.wrapper->removeChildNode(e.subtree);
+      node = e.subtree;
     }
+    desired.append(node);
+  }
+
+  // Reconcile the root's children to `desired` with the MINIMAL set of
+  // attach/detach/move operations. Adding or evicting one cell then touches
+  // only that one node -- every other layer's subtree stays attached, so the
+  // Qt scene-graph renderer keeps its batches for them instead of re-batching
+  // the whole ~14k-node scene (the 600-800ms cell-load hitch while panning).
+  //
+  // 1) Detach any current child that's no longer wanted (e.g. an evicted cell).
+  QSet<QSGNode*> wanted;
+  wanted.reserve(desired.size());
+  for (QSGNode* n : desired) wanted.insert(n);
+  QVarLengthArray<QSGNode*, 16> stale;
+  for (QSGNode* c = root->firstChild(); c; c = c->nextSibling())
+    if (!wanted.contains(c)) stale.append(c);
+  for (QSGNode* c : stale) root->removeChildNode(c);
+
+  // 2) Walk `desired` in order; only move/insert a node that isn't already in
+  // its correct slot. A node already in place costs nothing (no dirty flag).
+  QSGNode* prev = nullptr;
+  for (QSGNode* d : desired) {
+    QSGNode* expected = prev ? prev->nextSibling() : root->firstChild();
+    if (expected != d) {
+      if (d->parent() == root) root->removeChildNode(d);
+      if (prev)
+        root->insertChildNodeAfter(d, prev);
+      else if (root->firstChild())
+        root->insertChildNodeBefore(d, root->firstChild());
+      else
+        root->appendChildNode(d);
+    }
+    prev = d;
   }
 }
 

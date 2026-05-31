@@ -26,6 +26,7 @@
 #include <QPainter>
 #include <QHash>
 #include <QSet>
+#include <QVarLengthArray>
 #include <QQuickWindow>
 #include <QTimer>
 #include <QScreen>
@@ -46,6 +47,11 @@
 namespace ocpn::qtui {
 
 namespace {
+// Screen-pixel margin added around the view when frustum-culling billboards, so
+// a symbol/label whose anchor is just off-screen (but whose glyph straddles the
+// edge) isn't culled mid-stroke.
+constexpr double kBillboardCullMarginPx = 64.0;
+
 // Render a text label to an RGBA image using a SYSTEM font (the default
 // application font). This is the Qt-native replacement for the chart's
 // proprietary TexFont/DepthFont engine; font selection becomes
@@ -153,14 +159,25 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
   m_zoom_timer = new QTimer(this);
   m_zoom_timer->setSingleShot(true);
   m_zoom_timer->setInterval(110);
-  connect(m_zoom_timer, &QTimer::timeout, this, &ChartProvider::changed);
+  connect(m_zoom_timer, &QTimer::timeout, this, [this]() {
+    // Zoom settled: owe a full declutter re-layout (density depends on scale).
+    m_relayout_pending = true;
+    Q_EMIT changed();
+  });
   if (m_viewport) {
     connect(m_viewport, &Viewport::changed, this, [this]() {
       const double s = m_viewport->scale();
       if (s != m_emit_scale) {
         m_emit_scale = s;
-        m_zoom_timer->start();  // debounce; rebuild once zoom settles
+        m_zoom_timer->start();  // zoom: defer the declutter to settle
       }
+      // EVERY viewport change (pan, zoom, resize) re-runs the cheap per-frame
+      // pass in renderChart: view-frustum-cull (so only on-screen billboards
+      // are batched/drawn) and, on a zoom, re-counter-scale. A pan thus toggles
+      // opacity only -- no declutter, no geometry rebuild, same subtree node
+      // (so the compositor doesn't restructure). This is what bounds the draw
+      // to on-screen detail at any zoom.
+      Q_EMIT changed();
     });
   }
 }
@@ -254,17 +271,16 @@ void S52VectorChartProvider::setShowBuoys(bool on) {
 void S52VectorChartProvider::setDetailScale(double n) {
   if (n <= 0.0 || n == m_unset_scamin_n) return;
   m_unset_scamin_n = n;
-  // Pure scale cull -- no geometry rebuild; just re-run the billboard cull.
-  m_last_line_scale = -1.0;
+  // Changes which billboards survive SCAMIN -- owe a declutter re-layout.
+  m_relayout_pending = true;
   Q_EMIT changed();
 }
 
 void S52VectorChartProvider::setDeclutter(bool on) {
   if (on == m_declutter) return;
   m_declutter = on;
-  // Label overlap-avoid is part of the per-frame billboard cull; just re-run
-  // it (no geometry rebuild). Reset the scale gate so updateBillboards works.
-  m_last_line_scale = -1.0;
+  // Label overlap-avoid is part of the declutter pass -- owe a re-layout.
+  m_relayout_pending = true;
   Q_EMIT changed();
 }
 
@@ -375,17 +391,15 @@ void S52VectorChartProvider::updateScaminNodes(double chart_scale_n) {
   }
 }
 
-void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
+void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   const double s = viewport.scale();  // pixels per degree
   if (s <= 0.0) return;
 
-  // Everything here -- line offsets, pattern UVs, billboard counter-scale,
-  // and the world-space sounding declutter -- depends only on scale, not on
-  // pan. Bail out if the scale hasn't changed since the last update so a
-  // pan (or a redundant call) does no work.
-  if (s == m_last_line_scale) return;
+  // Scale-dependent, pan-invariant re-layout (pattern UVs, complex lines,
+  // static SCAMIN, and the per-billboard `kept` flag + counter-scale matrix).
+  // renderChart gates this so it runs only on build and at zoom-settle, never
+  // per pan frame.
   rebuildPatternUVs(s);  // lines are now zoom-invariant (AA-line shader)
-  m_last_line_scale = s;
 
   // Current chart scale as a 1:N denominator, for SCAMIN decluttering.
   // N = ground-metres-per-pixel / screen-metres-per-pixel:
@@ -487,22 +501,23 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
     }
   }
 
-  // Pass 2: show/hide each billboard via its opacity node (opacity 0 =
-  // culled, no draw call); set the counter-scale transform when shown.
+  // Pass 2: record each billboard's declutter result in `kept` (SCAMIN +
+  // density), and pre-set the counter-scale matrix on every kept billboard so
+  // it is correct the instant a pan brings it on-screen (the per-frame view-cull
+  // then only has to toggle opacity). Opacity itself is applied by
+  // applyBillboardVisibility, which the caller runs immediately after.
   for (int i = 0; i < m_billboards.size(); ++i) {
-    const Billboard& b = m_billboards[i];
-    if (!b.opacity || !b.xform) continue;
+    Billboard& b = m_billboards[i];
     bool hidden = chart_scale_n > effScamin(b);  // SCAMIN hard floor
     if (!hidden && b.kind == BbKind::Sounding)
       hidden = (cellShallowest.value(soundKey(b.worldPos), -1) != i);
     else if (!hidden && b.kind == BbKind::Label)
       hidden = !labelKeep.value(i, true);
-
-    b.opacity->setOpacity(hidden ? 0.0 : 1.0);
-    if (!hidden) {
-      // Placed under the World-anchored root (transform M = ...*scale(s)).
-      // translate to the world anchor, then scale(1/s) so M*this leaves the
-      // content at screen-pixel size regardless of zoom.
+    b.kept = !hidden;
+    if (b.kept && b.xform) {
+      // Under the World-anchored root (M = ...*scale(s)): translate to the world
+      // anchor, then scale(1/s) so the content stays screen-pixel-sized at any
+      // zoom.
       QMatrix4x4 m;
       m.translate(static_cast<float>(b.worldPos.x()),
                   static_cast<float>(b.worldPos.y()));
@@ -510,8 +525,48 @@ void S52VectorChartProvider::updateBillboards(const Viewport& viewport) {
       b.xform->setMatrix(m);
     }
   }
+  m_bb_scale = s;
 }
 
+void S52VectorChartProvider::applyBillboardVisibility(double s,
+                                                      const QRectF& worldView) {
+  // Per-frame pass (pan + zoom): show a billboard only if it survived declutter
+  // (`kept`) AND lies inside the view. Off-screen / culled ones get opacity 0,
+  // which the renderer treats as a blocked subtree: NOT batched, NOT drawn. So
+  // the draw-call count tracks ON-SCREEN detail, not the whole (often many-
+  // screens-wide) cell -- the win that lets a dense harbour pan/zoom at speed.
+  // setOpacity is a no-op when the value is unchanged, so a billboard that does
+  // not cross the view edge costs nothing. The counter-scale matrix is refreshed
+  // only when the scale changed (a zoom); a pure pan leaves it (recomputeDeclutter
+  // already set it for every kept billboard, on- or off-screen).
+  if (s <= 0.0) return;
+  const bool scaleChanged = (s != m_bb_scale);
+  for (const Billboard& b : m_billboards) {
+    if (!b.opacity || !b.xform) continue;
+    const bool shown = b.kept && worldView.contains(b.worldPos);
+    b.opacity->setOpacity(shown ? 1.0 : 0.0);
+    if (shown && scaleChanged) {
+      QMatrix4x4 m;
+      m.translate(static_cast<float>(b.worldPos.x()),
+                  static_cast<float>(b.worldPos.y()));
+      m.scale(static_cast<float>(1.0 / s), static_cast<float>(1.0 / s));
+      b.xform->setMatrix(m);
+    }
+  }
+  m_bb_scale = s;
+}
+
+void S52VectorChartProvider::applyPrimCull(const QRectF& worldView) {
+  // Per-frame: a prim tile whose world bbox doesn't meet the view is opacity 0
+  // -> blocked subtree -> its fills/lines are neither batched nor drawn. So a
+  // cell costs only its ON-SCREEN geometry, even when its extent is many screens
+  // wide (the coarse-underlay / dense-neighbour case). setOpacity is guarded, so
+  // a tile that doesn't cross the view edge costs nothing.
+  for (const PrimTile& t : m_prim_tiles) {
+    if (!t.opacity) continue;
+    t.opacity->setOpacity(worldView.intersects(t.bbox) ? 1.0 : 0.0);
+  }
+}
 
 QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                                              const Viewport& viewport,
@@ -521,7 +576,17 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // counter-scale; the World-anchored root transform handles everything
   // else, so no geometry or textures are rebuilt.
   if (old_subtree && m_built) {
-    updateBillboards(viewport);
+    // Run the expensive scale-dependent declutter only when owed (zoom settle,
+    // or a detail/declutter setting change) -- never per pan frame. Then run the
+    // cheap per-frame view-cull (+ counter-scale on a zoom) every time.
+    if (m_relayout_pending) {
+      recomputeDeclutter(viewport);
+      m_relayout_pending = false;
+    }
+    const QRectF worldView =
+        viewport.visibleWorldBounds(kBillboardCullMarginPx);
+    applyBillboardVisibility(viewport.scale(), worldView);
+    applyPrimCull(worldView);
     return old_subtree;
   }
 
@@ -531,7 +596,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   auto* root = new TextureCacheNode(window);
   m_patterns.clear();
   m_scamin_nodes.clear();
-  m_last_line_scale = -1.0;
+  m_bb_scale = -1.0;  // force the counter-scale matrices to be set on this build
 
   // Clip each chart to its own BOUNDING BOX -- a simple, reliable rectangle (the
   // chart's extent). A chart's geometry already lies within its bbox, so this
@@ -582,14 +647,75 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // underlay). The opacity node is appended in place, so draw/priority order
   // is preserved.
   constexpr double kScaminUnset = 1.0e8;
-  auto appendMaybeScamin = [&](QSGNode* node, int scamin) {
+
+  // --- Spatial cull grid (perf): bucket fills & lines into a grid of tiles over
+  // the cell so applyPrimCull() can drop whole off-screen tiles (not batched,
+  // not drawn) -- the fill/line analogue of the billboard frustum cull. This is
+  // what lets a many-cell quilt pan fast: each cell submits only the geometry on
+  // screen, not its whole (often >> the view) extent. Draw order: ALL fills then
+  // ALL lines (S-52 area < line priority) -- the fill containers are appended
+  // before the line containers. A prim spanning more than ~one tile bypasses
+  // tiling into its per-type underlay node (few; they underlie the rest).
+  m_prim_tiles.clear();
+  const double cellWest = m_west;
+  const double cellYTop = Viewport::latToWorldY(m_north);  // north -> smaller y
+  const double cellYBot = Viewport::latToWorldY(m_south);
+  const double cellSpanX = m_east - m_west;
+  const double cellSpanY = cellYBot - cellYTop;
+  constexpr int kPrimGrid = 12;
+  const double tileW = cellSpanX > 0 ? cellSpanX / kPrimGrid : 1.0;
+  const double tileH = cellSpanY > 0 ? cellSpanY / kPrimGrid : 1.0;
+  auto* fillUnderlay = new QSGNode();
+  content->appendChildNode(fillUnderlay);
+  auto* fillTiles = new QSGNode();
+  content->appendChildNode(fillTiles);
+  auto* lineUnderlay = new QSGNode();
+  content->appendChildNode(lineUnderlay);
+  auto* lineTiles = new QSGNode();
+  content->appendChildNode(lineTiles);
+  QVarLengthArray<int, kPrimGrid * kPrimGrid> fillGrid(kPrimGrid * kPrimGrid);
+  QVarLengthArray<int, kPrimGrid * kPrimGrid> lineGrid(kPrimGrid * kPrimGrid);
+  std::fill(fillGrid.begin(), fillGrid.end(), -1);
+  std::fill(lineGrid.begin(), lineGrid.end(), -1);
+  // Parent for a prim with world bbox [minx,maxx]x[miny,maxy]: its grid tile
+  // (recorded in m_prim_tiles, created on first use), or `underlay` if it spans
+  // more than ~one tile (a large always-drawn prim). The tile's bbox grows to
+  // the union of its prims, so culling is conservative -- a tile stays shown
+  // while any part of any prim it holds is on screen.
+  auto tileParent = [&](QSGNode* tilesParent, QSGNode* underlay,
+                        QVarLengthArray<int, kPrimGrid * kPrimGrid>& grid,
+                        double minx, double miny, double maxx,
+                        double maxy) -> QSGNode* {
+    if (cellSpanX <= 0 || cellSpanY <= 0) return underlay;
+    if ((maxx - minx) > tileW * 1.5 || (maxy - miny) > tileH * 1.5)
+      return underlay;  // large prim: never culled
+    const int tx = std::clamp(
+        static_cast<int>((0.5 * (minx + maxx) - cellWest) / tileW), 0,
+        kPrimGrid - 1);
+    const int ty = std::clamp(
+        static_cast<int>((0.5 * (miny + maxy) - cellYTop) / tileH), 0,
+        kPrimGrid - 1);
+    const int g = ty * kPrimGrid + tx;
+    const QRectF box(QPointF(minx, miny), QPointF(maxx, maxy));
+    if (grid[g] < 0) {
+      auto* op = new QSGOpacityNode();
+      tilesParent->appendChildNode(op);
+      grid[g] = static_cast<int>(m_prim_tiles.size());
+      m_prim_tiles.append({op, box});
+      return op;
+    }
+    PrimTile& t = m_prim_tiles[grid[g]];
+    t.bbox = t.bbox.united(box);
+    return t.opacity;
+  };
+  auto appendMaybeScamin = [&](QSGNode* parent, QSGNode* node, int scamin) {
     if (static_cast<double>(scamin) < kScaminUnset) {
       auto* op = new QSGOpacityNode();
       op->appendChildNode(node);
-      content->appendChildNode(op);
+      parent->appendChildNode(op);
       m_scamin_nodes.append({op, scamin});
     } else {
-      content->appendChildNode(node);
+      parent->appendChildNode(node);
     }
   };
 
@@ -611,12 +737,19 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
           static_cast<float>(prim.dashOffMm * m_screen_ppmm);
       QList<QPointF> world;
       world.reserve(prim.verts.size());
-      for (const QPointF& p : prim.verts)
-        world.append(QPointF(p.x(), Viewport::latToWorldY(p.y())));  // Mercator
+      double lminx = 1e18, lminy = 1e18, lmaxx = -1e18, lmaxy = -1e18;
+      for (const QPointF& p : prim.verts) {
+        const double wx = p.x(), wy = Viewport::latToWorldY(p.y());  // Mercator
+        world.append(QPointF(wx, wy));
+        lminx = std::min(lminx, wx); lmaxx = std::max(lmaxx, wx);
+        lminy = std::min(lminy, wy); lmaxy = std::max(lmaxy, wy);
+      }
       if (auto* node = makeAaLineNode(world, prim.color,
                                       static_cast<float>(widthPx),
                                       /*closed=*/false, dashOn, dashOff))
-        appendMaybeScamin(node, prim.scamin);
+        appendMaybeScamin(tileParent(lineTiles, lineUnderlay, lineGrid, lminx,
+                                     lminy, lmaxx, lmaxy),
+                          node, prim.scamin);
       continue;
     }
 
@@ -626,8 +759,17 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     auto* node = sg::makeFlatColorNode(prim.color, QSGGeometry::DrawTriangles,
                                        static_cast<int>(tris.size()));
     QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
-    for (qsizetype i = 0; i < tris.size(); ++i) v[i] = tris[i];
-    appendMaybeScamin(node, prim.scamin);
+    double fminx = 1e18, fminy = 1e18, fmaxx = -1e18, fmaxy = -1e18;
+    for (qsizetype i = 0; i < tris.size(); ++i) {
+      v[i] = tris[i];
+      fminx = std::min<double>(fminx, tris[i].x);
+      fmaxx = std::max<double>(fmaxx, tris[i].x);
+      fminy = std::min<double>(fminy, tris[i].y);
+      fmaxy = std::max<double>(fmaxy, tris[i].y);
+    }
+    appendMaybeScamin(tileParent(fillTiles, fillUnderlay, fillGrid, fminx, fminy,
+                                 fmaxx, fmaxy),
+                      node, prim.scamin);
   }
 
   // Coastline land-shade REMOVED: the inland gradient band followed the LNDARE
@@ -658,7 +800,17 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     auto* node = sg::makeTextureNode(tex, QSGGeometry::DrawTriangles,
                                      static_cast<int>(pf.tris.size()),
                                      /*blending=*/true);
-    appendMaybeScamin(node, pf.scamin);  // SCAMIN-cull when it carries one (P2.14)
+    // Pattern fills belong to the fill layer (after solid fills, before lines)
+    // and are view-cullable like solid fills.
+    double pminx = 1e18, pminy = 1e18, pmaxx = -1e18, pmaxy = -1e18;
+    for (const QPointF& tp : pf.tris) {
+      const double wx = tp.x(), wy = Viewport::latToWorldY(tp.y());
+      pminx = std::min(pminx, wx); pmaxx = std::max(pmaxx, wx);
+      pminy = std::min(pminy, wy); pmaxy = std::max(pmaxy, wy);
+    }
+    appendMaybeScamin(tileParent(fillTiles, fillUnderlay, fillGrid, pminx, pminy,
+                                 pmaxx, pmaxy),
+                      node, pf.scamin);  // SCAMIN-cull when it carries one (P2.14)
 
     const qreal dpr =
         pf.pattern.devicePixelRatio() > 0 ? pf.pattern.devicePixelRatio() : 1.0;
@@ -691,7 +843,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
 
   // Billboarded point items: one QSGTransformNode (placed at the world
   // anchor, counter-scaled per viewport) wrapping a textured quad. Built
-  // once with their textures; updateBillboards only touches the transform.
+  // once with their textures; the per-frame passes only touch the transform.
   m_billboards.clear();
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
                           QPointF pivotPx, int scamin, BbKind kind,
@@ -803,7 +955,17 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                  lab.depth, /*rotationDeg=*/0.0, lab.viewGroup);
   }
 
-  updateBillboards(viewport);
+  // Initial layout: declutter (sets `kept` + counter-scale on every kept
+  // billboard) then view-cull to the current view. m_emit_scale is seeded so the
+  // first viewport change after this build is correctly classified as pan vs zoom.
+  recomputeDeclutter(viewport);
+  {
+    const QRectF worldView =
+        viewport.visibleWorldBounds(kBillboardCullMarginPx);
+    applyBillboardVisibility(viewport.scale(), worldView);
+    applyPrimCull(worldView);
+  }
+  m_emit_scale = viewport.scale();
   m_built = true;
   return root;
 }

@@ -129,18 +129,32 @@ public:
   }
 
   QSGNode* updateSubtree(QSGNode* /*old*/, QQuickWindow* window) override {
-    // Rebuild wholesale and return a fresh root; the compositor frees the
-    // previous subtree (do NOT delete `old` here -- that double-frees).
-    auto* root = new QSGNode();
-    SgBuilder b(root, window);
+    // Rebuild into a STABLE root: keep the same QSGNode across rebuilds and
+    // just clear+repopulate its children. Returning the same node pointer lets
+    // the compositor skip the detach/re-attach (and the whole-scene re-batch it
+    // triggers), so an interactive route/node drag updates only this overlay's
+    // own geometry instead of churning every chart layer each mouse-move.
+    if (!m_root) {
+      m_root = new QSGNode();
+    } else {
+      // Free the previous frame's child nodes (default OwnedByParent, so each
+      // delete detaches from m_root and releases its geometry/material).
+      while (QSGNode* c = m_root->firstChild()) delete c;
+    }
+    SgBuilder b(m_root, window);
     draw(b, worldPerPx());
-    return root;
+    return m_root;
   }
 
 protected:
   // Build the overlay into `b`. `world_per_px` sizes screen-fixed elements
   // (line widths, dot radii, label quads) in world units.
   virtual void draw(SgBuilder& b, double world_per_px) = 0;
+
+private:
+  // Stable subtree root, owned by the Qt scene graph once attached (mirrors the
+  // dynamic AisLayer / OwnShipLayer retention strategy).
+  QSGNode* m_root = nullptr;
 };
 
 }  // namespace ocpn::qtui

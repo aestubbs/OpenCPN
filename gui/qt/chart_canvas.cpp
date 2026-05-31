@@ -312,6 +312,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // the part of the real window beyond it. Re-running on the real size fills
   // them in without waiting for a user pan/zoom.
   auto onResize = [this]() {
+    // Keep the viewport's canvas size current so layers can compute the visible
+    // world rect for view-frustum culling (Viewport::visibleWorldBounds).
+    if (m_viewport)
+      m_viewport->setCanvasSize(static_cast<int>(width()),
+                                static_cast<int>(height()));
     update();
     if (!m_catalog.isEmpty()) m_load_debounce->start();
   };
@@ -679,25 +684,28 @@ void ChartCanvas::updateVisibleCells() {
     for (int gx = 0; gx < kGrid; ++gx)
       pts.push_back({plat, lon0 + (gx + 0.5) / kGrid * (lon1 - lon0)});
   }
+  const QSet<QString> prev_needed = m_needed;  // to detect a real change below
   m_needed.clear();
-  // Render EVERY content-eligible chart that covers any part of the view,
-  // composited finer-on-top (zOrderForScale, set in onCellLoaded). This is the
-  // guaranteed coarser UNDERLAY (Rule 3): a finer chart's opaque area-fills hide
-  // the coarser exactly where the finer actually has data; where the finer has
-  // NO data (a coverage/data gap, e.g. open water it doesn't chart) the coarser
-  // chart beneath paints instead -- so the basemap is never exposed inside chart
-  // coverage. The earlier greedy stopped at the first cell whose M_COVR covered
-  // a sample point and selected no underlay; because M_COVR over-claims the
-  // painted footprint, an unpainted spot then fell through to the basemap (the
-  // "hole"). Selection (covers) and render (decoded fills) are reconciled here
-  // by the underlay, not by clipping selection to render.
-  for (const CellExtent* c : cands) {
-    if (!eligible(c)) continue;  // too detailed for this zoom -> rectangle only
-    for (const GridPt& p : pts)
-      if (c->covers(p.lat, p.lon)) {
+  // Per LOCATION, render only the FINEST content-eligible chart that covers it
+  // (region-subtraction, mirroring wx Quilt: each pixel = one chart). Sampling
+  // the view on the grid, each point picks the finest eligible cell covering it;
+  // a cell is needed iff it is the finest cover for >=1 point. Where a finer
+  // chart does NOT cover (a coverage gap), the loop falls through to the next
+  // coarser cell that does, so that spot still gets a chart -- but a coarser
+  // cell is NO LONGER stacked under a finer one that already covers the area.
+  // That stacking was up to 5-7 fully-overlapping cells at harbour zoom (each
+  // re-painting the whole screen), the dominant fill-rate / overdraw cost when
+  // zoomed in. zOrderForScale still puts finer on top where tiers do meet.
+  // (Trade-off vs the old "render every eligible underlay": a sub-grid hole in a
+  // finer cell's M_COVR could now expose the basemap instead of a coarser chart;
+  // the 24x24 grid keeps that rare.)
+  for (const GridPt& p : pts) {
+    for (const CellExtent* c : cands) {  // cands sorted finest -> coarsest
+      if (eligible(c) && c->covers(p.lat, p.lon)) {
         m_needed.insert(c->name);
-        break;
+        break;  // finest eligible chart here; coarser ones would only overdraw
       }
+    }
   }
   // Fallback: a sample point that NO eligible chart covers (zoomed out past
   // every covering chart's threshold there) gets its coarsest covering chart, so
@@ -716,9 +724,13 @@ void ChartCanvas::updateVisibleCells() {
     if (!anyEligible && coarsest) m_needed.insert(coarsest->name);
   }
 
-  qWarning("quilt: displayN=%.0f k=%.1f | %lld cells: %s", displayN, k,
-           static_cast<long long>(m_needed.size()),
-           qPrintable(QStringList(m_needed.values()).join(QLatin1Char(','))));
+  // Only the displayed set actually changing warrants a log line + a chart-bar
+  // refresh; a pan/zoom that lands on the same quilt is a no-op here.
+  const bool needed_changed = (m_needed != prev_needed);
+  if (needed_changed)
+    qWarning("quilt: displayN=%.0f k=%.1f | %lld cells: %s", displayN, k,
+             static_cast<long long>(m_needed.size()),
+             qPrintable(QStringList(m_needed.values()).join(QLatin1Char(','))));
 
   // --- Load: needed cells not already requested. ---
   for (const QString& name : m_needed) {
@@ -743,9 +755,8 @@ void ChartCanvas::updateVisibleCells() {
     m_requested.remove(name);  // eligible to reload when needed again
   }
   if (!evict.isEmpty()) update();
-  // The needed set (and possibly the loaded set) just changed -- refresh the
-  // chart bar's coverage list.
-  Q_EMIT chartCoverageChanged();
+  // Refresh the chart bar's coverage list only when the displayed set changed.
+  if (needed_changed) Q_EMIT chartCoverageChanged();
 }
 
 QVariantList ChartCanvas::chartBarCells() const {
@@ -1111,6 +1122,34 @@ QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,
 
   m_compositor->syncToScene(m_world_anchored_root, m_display_anchored_root,
                             window());
+
+  // Debug perf readout: time between paints -> smoothed fps + last frame ms.
+  // Measured here on the render thread; published to the GUI thread (throttled)
+  // so the QML HUD can bind to perfText. Only meaningful while frames are
+  // actually being produced (idle = render-on-demand, so it freezes).
+  if (m_frame_clock.isValid()) {
+    const double dt_ms = m_frame_clock.nsecsElapsed() / 1.0e6;
+    m_frame_clock.restart();
+    if (dt_ms > 0.0) {
+      const double inst = 1000.0 / dt_ms;
+      m_fps_smooth =
+          m_fps_smooth > 0.0 ? (0.85 * m_fps_smooth + 0.15 * inst) : inst;
+      if (++m_frame_count % 10 == 0) {  // publish ~once per 10 frames
+        const QString txt = QString::asprintf("%.0f fps  %.1f ms",
+                                              m_fps_smooth, dt_ms);
+        QMetaObject::invokeMethod(
+            this,
+            [this, txt]() {
+              if (m_perf_text == txt) return;
+              m_perf_text = txt;
+              Q_EMIT perfTextChanged();
+            },
+            Qt::QueuedConnection);
+      }
+    }
+  } else {
+    m_frame_clock.start();
+  }
   return root;
 }
 

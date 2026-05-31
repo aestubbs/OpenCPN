@@ -32,6 +32,7 @@
 #include <QList>
 #include <QPointF>
 #include <QPolygonF>
+#include <QRectF>
 #include <QString>
 
 #include "chart_provider.h"
@@ -120,6 +121,8 @@ private:
     float depth = 0.0f;       // sounding depth (metres) for shallowest-wins
     float screenW = 0.0f;     // on-screen size (logical px) -- for label
     float screenH = 0.0f;     // bounding-box declutter
+    bool kept = true;         // survived SCAMIN + density declutter (scale-only;
+                              // the per-frame view-cull is applied on top)
   };
 
   // An AP pattern fill: tessellated triangles (world coords) drawn with a
@@ -152,14 +155,38 @@ private:
     int scamin = 100000002;
   };
 
-  void updateBillboards(const Viewport& viewport);
+  // A spatial cull tile: a group of static fill/line nodes whose world bounding
+  // boxes fall in one grid cell of the chart. applyPrimCull() sets its opacity 0
+  // when it is entirely outside the view, so a large cell's off-screen geometry
+  // is neither batched nor drawn -- the fill/line analogue of the billboard
+  // frustum cull. `bbox` is the union (world AABB) of the tile's prims.
+  struct PrimTile {
+    QSGOpacityNode* opacity = nullptr;
+    QRectF bbox;
+  };
+
+  // Full re-layout (SCALE-dependent, pan-invariant): pattern UVs, complex
+  // lines, static-SCAMIN nodes, and the per-billboard `kept` flag (SCAMIN +
+  // density declutter). Sets the counter-scale matrix on every kept billboard.
+  // Expensive -- runs on build and once a zoom settles (not per pan frame).
+  void recomputeDeclutter(const Viewport& viewport);
+  // Cheap per-frame pass (PAN + zoom): view-frustum-cull -- show a billboard
+  // only if it is `kept` AND inside `worldView` (opacity 0 otherwise, so the
+  // off-screen ones become blocked subtrees: not batched, not drawn). Re-applies
+  // the counter-scale only when the scale changed (zoom), so a pure pan just
+  // toggles opacity. This bounds the draw-call count to on-screen content at any
+  // zoom, and keeps text/symbols screen-fixed during a zoom gesture.
+  void applyBillboardVisibility(double scale, const QRectF& worldView);
+  // Per-frame pass: hide (opacity 0) any prim tile whose world bbox is fully
+  // outside the view, so a cell only batches/draws the fills & lines on screen.
+  void applyPrimCull(const QRectF& worldView);
   void rebuildPatternUVs(double scale);
   // Walk each LC glyph along its path at the given scale (px/deg) + centre
   // latitude, regenerating the geometry (screen-fixed glyph) and SCAMIN cull.
   void rebuildComplexLines(double scale, double chart_scale_n);
   // Hide/show the static fills & lines that carry a real SCAMIN, by the
-  // current 1:N chart scale. Scale-only, so it runs in the updateBillboards
-  // pass (skipped while the scale is unchanged).
+  // current 1:N chart scale. Scale-only, so it runs in the recomputeDeclutter
+  // pass (not per pan frame).
   void updateScaminNodes(double chart_scale_n);
 
   // Pixels per millimetre of the display, for the 1:N chart-scale
@@ -169,18 +196,22 @@ private:
   QList<PatternGeom> m_patterns;
   QList<ComplexLineGeom> m_complex_lines;
   QList<ScaminNode> m_scamin_nodes;  // static fills/lines with a real SCAMIN
-  // Scale at the last full billboard/line/pattern update; updates are
-  // skipped while it's unchanged (so panning is free). Reset to -1 on build.
-  double m_last_line_scale = -1.0;
-  // Scale at which we last dirtied the layer; the provider only emits
-  // changed() (forcing a re-sync) when the scale actually changes, so a pan
-  // never re-syncs this chart.
+  QList<PrimTile> m_prim_tiles;      // spatial cull tiles for fills & lines
+  // Scale at which the billboard counter-scale matrices were last set. The
+  // per-frame view-cull skips re-setting matrices while this is unchanged (a
+  // pan), and refreshes them when it differs (a zoom). Reset to -1 on build.
+  double m_bb_scale = -1.0;
+  // Last scale the viewport reported, to tell a zoom (scale change -> arm the
+  // settle relayout) from a pan (same scale -> view-cull only).
   double m_emit_scale = -1.0;
-  // Debounces the zoom rebuild: a scale change (re)starts this timer; the
-  // CPU re-layout (changed() -> renderChart -> updateBillboards) fires only
-  // once the zoom settles. During the gesture the cached subtree keeps being
-  // GPU-transformed (billboards momentarily scale with the zoom), so zooming
-  // stays smooth and the CPU work happens once at the end.
+  // True when a full scale-dependent re-layout (recomputeDeclutter) is owed:
+  // set when a zoom settles or a declutter/detail setting changes. The next
+  // renderChart runs it once, then clears the flag; pan frames never set it.
+  bool m_relayout_pending = false;
+  // Debounces the zoom relayout: a scale change (re)starts this timer; the
+  // expensive declutter fires once, ~110ms after the last scale change. During
+  // the gesture each frame only view-culls + counter-scales the cached subtree,
+  // so zooming stays smooth and the CPU work happens once at the end.
   QTimer* m_zoom_timer = nullptr;
   int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All
   bool m_showSoundings = true;

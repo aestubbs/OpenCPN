@@ -123,6 +123,14 @@ private:
   QList<Layer*> m_layers;                  // registration order
   QHash<QString, Entry> m_entries_by_id;
   OcpnConfig* m_config = nullptr;          // non-owning; per-layer persistence
+  // The composition (set of visible layers, their z-order, opacity wrappers,
+  // or a layer's subtree node identity) changed, so a root's children must be
+  // re-attached. A pure pan/zoom (only the world-root matrix moves) or an
+  // in-place subtree update (same node pointer) leaves this false, so
+  // syncOneRoot skips the detach/re-attach that would otherwise force the Qt
+  // scene-graph renderer to rebuild all batches every frame. Starts true so
+  // the first sync attaches.
+  bool m_structure_dirty = true;
 };
 
 }  // namespace ocpn::qtui
