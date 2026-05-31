@@ -42,6 +42,7 @@ DisplayConfig::DisplayConfig() {
   m_preserve_scale = c.getBool("display/preserveScale", m_preserve_scale);
   m_wheel_zoom = c.getDouble("display/wheelZoom", m_wheel_zoom);
   m_show_compass = c.getBool("display/showCompass", m_show_compass);
+  m_show_tides = c.getBool("display/showTides", m_show_tides);
   m_time_zone = c.getInt("display/timeZone", m_time_zone);
   m_cog_predict_min = c.getDouble("display/cogPredictMin", m_cog_predict_min);
   m_sogcog_damping = c.getDouble("display/sogCogDamping", m_sogcog_damping);
@@ -91,6 +92,10 @@ void DisplayConfig::setWheelZoomFactor(double v) {
 void DisplayConfig::setShowCompass(bool v) {
   OCPN_SET(m_show_compass, v,
            ConfigStore::instance().setBool("display/showCompass", v))
+}
+void DisplayConfig::setShowTides(bool v) {
+  OCPN_SET(m_show_tides, v,
+           ConfigStore::instance().setBool("display/showTides", v))
 }
 void DisplayConfig::setTimeZone(int v) {
   OCPN_SET(m_time_zone, v, ConfigStore::instance().setInt("display/timeZone", v))

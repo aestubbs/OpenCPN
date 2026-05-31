@@ -2738,6 +2738,143 @@ ApplicationWindow {
         // context property set in main.cpp.
         s52Engine: s52
 
+        // --- Timeline (P3.14 phase E): a day-at-a-time scrubber for the shared
+        //     display time (TimeController -> gTimeSource) that tides, currents
+        //     and future GRIB follow. Date on the left, hourly ticks across the
+        //     track, draggable playhead with a time bubble, a live "now" marker,
+        //     ‹‹/›› step whole days, ▶ animates, Now is live. Visible only when
+        //     tides are on (MUIBar ≋ toggle).
+        Rectangle {
+            id: timeline
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 70
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(parent.width - 40, 820)
+            height: 54
+            radius: 8
+            color: Qt.rgba(0, 0, 0, 0.6)
+            border.color: Qt.rgba(1, 1, 1, 0.15)
+            visible: DisplayConfig.showTides
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 6
+
+                ToolButton {
+                    text: "‹‹"; onClicked: TimeController.stepDays(-1)
+                    ToolTip.text: qsTr("Previous day"); ToolTip.visible: hovered
+                }
+                ToolButton {
+                    text: TimeController.playing ? "⏸" : "▶"
+                    onClicked: TimeController.togglePlay()
+                    ToolTip.text: qsTr("Animate through time"); ToolTip.visible: hovered
+                }
+
+                // Date of the shown day, left of the track.
+                Label {
+                    text: TimeController.dateLabel
+                    color: "#e8e8e8"; font.bold: true; font.pointSize: 11
+                    Layout.preferredWidth: 92
+                }
+
+                // Hour track: ticks + 3-hourly labels + now-marker + playhead.
+                Item {
+                    id: track
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.topMargin: 8
+                    Layout.bottomMargin: 6
+                    readonly property real frac: TimeController.position
+                    readonly property real nowFrac: TimeController.nowPosition
+                    readonly property bool dragging: trackMouse.pressed
+
+                    Rectangle {  // baseline
+                        anchors.left: parent.left; anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: 2; color: "#50ffffff"
+                    }
+                    Repeater {   // hour ticks + labels every 3 h
+                        model: 25
+                        Item {
+                            x: track.width * index / 24
+                            height: track.height
+                            Rectangle {
+                                width: 1
+                                height: (index % 3 === 0) ? track.height * 0.55
+                                                          : track.height * 0.30
+                                color: "#70ffffff"
+                                anchors.bottom: parent.bottom
+                            }
+                            Label {
+                                visible: index % 3 === 0 && index < 24
+                                text: ("0" + index).slice(-2)
+                                font.pointSize: 8; color: "#b0ffffff"
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: track.height * 0.55 + 1
+                                anchors.horizontalCenter: parent.left
+                            }
+                        }
+                    }
+                    Rectangle {  // "now" marker (only when today is shown)
+                        visible: track.nowFrac >= 0 && track.nowFrac <= 1
+                        x: track.width * track.nowFrac - 1
+                        width: 2; height: track.height; color: "#ff5b5b"
+                    }
+                    Rectangle {  // playhead line
+                        x: track.width * track.frac - 1
+                        width: 2; height: track.height
+                        color: TimeController.live ? "#8fd0ff" : "#ffd27f"
+                    }
+                    Rectangle {  // playhead handle
+                        x: track.width * track.frac - 6; y: -3
+                        width: 12; height: 12; radius: 6
+                        color: TimeController.live ? "#8fd0ff" : "#ffd27f"
+                        border.color: "black"
+                    }
+                    Rectangle {  // selected-time bubble above the playhead
+                        visible: track.dragging || !TimeController.live
+                        x: Math.max(0, Math.min(track.width - width,
+                                                track.width * track.frac - width / 2))
+                        anchors.bottom: parent.top
+                        width: bubbleText.implicitWidth + 10
+                        height: bubbleText.implicitHeight + 4
+                        radius: 3; color: "#cc101418"; border.color: "#60ffffff"
+                        Label {
+                            id: bubbleText; anchors.centerIn: parent
+                            text: TimeController.timeLabel
+                            color: "#ffffff"; font.pointSize: 10
+                        }
+                    }
+                    // Drag to scrub. Property assignment invokes the WRITE
+                    // accessor (setPosition); it is not Q_INVOKABLE so calling
+                    // it as a function would silently fail.
+                    MouseArea {
+                        id: trackMouse
+                        anchors.fill: parent
+                        onPressed: (m) => TimeController.position = m.x / track.width
+                        onPositionChanged: (m) => {
+                            if (pressed)
+                                TimeController.position =
+                                    Math.max(0, Math.min(1, m.x / track.width))
+                        }
+                    }
+                }
+
+                ToolButton {
+                    text: "››"; onClicked: TimeController.stepDays(1)
+                    ToolTip.text: qsTr("Next day"); ToolTip.visible: hovered
+                }
+                ToolButton {
+                    text: qsTr("Now")
+                    highlighted: TimeController.live
+                    onClicked: TimeController.goLive()
+                    ToolTip.text: qsTr("Snap to the live clock"); ToolTip.visible: hovered
+                }
+            }
+        }
+
         // Compass rose (mirrors wx's ocpnCompass overlay). The chart is
         // north-up, so the rose is fixed N-up; the red needle shows own-ship
         // COG. Top-right corner.
@@ -3030,6 +3167,12 @@ ApplicationWindow {
                     checkable: true
                     checked: chart.followOwnShip
                     onClicked: chart.followOwnShip = checked
+                }
+                MuiTool {
+                    text: "≋"; ToolTip.text: qsTr("Show tides")
+                    checkable: true
+                    checked: DisplayConfig.showTides
+                    onClicked: DisplayConfig.showTides = checked
                 }
                 MuiTool {
                     text: "☰"; ToolTip.text: qsTr("Canvas display options")

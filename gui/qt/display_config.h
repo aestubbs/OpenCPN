@@ -63,6 +63,9 @@ class DisplayConfig : public QObject {
   // Show the on-chart compass rose overlay (top-right).
   Q_PROPERTY(bool showCompass READ showCompass WRITE setShowCompass NOTIFY
                  changed)
+  // Show tide stations (and the bottom timeline). Mirrors wx g_bShowTide.
+  // The tide/current scene-graph Layer (P3.14 phase D) will also gate on this.
+  Q_PROPERTY(bool showTides READ showTides WRITE setShowTides NOTIFY changed)
   // Time display: 0 = UTC, 1 = local (OS) time zone.
   Q_PROPERTY(int timeZone READ timeZone WRITE setTimeZone NOTIFY changed)
   // Own-ship COG/SOG predictor vector length, in minutes of run.
@@ -137,6 +140,8 @@ public:
   void setWheelZoomFactor(double v);
   bool showCompass() const { return m_show_compass; }
   void setShowCompass(bool v);
+  bool showTides() const { return m_show_tides; }
+  void setShowTides(bool v);
   int timeZone() const { return m_time_zone; }
   void setTimeZone(int v);
   double cogPredictorMinutes() const { return m_cog_predict_min; }
@@ -199,6 +204,7 @@ private:
   bool m_preserve_scale = false;
   double m_wheel_zoom = 1.3;
   bool m_show_compass = true;
+  bool m_show_tides = false;
   int m_time_zone = 0;
   double m_cog_predict_min = 6.0;
   double m_sogcog_damping = 0.0;

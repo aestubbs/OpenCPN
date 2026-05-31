@@ -122,6 +122,8 @@ qt_add_qml_module(opencpn-qt
     ui_config.cpp
     sound_player.h
     sound_player.cpp
+    time_controller.h
+    time_controller.cpp
     chart_config.h
     chart_config.cpp
     ocharts_service.h
