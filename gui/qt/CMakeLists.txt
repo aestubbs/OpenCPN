@@ -215,6 +215,8 @@ target_link_libraries(opencpn-qt PRIVATE
   ocpn::s57-charts
   # Shapefile reader for the world basemap (data/basemap_shp/*.shp).
   ocpn::shapefile_cpp
+  # Tide/current harmonic prediction engine (P3.14 phase A).
+  ocpn::tides
   ${wxWidgets_LIBRARIES}
 )
 

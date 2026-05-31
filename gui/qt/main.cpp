@@ -45,6 +45,11 @@
 
 #include "ocharts_service.h"
 #include "s52_engine.h"
+#include "tcmgr.h"      // P3.14 tide/current prediction engine (libs/tides)
+#include "idx_entry.h"
+#include <ctime>
+#include <string>
+#include <vector>
 #if defined(Q_OS_MACOS)
 #include "macos_titlebar.h"
 #endif
@@ -143,6 +148,32 @@ int main(int argc, char* argv[]) {
       s52.decodeOsenc(osenc, &n, &s, &e, &w);
       qInfo("OESU_TEST extent N%.4f S%.4f E%.4f W%.4f", n, s, e, w);
     }
+  }
+
+  // Dev one-shot: load a tide/current harmonic data set and predict the tide
+  // at the first few usable tide stations for "now", to validate the ported
+  // engine end-to-end (P3.14 phase A). Set OCPN_QT_TIDE_TEST=/path/to a .tcd
+  // (binary harmonic) or a HARMONIC .IDX (ascii). Uses the engine's global
+  // ptcmgr.
+  if (const QByteArray t = qgetenv("OCPN_QT_TIDE_TEST"); !t.isEmpty()) {
+    ptcmgr = new TCMgr;
+    std::vector<std::string> sources = {std::string(t.constData())};
+    ptcmgr->LoadDataSources(sources);
+    qInfo("TIDE_TEST: ready=%d stations=%d", ptcmgr->IsReady(),
+          ptcmgr->Get_max_IDX() + 1);
+    const time_t now = time(nullptr);
+    int shown = 0;
+    for (int i = 0; i <= ptcmgr->Get_max_IDX() && shown < 5; ++i) {
+      const IDX_entry* e = ptcmgr->GetIDX_entry(i);
+      if (!e || !(e->IDX_type == 't' || e->IDX_type == 'T')) continue;
+      float val = 0, dir = 0;
+      if (ptcmgr->GetTideOrCurrentMeters(now, i, val, dir)) {
+        qInfo("TIDE_TEST: %-28s now=%6.2f m  (idx %d  %.3f,%.3f)",
+              e->IDX_station_name, val, i, e->IDX_lat, e->IDX_lon);
+        ++shown;
+      }
+    }
+    if (!shown) qWarning("TIDE_TEST: no tide station produced a value");
   }
 
   // Shared QML<->native state (vessel-data drawer). Exposed as "app".

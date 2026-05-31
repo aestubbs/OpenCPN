@@ -2050,6 +2050,7 @@ add_subdirectory(libs/picosha2)
 add_subdirectory(libs/pugixml)
 add_subdirectory(libs/rapidjson)
 add_subdirectory(libs/s52plib)
+add_subdirectory(libs/tides)
 add_subdirectory(libs/sqlite)
 
 if (QT_ANDROID)
