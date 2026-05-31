@@ -357,7 +357,7 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
 
   // If any chart directories are configured, scan them; per-cell content
   // streams in on demand as the user zooms/pans.
-  if (m_chart_source && !m_chart_source->directories().isEmpty()) {
+  if (m_chart_source && !m_chart_source->activeDirectories().isEmpty()) {
     reloadCharts();
     return;
   }
@@ -438,7 +438,7 @@ void ChartCanvas::reloadCharts() {
   // Reset the key map once, then accumulate each o-charts dir's keyList below
   // (loadKeyList merges; a keyList-less dir must not wipe another dir's keys).
   OChartsService::instance().clearKeys();
-  for (const QString& path : m_chart_source->directories()) {
+  for (const QString& path : m_chart_source->activeDirectories()) {
     QFileInfo fi(path);
     if (fi.isDir()) {
       // o-charts dirs carry a keyList *.XML; load it so the worker can
@@ -497,8 +497,8 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
     m_chart_source->setStatus(
         tr("%1 cells in %2 director%3")
             .arg(cells.size())
-            .arg(m_chart_source->directories().size())
-            .arg(m_chart_source->directories().size() == 1 ? "y" : "ies"),
+            .arg(m_chart_source->activeDirectories().size())
+            .arg(m_chart_source->activeDirectories().size() == 1 ? "y" : "ies"),
         false);
 
   // Boundary overlay: created once, drawn on top so the cell grid stays

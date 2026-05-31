@@ -72,13 +72,28 @@ Two follow-ups surfaced during that work: **P2.23b** (super-SCAMIN — needs the
 cell native scale plumbed into `chart_context`, currently 0) and **P2.24**
 (OGR/.000 path: it never decodes per-object SCAMIN onto `obj->Scamin`, which
 also makes P2.14's cull inert on NOAA charts; + OGR area boundary lines from
-polygon rings). **Next: P2.24** (highest-value — restores SCAMIN on NOAA
-charts + their area borders) or **P2.7** (raster KAP/BSB — largest capability
-gap), then the live `NavDataProvider` adapter. P2.20 = Show Grid + Show Depth
-Units (new render paths).
+polygon rings). **Completed since (committed, 2026-05-31):** P2.24 + P2.15 (OGR/.000 area
+boundary lines; the "SCAMIN inert on NOAA" concern was retracted) and P2.23b
+(super-SCAMIN) all landed. Beyond the parity audit, four features the older
+roadmap had queued as "next" are now done: a **CPA/TCPA engine** for AIS
+targets (`ais_cpa.cpp`, wx parity + danger display); **chart orientation**
+(North-Up / Course-Up / Head-Up + look-ahead, click-the-compass-rose toggle,
+real scene-graph rotation); **native o-charts** decrypt end-to-end (oexserverd
+FIFO + OSENC decode + SENC disk cache); and the **live `NavDataProvider`
+adapter** (`model_nav_data_provider` reading real ais_decoder / own_ship /
+routeman / comm drivers; demo off by default). Pan/zoom is now GPU-real
+(40+fps).
+
+**Direction (2026-05-31):** Phase 2's S-52 vector renderer is effectively at
+parity. Remaining Phase-2 items are **P2.7 (raster KAP/BSB — DEPRIORITIZED by
+the user 2026-05-31; parked, do not pursue)** and the low-severity
+P2.17/P2.18/P2.20 + P2.19 (CM93). Work now shifts to **Phase 3 (QtQuick UI
+shell consolidation) heading toward retiring the parallel wx build (P3.11)**.
+New investigation task **P2.25** captures specific chart-rendering defects to
+chase (Yarmouth tiling, Poole missing areas).
 See [`QT_MIGRATION_MATERIALS.md`](./QT_MIGRATION_MATERIALS.md) and
 [`QT_MIGRATION_PERF.md`](./QT_MIGRATION_PERF.md).
-**Last updated:** 2026-05-30.
+**Last updated:** 2026-05-31.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
 Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
@@ -1045,11 +1060,26 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       print threshold in the small harbour cell, not an absence of SCAMIN).
       Nothing to do here; closed.
 
+- [ ] **P2.25** **Chart-rendering defect sweep (specific cells).** Investigate
+      and fix concrete rendering issues on the user's local UK South-Coast
+      charts:
+      - **Yarmouth (Isle of Wight / Solent)** — chart **tiling** artefacts
+        (cell-boundary seams, quilt-edge / overlap glitches).
+      - **Poole (Dorset)** — **missing areas** (chart area not rendering /
+        coverage gap).
+      Method: reproduce each, then isolate the cause — quilt composite vs
+      per-cell bounding-box clip (cf. **P2.17** M_COVR), area emit /
+      tessellation, or the decode path (OGR `.000` vs OSENC) — and fix.
+      Likely overlaps P2.17. *(severity: medium — user-visible on home waters)*
+
 > **P2.7 (re-confirmed open, high):** `RasterChartProvider` is still a
 > placeholder with no decoder, so Qt cannot render **raster KAP/BSB** charts at
 > all — a hard parity gap for raster-only regions. Extend its scope to cover
 > **MBTiles** raster/overlay and raster **de-skew** reprojection (wx:
 > `ChartKAP` / `ChartGEO` / `ChartMBTiles`). See the P2.7 entry above.
+> **DEPRIORITIZED 2026-05-31 (user decision):** raster support is parked — do
+> not pursue it as a next step. Vector (NOAA ENC `.000` + native o-charts/OSENC)
+> covers current use.
 
 > **Doc upkeep:** `Docs/QT_QUILT_VS_WX.md` carried three contradictory quilt
 > models (§5 reference-gate plan, §8 composite-with-M_COVR-clip, §9 no-clip
@@ -1123,6 +1153,61 @@ render anything onto the chart, only manages the plugin lifecycle.
       `slots` / `emit` keywords now that no wx/system headers remain to clash
       with. Touches the QObject classes added during Phase 1 (`observable_qt`,
       `comm_drv_*`). Introduced by P1.5a.
+- [ ] **P3.13** **Route-creation interaction parity (pan/zoom while routing).**
+      Route *rendering* and the manager (P3.7) are good, but the *entry* UX is
+      hard to use: **you cannot pan the chart while creating a route.** In
+      `ChartCanvas::mousePressEvent` (`gui/qt/chart_canvas.cpp:1156`) route-build
+      mode consumes every left-click as "add vertex" and returns early, so
+      left-drag never pans; there is no edge auto-pan and no `keyPressEvent`
+      override at all. (Wheel **zoom** already works — `wheelEvent` is not gated
+      by route mode.)
+      - **wx reference** (`gui/src/chcanv.cpp`): while `m_routeState >= 2`
+        (rubber-banding) the chart stays fully navigable —
+        - **Edge auto-pan**: `CheckEdgePan(x,y,dragging,5,2)` on mouse-move
+          (`chcanv.cpp:8040`); cursor inside a 5%-margin edge band pans the
+          viewport 2%/tick via a 200 ms one-shot `pPanTimer`, so a route extends
+          past the current view without stopping.
+        - Wheel **zoom** and **keyboard** pan (arrows) / zoom stay active.
+        - Vertices placed on discrete **left-down** (`chcanv.cpp:8616`) with
+          **nearby-waypoint reuse** (`GetNearbyWaypoint` snaps to an existing
+          mark within the select radius).
+        - Right-click / Esc / double-click / kill-focus **finish** the route
+          (`FinishRoute`, `m_FinishRouteOnKillFocus`).
+      - **Qt scope:**
+        1. **Edge auto-pan** during build — port `CheckEdgePan` + a one-shot
+           `QTimer` pan loop; keep the rubber-band leg world-anchored so it
+           follows the pan.
+        2. **Keyboard nav while building** — add a `keyPressEvent` override
+           (none today): arrows pan, +/-/= zoom, **Esc cancels** the route,
+           **Backspace/Delete removes the last vertex**, Enter **finishes**.
+        3. *(beyond wx)* **Drag-to-pan** during build — distinguish a click
+           (place vertex) from a drag (pan) by a small move threshold before
+           release; gives a modern/touch feel edge-pan alone doesn't.
+        4. **Nearby-waypoint reuse** — snap a placed vertex to an existing
+           waypoint within the select radius (mirror `GetNearbyWaypoint`).
+        5. **Touch parity** — drag-to-pan + tap-to-place + on-screen
+           Finish/Cancel/Undo affordances (a route can't be built with
+           right-click on touch).
+      - **Files:** `gui/qt/chart_canvas.{cpp,h}` (input, edge-pan timer,
+        `keyPressEvent`), `gui/qt/qml/Main.qml` (build-mode affordances),
+        `NavDataProvider` route API (`addRoutePoint`/`setRouteRubberband`/
+        `finishRoute` exist; add `removeLastRoutePoint`/`cancelRoute`).
+        Relates to **P3.7**. *(severity: medium-high — route creation is a core
+        nav workflow and is currently frustrating to use)*
+- [ ] **P3.14** **Tides & currents engine port.** Port the wx tide/current
+      prediction engine (`gui/src/tcmgr.cpp`, ~7,451 lines — harmonics parsing
+      + prediction) into the de-wx'd Qt core, then surface it: the Charts →
+      Tides data-set list, and on-chart tide-height / current-arrow stations as
+      a world-anchored Layer. Large; the Charts → Tides pane is a placeholder
+      until this lands. *(severity: medium — large effort)*
+- [ ] **P3.15** **Alert engine (sound triggering).** The Qt **sound engine**
+      (`SoundPlayer`, P3 UI→Sounds) plays files and the **Test** buttons are
+      live, but nothing *fires* the alerts automatically yet. Wire: AIS
+      **CPA/TCPA** danger (`ais_cpa` already detects it) → AIS alert sound +
+      alert dialog; **anchor watch** (drag circle) → anchor alarm; **SART** /
+      **DSC** distress → their sounds; and **ship's bells** (a clock timer,
+      `UIConfig.playShipsBells`). Each gated on its `UIConfig`/`AisConfig`
+      enable + file. *(severity: medium)*
 
 ### P3.6 — Options / Settings dialog breakdown
 
@@ -1157,9 +1242,10 @@ remain.
       `ChartCanvas::wheelEvent` (`display.wheelZoomFactor`).
 - [x] Own-ship COG/SOG predictor length (minutes) — consumed by
       `OwnShipLayer` (`display.cogPredictorMinutes`).
-- [p] Navigation Mode North-Up / Course-Up + look-ahead — controls present and
-      persisted (`display.navMode`, `display.lookAhead`), but the viewport
-      does not rotate / lead yet (no Course-Up render path).
+- [x] Navigation Mode North-Up / Course-Up / Head-Up + look-ahead — DONE
+      (2026-05-31). The viewport now rotates via real scene-graph rotation;
+      persisted (`display.navMode`, `display.lookAhead`), and clicking the
+      on-chart compass rose cycles the three modes.
 - [p] Preserve scale on chart switch — persisted (`display.preserveScaleOnSwitch`);
       the Piano-click autoscale will read it once wired.
 - [p] Time display UTC vs local, SOG/COG damping, default boat speed (ETA) —
@@ -1227,19 +1313,40 @@ toggles stay on `chart` (ChartCanvas).
       applied once the s52 provider exposes the matching viewing groups.
 - [ ] Vector → CM93 offset, "User Standard Objects" checklist (select-all /
       clear-all / reset-to-standard), ECDIS help (not surfaced).
-- [ ] **Chart Groups** — named chart-group editor. Placeholder; needs the
-      chart-directory manager.
-- [ ] **Tides & Currents** — tide/current data-set (harmonics) list.
-      Placeholder; the Qt build does not load harmonics yet.
+- [x] **Chart Groups (2026-05-31).** Qt-native named-group editor in
+      `ChartSourceModel`: create / rename / remove groups, toggle each chart
+      folder's membership via a checklist, and an **Active group** selector
+      ("All charts" + each group). Persisted as JSON (`chartGroups` /
+      `chartActiveGroup`). The active group filters what loads —
+      `ChartSourceModel::activeDirectories()` (group membership ∩ live dir
+      list), which `ChartCanvas::reloadCharts` now iterates; changing the
+      active group triggers a reload. (`chart_source_model.*`, `Main.qml`
+      Groups tab.)
+- [~] **Tides & Currents** — the data-set list + on-chart tide/current
+      stations need the **tide-prediction engine** (`gui/src/tcmgr.cpp`,
+      ~7,451 lines of wx code) ported to the de-wx'd Qt core first. Pane states
+      this. Tracked as **P3.14**.
 
 **Connections page** (wx sub-panel: NMEA / data connections)
-- [x] Connection list (enable/disable, summary, remove) and add-connection
-      form (transport TCP/UDP, protocol NMEA0183/2000/SignalK, host, port).
-      Qt has a basic add/list backed by `chart.connections`.
-- [ ] Full connections editor parity — serial ports + baud, GPSD/Garmin
-      host, network connection edit dialog, per-connection input/output
-      filters, NMEA sentence filtering, priorities, "show NMEA debug
-      window".
+- [x] Connection list (enable/disable, summary, remove) backed by
+      `chart.connections` (`ConnectionsViewModel`).
+- [x] **Connections editor parity (2026-05-31).** The add/edit form now covers
+      every transport/protocol the wx-free comm framework actually wires:
+      **Serial** (port via `QSerialPortInfo` enumeration + rescan, baud) and
+      **Network** TCP/UDP, each carrying **NMEA 0183 / NMEA 2000**; plus **I/O
+      direction** (Input / Output / Both → `dsPortType`), **input & output
+      sentence filters** (Accept/Ignore = whitelist/blacklist; input filter is
+      live via `ConnectionParams::MakeInputFilter`), a **user comment**, and
+      full **edit-in-place** of an existing connection (re-keys the running
+      driver). Persisted as JSON via `ConfigStore`. (`connections_view_model.*`,
+      `Main.qml` Connections tab.)
+- [—] GPSD, Garmin, SignalK, SocketCAN, TCP-server: deliberately **not** in the
+      editor — `MakeCommDriver` parks them (no driver), so exposing them would
+      be inert. They return when the comm framework grows those transports
+      (see `comm_drv_factory.cpp`).
+- [ ] Remaining: per-connection **priorities** (the comm-priority registry is a
+      separate subsystem), and a "show NMEA debug window" launcher from this
+      page (the data-monitor itself exists — `nmea_monitor_model`).
 
 **Ships page** (wx sub-panels: Own ship, AIS Targets, MMSI Properties,
 Routes/Points) — now built as four sub-tabs in `optionsWindow`, backed by the
@@ -1262,8 +1369,11 @@ stuck; singletons are compile-time resolved and always available.)
 - [ ] Range-ring colour, HDT (separate from COG) predictor length.
 
 **Ships → AIS Targets** (wx sub-panel: AIS Targets) — controls built;
-all persisted (`AisConfig.*`), pending the CPA/TCPA + filtering + alert engine
-- [p] CPA/TCPA: max target range, CPA warn distance, TCPA warn time.
+all persisted (`AisConfig.*`); the **CPA/TCPA engine is now implemented**
+(`ais_cpa.cpp`, wx parity + danger display) and consumes the warn thresholds —
+filtering and the alert sound/dialog engine are still pending
+- [x] CPA/TCPA: max target range, CPA warn distance, TCPA warn time — consumed
+      live by the CPA/TCPA engine (`ais_cpa.cpp`); dangerous targets flagged.
 - [p] Lost targets: mark-lost / remove-lost timeouts.
 - [p] Display: COG-predictor length (+ "sync with own ship"), target tracks
       length, suppress-anchored speed max, attenuation threshold, show area
@@ -1316,11 +1426,17 @@ QML-singleton (persisted). Several controls are wired live to the shell.
       properties so the two pages stay in sync.
 
 **UI → Sounds**
-- [p] Per-event sound files (anchor, AIS, SART, DSC) with enable + file picker
-      (FileDialog) — present and persisted (`UIConfig.*Sound`/`*SoundFile`);
-      Test is disabled and playback is inert pending the Qt sound engine.
-- [ ] Sound-output device selection / custom play command (not surfaced; no
-      sound engine yet).
+- [x] **Qt sound engine (2026-05-31).** `SoundPlayer` (QML singleton,
+      `QMediaPlayer` + `QAudioOutput`, `Qt6::Multimedia`) plays any Qt-supported
+      audio file. The per-event **Test** buttons (anchor / AIS / SART / DSC) are
+      now live (`SoundPlayer.play(file)`); files + enables persist via
+      `UIConfig`. (`sound_player.{h,cpp}`, `Main.qml` Sounds page.)
+- [ ] **Alert-engine triggering** (the part that *fires* each sound): anchor
+      watch, AIS CPA/TCPA alert, SART, DSC, plus ship's bells. The playback
+      primitive (`SoundPlayer.play`) and the CPA/TCPA danger detection
+      (`ais_cpa`) exist; wiring danger → sound + the anchor-watch / bells timers
+      is **P3.15**.
+- [ ] Sound-output device selection / custom play command (not surfaced).
 
 **Plugins page**
 - [~] Qt shows a placeholder. To build: plugin list/enable, catalog

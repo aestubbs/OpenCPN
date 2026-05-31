@@ -13,7 +13,7 @@ qt_add_executable(opencpn-qt
 
 # Custom AA-line shaders (P2.4 #5 / P2.13): baked to .qsb via qsb and exposed
 # as Qt resources at :/shaders/aaline.{vert,frag}.qsb (see aa_line.cpp).
-find_package(Qt6 REQUIRED COMPONENTS ShaderTools)
+find_package(Qt6 REQUIRED COMPONENTS ShaderTools SerialPort Multimedia)
 qt_add_shaders(opencpn-qt "opencpn_qt_shaders"
   PREFIX "/"
   FILES
@@ -120,6 +120,8 @@ qt_add_qml_module(opencpn-qt
     route_defaults_config.cpp
     ui_config.h
     ui_config.cpp
+    sound_player.h
+    sound_player.cpp
     chart_config.h
     chart_config.cpp
     ocharts_service.h
@@ -199,6 +201,10 @@ target_link_libraries(opencpn-qt PRIVATE
   Qt6::Qml
   # QQuickStyle (selects the native Quick Controls style in main.cpp).
   Qt6::QuickControls2
+  # QSerialPortInfo for the Connections editor's serial-port enumeration.
+  Qt6::SerialPort
+  # QMediaPlayer/QAudioOutput for the alert-sound engine (SoundPlayer).
+  Qt6::Multimedia
   # libs/s52plib transitively brings ocpn::model, ocpn::geoprim,
   # ocpn::gl-headers, ocpn::pugixml, ocpn::gdal, ocpn::tess2 -- the
   # full set s52plib needs after the P2.8.0 standalone-link refactor.

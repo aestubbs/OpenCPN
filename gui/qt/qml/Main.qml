@@ -1166,17 +1166,156 @@ ApplicationWindow {
                                 }
                             }
 
-                            // --- Chart Groups (pending) ---
+                            // --- Chart Groups ---
                             Item {
                                 ColumnLayout {
+                                    id: groupsTab
                                     anchors.fill: parent
                                     spacing: 8
+                                    readonly property var gs: chart.chartSource
+                                    property int editGroup: -1   // group being edited; -1 none
+
+                                    // Directory list + membership for the group under edit. Reads
+                                    // gs.groups so it re-evaluates on groupsChanged.
+                                    property var memberModel: {
+                                        var out = []
+                                        if (!gs || editGroup < 0) return out
+                                        var all = gs.groups
+                                        var g = (editGroup < all.length) ? all[editGroup] : null
+                                        var member = g ? g.dirs : []
+                                        var dirs = gs.directories
+                                        for (var i = 0; i < dirs.length; ++i)
+                                            out.push({ dir: dirs[i],
+                                                       member: member.indexOf(dirs[i]) >= 0 })
+                                        return out
+                                    }
+
                                     Label { text: qsTr("Chart groups"); font.bold: true }
                                     Label {
-                                        text: qsTr("Named chart groups depend on the chart-directory manager and are not yet available in the Qt build.")
+                                        text: qsTr("Define named subsets of your chart folders, then switch which set is active. \"All charts\" loads every folder.")
                                         wrapMode: Text.Wrap; Layout.fillWidth: true
-                                        color: palette.placeholderText
+                                        color: palette.placeholderText; font.pointSize: 11
                                     }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Label { text: qsTr("Active group:") }
+                                        ComboBox {
+                                            id: activeGroupBox
+                                            Layout.fillWidth: true
+                                            model: {
+                                                var names = [qsTr("All charts")]
+                                                var g = groupsTab.gs ? groupsTab.gs.groups : []
+                                                for (var i = 0; i < g.length; ++i) names.push(g[i].name)
+                                                return names
+                                            }
+                                            currentIndex: groupsTab.gs ? groupsTab.gs.activeGroup + 1 : 0
+                                            onActivated: if (groupsTab.gs)
+                                                groupsTab.gs.activeGroup = currentIndex - 1
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Groups"); font.bold: true }
+                                    ListView {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 110
+                                        clip: true
+                                        model: groupsTab.gs ? groupsTab.gs.groups : []
+                                        delegate: ItemDelegate {
+                                            required property var modelData
+                                            required property int index
+                                            width: ListView.view.width
+                                            highlighted: index === groupsTab.editGroup
+                                            contentItem: RowLayout {
+                                                spacing: 8
+                                                Label {
+                                                    text: modelData.name + "  (" + modelData.dirCount + ")"
+                                                    Layout.fillWidth: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                ToolButton {
+                                                    text: "✎"
+                                                    ToolTip.text: qsTr("Edit folders")
+                                                    ToolTip.visible: hovered
+                                                    onClicked: groupsTab.editGroup =
+                                                        (groupsTab.editGroup === index ? -1 : index)
+                                                }
+                                                ToolButton {
+                                                    text: "✕"
+                                                    onClicked: {
+                                                        if (groupsTab.editGroup === index)
+                                                            groupsTab.editGroup = -1
+                                                        groupsTab.gs.removeGroup(index)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        TextField {
+                                            id: newGroupField
+                                            Layout.fillWidth: true
+                                            placeholderText: qsTr("New group name")
+                                            selectByMouse: true
+                                            onAccepted: addGroupBtn.clicked()
+                                        }
+                                        Button {
+                                            id: addGroupBtn
+                                            text: qsTr("Add group")
+                                            enabled: newGroupField.text.trim().length > 0
+                                            onClicked: {
+                                                var i = groupsTab.gs.addGroup(newGroupField.text)
+                                                newGroupField.text = ""
+                                                if (i >= 0) groupsTab.editGroup = i
+                                            }
+                                        }
+                                    }
+
+                                    MenuSeparator {
+                                        Layout.fillWidth: true
+                                        visible: groupsTab.editGroup >= 0
+                                    }
+                                    Label {
+                                        visible: groupsTab.editGroup >= 0
+                                        text: {
+                                            var all = groupsTab.gs ? groupsTab.gs.groups : []
+                                            var g = (groupsTab.editGroup >= 0
+                                                     && groupsTab.editGroup < all.length)
+                                                ? all[groupsTab.editGroup] : null
+                                            return qsTr("Folders in ") + (g ? "“" + g.name + "”" : "")
+                                        }
+                                        font.bold: true
+                                    }
+                                    Label {
+                                        visible: groupsTab.editGroup >= 0
+                                               && groupsTab.memberModel.length === 0
+                                        text: qsTr("No chart folders yet — add them under Chart Files.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                    ListView {
+                                        visible: groupsTab.editGroup >= 0
+                                               && groupsTab.memberModel.length > 0
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 130
+                                        clip: true
+                                        model: groupsTab.memberModel
+                                        delegate: CheckDelegate {
+                                            required property var modelData
+                                            width: ListView.view.width
+                                            text: modelData.dir
+                                            checked: modelData.member
+                                            onToggled: groupsTab.gs.setDirInGroup(
+                                                groupsTab.editGroup, modelData.dir, checked)
+                                        }
+                                    }
+
                                     Item { Layout.fillHeight: true }
                                 }
                             }
@@ -1188,7 +1327,7 @@ ApplicationWindow {
                                     spacing: 8
                                     Label { text: qsTr("Tides & currents"); font.bold: true }
                                     Label {
-                                        text: qsTr("Tide and current harmonic data sets are not yet loaded by the Qt build; the data-location list will live here.")
+                                        text: qsTr("Tide & current predictions need the harmonics engine (wx tcmgr, ~7.5k lines) ported to the Qt core — tracked as a dedicated task. The data-set list and on-chart tide/current stations will live here once it lands.")
                                         wrapMode: Text.Wrap; Layout.fillWidth: true
                                         color: palette.placeholderText
                                     }
@@ -1257,8 +1396,71 @@ ApplicationWindow {
                         anchors.margins: 20
                         spacing: 8
                         readonly property var cm: chart.connections
+                        property int editIndex: -1               // -1 = add mode
+                        property var serialPorts: cm ? cm.availableSerialPorts() : []
 
-                        Label { text: qsTr("Network data sources"); font.bold: true }
+                        function refreshPorts() {
+                            serialPorts = cm ? cm.availableSerialPorts() : []
+                        }
+                        function buildRecord() {
+                            var sp = ""
+                            if (typeBox.currentIndex === 1 && serialBox.currentIndex >= 0
+                                    && serialPorts.length > serialBox.currentIndex)
+                                sp = serialPorts[serialBox.currentIndex].port
+                            return {
+                                type: typeBox.currentIndex,
+                                netProto: netProtoBox.currentIndex,
+                                address: addrField.text,
+                                port: parseInt(portField.text) || 0,
+                                serialPort: sp,
+                                baud: parseInt(baudBox.currentText) || 4800,
+                                dataProto: dataProtoBox.currentIndex,
+                                ioSelect: ioBox.currentValue,
+                                inFilterType: inFilterTypeBox.currentIndex,
+                                inFilter: inFilterField.text,
+                                outFilterType: outFilterTypeBox.currentIndex,
+                                outFilter: outFilterField.text,
+                                comment: commentField.text
+                            }
+                        }
+                        function loadForm(c) {
+                            typeBox.currentIndex = c.type || 0
+                            netProtoBox.currentIndex = c.netProto || 0
+                            addrField.text = c.address || ""
+                            portField.text = c.port ? String(c.port) : ""
+                            var idx = 0
+                            for (var i = 0; i < serialPorts.length; ++i)
+                                if (serialPorts[i].port === c.serialPort) { idx = i; break }
+                            serialBox.currentIndex = idx
+                            var bi = baudBox.find(String(c.baud || 4800))
+                            baudBox.currentIndex = bi >= 0 ? bi : 0
+                            dataProtoBox.currentIndex = c.dataProto || 0
+                            ioBox.currentIndex = Math.max(0, ioBox.indexOfValue(c.ioSelect || 0))
+                            inFilterTypeBox.currentIndex = c.inFilterType || 0
+                            inFilterField.text = (c.inFilter || []).join(", ")
+                            outFilterTypeBox.currentIndex = c.outFilterType || 0
+                            outFilterField.text = (c.outFilter || []).join(", ")
+                            commentField.text = c.comment || ""
+                        }
+                        function clearForm() {
+                            editIndex = -1
+                            typeBox.currentIndex = 0
+                            netProtoBox.currentIndex = 0
+                            addrField.text = ""
+                            portField.text = ""
+                            serialBox.currentIndex = 0
+                            var bi = baudBox.find("4800")
+                            baudBox.currentIndex = bi >= 0 ? bi : 0
+                            dataProtoBox.currentIndex = 0
+                            ioBox.currentIndex = 0
+                            inFilterTypeBox.currentIndex = 0
+                            inFilterField.text = ""
+                            outFilterTypeBox.currentIndex = 0
+                            outFilterField.text = ""
+                            commentField.text = ""
+                        }
+
+                        Label { text: qsTr("Data connections"); font.bold: true }
 
                         ListView {
                             Layout.fillWidth: true
@@ -1281,6 +1483,15 @@ ApplicationWindow {
                                         elide: Text.ElideRight
                                     }
                                     ToolButton {
+                                        text: "✎"
+                                        ToolTip.text: qsTr("Edit")
+                                        ToolTip.visible: hovered
+                                        onClicked: {
+                                            connTab.editIndex = index
+                                            connTab.loadForm(chart.connections.connectionAt(index))
+                                        }
+                                    }
+                                    ToolButton {
                                         text: "✕"
                                         onClicked: chart.connections.removeConnection(index)
                                     }
@@ -1290,7 +1501,11 @@ ApplicationWindow {
 
                         MenuSeparator { Layout.fillWidth: true }
 
-                        Label { text: qsTr("Add connection"); font.bold: true }
+                        Label {
+                            text: connTab.editIndex >= 0 ? qsTr("Edit connection")
+                                                         : qsTr("Add connection")
+                            font.bold: true
+                        }
                         GridLayout {
                             columns: 2
                             columnSpacing: 8
@@ -1298,14 +1513,95 @@ ApplicationWindow {
                             Layout.fillWidth: true
 
                             Label {
+                                text: qsTr("Type:")
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            ComboBox {
+                                id: typeBox
+                                Layout.fillWidth: true
+                                model: ["Network", "Serial"]
+                            }
+
+                            // --- Network-only rows ---
+                            Label {
                                 text: qsTr("Transport:")
+                                visible: typeBox.currentIndex === 0
                                 Layout.alignment: Qt.AlignRight
                             }
                             ComboBox {
                                 id: netProtoBox
+                                visible: typeBox.currentIndex === 0
                                 Layout.fillWidth: true
                                 model: ["TCP", "UDP"]
                             }
+                            Label {
+                                text: qsTr("Address / host:")
+                                visible: typeBox.currentIndex === 0
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            TextField {
+                                id: addrField
+                                visible: typeBox.currentIndex === 0
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("e.g. 192.168.1.10 (TCP) or 0.0.0.0 (UDP listen)")
+                                selectByMouse: true
+                            }
+                            Label {
+                                text: qsTr("Port:")
+                                visible: typeBox.currentIndex === 0
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            TextField {
+                                id: portField
+                                visible: typeBox.currentIndex === 0
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("e.g. 2000 / 60001")
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                validator: IntValidator { bottom: 1; top: 65535 }
+                                selectByMouse: true
+                            }
+
+                            // --- Serial-only rows ---
+                            Label {
+                                text: qsTr("Serial port:")
+                                visible: typeBox.currentIndex === 1
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            RowLayout {
+                                visible: typeBox.currentIndex === 1
+                                Layout.fillWidth: true
+                                spacing: 6
+                                ComboBox {
+                                    id: serialBox
+                                    Layout.fillWidth: true
+                                    model: connTab.serialPorts
+                                    textRole: "description"
+                                    displayText: connTab.serialPorts.length === 0
+                                        ? qsTr("(no serial ports found)") : currentText
+                                }
+                                ToolButton {
+                                    text: "⟳"
+                                    ToolTip.text: qsTr("Rescan ports")
+                                    ToolTip.visible: hovered
+                                    onClicked: connTab.refreshPorts()
+                                }
+                            }
+                            Label {
+                                text: qsTr("Baud:")
+                                visible: typeBox.currentIndex === 1
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            ComboBox {
+                                id: baudBox
+                                visible: typeBox.currentIndex === 1
+                                Layout.fillWidth: true
+                                model: connTab.cm ? connTab.cm.baudRates() : [4800]
+                                Component.onCompleted: {
+                                    var bi = find("4800"); currentIndex = bi >= 0 ? bi : 0
+                                }
+                            }
+
+                            // --- Common rows ---
                             Label {
                                 text: qsTr("Data protocol:")
                                 Layout.alignment: Qt.AlignRight
@@ -1313,45 +1609,96 @@ ApplicationWindow {
                             ComboBox {
                                 id: dataProtoBox
                                 Layout.fillWidth: true
-                                model: ["NMEA 0183", "NMEA 2000", "SignalK"]
+                                model: ["NMEA 0183", "NMEA 2000"]
                             }
                             Label {
-                                text: qsTr("Address / host:")
+                                text: qsTr("Direction:")
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            ComboBox {
+                                id: ioBox
+                                Layout.fillWidth: true
+                                textRole: "text"
+                                valueRole: "value"
+                                model: [{ text: qsTr("Input"), value: 0 },
+                                        { text: qsTr("Input + Output"), value: 1 },
+                                        { text: qsTr("Output"), value: 2 }]
+                            }
+                            Label {
+                                text: qsTr("Input filter:")
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                ComboBox {
+                                    id: inFilterTypeBox
+                                    model: [qsTr("Accept"), qsTr("Ignore")]
+                                    Layout.preferredWidth: 110
+                                }
+                                TextField {
+                                    id: inFilterField
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("sentences, e.g. GGA, RMC (blank = all)")
+                                    selectByMouse: true
+                                }
+                            }
+                            Label {
+                                text: qsTr("Output filter:")
+                                Layout.alignment: Qt.AlignRight
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                ComboBox {
+                                    id: outFilterTypeBox
+                                    model: [qsTr("Accept"), qsTr("Ignore")]
+                                    Layout.preferredWidth: 110
+                                }
+                                TextField {
+                                    id: outFilterField
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("sentences (blank = all)")
+                                    selectByMouse: true
+                                }
+                            }
+                            Label {
+                                text: qsTr("Comment:")
                                 Layout.alignment: Qt.AlignRight
                             }
                             TextField {
-                                id: addrField
+                                id: commentField
                                 Layout.fillWidth: true
-                                placeholderText: qsTr("e.g. 0.0.0.0 or 192.168.1.10")
+                                placeholderText: qsTr("optional label")
                                 selectByMouse: true
                             }
-                            Label {
-                                text: qsTr("Port:")
-                                Layout.alignment: Qt.AlignRight
-                            }
-                            TextField {
-                                id: portField
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("e.g. 2000 / 60001")
-                                inputMethodHints: Qt.ImhDigitsOnly
-                                validator: IntValidator { bottom: 1; top: 65535 }
-                                selectByMouse: true
-                            }
+
                             Item {}  // spacer in label column
-                            Button {
-                                text: qsTr("Add")
-                                Layout.alignment: Qt.AlignLeft
-                                enabled: addrField.text.length > 0 && portField.text.length > 0
-                                onClicked: {
-                                    chart.connections.addConnection(
-                                        netProtoBox.currentIndex, addrField.text,
-                                        parseInt(portField.text), dataProtoBox.currentIndex)
-                                    addrField.text = ""; portField.text = ""
+                            RowLayout {
+                                spacing: 8
+                                Button {
+                                    text: connTab.editIndex >= 0 ? qsTr("Save") : qsTr("Add")
+                                    enabled: typeBox.currentIndex === 1
+                                        ? connTab.serialPorts.length > 0
+                                        : (addrField.text.length > 0 && portField.text.length > 0)
+                                    onClicked: {
+                                        if (connTab.editIndex >= 0)
+                                            chart.connections.updateConnection(
+                                                connTab.editIndex, connTab.buildRecord())
+                                        else
+                                            chart.connections.addConnection(connTab.buildRecord())
+                                        connTab.clearForm()
+                                    }
+                                }
+                                Button {
+                                    text: qsTr("Cancel")
+                                    visible: connTab.editIndex >= 0
+                                    onClicked: connTab.clearForm()
                                 }
                             }
                         }
                         Label {
-                            text: qsTr("Enabling a connection opens the socket and switches to live data.")
+                            text: qsTr("Enabling a connection opens the transport and switches to live data. Serial and TCP/UDP (NMEA 0183 / NMEA 2000) are supported.")
                             wrapMode: Text.Wrap; Layout.fillWidth: true
                             color: palette.placeholderText; font.pointSize: 11
                         }
@@ -2194,7 +2541,11 @@ ApplicationWindow {
                                                 text: qsTr("Browse…")
                                                 onClicked: { soundFileDialog.target = soundRow.key; soundFileDialog.open() }
                                             }
-                                            Button { text: qsTr("Test"); enabled: false }
+                                            Button {
+                                                text: qsTr("Test")
+                                                enabled: soundRow.file.length > 0
+                                                onClicked: SoundPlayer.play(soundRow.file)
+                                            }
                                         }
                                         Label {
                                             Layout.fillWidth: true
@@ -2215,7 +2566,7 @@ ApplicationWindow {
                                         soundEnabled: UIConfig.dscAlertSound; file: UIConfig.dscSoundFile }
 
                                     Label {
-                                        text: qsTr("Sound playback is not yet wired in; these choices are saved for when the Qt sound engine lands. Test is disabled until then.")
+                                        text: qsTr("Test plays the chosen file through the Qt sound engine. Automatic triggering of each alert (anchor watch, AIS CPA, SART, DSC) is wired as the alert engine lands.")
                                         wrapMode: Text.Wrap; Layout.fillWidth: true
                                         color: palette.placeholderText; font.pointSize: 11
                                     }
