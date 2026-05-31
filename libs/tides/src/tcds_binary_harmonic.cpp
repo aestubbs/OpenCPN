@@ -121,10 +121,10 @@ char *tz_time2sec(char *psrc, long *timesec) {
   while (*psrc == ' ') psrc++; /* Skip leading blanks */
   if (*psrc == '+') psrc++;    /* Gobble leading + */
   if (*psrc == '-') {
-    neg = TRUE;
+    neg = true;
     psrc++;
   } else
-    neg = FALSE;
+    neg = false;
 
   do {
     temp = 0;
@@ -322,9 +322,9 @@ TCDS_Binary_Harmonic::~TCDS_Binary_Harmonic() {
   free(m_cst_speeds);
 }
 
-TC_Error_Code TCDS_Binary_Harmonic::LoadData(const wxString &data_file_path) {
+TC_Error_Code TCDS_Binary_Harmonic::LoadData(const QString &data_file_path) {
   try {
-    if (!open_tide_db(data_file_path.mb_str())) return TC_TCD_FILE_CORRUPT;
+    if (!open_tide_db(data_file_path.toUtf8().constData())) return TC_TCD_FILE_CORRUPT;
   } catch (...) {
     return TC_TCD_FILE_CORRUPT;
   }
@@ -333,7 +333,7 @@ TC_Error_Code TCDS_Binary_Harmonic::LoadData(const wxString &data_file_path) {
 
   DB_HEADER_PUBLIC hdr = get_tide_db_header();
 
-  source_ident = wxString(hdr.version, wxConvUTF8);
+  source_ident = QString::fromUtf8(hdr.version);
 
   num_csts = hdr.constituents;
   if (0 == num_csts) return TC_GENERIC_ERROR;
@@ -425,9 +425,9 @@ TC_Error_Code TCDS_Binary_Harmonic::LoadData(const wxString &data_file_path) {
 
     if (REFERENCE_STATION == ptiderec->header.record_type) {
       //    Establish Station Type
-      wxString caplin(pIDX->IDX_station_name, wxConvUTF8);
-      caplin.MakeUpper();
-      if (caplin.Contains("CURRENT"))
+      QString caplin = QString::fromUtf8(pIDX->IDX_station_name);
+      caplin = caplin.toUpper();
+      if (caplin.contains("CURRENT"))
         pIDX->IDX_type = 'C';
       else
         pIDX->IDX_type = 'T';
@@ -496,9 +496,9 @@ TC_Error_Code TCDS_Binary_Harmonic::LoadData(const wxString &data_file_path) {
       pIDX->have_offsets = 0;
     } else if (SUBORDINATE_STATION == ptiderec->header.record_type) {
       //    Establish Station Type
-      wxString caplin(pIDX->IDX_station_name, wxConvUTF8);
-      caplin.MakeUpper();
-      if (caplin.Contains("CURRENT"))
+      QString caplin = QString::fromUtf8(pIDX->IDX_station_name);
+      caplin = caplin.toUpper();
+      if (caplin.contains("CURRENT"))
         pIDX->IDX_type = 'c';
       else
         pIDX->IDX_type = 't';

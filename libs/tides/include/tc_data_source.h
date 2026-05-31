@@ -24,8 +24,9 @@
 #ifndef TCDATASOURCE_H_
 #define TCDATASOURCE_H_
 
-#include <wx/string.h>
-#include <wx/dynarray.h>
+#include <QString>
+#include "obj_array.h"
+
 
 #include "tc_error_code.h"
 #include "idx_entry.h"
@@ -38,20 +39,20 @@ public:
   TCDataSource();
   ~TCDataSource();
 
-  TC_Error_Code LoadData(const wxString &data_file_path);
+  TC_Error_Code LoadData(const QString &data_file_path);
 
   int GetMaxIndex();
   IDX_entry *GetIndexEntry(int n_index);
   TC_Error_Code LoadHarmonicData(IDX_entry *pIDX);
 
 private:
-  wxString m_data_source_path;
+  QString m_data_source_path;
 
   TCDataFactory *m_pfactory;
   TCDS_Ascii_Harmonic *pTCDS_Ascii_Harmonic;
   TCDS_Binary_Harmonic *pTCDS_Binary_Harmonic;
 };
 
-WX_DECLARE_OBJARRAY(TCDataSource, ArrayOfTCDSources);
+using ArrayOfTCDSources = ObjArray<TCDataSource>;
 
 #endif

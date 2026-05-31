@@ -24,13 +24,12 @@
 
 #include <math.h>
 
-#include <wx/tokenzr.h>
 
 #include <QDir>
 #include <QFileInfo>
 #include <QString>
 
-#include "model/wx_qt_string.h"
+#include <QStringList>
 
 #include "tcds_ascii_harmonic.h"
 
@@ -81,7 +80,7 @@ TCDS_Ascii_Harmonic::~TCDS_Ascii_Harmonic() {
   m_msd_array.Clear();
 }
 
-TC_Error_Code TCDS_Ascii_Harmonic::LoadData(const wxString &data_file_path) {
+TC_Error_Code TCDS_Ascii_Harmonic::LoadData(const QString &data_file_path) {
   if (m_IndexFile) IndexFileIO(IFF_CLOSE, 0);
 
   m_indexfile_name = data_file_path;
@@ -89,10 +88,10 @@ TC_Error_Code TCDS_Ascii_Harmonic::LoadData(const wxString &data_file_path) {
   TC_Error_Code error_return = init_index_file();
   if (error_return != TC_NO_ERROR) return error_return;
 
-  QFileInfo f(wxString_to_QString(data_file_path));
-  m_harmfile_name = QString_to_wxString(f.absolutePath());
-  m_harmfile_name += static_cast<char>(QDir::separator().toLatin1());
-  m_harmfile_name += QString_to_wxString(f.completeBaseName());
+  QFileInfo f(data_file_path);
+  m_harmfile_name = f.absolutePath();
+  m_harmfile_name += QDir::separator();
+  m_harmfile_name += f.completeBaseName();
   error_return = LoadHarmonicConstants(m_harmfile_name);
 
   //  Mark the index entries individually with invariant harmonic constants
@@ -148,23 +147,21 @@ TC_Error_Code TCDS_Ascii_Harmonic::init_index_file() {
       }  // found *END* of cross reference
 
       else if (!have_index && xref_start) {
-        wxString line(index_line_buffer, wxConvUTF8);
+        QString line = QString::fromUtf8(index_line_buffer);
 
         abbr_entry entry;
 
-        wxStringTokenizer tkz(line, " ");
-        wxString token = tkz.GetNextToken();
-        if (token.IsSameAs("REGION", FALSE))
+        const QStringList parts = line.split(' ', Qt::SkipEmptyParts);
+        QString token = parts.value(0);
+        if (token.compare("REGION", Qt::CaseInsensitive) == 0)
           entry.type = REGION;
-        else if (token.IsSameAs("COUNTRY", FALSE))
+        else if (token.compare("COUNTRY", Qt::CaseInsensitive) == 0)
           entry.type = COUNTRY;
-        else if (token.IsSameAs("STATE", FALSE))
+        else if (token.compare("STATE", Qt::CaseInsensitive) == 0)
           entry.type = STATE;
 
-        token = tkz.GetNextToken();
-        entry.short_s = token;
-
-        entry.long_s = line.Mid(tkz.GetPosition()).Strip();
+        entry.short_s = parts.value(1);
+        entry.long_s = parts.mid(2).join(' ');
 
         m_abbreviation_array.push_back(entry);
 
@@ -177,7 +174,7 @@ TC_Error_Code TCDS_Ascii_Harmonic::init_index_file() {
         pIDX->source_data_type = SOURCE_TYPE_ASCII_HARMONIC;
         pIDX->pDataSource = NULL;
 
-        index_in_memory = TRUE;
+        index_in_memory = true;
         pIDX->Valid15 = 0;
 
         if (TC_NO_ERROR != build_IDX_entry(pIDX)) {
@@ -335,7 +332,7 @@ TC_Error_Code TCDS_Ascii_Harmonic::build_IDX_entry(IDX_entry *pIDX) {
 
 //    Load the Harmonic Constant Invariants
 TC_Error_Code TCDS_Ascii_Harmonic::LoadHarmonicConstants(
-    const wxString &data_file_path) {
+    const QString &data_file_path) {
   FILE *fp;
   char linrec[linelen];
   char junk[80];
@@ -343,7 +340,7 @@ TC_Error_Code TCDS_Ascii_Harmonic::LoadHarmonicConstants(
 
   free_data();
 
-  fp = fopen(data_file_path.mb_str(), "r");
+  fp = fopen(data_file_path.toUtf8().constData(), "r");
   if (NULL == fp) return TC_FILE_NOT_FOUND;
 
   read_next_line(fp, linrec, 0);
@@ -443,18 +440,18 @@ TC_Error_Code TCDS_Ascii_Harmonic::LoadHarmonicData(IDX_entry *pIDX) {
   //    If reference station was recently sought, and not found, don't bother
   //            if(!strcmp(pIDX->IDX_reference_name,
   //            plast_reference_not_found->mb_str()))
-  if (m_last_reference_not_found.IsSameAs(
-          wxString(pIDX->IDX_reference_name, wxConvUTF8)))
+  if (m_last_reference_not_found ==
+      QString::fromUtf8(pIDX->IDX_reference_name))
     return TC_MASTER_HARMONICS_NOT_FOUND;
 
   //    Clear for this looking
-  m_last_reference_not_found.Clear();
+  m_last_reference_not_found.clear();
 
   //    Find and load appropriate constituents
   FILE *fp;
   char linrec[linelen];
 
-  fp = fopen(m_harmfile_name.mb_str(), "r");
+  fp = fopen(m_harmfile_name.toUtf8().constData(), "r");
   if (fp == 0) return TC_MASTER_HARMONICS_NOT_FOUND;
 
   while (read_next_line(fp, linrec, 1)) {
@@ -474,9 +471,9 @@ TC_Error_Code TCDS_Ascii_Harmonic::LoadHarmonicData(IDX_entry *pIDX) {
     strcpy(psd->station_name, linrec);
 
     //    Establish Station Type
-    wxString caplin(linrec, wxConvUTF8);
-    caplin.MakeUpper();
-    if (caplin.Contains("CURRENT"))
+    QString caplin = QString::fromUtf8(linrec);
+    caplin = caplin.toUpper();
+    if (caplin.contains("CURRENT"))
       psd->station_type = 'C';
     else
       psd->station_type = 'T';
@@ -530,7 +527,7 @@ TC_Error_Code TCDS_Ascii_Harmonic::LoadHarmonicData(IDX_entry *pIDX) {
   fclose(fp);
 
   if (!psd) {
-    m_last_reference_not_found = wxString(pIDX->IDX_reference_name, wxConvUTF8);
+    m_last_reference_not_found = QString::fromUtf8(pIDX->IDX_reference_name);
     return TC_MASTER_HARMONICS_NOT_FOUND;
   } else {
     m_msd_array.Add(psd);  // add it to the member array
@@ -555,7 +552,7 @@ long TCDS_Ascii_Harmonic::IndexFileIO(int func, long value) {
 
       // Open
     case IFF_OPEN:
-      m_IndexFile = fopen(m_indexfile_name.mb_str(), "rt");
+      m_IndexFile = fopen(m_indexfile_name.toUtf8().constData(), "rt");
       if (m_IndexFile == NULL) return (0);
       return (1);
 

@@ -30,7 +30,6 @@
 
 #include <QDateTime>
 
-#include <wx/datetime.h>
 
 #include "station_data.h"
 #include "idx_entry.h"
@@ -122,9 +121,9 @@ public:
   std::map<double, const IDX_entry *> GetStationsForLL(double xlat,
                                                        double xlon) const;
 
-  int GetStationIDXbyName(const wxString &prefix, double xlat,
+  int GetStationIDXbyName(const QString &prefix, double xlat,
                           double xlon) const;
-  int GetStationIDXbyNameType(const wxString &prefix, double xlat, double xlon,
+  int GetStationIDXbyNameType(const QString &prefix, double xlat, double xlon,
                               char type) const;
   void ScrubCurrentDepths();
 
@@ -137,7 +136,7 @@ private:
   void FreeMRU();
 
   bool bTCMReady;
-  wxString pmru_file_name;
+  QString pmru_file_name;
 
   ArrayOfTCDSources m_source_array;
   std::vector<std::string> m_sourcefile_array;

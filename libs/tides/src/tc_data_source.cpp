@@ -22,19 +22,16 @@
  * TCDataSource
  */
 
-#include <wx/log.h>
 
 #include <QFileInfo>
 #include <QString>
 
-#include "model/wx_qt_string.h"
+#include <QtGlobal>  // qInfo / qWarning
 
 #include "tc_data_source.h"
 #include "tcds_ascii_harmonic.h"
 #include "tcds_binary_harmonic.h"
 
-#include <wx/arrimpl.cpp>
-WX_DEFINE_OBJARRAY(ArrayOfTCDSources);
 
 TCDataSource::TCDataSource() {
   m_pfactory = NULL;
@@ -43,19 +40,19 @@ TCDataSource::TCDataSource() {
 }
 
 TCDataSource::~TCDataSource() {
-  wxLogMessage("UnLoading Tide/Current data source: %s",
-               m_data_source_path.c_str());
+  qInfo("Unloading Tide/Current data source: %s",
+        qUtf8Printable(m_data_source_path));
 
   delete pTCDS_Ascii_Harmonic;
   delete pTCDS_Binary_Harmonic;
 }
 
-TC_Error_Code TCDataSource::LoadData(const wxString &data_file_path) {
+TC_Error_Code TCDataSource::LoadData(const QString &data_file_path) {
   m_data_source_path = data_file_path;
-  wxLogMessage("Loading Tide/Current data source: %s",
-               m_data_source_path.c_str());
+  qInfo("Loading Tide/Current data source: %s",
+        qUtf8Printable(m_data_source_path));
 
-  QFileInfo fname(wxString_to_QString(data_file_path));
+  QFileInfo fname(data_file_path);
 
   if (!fname.exists() || !fname.isFile()) return TC_FILE_NOT_FOUND;
 
@@ -74,7 +71,7 @@ TC_Error_Code TCDataSource::LoadData(const wxString &data_file_path) {
   if (m_pfactory) {
     err_code = m_pfactory->LoadData(data_file_path);
     if (err_code != TC_NO_ERROR) {
-      wxLogMessage("Error loading tide/current data.");
+      qWarning("Error loading tide/current data.");
       return err_code;
     }
 
@@ -84,7 +81,7 @@ TC_Error_Code TCDataSource::LoadData(const wxString &data_file_path) {
       IDX_entry *pIDX = GetIndexEntry(i);
       if (pIDX) {
         pIDX->pDataSource = this;
-        strncpy(pIDX->source_ident, m_data_source_path.mb_str(),
+        strncpy(pIDX->source_ident, m_data_source_path.toUtf8().constData(),
                 MAXNAMELEN - 1);
         pIDX->source_ident[MAXNAMELEN - 1] = '\0';
       }

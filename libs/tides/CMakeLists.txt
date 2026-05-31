@@ -7,9 +7,8 @@
 # vendored libtcd), lifted out of the wx GUI tree so the Qt build (opencpn-qt)
 # can compute tides without the wx GUI. P3.14 phase A.
 #
-# NOTE: the engine still uses wxString / wxObjArray internally; it compiles
-# against the wxWidgets headers/libs the app already links. De-wxing it to pure
-# Qt/std types is the follow-up (P3.14 phase A.2).
+# The engine is pure Qt/std (de-wx'd, P3.14 phase A.2): QString / QHash /
+# QDateTime / QFileInfo / a small ObjArray<T> shim -- no wxWidgets.
 
 add_library(TIDES STATIC
   src/tcmgr.cpp
@@ -31,11 +30,6 @@ if (APPLE)
   target_compile_options(TIDES PRIVATE -mmacosx-version-min=10.15)
 endif ()
 
-# wxWidgets compile flags + include dirs (engine still wx-internal for now).
-if (wxWidgets_FOUND)
-  include(${wxWidgets_USE_FILE})
-endif ()
-
-# ocpn::model brings georef / logger / wx_qt_string headers + Qt6 + the model
-# include paths; Qt6::Core covers QString / QDateTime / QFileInfo / QDir.
+# ocpn::model brings georef / logger headers + Qt6 + the model include paths;
+# Qt6::Core covers QString / QHash / QDateTime / QFileInfo / QDir.
 target_link_libraries(TIDES PUBLIC ocpn::model Qt6::Core)

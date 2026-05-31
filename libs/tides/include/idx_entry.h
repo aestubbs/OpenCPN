@@ -24,7 +24,9 @@
 #ifndef __IDX_ENTRY_H__
 #define __IDX_ENTRY_H__
 
-#include <wx/dynarray.h>
+#include <ctime>
+#include "obj_array.h"
+
 
 #define MAXNAMELEN 90
 
@@ -117,6 +119,6 @@ public:
   time_t recent_low_time;   ///< Time of the most recent low tide
 };
 
-WX_DECLARE_OBJARRAY(IDX_entry, ArrayOfIDXEntry);
+using ArrayOfIDXEntry = ObjArray<IDX_entry>;
 
 #endif

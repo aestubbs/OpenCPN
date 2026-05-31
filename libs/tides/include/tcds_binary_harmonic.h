@@ -24,7 +24,8 @@
 #ifndef TCDS_BINARY_HARMONIC_H_
 #define TCDS_BINARY_HARMONIC_H_
 
-#include <wx/string.h>
+#include <QString>
+
 
 #include "tc_data_factory.h"
 #include "station_data.h"
@@ -35,7 +36,7 @@ public:
   TCDS_Binary_Harmonic();
   ~TCDS_Binary_Harmonic();
 
-  TC_Error_Code LoadData(const wxString &data_file_path);
+  TC_Error_Code LoadData(const QString &data_file_path);
 
   int GetMaxIndex() { return num_IDX; };
   IDX_entry *GetIndexEntry(int n_index);
@@ -44,7 +45,7 @@ public:
 private:
   ArrayOfStationData m_msd_array;
 
-  wxString m_last_reference_not_found;
+  QString m_last_reference_not_found;
 
   ArrayOfIDXEntry m_IDX_array;
 

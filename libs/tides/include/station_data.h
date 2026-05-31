@@ -24,16 +24,15 @@
 #ifndef STATION_DATA_H_
 #define STATION_DATA_H_
 
-#include <wx/defs.h>
-#include <wx/wxchar.h>
-#include <wx/dynarray.h>
+#include "obj_array.h"
+
 
 class Station_Data {
 public:
   Station_Data();
   ~Station_Data();
   char *station_name;
-  wxChar station_type;  // T or C
+  char station_type;  // T or C
   double *amplitude;
   double *epoch;
   double DATUM;
@@ -46,6 +45,6 @@ public:
   int have_BOGUS;
 };
 
-WX_DECLARE_OBJARRAY(Station_Data, ArrayOfStationData);
+using ArrayOfStationData = ObjArray<Station_Data>;
 
 #endif  // STATION_DATA_H_

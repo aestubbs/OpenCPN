@@ -24,7 +24,8 @@
 #ifndef TCDATAFACTORY_H_
 #define TCDATAFACTORY_H_
 
-#include <wx/string.h>
+#include <QString>
+
 
 #include "idx_entry.h"
 #include "tc_error_code.h"
@@ -46,8 +47,8 @@ typedef struct {
 class abbr_entry {
 public:
   int type;
-  wxString short_s;
-  wxString long_s;
+  QString short_s;
+  QString long_s;
 };
 
 class TCDataFactory {
@@ -55,7 +56,7 @@ public:
   TCDataFactory() {}
   virtual ~TCDataFactory() {}
 
-  virtual TC_Error_Code LoadData(const wxString &data_file_path) = 0;
+  virtual TC_Error_Code LoadData(const QString &data_file_path) = 0;
 
   virtual int GetMaxIndex() = 0;
   virtual IDX_entry *GetIndexEntry(int n_index) = 0;
@@ -63,7 +64,7 @@ public:
   static int findunit(const char *unit);
   static const unit known_units[NUMUNITS];
 
-  wxString source_ident;
+  QString source_ident;
 };
 
 #endif

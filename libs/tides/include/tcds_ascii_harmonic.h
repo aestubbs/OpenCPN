@@ -24,10 +24,11 @@
 #ifndef TCDS_ASCII_HARMONIC_H_
 #define TCDS_ASCII_HARMONIC_H_
 
+#include <QString>
+
 #include <stdio.h>
 #include <vector>
 
-#include <wx/string.h>
 
 #include "tc_data_factory.h"
 #include "station_data.h"
@@ -40,7 +41,7 @@ public:
   TCDS_Ascii_Harmonic();
   ~TCDS_Ascii_Harmonic();
 
-  TC_Error_Code LoadData(const wxString &data_file_path);
+  TC_Error_Code LoadData(const QString &data_file_path);
 
   int GetMaxIndex() { return num_IDX; };
   IDX_entry *GetIndexEntry(int n_index);
@@ -52,7 +53,7 @@ private:
   long IndexFileIO(int func, long value);
   TC_Error_Code init_index_file();
   TC_Error_Code build_IDX_entry(IDX_entry *pIDX);
-  TC_Error_Code LoadHarmonicConstants(const wxString &data_file_path);
+  TC_Error_Code LoadHarmonicConstants(const QString &data_file_path);
   int read_next_line(FILE *fp, char linrec[linelen], int end_ok);
   int skipnl(FILE *fp);
   char *nojunk(char *line);
@@ -65,9 +66,9 @@ private:
 
   ArrayOfStationData m_msd_array;
 
-  wxString m_indexfile_name;
-  wxString m_harmfile_name;
-  wxString m_last_reference_not_found;
+  QString m_indexfile_name;
+  QString m_harmfile_name;
+  QString m_last_reference_not_found;
 
   char index_line_buffer[1024];
   FILE *m_IndexFile;

@@ -21,17 +21,13 @@
  * Tide and Current Manager
  */
 
-#include <wx/wxprec.h>
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif  // precompiled headers
-#include <wx/hashmap.h>
-
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
 
 #include <QDateTime>
+#include <QHash>
+#include <QString>
 
 #include "model/georef.h"
 #include "model/logger.h"
@@ -653,18 +649,18 @@ TC_Error_Code TCMgr::LoadDataSources(std::vector<std::string> &sources) {
 
   for (auto src : sources) {
     TCDataSource *s = new TCDataSource;
-    TC_Error_Code r = s->LoadData(src);
+    TC_Error_Code r = s->LoadData(QString::fromStdString(src));
     if (r != TC_NO_ERROR) {
-      wxString msg;
-      msg.Printf("   Error loading Tide/Currect data source %s ", src.c_str());
+      QString msg;
+      msg = QString::asprintf("   Error loading Tide/Currect data source %s ", src.c_str());
       if (r == TC_FILE_NOT_FOUND)
         msg += "Error Code: TC_FILE_NOT_FOUND";
       else {
-        wxString msg1;
-        msg1.Printf("Error code: %d", r);
+        QString msg1;
+        msg1 = QString::asprintf("Error code: %d", r);
         msg += msg1;
       }
-      wxLogMessage(msg);
+      qInfo("%s", qUtf8Printable(msg));
       delete s;
     } else {
       m_source_array.Add(s);
@@ -681,7 +677,7 @@ TC_Error_Code TCMgr::LoadDataSources(std::vector<std::string> &sources) {
   bTCMReady = true;
 
   if (m_Combined_IDX_array.empty())
-    wxLogMessage("TCMgr: no tide/current harmonic data installed.");
+    qWarning("TCMgr: no tide/current harmonic data installed.");
 
   ScrubCurrentDepths();
   return TC_NO_ERROR;
@@ -692,9 +688,7 @@ void TCMgr::ScrubCurrentDepths() {
   //  Identify and mark the shallowest record, as being most usable to OCPN
   //  users
 
-  WX_DECLARE_STRING_HASH_MAP(int, currentDepth_index_hash);
-
-  currentDepth_index_hash hash1;
+  QHash<QString, int> hash1;
 
   for (int i = 1; i < Get_max_IDX() + 1; i++) {
     IDX_entry *a = (IDX_entry *)GetIDX_entry(i);
@@ -708,17 +702,17 @@ void TCMgr::ScrubCurrentDepths() {
         //  This is relatively inefficient. but tolerable in this little used
         //  method.
 
-        wxString key1;
-        key1.Printf("%10.6f %10.6f", a->IDX_lat, a->IDX_lon);
+        QString key1;
+        key1 = QString::asprintf("%10.6f %10.6f", a->IDX_lat, a->IDX_lon);
 
-        currentDepth_index_hash::iterator it = hash1.find(key1);
+        auto it = hash1.find(key1);
         if (it == hash1.end()) {
           //      Key not found, needs to be added
           hash1[key1] = i;
         } else {
           // Check the depth value at the referenced index
           // if less than the current depth, replace the hashmap value
-          IDX_entry *b = (IDX_entry *)GetIDX_entry(it->second);
+          IDX_entry *b = (IDX_entry *)GetIDX_entry(it.value());
           std::string bName(b->IDX_station_name);
           int depth_b = b->current_depth;
           if (depth_a < depth_b) {
@@ -1030,11 +1024,11 @@ std::wstring TCMgr::GetTidalEventStr(int station_id, QDateTime ref_dt,
 
   std::wstring event_str;
   if (event == 1) {
-    event_str = _("LW").ToStdWstring();
+    event_str = std::wstring(L"LW");
   } else if (event == 2) {
-    event_str = _("HW").ToStdWstring();
+    event_str = std::wstring(L"HW");
   } else {
-    event_str = _("Unavailable").ToStdWstring();
+    event_str = std::wstring(L"Unavailable");
   }
 
   if (event > 0) {
@@ -1057,7 +1051,7 @@ std::map<double, const IDX_entry *> TCMgr::GetStationsForLL(double xlat,
   for (int j = 1; j < Get_max_IDX() + 1; j++) {
     lpIDX = GetIDX_entry(j);
     char type = lpIDX->IDX_type;
-    wxString locnx(lpIDX->IDX_station_name, wxConvUTF8);
+    QString locnx = QString::fromUtf8(lpIDX->IDX_station_name);
 
     if (type == 't' || type == 'T') {
       double brg, dist;
@@ -1070,11 +1064,11 @@ std::map<double, const IDX_entry *> TCMgr::GetStationsForLL(double xlat,
   return x;
 }
 
-int TCMgr::GetStationIDXbyName(const wxString &prefix, double xlat,
+int TCMgr::GetStationIDXbyName(const QString &prefix, double xlat,
                                double xlon) const {
   const IDX_entry *lpIDX;
   int jx = 0;
-  wxString locn;
+  QString locn;
   double distx = 100000.;
 
   int jmax = Get_max_IDX();
@@ -1082,10 +1076,10 @@ int TCMgr::GetStationIDXbyName(const wxString &prefix, double xlat,
   for (int j = 1; j < Get_max_IDX() + 1; j++) {
     lpIDX = GetIDX_entry(j);
     char type = lpIDX->IDX_type;  // Entry "TCtcIUu" identifier
-    wxString locnx(lpIDX->IDX_station_name, wxConvUTF8);
+    QString locnx = QString::fromUtf8(lpIDX->IDX_station_name);
 
     if (((type == 't') || (type == 'T'))  // only Tides
-        && (locnx.StartsWith(prefix))) {
+        && (locnx.startsWith(prefix))) {
       double brg, dist;
       DistanceBearingMercator(xlat, xlon, lpIDX->IDX_lat, lpIDX->IDX_lon, &brg,
                               &dist);
@@ -1099,11 +1093,11 @@ int TCMgr::GetStationIDXbyName(const wxString &prefix, double xlat,
   return (jx);
 }
 
-int TCMgr::GetStationIDXbyNameType(const wxString &prefix, double xlat,
+int TCMgr::GetStationIDXbyNameType(const QString &prefix, double xlat,
                                    double xlon, char type) const {
   const IDX_entry *lpIDX;
   int jx = 0;
-  wxString locn;
+  QString locn;
   double distx = 100000.;
 
   // if (prp->m_MarkName.Find("@~~") != wxNOT_FOUND) {
@@ -1113,9 +1107,9 @@ int TCMgr::GetStationIDXbyNameType(const wxString &prefix, double xlat,
   for (int j = 1; j < Get_max_IDX() + 1; j++) {
     lpIDX = GetIDX_entry(j);
     char typep = lpIDX->IDX_type;  // Entry "TCtcIUu" identifier
-    wxString locnx(lpIDX->IDX_station_name, wxConvUTF8);
+    QString locnx = QString::fromUtf8(lpIDX->IDX_station_name);
 
-    if ((type == typep) && (locnx.StartsWith(prefix))) {
+    if ((type == typep) && (locnx.startsWith(prefix))) {
       double brg, dist;
       DistanceBearingMercator(xlat, xlon, lpIDX->IDX_lat, lpIDX->IDX_lon, &brg,
                               &dist);

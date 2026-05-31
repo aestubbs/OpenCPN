@@ -25,9 +25,7 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include <wx/arrimpl.cpp>
 
-WX_DEFINE_OBJARRAY(ArrayOfIDXEntry);
 
 IDX_entry::IDX_entry()
     : source_data_type(SOURCE_TYPE_UNKNOWN),
