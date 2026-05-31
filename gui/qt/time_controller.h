@@ -59,6 +59,16 @@ public:
   explicit TimeController(QObject* parent = nullptr);
   ~TimeController() override;
 
+  /** The shared C++ instance -- also what QML's singleton resolves to (via
+   *  create()), so the tide Layer (C++) and the timeline HUD (QML) drive one
+   *  clock. */
+  static TimeController& instance();
+  static TimeController* create(QQmlEngine*, QJSEngine*) {
+    TimeController* p = &instance();
+    QJSEngine::setObjectOwnership(p, QJSEngine::CppOwnership);
+    return p;
+  }
+
   QDateTime displayTime() const { return m_time; }
   bool live() const { return m_live; }
   bool playing() const { return m_playing; }

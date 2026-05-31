@@ -126,6 +126,8 @@ qt_add_qml_module(opencpn-qt
     time_controller.cpp
     tide_model.h
     tide_model.cpp
+    tide_layer.h
+    tide_layer.cpp
     chart_config.h
     chart_config.cpp
     ocharts_service.h

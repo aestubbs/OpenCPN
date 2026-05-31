@@ -39,6 +39,11 @@ TimeController::TimeController(QObject* parent) : QObject(parent) {
 
 TimeController::~TimeController() = default;
 
+TimeController& TimeController::instance() {
+  static TimeController s;
+  return s;
+}
+
 void TimeController::recenterWindow() {
   const QDate d =
       (m_time.isValid() ? m_time : QDateTime::currentDateTime()).date();

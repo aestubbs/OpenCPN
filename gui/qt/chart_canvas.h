@@ -77,6 +77,7 @@ class SwitchableNavDataProvider;
 class AisLayer;
 class OwnShipLayer;
 class RouteLayer;
+class TideLayer;
 
 class ChartCanvas : public QQuickItem {
   Q_OBJECT
@@ -409,6 +410,7 @@ private:
   AisLayer* m_ais_layer = nullptr;
   OwnShipLayer* m_own_ship_layer = nullptr;
   RouteLayer* m_route_layer = nullptr;  // for colour-scheme line tinting
+  TideLayer* m_tide_layer = nullptr;    // tide/current stations (P3.14 D)
   // Demo (Hakefjord replay) is OFF by default and opt-in only: the app boots
   // into the live setup (persisted connections auto-start). Persisted in
   // ConfigStore ("display/demoMode"); the constructor reads it.
@@ -431,6 +433,12 @@ private:
   bool m_show_text = true;
   bool m_show_lights = true;
   bool m_show_buoys = true;
+  // Last-applied object-height unit (DisplayConfig order: 0 m, 1 ft) and depth
+  // unit (0 m, 1 ft, 2 fathoms). Both bake into the decode (height text + the
+  // SNDFRM obstruction soundings + the provider's SOUNDG formatter), so a change
+  // to either triggers applyChartConfig().
+  int m_height_unit = 0;
+  int m_depth_unit = 0;
   double m_detail_scale = 100000.0;  // default min display scale (no SCAMIN)
   double m_overzoom_k = 2.0;  // quilt over-zoom factor (render at <= native*k)
   // Push the current display category + viewing-group toggles onto a newly

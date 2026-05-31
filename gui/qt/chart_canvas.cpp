@@ -50,8 +50,11 @@
 #include "config_store.h"
 #include "demo_nav_data_provider.h"
 #include "shapefile_basemap_provider.h"
+#include "own_ship_config.h"
 #include "own_ship_layer.h"
+#include "ui_config.h"
 #include "route_overlay_layers.h"
+#include "tide_layer.h"
 #include "layer_compositor.h"
 #include "model/ocpn_config.h"
 #include "model/georef.h"  // DistanceBearingMercator -- cursor brg/rng
@@ -215,6 +218,12 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   waypoints->setZOrder(1700);
   m_compositor->addLayer(waypoints);
 
+  // Tide/current stations (P3.14 D) -- world-anchored, queried from the engine
+  // (ptcmgr) at the timeline's display time; hidden unless Show Tides is on.
+  m_tide_layer = new TideLayer(m_viewport.get());
+  m_tide_layer->setZOrder(1750);
+  m_compositor->addLayer(m_tide_layer);
+
   // Recentre on the active source's own-ship fix once after each mode switch
   // (the Hakefjord demo and a live feed are both at their real positions,
   // not on the loaded charts). m_live_centered is reset in setDemoMode.
@@ -303,9 +312,34 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
             }
             m_viewport->setCenter(clat, clon);
           });
-  // Recompute the chart rotation when the orientation mode / averaging changes.
-  connect(&DisplayConfig::instance(), &DisplayConfig::changed, this,
-          [this]() { updateChartRotation(); });
+  // Recompute the chart rotation when the orientation mode / averaging changes,
+  // and push the (possibly changed) depth unit to resident chart providers so
+  // soundings re-raster in the new unit. setDepthUnit short-circuits when the
+  // unit is unchanged, so unrelated DisplayConfig edits cost nothing.
+  connect(&DisplayConfig::instance(), &DisplayConfig::changed, this, [this]() {
+    updateChartRotation();
+    // Depth + height units both bake into the decode: height text + light
+    // descriptions and the SNDFRM soundings on wrecks/rocks are unit-formatted
+    // by s52plib at decode, and the reload re-creates providers with the new
+    // depth unit (applyDisplaySettings) so SOUNDG figures re-format too. So a
+    // change to either re-decodes the resident cells.
+    if (DisplayConfig::instance().depthUnit() != m_depth_unit ||
+        DisplayConfig::instance().heightUnit() != m_height_unit)
+      applyChartConfig();
+  });
+  // Vessel safety depth -> ENC sounding bold threshold (render-time re-raster).
+  connect(&OwnShipConfig::instance(), &OwnShipConfig::changed, this, [this]() {
+    const double sd = OwnShipConfig::instance().safetyDepth();
+    for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+      if (it.value().provider) it.value().provider->setSafetyDepth(sd);
+  });
+  // ENC sounding-size slider -> figure scale (render-time re-raster). The
+  // -5..+5 slider maps to 0.5x..1.5x, mirroring wx m_SoundingsScaleFactor.
+  connect(&UIConfig::instance(), &UIConfig::changed, this, [this]() {
+    const double sc = 1.0 + 0.1 * UIConfig::instance().encSoundingScaleFactor();
+    for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+      if (it.value().provider) it.value().provider->setSoundingScale(sc);
+  });
   // On resize, repaint AND re-evaluate visible cells: the initial fit +
   // selection can run before the canvas has its real size (the catalog scan
   // starts at launch), sampling a too-small view rect and missing cells in
@@ -410,6 +444,10 @@ void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
     s.safetyContour = c.safetyContour();
     s.shallowContour = c.shallowContour();
     s.deepContour = c.deepContour();
+    m_height_unit = DisplayConfig::instance().heightUnit();
+    s.heightUnit = m_height_unit;
+    m_depth_unit = DisplayConfig::instance().depthUnit();
+    s.depthUnit = m_depth_unit;
     s.chartInfoObjects = c.chartInfoObjects();          // P2.16
     s.buoyLightLabels = c.buoyLightLabels();            // P2.16
     s.lightDescriptions = c.lightDescriptions();        // P2.16
@@ -1008,6 +1046,16 @@ void ChartCanvas::applyDisplaySettings(
   provider->setShowBuoys(m_show_buoys);
   provider->setDetailScale(m_detail_scale);
   provider->setDeclutter(ChartConfig::instance().declutterText());  // P2.23a
+  // Sounding display. The depth unit applies here so freshly-decoded SOUNDG
+  // figures format correctly (a depth-unit *change* re-decodes via the
+  // DisplayConfig handler, since obstruction soundings are baked by s52plib).
+  // Safety-depth emphasis and the ENC sounding-size slider are live render-time
+  // re-rasters; the slider's -5..+5 maps to 0.5x..1.5x (1 + 0.1*f), mirroring
+  // wx m_SoundingsScaleFactor.
+  provider->setDepthUnit(DisplayConfig::instance().depthUnit());
+  provider->setSafetyDepth(OwnShipConfig::instance().safetyDepth());
+  provider->setSoundingScale(
+      1.0 + 0.1 * UIConfig::instance().encSoundingScaleFactor());
 }
 
 void ChartCanvas::setDetailScale(double n) {
@@ -1353,6 +1401,10 @@ void ChartCanvas::applyChartConfig() {
   s.safetyContour = c.safetyContour();
   s.shallowContour = c.shallowContour();
   s.deepContour = c.deepContour();
+  m_height_unit = DisplayConfig::instance().heightUnit();
+  s.heightUnit = m_height_unit;
+  m_depth_unit = DisplayConfig::instance().depthUnit();
+  s.depthUnit = m_depth_unit;
   s.chartInfoObjects = c.chartInfoObjects();          // P2.16
   s.buoyLightLabels = c.buoyLightLabels();            // P2.16
   s.lightDescriptions = c.lightDescriptions();        // P2.16
