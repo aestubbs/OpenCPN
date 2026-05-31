@@ -101,6 +101,22 @@ target_include_directories(_SOUND
 )
 target_link_libraries(_SOUND PRIVATE ${SOUND_WX_LIBS})
 
+# When libsndfile is found we add src/sndfile_sound_loader.cpp (above); it needs
+# the libsndfile headers + library on _SOUND's own paths. Without this the build
+# fails the moment libsndfile is installed (sndfile.h not found).
+#
+# The header lives in /opt/homebrew/include, which CMake lists in
+# CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES (Homebrew/arm64 + AppleClang) and so
+# *drops* from a normal target_include_directories() -I -- yet the compiler
+# doesn't actually search it. Pass it as a raw -I compile option, which is not
+# deduplicated against the implicit set.
+if (LIBSNDFILE_FOUND)
+  foreach (_sf_inc ${LIBSNDFILE_INCLUDE_DIRS})
+    target_compile_options(_SOUND PRIVATE "-I${_sf_inc}")
+  endforeach ()
+  target_link_libraries(_SOUND PRIVATE ${LIBSNDFILE_LIBRARIES})
+endif ()
+
 if (QT_ANDROID)
   target_link_libraries(_SOUND PRIVATE ocpn::java-jvm)
 endif ()
