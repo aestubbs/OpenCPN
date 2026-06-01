@@ -839,8 +839,17 @@ void ChartCanvas::updateVisibleCells() {
     if (!it->covers(cLat, cLon)) continue;
     if (centreN == 0 || it->nativeScale < centreN) centreN = it->nativeScale;
   }
-  const double newOverscale =
-      (centreN > 0 && displayN > 0.0) ? centreN / displayN : 0.0;
+  // The raw ratio (chart 1:N / display 1:N): >1 means zoomed in finer than the
+  // chart was compiled for. But the quilt INTENTIONALLY renders a chart
+  // overzoomed up to m_overzoom_k (default 2, up to 5) -- that is its normal
+  // display band, not "overscale". So, like wx (EmbossOverzoomIndicator fires
+  // only when ref_scale/chart_scale > 3.9, well above any normal overzoom), the
+  // warning must sit ABOVE that band: threshold = max(4, k). Below it -> report
+  // 0 so the banner stays hidden during ordinary quilt overzoom (e.g. right
+  // after a piano-bar select that autoscales a chart to ~its native scale).
+  const double overscaleThr = std::max(4.0, k);
+  const double raw = (centreN > 0 && displayN > 0.0) ? centreN / displayN : 0.0;
+  const double newOverscale = raw > overscaleThr ? raw : 0.0;
   // Quantise relative to the current value (a fixed absolute step would churn
   // at large factors and barely move near 1). 5% change is the HUD threshold.
   if (std::abs(newOverscale - m_overscale_factor) >
@@ -1109,6 +1118,10 @@ void ChartCanvas::applyDisplaySettings(
   provider->setSafetyDepth(OwnShipConfig::instance().safetyDepth());
   provider->setSoundingScale(
       1.0 + 0.1 * UIConfig::instance().encSoundingScaleFactor());
+  // Over-scale hatch threshold: above the quilt's normal overzoom band
+  // (m_overzoom_k), floored at wx's ~4x, so the hatch only marks genuine
+  // overscale -- not the routine overzoom the quilt does after autoscaling.
+  provider->setOverscaleThreshold(std::max(4.0, m_overzoom_k));
 }
 
 void ChartCanvas::setDetailScale(double n) {
@@ -1128,6 +1141,11 @@ void ChartCanvas::setOverzoomFactor(double k) {
   ConfigStore::instance().setDouble("display/overzoomFactor", k);
   // The over-zoom factor changes which charts the quilt selects, so re-run the
   // per-view selection (loads/evicts as needed). Cheap; only on a settings edit.
+  // It also sets the over-scale hatch threshold (max(4,k)), so push that to the
+  // resident providers too.
+  const double thr = std::max(4.0, m_overzoom_k);
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().provider) it.value().provider->setOverscaleThreshold(thr);
   if (!m_catalog.isEmpty()) updateVisibleCells();
   Q_EMIT overzoomFactorChanged();
   update();

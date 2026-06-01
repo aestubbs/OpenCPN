@@ -461,6 +461,13 @@ void S52VectorChartProvider::setNativeScale(int n) {
   Q_EMIT changed();
 }
 
+void S52VectorChartProvider::setOverscaleThreshold(double t) {
+  if (t <= 0.0 || t == m_overscale_threshold) return;
+  m_overscale_threshold = t;
+  m_relayout_pending = true;  // re-evaluate the hatch show/hide
+  Q_EMIT changed();
+}
+
 void S52VectorChartProvider::setDetailScale(double n) {
   if (n <= 0.0 || n == m_unset_scamin_n) return;
   m_unset_scamin_n = n;
@@ -593,10 +600,14 @@ void S52VectorChartProvider::rebuildOverscaleHatch(double scale,
   // across the cell bbox, screen-fixed spacing (rebuilt on zoom), inside the
   // cell's own clipped subtree so a finer cell drawn on top hides it.
   if (!m_overscale_hatch || scale <= 0.0) return;
-  // Show only when overscaled (a small hysteresis avoids flicker right at the
-  // boundary). m_native_scale 0 = unknown -> never hatch.
+  // Show only when the display is finer than native by MORE than the over-scale
+  // threshold. The quilt renders charts overzoomed up to the over-zoom factor as
+  // normal display, so hatching at the first hint of overzoom (native*0.99)
+  // would paint nearly every chart; the threshold sits above that band (matches
+  // the HUD banner + wx's 3.9x). m_native_scale 0 = unknown -> never hatch.
   const bool overscaled =
-      m_native_scale > 0 && chart_scale_n < m_native_scale * 0.99;
+      m_native_scale > 0 &&
+      chart_scale_n < m_native_scale / m_overscale_threshold;
   m_overscale_hatch->setOpacity(overscaled ? 1.0 : 0.0);
   if (!overscaled) return;  // skip the geometry rebuild while hidden
 

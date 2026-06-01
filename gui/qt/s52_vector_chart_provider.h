@@ -118,10 +118,16 @@ public:
   void setSoundingScale(double mult);
   double soundingScale() const { return m_sounding_scale; }
   // The cell's compilation scale (1:N). When the display is zoomed in finer
-  // than this, the cell is OVERSCALED and an S-52 over-scale hatch is drawn
-  // over its extent. 0 (unknown) disables the hatch. Set after construction
-  // (the catalog scale is known then). Triggers a re-layout (emits changed()).
+  // than this BY MORE THAN the over-scale threshold, the cell is OVERSCALED and
+  // an S-52 over-scale hatch is drawn over its extent. 0 (unknown) disables the
+  // hatch. Set after construction (the catalog scale is known then). Triggers a
+  // re-layout (emits changed()).
   void setNativeScale(int n);
+  // Over-scale threshold: how many times finer than native the display must be
+  // before the hatch shows. The quilt renders charts overzoomed up to the
+  // over-zoom factor as NORMAL display, so the threshold sits above that band
+  // (mirrors wx EmbossOverzoomIndicator's 3.9x). Default 4.0.
+  void setOverscaleThreshold(double t);
 
 private:
   // One billboarded point item (symbol or text): a transform node placed at
@@ -262,6 +268,7 @@ private:
   double m_safety_depth_m = 5.0;  // <= this (metres) -> emphasised sounding
   double m_sounding_scale = 1.0;  // ENC sounding-size slider multiplier
   int m_native_scale = 0;         // cell compilation 1:N (0 = unknown)
+  double m_overscale_threshold = 4.0;  // hatch when display finer than native*t
   // S-52 over-scale hatch: vertical lines over the cell's extent, shown only
   // when the display is zoomed finer than the cell's native scale. Built once
   // (a fixed set of world-X verticals across the bbox); shown/hidden + line
