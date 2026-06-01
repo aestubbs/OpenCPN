@@ -692,18 +692,24 @@ void TCMgr::ScrubCurrentDepths() {
 
   for (int i = 1; i < Get_max_IDX() + 1; i++) {
     IDX_entry *a = (IDX_entry *)GetIDX_entry(i);
-    if (a->IDX_type == 'C') {
+    // Both reference ('C') and subordinate ('c') current stations can report
+    // at multiple depths; scrub both so neither stacks an arrow per depth.
+    if (a->IDX_type == 'C' || a->IDX_type == 'c') {
       if (a->current_depth > 0) {
         int depth_a = a->current_depth;
 
-        // We formulate the hash map with geo-location as the keys
+        // We formulate the hash map with geo-location as the keys.
         //  Using "doubles" as hashmap key values is dangerous, especially
-        //  cross-platform So, we a printf-ed string of lat/lon for hash key,
+        //  cross-platform. So we use a printf-ed string of lat/lon for the key.
+        //  Round to 4 decimals (~11 m) so near-coincident duplicates collapse
+        //  too: the free harmonics set carries legacy stations a few metres
+        //  off a newer one (e.g. "Golden Gate" atop "Golden Gate Bridge,
+        //  0.88 nmi NE of"), which an exact match would leave as two markers.
         //  This is relatively inefficient. but tolerable in this little used
         //  method.
 
         QString key1;
-        key1 = QString::asprintf("%10.6f %10.6f", a->IDX_lat, a->IDX_lon);
+        key1 = QString::asprintf("%.4f %.4f", a->IDX_lat, a->IDX_lon);
 
         auto it = hash1.find(key1);
         if (it == hash1.end()) {

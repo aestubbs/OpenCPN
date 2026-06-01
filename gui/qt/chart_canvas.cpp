@@ -1560,6 +1560,10 @@ bool ChartCanvas::pickTideStationAt(const QPointF& screen_pos) {
     if (!e || !e->IDX_Useable) continue;
     const char ty = e->IDX_type;
     if (ty != 't' && ty != 'T' && ty != 'c' && ty != 'C') continue;
+    // Skip the deeper records of multi-depth current stations so the pick (and
+    // hence the graph) lands on the shallowest, most-usable record -- matching
+    // what TideLayer draws and the legacy wx RebuildCurrentSelectList.
+    if ((ty == 'c' || ty == 'C') && e->b_skipTooDeep) continue;
     const QPointF sp =
         m.map(QPointF(e->IDX_lon, Viewport::latToWorldY(e->IDX_lat)));
     const double dx = sp.x() - screen_pos.x();

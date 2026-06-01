@@ -99,6 +99,12 @@ void TideLayer::draw(SgBuilder& b, double wpp) {
     const bool is_tide = (ty == 't' || ty == 'T');
     const bool is_current = (ty == 'c' || ty == 'C');
     if (!is_tide && !is_current) continue;
+    // Multi-depth current stations report several records at one lat/lon (NOAA
+    // names them "... (depth NN ft)"). ScrubCurrentDepths() keeps the shallowest,
+    // most-usable record and marks the deeper ones b_skipTooDeep; honour that so
+    // we don't stack a marker per depth. Matches the legacy wx renderer
+    // (chcanv.cpp DrawAllCurrentsInBBox / RebuildCurrentSelectList).
+    if (is_current && e->b_skipTooDeep) continue;
 
     const QPointF w = world(e->IDX_lat, e->IDX_lon);  // Mercator world point
     if (!vb.contains(w)) continue;
