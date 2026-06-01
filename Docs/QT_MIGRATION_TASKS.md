@@ -1194,12 +1194,64 @@ render anything onto the chart, only manages the plugin lifecycle.
         `finishRoute` exist; add `removeLastRoutePoint`/`cancelRoute`).
         Relates to **P3.7**. *(severity: medium-high — route creation is a core
         nav workflow and is currently frustrating to use)*
-- [ ] **P3.14** **Tides & currents engine port.** Port the wx tide/current
-      prediction engine (`gui/src/tcmgr.cpp`, ~7,451 lines — harmonics parsing
-      + prediction) into the de-wx'd Qt core, then surface it: the Charts →
-      Tides data-set list, and on-chart tide-height / current-arrow stations as
-      a world-anchored Layer. Large; the Charts → Tides pane is a placeholder
-      until this lands. *(severity: medium — large effort)*
+- [~] **P3.14** **Tides & currents port.** Plan agreed 2026-05-31 after a
+      full audit of the wx subsystem (engine `tcmgr`/`idx_entry`/
+      `tc_data_source`/`tcds_*_harmonic` + vendored `libtcd`; on-chart render in
+      `chcanv.cpp`; graph `tc_win.cpp`). **Key enabler:** the display-time spine
+      already exists in the de-wx'd core — `gTimeSource` (a `QDateTime` in
+      `model/gui_vars.cpp:105`) is what GRIB sets and the tide/current render
+      reads (invalid == live/now). The engine is already mostly `std`/`time_t`/
+      `QDateTime`-typed (~35 wx refs) and the math is correct. Engine is **not
+      reentrant** (static epoch state + libtcd single-DB-open) → sample on one
+      mutex-guarded worker thread.
+      **Decisions (user, 2026-05-31):** one **unified timeline** (tides +
+      currents + future GRIB all follow `gTimeSource`); the tide/current graph
+      is a **docked bottom panel** (scrub moves the marker, click-curve sets the
+      time); slider supports **scrub + Play** (animate flood/ebb).
+      **Phases:** (A) port the engine into a `libs/tides` lib `gui/qt` links —
+      de-wx (wxString→QString at the edge, `WX_DECLARE_OBJARRAY`→`QVector`,
+      wxLog/tokenizer/wxConvUTF8/wxHashMap), keep the harmonic math, expose a
+      mutex-guarded `TideCurrentEngine` facade; (B) Charts→Tides data-set list
+      (persisted, feeds `LoadDataSources` — mirrors `ChartSourceModel`); (C)
+      **`TimeController`** QML singleton wrapping `gTimeSource` (live/scrub/play
+      via QTimer); (D) world-anchored **tide/current scene-graph Layer** (icons
+      + log-scaled current arrows + labels, sampled at displayTime on a worker,
+      rebuilt on time/viewport change — reuses SgBuilder/billboards); (E)
+      **bottom timeline slider HUD** (scrub/Now/Play/readout); (F) docked
+      **tide/current graph panel** replacing `TCWin`, bound to the same
+      `TimeController`. **Done so far:** C + E (TimeController + timeline HUD);
+      **A** — the engine is ported into `libs/tides` and **builds, links and
+      calculates** in opencpn-qt (verified via `OCPN_QT_TIDE_TEST`: loaded 8,184
+      stations from harmonics-dwf .tcd and predicted Honolulu / Nawiliwili / etc.
+      for 'now'). **A.2** — the engine is now **pure Qt/std** (wxString→QString,
+      wxObjArray→an `ObjArray<T>` shim, wxHashMap→QHash, wxStringTokenizer→
+      `QString::split`, wxConvUTF8→`fromUtf8`, wxLog→qInfo/qWarning; no wx in the
+      code, wx dependency dropped from the lib CMake). Re-verified still
+      calculating identically (same 8,184 stations, correct names). **B DONE** —
+      `TideModel` (context property `tides`) persists a harmonic-file list and
+      (re)builds the global `TCMgr` via `LoadDataSources`; bundled
+      `harmonics-dwf` seeded on first run; Options→Charts→Tides is a real
+      add/remove/list picker. **D DONE** — `TideLayer` (world-anchored,
+      `StaticNavLayer`) queries the engine per station in the viewport bbox at
+      the timeline's display time (`gTimeSource`), drawing tide markers + height
+      labels and current set-arrows; gated on `DisplayConfig.showTides`
+      (MUIBar ≋), rebuilt on zoom / minute-tick / toggle. `TimeController` is
+      now an `instance()`+`create()` singleton so the C++ Layer and the QML
+      timeline share one clock. **F DONE** — a docked **bottom tide-graph
+      drawer** + a full-width window-bottom **time bar** that rides the drawer
+      and uses a **fixed read-marker with a pannable, infinite axis** (drag pans
+      time; chart tides + graph animate under the marker; ▶ animates; Now
+      re-snaps). `TimeController` rewritten to the pan/fixed-marker window
+      (8h back + 24h ahead, marker ¼; panPixels/setDisplayFraction). Clicking a
+      tide/current station (`ChartCanvas::pickTideStationAt`) selects it into a
+      new `TideGraphViewModel` (curve `samples()` + HW/LW or flood/ebb
+      `events()` + `valueAtMarker`, all in the user's units); the QML graph is a
+      `Canvas` aligned to the bar's shared time→x mapping. Current-speed labels +
+      height-unit formatting also landed (the animation-on-drag polish too).
+      **Remaining:** current-station *slack* markers, scale-gated decluttering,
+      DST/timezone tick labels, and the **active-tides** sounding adjustment
+      (the per-(lat,lon,time) seam lives in `TideLayer`/the engine).
+      *(severity: medium — large effort)*
 - [ ] **P3.15** **Alert engine (sound triggering).** The Qt **sound engine**
       (`SoundPlayer`, P3 UI→Sounds) plays files and the **Test** buttons are
       live, but nothing *fires* the alerts automatically yet. Wire: AIS

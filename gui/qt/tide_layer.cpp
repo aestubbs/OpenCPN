@@ -120,17 +120,29 @@ void TideLayer::draw(SgBuilder& b, double wpp) {
       float val = 0.0f, dir = 0.0f;
       if (!ptcmgr->GetTideOrCurrent(t, i, val, dir)) continue;
       const QPointF u = headingVec(dir);  // world unit vector for the set
-      const double len = (14.0 + std::min(60.0, std::fabs(val) * 18.0)) * wpp;
-      const QPointF tip(w.x() + u.x() * len, w.y() + u.y() * len);
-      b.setPen(QColor(240, 140, 30), 2.0f);
-      b.noBrush();
-      b.drawLine(w, tip);
-      const QPointF n(-u.y(), u.x());
-      const QPointF base(tip.x() - u.x() * 5.0 * wpp, tip.y() - u.y() * 5.0 * wpp);
-      b.drawLine(tip, QPointF(base.x() + n.x() * 3.0 * wpp,
-                              base.y() + n.y() * 3.0 * wpp));
-      b.drawLine(tip, QPointF(base.x() - n.x() * 3.0 * wpp,
-                              base.y() - n.y() * 3.0 * wpp));
+      // Drift vector: the distance the current carries you in the configured
+      // time (DisplayConfig.currentVectorMinutes), drawn at chart scale. The
+      // world frame is conformal Mercator, so 1 world unit = 60*cos(lat) nm;
+      // hence world length = drift_nm / (60*cos lat). It grows/shrinks with zoom
+      // like a real set-and-drift vector. Capped so a long period at a large
+      // scale can't run off-screen.
+      const double drift_nm =
+          std::fabs(val) * (dc.currentVectorMinutes() / 60.0);  // kn * hours
+      const double clat =
+          std::max(0.20, std::cos(e->IDX_lat * 0.017453292519943295));
+      const double len = std::min(drift_nm / (60.0 * clat), 160.0 * wpp);
+      if (len > 1.5 * wpp) {  // skip the shaft at/near slack (no drift to show)
+        const QPointF tip(w.x() + u.x() * len, w.y() + u.y() * len);
+        b.setPen(QColor(240, 140, 30), 2.0f);
+        b.noBrush();
+        b.drawLine(w, tip);
+        const QPointF n(-u.y(), u.x());
+        const double hb = std::max(4.0 * wpp, len * 0.28);  // arrowhead length
+        const double hw = std::max(2.5 * wpp, len * 0.16);  // arrowhead half-width
+        const QPointF base(tip.x() - u.x() * hb, tip.y() - u.y() * hb);
+        b.drawLine(tip, QPointF(base.x() + n.x() * hw, base.y() + n.y() * hw));
+        b.drawLine(tip, QPointF(base.x() - n.x() * hw, base.y() - n.y() * hw));
+      }
       b.setBrush(QColor(240, 140, 30));
       b.setPen(QColor(120, 70, 10), 1.0f);
       b.drawCircle(w, static_cast<float>(2.5 * wpp));

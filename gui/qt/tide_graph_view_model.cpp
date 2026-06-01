@@ -193,4 +193,28 @@ QVariantList TideGraphViewModel::events(double startMs, double endMs) const {
   return out;
 }
 
+QVariantList TideGraphViewModel::currentArrows(double startMs, double endMs,
+                                               double stepMins) const {
+  QVariantList out;
+  if (m_idx < 0 || !ptcmgr || !m_is_current || stepMins <= 0.0 ||
+      endMs <= startMs)
+    return out;
+  const time_t start = static_cast<time_t>(startMs / 1000.0);
+  const time_t end = static_cast<time_t>(endMs / 1000.0);
+  const time_t step = static_cast<time_t>(stepMins * 60.0);
+  if (step <= 0) return out;
+  for (time_t t = start; t <= end && out.size() < 600; t += step) {
+    float val = 0.0f, dir = 0.0f;  // knots (signed: + flood / - ebb), compass
+    if (!ptcmgr->GetTideOrCurrent(t, m_idx, val, dir)) continue;
+    QVariantMap a;
+    a[QStringLiteral("t")] = static_cast<double>(t) * 1000.0;
+    a[QStringLiteral("v")] = toUser(val);          // signed user units (curve y)
+    a[QStringLiteral("dir")] = static_cast<double>(dir);  // set, degrees true
+    a[QStringLiteral("spd")] =
+        std::fabs(static_cast<double>(val));       // knots (native) -> arrow len
+    out.append(a);
+  }
+  return out;
+}
+
 }  // namespace ocpn::qtui

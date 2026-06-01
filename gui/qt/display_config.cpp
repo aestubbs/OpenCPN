@@ -44,6 +44,8 @@ DisplayConfig::DisplayConfig() {
   m_show_compass = c.getBool("display/showCompass", m_show_compass);
   m_show_tides = c.getBool("display/showTides", m_show_tides);
   m_show_nodata = c.getBool("display/showNoData", m_show_nodata);
+  m_current_vector_min =
+      c.getDouble("display/currentVectorMinutes", m_current_vector_min);
   m_time_zone = c.getInt("display/timeZone", m_time_zone);
   m_cog_predict_min = c.getDouble("display/cogPredictMin", m_cog_predict_min);
   m_sogcog_damping = c.getDouble("display/sogCogDamping", m_sogcog_damping);
@@ -101,6 +103,10 @@ void DisplayConfig::setShowTides(bool v) {
 void DisplayConfig::setShowNoData(bool v) {
   OCPN_SET(m_show_nodata, v,
            ConfigStore::instance().setBool("display/showNoData", v))
+}
+void DisplayConfig::setCurrentVectorMinutes(double v) {
+  OCPN_SET(m_current_vector_min, v,
+           ConfigStore::instance().setDouble("display/currentVectorMinutes", v))
 }
 void DisplayConfig::setTimeZone(int v) {
   OCPN_SET(m_time_zone, v, ConfigStore::instance().setInt("display/timeZone", v))

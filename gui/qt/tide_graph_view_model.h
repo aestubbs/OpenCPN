@@ -63,6 +63,11 @@ public:
   /** Turning-point events in the window as { t (ms), v (user units), type } --
    *  type "HW"/"LW" for tide, "Flood"/"Ebb" for current. */
   Q_INVOKABLE QVariantList events(double startMs, double endMs) const;
+  /** Current set/drift arrows at stepMins intervals across [startMs, endMs] as
+   *  { t (ms), v (signed user-unit speed -> the y on the curve), dir (compass
+   *  set, degrees) }. Empty for tide stations. */
+  Q_INVOKABLE QVariantList currentArrows(double startMs, double endMs,
+                                         double stepMins) const;
 
 Q_SIGNALS:
   void changed();        // station / unit / value range

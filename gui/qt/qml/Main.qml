@@ -743,6 +743,17 @@ ApplicationWindow {
                                             value: Math.round(DisplayConfig.defaultBoatSpeed)
                                             onValueModified: DisplayConfig.defaultBoatSpeed = value
                                         }
+                                        Label {
+                                            text: qsTr("Current vector (min):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 1; to: 120
+                                            value: Math.round(DisplayConfig.currentVectorMinutes)
+                                            onValueModified: DisplayConfig.currentVectorMinutes = value
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("On-chart current arrows show the distance the current carries you in this many minutes, at chart scale")
+                                        }
                                     }
 
                                     MenuSeparator { Layout.fillWidth: true }
@@ -3363,12 +3374,14 @@ ApplicationWindow {
                 // current set vectors along the curve, every 15 min: a line in
                 // the compass set (N up), length proportional to drift speed.
                 if (tg.isCurrent) {
-                    var maxAbs = Math.max(Math.abs(vmin), Math.abs(vmax), 0.1)
                     var arr = tg.currentArrows(tideBar.winStartMs, tideBar.winEndMs, 15)
                     var span2 = tideBar.winEndMs - tideBar.winStartMs
                     ctx.strokeStyle = "#ffb347"; ctx.fillStyle = "#ffb347"; ctx.lineWidth = 1
                     for (var a = 0; a < arr.length; a++) {
-                        var L = Math.abs(arr[a].v) / maxAbs * 15
+                        // length = drift over the configured time (same setting
+                        // as the chart arrows), at a fixed graph scale.
+                        var L = Math.min(34, arr[a].spd
+                                         * (DisplayConfig.currentVectorMinutes / 60) * 130)
                         if (L < 1.5) continue   // skip near-slack (too short to read)
                         var ax = pl + pw * (arr[a].t - tideBar.winStartMs) / span2
                         var ay = yOf(arr[a].v)

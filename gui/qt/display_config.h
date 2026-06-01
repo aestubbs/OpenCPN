@@ -70,6 +70,11 @@ class DisplayConfig : public QObject {
   // areas with no ENC read as "unsurveyed" rather than the roamable world map.
   // Off by default (keeps the world basemap). Mirrors the ECDIS no-data look.
   Q_PROPERTY(bool showNoData READ showNoData WRITE setShowNoData NOTIFY changed)
+  // On-chart current arrows are drawn as a DRIFT vector: the distance the
+  // current would carry you in this many minutes, at chart scale (so the arrow
+  // grows/shrinks with zoom, like a real set-and-drift vector).
+  Q_PROPERTY(double currentVectorMinutes READ currentVectorMinutes WRITE
+                 setCurrentVectorMinutes NOTIFY changed)
   // Time display: 0 = UTC, 1 = local (OS) time zone.
   Q_PROPERTY(int timeZone READ timeZone WRITE setTimeZone NOTIFY changed)
   // Own-ship COG/SOG predictor vector length, in minutes of run.
@@ -148,6 +153,8 @@ public:
   void setShowTides(bool v);
   bool showNoData() const { return m_show_nodata; }
   void setShowNoData(bool v);
+  double currentVectorMinutes() const { return m_current_vector_min; }
+  void setCurrentVectorMinutes(double v);
   int timeZone() const { return m_time_zone; }
   void setTimeZone(int v);
   double cogPredictorMinutes() const { return m_cog_predict_min; }
@@ -219,6 +226,7 @@ private:
   bool m_show_compass = true;
   bool m_show_tides = false;
   bool m_show_nodata = false;
+  double m_current_vector_min = 6.0;
   int m_time_zone = 0;
   double m_cog_predict_min = 6.0;
   double m_sogcog_damping = 0.0;
