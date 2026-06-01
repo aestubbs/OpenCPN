@@ -55,6 +55,9 @@
 #include "ui_config.h"
 #include "route_overlay_layers.h"
 #include "tide_layer.h"
+#include "tcmgr.h"            // ptcmgr (libs/tides) -- tide-station hit-testing
+#include "idx_entry.h"
+#include "display_config.h"   // showTides gate for the tide pick
 #include "layer_compositor.h"
 #include "model/ocpn_config.h"
 #include "model/georef.h"  // DistanceBearingMercator -- cursor brg/rng
@@ -159,6 +162,7 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_nav_state = std::make_unique<NavStateViewModel>(m_nav_provider.get());
   // Selected-AIS-target model for the info popup (P3.9).
   m_ais_selection = std::make_unique<AisSelectionViewModel>();
+  m_tide_graph = std::make_unique<TideGraphViewModel>();
   // S-57 object-query result model (P3.9).
   m_object_query = std::make_unique<ObjectQueryViewModel>();
   // Route/waypoint list model for the manager (P3.7).
@@ -1318,7 +1322,10 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
         else
           selectRoute(rt);
       } else if (!pickAisAt(event->position())) {
-        clearRouteSelection();  // clicked empty water -> leave edit
+        // Tides on? try a tide/current station before deselecting.
+        if (!(DisplayConfig::instance().showTides() &&
+              pickTideStationAt(event->position())))
+          clearRouteSelection();  // clicked empty water -> leave edit
       }
     }
     event->accept();
@@ -1470,6 +1477,36 @@ bool ChartCanvas::pickAisAt(const QPointF& screen_pos) {
     return true;
   }
   m_ais_selection->clear();
+  return false;
+}
+
+bool ChartCanvas::pickTideStationAt(const QPointF& screen_pos) {
+  if (!m_tide_graph || !m_viewport || !ptcmgr || !ptcmgr->IsReady())
+    return false;
+  const QMatrix4x4 m = m_viewport->transformMatrix(static_cast<int>(width()),
+                                                   static_cast<int>(height()));
+  constexpr double kPickRadiusPx = 13.0;
+  double best = kPickRadiusPx * kPickRadiusPx;
+  int hit = -1;
+  for (int i = 0; i <= ptcmgr->Get_max_IDX(); ++i) {
+    const IDX_entry* e = ptcmgr->GetIDX_entry(i);
+    if (!e || !e->IDX_Useable) continue;
+    const char ty = e->IDX_type;
+    if (ty != 't' && ty != 'T' && ty != 'c' && ty != 'C') continue;
+    const QPointF sp =
+        m.map(QPointF(e->IDX_lon, Viewport::latToWorldY(e->IDX_lat)));
+    const double dx = sp.x() - screen_pos.x();
+    const double dy = sp.y() - screen_pos.y();
+    const double d2 = dx * dx + dy * dy;
+    if (d2 < best) {
+      best = d2;
+      hit = i;
+    }
+  }
+  if (hit >= 0) {
+    m_tide_graph->select(hit);
+    return true;
+  }
   return false;
 }
 

@@ -16,6 +16,7 @@
 #include "time_controller.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <QTimer>
 
@@ -23,15 +24,10 @@
 
 namespace ocpn::qtui {
 
-namespace {
-constexpr double kDaySecs = 24.0 * 3600.0;
-}
-
 TimeController::TimeController(QObject* parent) : QObject(parent) {
   m_time = QDateTime::currentDateTime();
-  recenterWindow();
   m_timer = new QTimer(this);
-  m_timer->setInterval(1000);  // 1 Hz: advance the live clock / play animation
+  m_timer->setInterval(1000);  // 1 Hz live tick (100 ms while playing)
   connect(m_timer, &QTimer::timeout, this, &TimeController::onTick);
   m_timer->start();
   applyToGlobal();
@@ -44,32 +40,19 @@ TimeController& TimeController::instance() {
   return s;
 }
 
-void TimeController::recenterWindow() {
-  const QDate d =
-      (m_time.isValid() ? m_time : QDateTime::currentDateTime()).date();
-  m_window_start = d.startOfDay();  // local midnight of the shown day
-  Q_EMIT windowChanged();
-}
-
-double TimeController::position() const {
-  const qint64 a = m_window_start.toSecsSinceEpoch();
-  return std::clamp(
-      static_cast<double>(m_time.toSecsSinceEpoch() - a) / kDaySecs, 0.0, 1.0);
-}
-
-double TimeController::nowPosition() const {
-  const qint64 a = m_window_start.toSecsSinceEpoch();
-  return static_cast<double>(
-             QDateTime::currentDateTime().toSecsSinceEpoch() - a) /
-         kDaySecs;
-}
-
-QString TimeController::dateLabel() const {
-  return m_window_start.toString(QStringLiteral("ddd dd MMM"));
+double TimeController::nowFraction() const {
+  const qint64 a = windowStart().toSecsSinceEpoch();
+  const double now =
+      static_cast<double>(QDateTime::currentDateTime().toSecsSinceEpoch());
+  return (now - static_cast<double>(a)) / m_window_secs;
 }
 
 QString TimeController::timeLabel() const {
   return m_time.toString(QStringLiteral("HH:mm"));
+}
+
+QString TimeController::dateLabel() const {
+  return m_time.toString(QStringLiteral("ddd dd MMM"));
 }
 
 void TimeController::applyToGlobal() {
@@ -77,14 +60,25 @@ void TimeController::applyToGlobal() {
   gTimeSource = m_live ? QDateTime() : m_time;
 }
 
+void TimeController::enterScrub() {
+  if (m_playing) {
+    m_playing = false;
+    if (m_timer) m_timer->setInterval(1000);
+  }
+  const bool was_live = m_live;
+  m_live = false;
+  if (was_live) Q_EMIT modeChanged();  // playing already cleared above
+}
+
 void TimeController::goLive() {
   m_playing = false;
+  if (m_timer) m_timer->setInterval(1000);
   m_live = true;
   m_time = QDateTime::currentDateTime();
-  recenterWindow();
   applyToGlobal();
   Q_EMIT modeChanged();
   Q_EMIT timeChanged();
+  Q_EMIT windowChanged();
 }
 
 void TimeController::setDisplayTime(const QDateTime& t) {
@@ -92,33 +86,41 @@ void TimeController::setDisplayTime(const QDateTime& t) {
     goLive();
     return;
   }
-  m_live = false;
+  enterScrub();
   m_time = t;
-  // Keep the playhead in view: follow the window to the day we landed on.
-  if (m_time.date() != m_window_start.date()) recenterWindow();
   applyToGlobal();
-  Q_EMIT modeChanged();
   Q_EMIT timeChanged();
+  Q_EMIT windowChanged();
 }
 
-void TimeController::setPosition(double p) {
-  p = std::clamp(p, 0.0, 1.0);
-  const qint64 a = m_window_start.toSecsSinceEpoch();
-  setDisplayTime(
-      QDateTime::fromSecsSinceEpoch(a + static_cast<qint64>(p * kDaySecs)));
+void TimeController::panSeconds(double secs) {
+  enterScrub();
+  m_time = m_time.addSecs(static_cast<qint64>(std::llround(secs)));
+  applyToGlobal();
+  Q_EMIT timeChanged();
+  Q_EMIT windowChanged();
+}
+
+void TimeController::panPixels(double dx, double widthPx) {
+  if (widthPx <= 0.0) return;
+  panSeconds(-dx * (m_window_secs / widthPx));  // drag right -> earlier
+}
+
+void TimeController::setDisplayFraction(double x) {
+  x = std::clamp(x, 0.0, 1.0);
+  const qint64 a = windowStart().toSecsSinceEpoch();
+  setDisplayTime(QDateTime::fromSecsSinceEpoch(
+      a + static_cast<qint64>(x * m_window_secs)));
 }
 
 void TimeController::stepMinutes(int mins) {
   setDisplayTime(m_time.addSecs(static_cast<qint64>(mins) * 60));
 }
 
-void TimeController::stepDays(int days) {
-  setDisplayTime(m_time.addDays(days));  // recenterWindow() follows the date
-}
-
 void TimeController::play() {
-  m_live = false;  // animate from the current display time
+  m_live = false;
   m_playing = true;
+  if (m_timer) m_timer->setInterval(100);  // smooth animation while playing
   applyToGlobal();
   Q_EMIT modeChanged();
 }
@@ -126,6 +128,7 @@ void TimeController::play() {
 void TimeController::pause() {
   if (!m_playing) return;
   m_playing = false;
+  if (m_timer) m_timer->setInterval(1000);  // back to the 1 Hz live tick
   Q_EMIT modeChanged();
 }
 
@@ -134,13 +137,13 @@ void TimeController::togglePlay() { m_playing ? pause() : play(); }
 void TimeController::onTick() {
   if (m_playing) {
     m_time = m_time.addSecs(static_cast<qint64>(m_play_minutes_per_tick) * 60);
-    if (m_time >= windowEnd()) recenterWindow();  // roll into the next day
     applyToGlobal();
     Q_EMIT timeChanged();
+    Q_EMIT windowChanged();  // window scrolls forward with displayTime
   } else if (m_live) {
     m_time = QDateTime::currentDateTime();
-    if (m_time.date() != m_window_start.date()) recenterWindow();  // past midnight
-    Q_EMIT timeChanged();  // gTimeSource stays invalid while live
+    Q_EMIT timeChanged();
+    Q_EMIT windowChanged();  // gTimeSource stays invalid while live
   }
 }
 

@@ -128,6 +128,8 @@ qt_add_qml_module(opencpn-qt
     tide_model.cpp
     tide_layer.h
     tide_layer.cpp
+    tide_graph_view_model.h
+    tide_graph_view_model.cpp
     chart_config.h
     chart_config.cpp
     ocharts_service.h

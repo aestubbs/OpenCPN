@@ -2793,150 +2793,14 @@ ApplicationWindow {
         id: chart
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.bottom: parent.bottom
+        // Bottom follows the tide time-bar (which rides the graph drawer).
+        anchors.bottom: tideBar.top
         // Right edge follows the HUD panel so opening it shrinks the chart.
         anchors.right: hudPanel.left
         // Hand the S-52 engine to the canvas so it scans the chart set's
         // boundaries and streams cell content on demand. `s52` is the
         // context property set in main.cpp.
         s52Engine: s52
-
-        // --- Timeline (P3.14 phase E): a day-at-a-time scrubber for the shared
-        //     display time (TimeController -> gTimeSource) that tides, currents
-        //     and future GRIB follow. Date on the left, hourly ticks across the
-        //     track, draggable playhead with a time bubble, a live "now" marker,
-        //     ‹‹/›› step whole days, ▶ animates, Now is live. Visible only when
-        //     tides are on (MUIBar ≋ toggle).
-        Rectangle {
-            id: timeline
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 70
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(parent.width - 40, 820)
-            height: 54
-            radius: 8
-            color: Qt.rgba(0, 0, 0, 0.6)
-            border.color: Qt.rgba(1, 1, 1, 0.15)
-            visible: DisplayConfig.showTides
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 6
-
-                ToolButton {
-                    text: "‹‹"; onClicked: TimeController.stepDays(-1)
-                    ToolTip.text: qsTr("Previous day"); ToolTip.visible: hovered
-                }
-                ToolButton {
-                    text: TimeController.playing ? "⏸" : "▶"
-                    onClicked: TimeController.togglePlay()
-                    ToolTip.text: qsTr("Animate through time"); ToolTip.visible: hovered
-                }
-
-                // Date of the shown day, left of the track.
-                Label {
-                    text: TimeController.dateLabel
-                    color: "#e8e8e8"; font.bold: true; font.pointSize: 11
-                    Layout.preferredWidth: 92
-                }
-
-                // Hour track: ticks + 3-hourly labels + now-marker + playhead.
-                Item {
-                    id: track
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.topMargin: 8
-                    Layout.bottomMargin: 6
-                    readonly property real frac: TimeController.position
-                    readonly property real nowFrac: TimeController.nowPosition
-                    readonly property bool dragging: trackMouse.pressed
-
-                    Rectangle {  // baseline
-                        anchors.left: parent.left; anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 2; color: "#50ffffff"
-                    }
-                    Repeater {   // hour ticks + labels every 3 h
-                        model: 25
-                        Item {
-                            x: track.width * index / 24
-                            height: track.height
-                            Rectangle {
-                                width: 1
-                                height: (index % 3 === 0) ? track.height * 0.55
-                                                          : track.height * 0.30
-                                color: "#70ffffff"
-                                anchors.bottom: parent.bottom
-                            }
-                            Label {
-                                visible: index % 3 === 0 && index < 24
-                                text: ("0" + index).slice(-2)
-                                font.pointSize: 8; color: "#b0ffffff"
-                                anchors.bottom: parent.bottom
-                                anchors.bottomMargin: track.height * 0.55 + 1
-                                anchors.horizontalCenter: parent.left
-                            }
-                        }
-                    }
-                    Rectangle {  // "now" marker (only when today is shown)
-                        visible: track.nowFrac >= 0 && track.nowFrac <= 1
-                        x: track.width * track.nowFrac - 1
-                        width: 2; height: track.height; color: "#ff5b5b"
-                    }
-                    Rectangle {  // playhead line
-                        x: track.width * track.frac - 1
-                        width: 2; height: track.height
-                        color: TimeController.live ? "#8fd0ff" : "#ffd27f"
-                    }
-                    Rectangle {  // playhead handle
-                        x: track.width * track.frac - 6; y: -3
-                        width: 12; height: 12; radius: 6
-                        color: TimeController.live ? "#8fd0ff" : "#ffd27f"
-                        border.color: "black"
-                    }
-                    Rectangle {  // selected-time bubble above the playhead
-                        visible: track.dragging || !TimeController.live
-                        x: Math.max(0, Math.min(track.width - width,
-                                                track.width * track.frac - width / 2))
-                        anchors.bottom: parent.top
-                        width: bubbleText.implicitWidth + 10
-                        height: bubbleText.implicitHeight + 4
-                        radius: 3; color: "#cc101418"; border.color: "#60ffffff"
-                        Label {
-                            id: bubbleText; anchors.centerIn: parent
-                            text: TimeController.timeLabel
-                            color: "#ffffff"; font.pointSize: 10
-                        }
-                    }
-                    // Drag to scrub. Property assignment invokes the WRITE
-                    // accessor (setPosition); it is not Q_INVOKABLE so calling
-                    // it as a function would silently fail.
-                    MouseArea {
-                        id: trackMouse
-                        anchors.fill: parent
-                        onPressed: (m) => TimeController.position = m.x / track.width
-                        onPositionChanged: (m) => {
-                            if (pressed)
-                                TimeController.position =
-                                    Math.max(0, Math.min(1, m.x / track.width))
-                        }
-                    }
-                }
-
-                ToolButton {
-                    text: "››"; onClicked: TimeController.stepDays(1)
-                    ToolTip.text: qsTr("Next day"); ToolTip.visible: hovered
-                }
-                ToolButton {
-                    text: qsTr("Now")
-                    highlighted: TimeController.live
-                    onClicked: TimeController.goLive()
-                    ToolTip.text: qsTr("Snap to the live clock"); ToolTip.visible: hovered
-                }
-            }
-        }
 
         // Compass rose (mirrors wx's ocpnCompass overlay). The chart is
         // north-up, so the rose is fixed N-up; the red needle shows own-ship
@@ -3406,6 +3270,259 @@ ApplicationWindow {
                 text: qsTr("Editing route — drag nodes · click line to add · " +
                            "right-click node to delete · click water to finish")
                 color: "#ffe0a0"; font.pointSize: 10
+            }
+        }
+    }
+
+    // --- Tide/current graph drawer (P3.14 F): docked at the window bottom,
+    //     below the full-width time bar. Opens when a tide/current station is
+    //     clicked (chart.tideGraph.valid); the time bar rides on its top edge.
+    Item {
+        id: tideDrawer
+        anchors.left: parent.left
+        anchors.right: hudPanel.left
+        anchors.bottom: parent.bottom
+        readonly property bool open: DisplayConfig.showTides
+            && chart.tideGraph && chart.tideGraph.valid
+        height: open ? 190 : 0
+        clip: true
+        Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0.04, 0.06, 0.09, 0.97)
+            border.color: Qt.rgba(1, 1, 1, 0.12)
+        }
+
+        RowLayout {  // header: station name + close
+            id: tideDrawerHeader
+            anchors.top: parent.top; anchors.left: parent.left
+            anchors.right: parent.right; anchors.margins: 6
+            Label {
+                text: chart.tideGraph && chart.tideGraph.valid
+                      ? chart.tideGraph.stationName : ""
+                color: "#e8eef6"; font.bold: true; font.pointSize: 11
+                elide: Text.ElideRight; Layout.fillWidth: true
+            }
+            ToolButton {
+                text: "✕"
+                onClicked: if (chart.tideGraph) chart.tideGraph.clear()
+                ToolTip.text: qsTr("Close"); ToolTip.visible: hovered
+            }
+        }
+
+        Canvas {  // the tide/current curve, aligned to the time bar's plot x-range
+            id: graphCanvas
+            anchors.top: tideDrawerHeader.bottom; anchors.left: parent.left
+            anchors.right: parent.right; anchors.bottom: parent.bottom
+            anchors.bottomMargin: 4
+            onPaint: {
+                var ctx = getContext("2d"); ctx.reset()
+                var tg = chart.tideGraph
+                if (!tg || !tg.valid) return
+                var pl = tideBar.plotLeft, pw = tideBar.plotWidth
+                if (pw <= 1) return
+                var topM = 6, botM = 14
+                var plotH = height - topM - botM
+                if (plotH < 10) return
+                var vmin = tg.minValue, vmax = tg.maxValue
+                if (vmax <= vmin) vmax = vmin + 1
+                function yOf(v) { return topM + plotH * (1 - (v - vmin) / (vmax - vmin)) }
+                var n = Math.max(2, Math.round(pw / 2))
+                var vals = tg.samples(tideBar.winStartMs, tideBar.winEndMs, n)
+                if (vals.length < 2) return
+                if (tg.isCurrent) {   // zero baseline for currents
+                    ctx.strokeStyle = "#40ffffff"; ctx.lineWidth = 1
+                    ctx.beginPath(); ctx.moveTo(pl, yOf(0)); ctx.lineTo(pl + pw, yOf(0)); ctx.stroke()
+                }
+                // filled curve
+                ctx.beginPath(); ctx.moveTo(pl, yOf(vals[0]))
+                for (var i = 1; i < vals.length; i++)
+                    ctx.lineTo(pl + pw * i / (vals.length - 1), yOf(vals[i]))
+                var baseY = tg.isCurrent ? yOf(0) : (topM + plotH)
+                ctx.lineTo(pl + pw, baseY); ctx.lineTo(pl, baseY); ctx.closePath()
+                ctx.fillStyle = "#22384f"; ctx.fill()
+                ctx.beginPath(); ctx.moveTo(pl, yOf(vals[0]))
+                for (var j = 1; j < vals.length; j++)
+                    ctx.lineTo(pl + pw * j / (vals.length - 1), yOf(vals[j]))
+                ctx.strokeStyle = "#5bb0ff"; ctx.lineWidth = 2; ctx.stroke()
+                // now line
+                var nf = TimeController.nowFraction
+                if (nf >= 0 && nf <= 1) {
+                    var nx = pl + pw * nf
+                    ctx.strokeStyle = "#ff5b5b"; ctx.lineWidth = 1
+                    ctx.beginPath(); ctx.moveTo(nx, topM); ctx.lineTo(nx, topM + plotH); ctx.stroke()
+                }
+                // fixed read-marker + value dot + readout
+                var mx = pl + pw * TimeController.markerFraction
+                ctx.strokeStyle = "#ffd27f"; ctx.lineWidth = 2
+                ctx.beginPath(); ctx.moveTo(mx, topM); ctx.lineTo(mx, topM + plotH); ctx.stroke()
+                var my = yOf(tg.valueAtMarker)
+                ctx.fillStyle = "#ffd27f"; ctx.beginPath(); ctx.arc(mx, my, 4, 0, 2 * Math.PI); ctx.fill()
+                ctx.fillStyle = "#ffffff"; ctx.font = "12px sans-serif"
+                ctx.fillText(tg.valueAtMarkerText, Math.min(width - 70, mx + 7), Math.max(12, my - 7))
+                // turning-point events (HW/LW or flood/ebb)
+                var evs = tg.events(tideBar.winStartMs, tideBar.winEndMs)
+                ctx.font = "10px sans-serif"
+                for (var k = 0; k < evs.length; k++) {
+                    var ex = pl + pw * (evs[k].t - tideBar.winStartMs) / (tideBar.winEndMs - tideBar.winStartMs)
+                    var ey = yOf(evs[k].v)
+                    ctx.fillStyle = "#bcd8f5"
+                    ctx.beginPath(); ctx.arc(ex, ey, 2.5, 0, 2 * Math.PI); ctx.fill()
+                    var lbl = evs[k].type + " " + Number(evs[k].v).toFixed(1)
+                    var tw = ctx.measureText(lbl).width
+                    ctx.fillText(lbl, Math.max(pl, Math.min(pl + pw - tw, ex - tw / 2)), ey - 6)
+                }
+                // y-axis labels (user units), in the left gutter
+                ctx.fillStyle = "#90a4b8"; ctx.font = "10px sans-serif"
+                for (var g = 0; g <= 4; g++) {
+                    var vv = vmin + (vmax - vmin) * g / 4
+                    ctx.fillText(Number(vv).toFixed(1), 4, yOf(vv) - 1)
+                }
+                ctx.fillStyle = "#c0d0e0"; ctx.fillText(tg.unitLabel, 4, topM + 9)
+            }
+            Connections {
+                target: chart.tideGraph
+                function onChanged() { graphCanvas.requestPaint() }
+                function onMarkerChanged() { graphCanvas.requestPaint() }
+            }
+            Connections {
+                target: DisplayConfig
+                function onChanged() { graphCanvas.requestPaint() }
+            }
+            Timer {  // smooth repaint while the drawer is open (engine-sampled)
+                interval: 33; repeat: true; running: tideDrawer.open
+                onTriggered: graphCanvas.requestPaint()
+            }
+        }
+    }
+
+    // --- Time bar (P3.14 F): full-width, pinned to the window bottom, riding
+    //     the tide drawer's top edge. A fixed read-marker with a pannable,
+    //     infinite axis (drag to pan time; chart tides + graph animate; click to
+    //     read a time). Visible only when tides are on (MUIBar ≋).
+    Item {
+        id: tideBar
+        anchors.left: parent.left
+        anchors.right: hudPanel.left
+        anchors.bottom: tideDrawer.top
+        height: DisplayConfig.showTides ? 54 : 0
+        visible: DisplayConfig.showTides
+        clip: true
+        Behavior on height { NumberAnimation { duration: 150 } }
+
+        // Shared time->x mapping consumed by the bar ticks AND the graph Canvas.
+        readonly property real plotLeft: plot.x
+        readonly property real plotWidth: plot.width
+        readonly property double winStartMs: TimeController.windowStart.getTime()
+        readonly property double winEndMs: TimeController.windowEnd.getTime()
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.62); border.color: Qt.rgba(1, 1, 1, 0.12)
+        }
+
+        Row {  // left controls
+            id: leftBtns
+            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 6; spacing: 1
+            ToolButton {
+                text: TimeController.playing ? "⏸" : "▶"
+                onClicked: TimeController.togglePlay()
+                ToolTip.text: qsTr("Animate through time"); ToolTip.visible: hovered
+            }
+            ToolButton {
+                text: "‹"; onClicked: TimeController.stepMinutes(-60)
+                ToolTip.text: qsTr("Back 1 hour"); ToolTip.visible: hovered
+            }
+            ToolButton {
+                text: "›"; onClicked: TimeController.stepMinutes(60)
+                ToolTip.text: qsTr("Forward 1 hour"); ToolTip.visible: hovered
+            }
+        }
+        Row {  // right controls
+            id: rightBtns
+            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 6; spacing: 4
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: TimeController.dateLabel + "  " + TimeController.timeLabel
+                color: TimeController.live ? "#8fd0ff" : "#ffd27f"; font.pointSize: 10
+            }
+            ToolButton {
+                text: qsTr("Now"); highlighted: TimeController.live
+                onClicked: TimeController.goLive()
+                ToolTip.text: qsTr("Snap to the live clock"); ToolTip.visible: hovered
+            }
+        }
+
+        Item {  // plot area: hour ticks + fixed marker + now line + pan handler
+            id: plot
+            anchors.left: leftBtns.right; anchors.right: rightBtns.left
+            anchors.top: parent.top; anchors.bottom: parent.bottom
+            anchors.leftMargin: 8; anchors.rightMargin: 8
+
+            Canvas {
+                id: barCanvas
+                anchors.fill: parent
+                onPaint: {
+                    var ctx = getContext("2d"); ctx.reset()
+                    var s = tideBar.winStartMs, e = tideBar.winEndMs
+                    if (e <= s) return
+                    var span = e - s
+                    function xOf(ms) { return width * (ms - s) / span }
+                    var d = new Date(s)
+                    d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1)
+                    for (var t = d.getTime(); t < e; t += 3600000) {
+                        var x = xOf(t)
+                        var hr = new Date(t).getHours()
+                        var major = (hr % 3 === 0)
+                        ctx.strokeStyle = major ? "#80ffffff" : "#38ffffff"; ctx.lineWidth = 1
+                        ctx.beginPath()
+                        ctx.moveTo(x, height * (major ? 0.32 : 0.58)); ctx.lineTo(x, height)
+                        ctx.stroke()
+                        if (major) {
+                            ctx.fillStyle = "#b0c0d0"; ctx.font = "9px sans-serif"
+                            ctx.fillText((hr < 10 ? "0" : "") + hr, x - 6, height * 0.26)
+                        }
+                    }
+                }
+                Connections {
+                    target: TimeController
+                    function onWindowChanged() { barCanvas.requestPaint() }
+                }
+            }
+
+            Rectangle {  // now line (moves with real time / pan)
+                visible: TimeController.nowFraction >= 0 && TimeController.nowFraction <= 1
+                x: plot.width * TimeController.nowFraction - 1
+                width: 2; height: plot.height; color: "#ff5b5b"
+            }
+            Rectangle {  // fixed read-marker (the axis pans under it)
+                x: plot.width * TimeController.markerFraction - 1
+                width: 2; height: plot.height; color: "#ffd27f"
+            }
+            Rectangle {  // marker handle
+                x: plot.width * TimeController.markerFraction - 6; y: -3
+                width: 12; height: 12; radius: 6; color: "#ffd27f"; border.color: "black"
+            }
+
+            MouseArea {
+                id: panArea
+                anchors.fill: parent
+                property real lastX: 0
+                property real pressX: 0
+                onPressed: (m) => { lastX = m.x; pressX = m.x }
+                onReleased: (m) => {
+                    if (Math.abs(m.x - pressX) < 4)
+                        TimeController.setDisplayFraction(m.x / plot.width)
+                }
+                onPositionChanged: (m) => {
+                    if (pressed) {
+                        TimeController.panPixels(m.x - lastX, plot.width)
+                        lastX = m.x
+                    }
+                }
             }
         }
     }

@@ -43,6 +43,7 @@
 #include <QVariantMap>
 
 #include "ais_selection_view_model.h"  // complete type needed for Q_PROPERTY
+#include "tide_graph_view_model.h"     // complete type needed for Q_PROPERTY
 #include "chart_extent.h"  // CellExtent -- catalog entry (value type)
 #include "chart_source_model.h"  // complete type needed for Q_PROPERTY
 #include "connections_view_model.h"  // complete type needed for Q_PROPERTY
@@ -128,6 +129,8 @@ class ChartCanvas : public QQuickItem {
   // Currently-selected AIS target for the info popup (P3.9).
   Q_PROPERTY(ocpn::qtui::AisSelectionViewModel* selectedAis READ selectedAis
                  CONSTANT)
+  // Selected tide/current station behind the bottom graph drawer (P3.14 F).
+  Q_PROPERTY(ocpn::qtui::TideGraphViewModel* tideGraph READ tideGraph CONSTANT)
 
   // S-57 features under the last click, for the object-query popup (P3.9).
   Q_PROPERTY(ocpn::qtui::ObjectQueryViewModel* objectQuery READ objectQuery
@@ -223,6 +226,7 @@ public:
 
   NavStateViewModel* navState() const { return m_nav_state.get(); }
   AisSelectionViewModel* selectedAis() const { return m_ais_selection.get(); }
+  TideGraphViewModel* tideGraph() const { return m_tide_graph.get(); }
   ObjectQueryViewModel* objectQuery() const { return m_object_query.get(); }
   RouteListViewModel* routeList() const { return m_route_list.get(); }
   ConnectionsViewModel* connections() const { return m_connections.get(); }
@@ -388,6 +392,8 @@ private:
   std::unique_ptr<NavStateViewModel> m_nav_state;
   // Selected AIS target for the info popup (P3.9).
   std::unique_ptr<AisSelectionViewModel> m_ais_selection;
+  // Selected tide/current station for the bottom graph drawer (P3.14 F).
+  std::unique_ptr<TideGraphViewModel> m_tide_graph;
   // S-57 object-query result for the query popup (P3.9).
   std::unique_ptr<ObjectQueryViewModel> m_object_query;
   // Route/waypoint lists for the route & mark manager (P3.7).
@@ -529,6 +535,8 @@ private:
   // Hit-test a click (item-local px) against the live AIS targets and select
   // the nearest within a small radius (P3.9). Returns true if one was hit.
   bool pickAisAt(const QPointF& screen_pos);
+  // Select the nearest tide/current station within a small radius (P3.14 F).
+  bool pickTideStationAt(const QPointF& screen_pos);
   // Hit-test a click against the loaded S-52 chart objects and populate the
   // object-query result (P3.9).
   void pickObjectsAt(const QPointF& screen_pos);
