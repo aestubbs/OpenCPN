@@ -44,10 +44,10 @@ protected:
   void draw(SgBuilder& b, double world_per_px) override;
 
 private:
-  void onTimeChanged();  // rebuild at most once per displayed minute
+  void onTimeChanged();  // coalesce scrub/play bursts into ~16 rebuilds/sec
 
   const Viewport* m_vp;
-  qint64 m_last_minute = -1;
+  bool m_rebuild_pending = false;
 };
 
 }  // namespace ocpn::qtui

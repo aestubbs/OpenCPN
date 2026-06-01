@@ -22,6 +22,7 @@
 #include <QDateTime>
 #include <QImage>
 #include <QRectF>
+#include <QTimer>
 
 #include "display_config.h"
 #include "idx_entry.h"
@@ -39,6 +40,18 @@ time_t displaySecs() {
              : static_cast<time_t>(
                    QDateTime::currentDateTime().toSecsSinceEpoch());
 }
+
+// A small screen-fixed text label (sized in world units via wpp), offset to the
+// right of the station marker.
+void drawLabel(SgBuilder& b, const QString& txt, const QColor& color,
+               const QPointF& w, double wpp) {
+  const QImage img = SgBuilder::renderText(txt, color, 9.0f);
+  if (img.isNull()) return;
+  const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
+  const double tw = img.width() / dpr * wpp;
+  const double th = img.height() / dpr * wpp;
+  b.drawImage(QRectF(w.x() + 8.0 * wpp, w.y() - th / 2.0, tw, th), img);
+}
 }  // namespace
 
 TideLayer::TideLayer(const Viewport* viewport, QObject* parent)
@@ -49,24 +62,33 @@ TideLayer::TideLayer(const Viewport* viewport, QObject* parent)
   connect(&DisplayConfig::instance(), &DisplayConfig::changed, this, [this]() {
     setVisible(DisplayConfig::instance().showTides());
   });
-  // Rebuild when the timeline scrubs (throttled to once per displayed minute --
-  // tides move slowly and re-querying + re-rendering labels is not free).
+  // Re-query + redraw as the timeline scrubs / plays, so tides and currents
+  // animate. Coalesce bursts (drag rate, the 1 Hz live tick) into ~16 rebuilds
+  // a second so a fast drag stays smooth.
   connect(&TimeController::instance(), &TimeController::timeChanged, this,
           &TideLayer::onTimeChanged);
 }
 
 void TideLayer::onTimeChanged() {
-  const qint64 minute = static_cast<qint64>(displaySecs()) / 60;
-  if (minute == m_last_minute) return;
-  m_last_minute = minute;
-  Q_EMIT dirty();
+  if (m_rebuild_pending) return;
+  m_rebuild_pending = true;
+  QTimer::singleShot(60, this, [this]() {
+    m_rebuild_pending = false;
+    Q_EMIT dirty();
+  });
 }
 
 void TideLayer::draw(SgBuilder& b, double wpp) {
   if (!ptcmgr || !ptcmgr->IsReady() || !m_vp) return;
 
   const QRectF vb = m_vp->visibleWorldBounds(60.0);  // world coords (+margin)
+  // Labels (height / speed) are only legible -- and cheap enough to re-render
+  // every animation frame -- when zoomed in; at wide views draw markers/arrows
+  // only (keeps a fast drag smooth even with hundreds of stations in view).
+  const bool show_labels = vb.width() < 6.0;
   const time_t t = displaySecs();
+  DisplayConfig& dc = DisplayConfig::instance();
+  const bool feet = dc.heightUnit() == 1;
 
   int shown = 0;
   constexpr int kMax = 300;  // declutter cap per frame
@@ -81,31 +103,28 @@ void TideLayer::draw(SgBuilder& b, double wpp) {
     const QPointF w = world(e->IDX_lat, e->IDX_lon);  // Mercator world point
     if (!vb.contains(w)) continue;
 
-    float val = 0.0f, dir = 0.0f;
-    if (!ptcmgr->GetTideOrCurrentMeters(t, i, val, dir)) continue;
-
     if (is_tide) {
+      float val = 0.0f, dir = 0.0f;  // metres (height of tide)
+      if (!ptcmgr->GetTideOrCurrentMeters(t, i, val, dir)) continue;
       b.setBrush(QColor(60, 130, 220));
       b.setPen(QColor(255, 255, 255), 1.2f);
       b.drawCircle(w, static_cast<float>(5.0 * wpp));
-
-      const QString txt = QString::asprintf("%.1f m", val);
-      const QImage img = SgBuilder::renderText(txt, QColor(15, 45, 90), 9.0f);
-      if (!img.isNull()) {
-        const qreal dpr =
-            img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
-        const double tw = img.width() / dpr * wpp;
-        const double th = img.height() / dpr * wpp;
-        b.drawImage(QRectF(w.x() + 8.0 * wpp, w.y() - th / 2.0, tw, th), img);
+      if (show_labels) {
+        const double h = feet ? val / 0.3048 : val;
+        const QString txt =
+            QString::number(h, 'f', 1) + (feet ? QStringLiteral(" ft")
+                                               : QStringLiteral(" m"));
+        drawLabel(b, txt, QColor(15, 45, 90), w, wpp);
       }
-    } else {  // current station: set-direction arrow, length ~ velocity
+    } else {  // current station: value in knots (station-native)
+      float val = 0.0f, dir = 0.0f;
+      if (!ptcmgr->GetTideOrCurrent(t, i, val, dir)) continue;
       const QPointF u = headingVec(dir);  // world unit vector for the set
       const double len = (14.0 + std::min(60.0, std::fabs(val) * 18.0)) * wpp;
       const QPointF tip(w.x() + u.x() * len, w.y() + u.y() * len);
       b.setPen(QColor(240, 140, 30), 2.0f);
       b.noBrush();
       b.drawLine(w, tip);
-      // arrowhead
       const QPointF n(-u.y(), u.x());
       const QPointF base(tip.x() - u.x() * 5.0 * wpp, tip.y() - u.y() * 5.0 * wpp);
       b.drawLine(tip, QPointF(base.x() + n.x() * 3.0 * wpp,
@@ -115,6 +134,8 @@ void TideLayer::draw(SgBuilder& b, double wpp) {
       b.setBrush(QColor(240, 140, 30));
       b.setPen(QColor(120, 70, 10), 1.0f);
       b.drawCircle(w, static_cast<float>(2.5 * wpp));
+      if (show_labels)  // speed in the user's chosen units, beside the station
+        drawLabel(b, dc.formatSpeed(std::fabs(val)), QColor(120, 60, 10), w, wpp);
     }
     ++shown;
   }
