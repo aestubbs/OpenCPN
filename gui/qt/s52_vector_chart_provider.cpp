@@ -76,6 +76,169 @@ QImage renderLabelImage(const s52sg::Label& lab) {
   p.end();
   return img;
 }
+
+// Render a sounding to an RGBA image following the S-52 SNDFRM convention
+// (mirrors libs/s52plib SNDFRM02 + IHO S-52 "Soundings"), using a system font
+// in place of the proprietary DepthFont symbol set:
+//   * the depth (held in metres) is converted to the user's display unit;
+//   * the integer part is drawn full size, the tenths digit (if any) as a
+//     right-SUBSCRIPT with NO decimal point ("9.5" -> "9" + small low "5");
+//   * a drying height (negative depth -- a feature that uncovers, charted as a
+//     height above datum) has its integer figures UNDERLINED and no sign;
+//   * a sounding at or shallower than the safety depth is EMPHASISED (bold,
+//     solid black -- the legacy SOUNDS vs SOUNDG split), deeper ones are the
+//     lighter grey the chart used before.
+// Decimals are shown only to 31 display-units (S-52); deeper values and feet
+// are whole numbers. `safetyMetres` is the safety depth in metres (raw, so the
+// comparison is unit-agnostic). `basePt` is the integer-figure point size.
+QImage renderSoundingImage(double depthMetres, int depthUnit,
+                           double safetyMetres, float basePt, bool swept,
+                           bool lowAccuracy) {
+  // Guard bogus SENC/ENC values (mirrors SNDFRM02): absurdly deep -> no sounding
+  // figure of merit; far-above-datum -> clamp to datum.
+  double dm = depthMetres;
+  if (dm > 40000.0) dm = 99999.0;
+  else if (dm < -1000.0) dm = 0.0;
+
+  // Value in the display unit (DisplayConfig order: 0 m, 1 ft, 2 fathoms).
+  double v = dm;
+  switch (depthUnit) {
+    case 1: v *= 1.0 / 0.3048; break;        // feet
+    case 2: v *= 1.0 / 0.3048 / 6.0; break;  // fathoms
+    default: break;                          // metres
+  }
+  const bool drying = dm < 0.0;             // above chart datum (uncovers)
+  const bool emphasis = dm <= safetyMetres;  // <= safety depth -> bold/black
+  const double av = std::fabs(v);
+
+  // Split into integer + single tenths digit; never emit a decimal point.
+  QString intStr, fracStr;
+  const bool showTenths = depthUnit != 1 /*feet are whole*/ && av < 31.0;
+  if (showTenths) {
+    const double r = std::round(av * 10.0) / 10.0;  // round to one decimal
+    long long ip = static_cast<long long>(std::floor(r + 1e-6));
+    int fp = static_cast<int>(std::llround((r - static_cast<double>(ip)) * 10.0));
+    if (fp >= 10) {  // carry from the rounding above
+      ip += 1;
+      fp = 0;
+    }
+    intStr = QString::number(ip);
+    if (fp > 0) fracStr = QString::number(fp);
+  } else {
+    intStr = QString::number(static_cast<long long>(std::llround(av)));
+  }
+
+  // Fonts: integer full size; the tenths digit a bit smaller (kept large enough
+  // to read). The drying-height underline + low-accuracy italic apply to the
+  // integer figures; the subscript shares the italic but not the underline.
+  QFont fInt;
+  fInt.setPointSizeF(basePt);
+  fInt.setBold(emphasis);
+  fInt.setUnderline(drying);
+  fInt.setItalic(lowAccuracy);
+  QFont fFrac = fInt;
+  fFrac.setPointSizeF(basePt * 0.80);
+  fFrac.setUnderline(false);
+
+  const qreal dpr = 2.0;
+  QFontMetricsF fmI(fInt), fmF(fFrac);
+  const qreal wI = fmI.horizontalAdvance(intStr);
+  const qreal wF = fracStr.isEmpty() ? 0.0 : fmF.horizontalAdvance(fracStr);
+  // The subscript baseline drops below the integer baseline so it sits low and
+  // to the right, as on a paper chart.
+  const qreal drop = fmI.ascent() * 0.30;
+  const qreal pad = 2.0;
+  // Reserve room below the figures for the swept-depth bracket (bar + ticks).
+  const qreal sweptGap = swept ? std::max<qreal>(3.0, basePt * 0.35) : 0.0;
+  const qreal w = wI + wF + pad * 2.0;
+  const qreal h = fmI.ascent() + fmI.descent() + drop + sweptGap + pad * 2.0;
+
+  QImage img(qRound(w * dpr), qRound(h * dpr),
+             QImage::Format_RGBA8888_Premultiplied);
+  img.setDevicePixelRatio(dpr);
+  img.fill(Qt::transparent);
+  QPainter p(&img);
+  p.setRenderHint(QPainter::TextAntialiasing, true);
+  const QColor col = emphasis ? QColor(0, 0, 0) : QColor(60, 60, 60);
+  p.setPen(col);
+  const qreal baseY = pad + fmI.ascent();
+  p.setFont(fInt);
+  p.drawText(QPointF(pad, baseY), intStr);
+  if (!fracStr.isEmpty()) {
+    p.setFont(fFrac);
+    p.drawText(QPointF(pad + wI, baseY + drop), fracStr);
+  }
+  // Swept depth (TECSOU "swept by wire drag"): a horizontal bar under the
+  // integer figures with short upturned end ticks -- the S-52 SOUNDS/GB1 glyph.
+  if (swept) {
+    const qreal y = baseY + fmI.descent() + sweptGap * 0.5;
+    const qreal x0 = pad, x1 = pad + wI;
+    const qreal tick = std::max<qreal>(2.0, basePt * 0.22);
+    QPen pen(col);
+    pen.setWidthF(std::max<qreal>(1.0, basePt * 0.09));
+    p.setPen(pen);
+    p.drawLine(QPointF(x0, y), QPointF(x1, y));         // bar
+    p.drawLine(QPointF(x0, y), QPointF(x0, y - tick));  // left tick (up)
+    p.drawLine(QPointF(x1, y), QPointF(x1, y - tick));  // right tick (up)
+  }
+  p.end();
+  return img;
+}
+
+// S-52 label placement: returns the point of the text image (logical px,
+// top-left origin) that must coincide with the object anchor, from the PresLib
+// justification + offsets. hjust 1=centre 2=right 3=left; vjust 1=bottom
+// 2=centre 3=top; xoffs/yoffs then shift the text +right/+down from the anchor
+// (in average-char-width / char-height units). Mirrors the legacy text adjust
+// in s52plib.cpp. Soundings keep their own centred placement.
+QPointF labelPivot(qreal w, qreal h, const s52sg::Label& lab) {
+  QFont font;
+  font.setPointSizeF(lab.pointSize > 0 ? lab.pointSize : 10.0f);
+  const QFontMetricsF fm(font);
+  qreal refX, refY;
+  switch (lab.hjust) {
+    case '2': refX = w; break;        // right-justified: anchor at right edge
+    case '3': refX = 0.0; break;      // left-justified: anchor at left edge
+    default:  refX = w / 2.0; break;  // '1' centred
+  }
+  switch (lab.vjust) {
+    case '3': refY = 0.0; break;      // top: anchor at top edge
+    case '2': refY = h / 2.0; break;  // centred
+    default:  refY = h; break;        // '1' bottom: anchor at bottom edge
+  }
+  return QPointF(refX - lab.xoffs * fm.averageCharWidth(),
+                 refY - lab.yoffs * fm.height());
+}
+
+// Build a billboard's world-anchor placement matrix. The World-anchored root
+// applies M = T(centre)*R(theta)*S(scale)*T(-worldCentre), so a local point v
+// in this billboard lands on screen at anchor + R(theta)*(v/scale*scale) terms;
+// concretely M*T(worldPos)*S(1/scale)*u = anchor_screen + R(theta)*u.
+//   * Non-upright (symbols/vector marks): B = T(worldPos)*S(1/scale). The glyph
+//     rotates with the chart -- correct for an ORIENT'd light/beacon.
+//   * Upright (system-font text): the image is built CENTRED on its origin and
+//     B = T(worldPos)*S(1/scale)*T(offset)*R(-theta). Then a glyph point v maps
+//     to anchor_screen + R(theta)*offset + v: the placement OFFSET rotates with
+//     the chart (label stays on the right side of its feature) while the GLYPH
+//     stays upright (v is un-rotated). At theta = 0 (north-up default) the extra
+//     T(offset)*R(0) collapses to a plain offset translate, identical to baking
+//     the offset into the image rect -- so the common case is unchanged.
+QMatrix4x4 billboardMatrix(const QPointF& worldPos, double invScale,
+                           bool upright, double rotationRad,
+                           const QPointF& offsetPx) {
+  QMatrix4x4 m;
+  m.translate(static_cast<float>(worldPos.x()),
+              static_cast<float>(worldPos.y()));
+  m.scale(static_cast<float>(invScale), static_cast<float>(invScale));
+  if (upright) {
+    m.translate(static_cast<float>(offsetPx.x()),
+                static_cast<float>(offsetPx.y()));
+    if (rotationRad != 0.0)
+      m.rotate(static_cast<float>(-rotationRad * 180.0 / M_PI), 0.0f, 0.0f,
+               1.0f);
+  }
+  return m;
+}
 // World convention: x = lon, y = -lat (see viewport.h). Buffer vertices
 // are QPointF(lon, lat).
 QSGGeometry::Point2D worldPoint(const QPointF& v) {
@@ -268,6 +431,36 @@ void S52VectorChartProvider::setShowBuoys(bool on) {
   Q_EMIT changed();
 }
 
+void S52VectorChartProvider::setDepthUnit(int unit) {
+  if (unit == m_depth_unit) return;
+  m_depth_unit = unit;
+  m_built = false;  // re-raster sounding labels in the new unit
+  Q_EMIT changed();
+}
+
+void S52VectorChartProvider::setSafetyDepth(double metres) {
+  if (metres == m_safety_depth_m) return;
+  m_safety_depth_m = metres;
+  m_built = false;  // shallow-sounding (<= safety) emphasis threshold moved
+  Q_EMIT changed();
+}
+
+void S52VectorChartProvider::setSoundingScale(double mult) {
+  if (mult <= 0.0 || mult == m_sounding_scale) return;
+  m_sounding_scale = mult;
+  m_built = false;  // re-raster soundings at the new figure size
+  Q_EMIT changed();
+}
+
+void S52VectorChartProvider::setNativeScale(int n) {
+  if (n == m_native_scale) return;
+  m_native_scale = n;
+  // The hatch node is built lazily on the next build; if already built, owe a
+  // re-layout so its show/hide + spacing reflect the new native scale.
+  m_relayout_pending = true;
+  Q_EMIT changed();
+}
+
 void S52VectorChartProvider::setDetailScale(double n) {
   if (n <= 0.0 || n == m_unset_scamin_n) return;
   m_unset_scamin_n = n;
@@ -391,9 +584,52 @@ void S52VectorChartProvider::updateScaminNodes(double chart_scale_n) {
   }
 }
 
+void S52VectorChartProvider::rebuildOverscaleHatch(double scale,
+                                                   double chart_scale_n) {
+  // S-52 over-scale indication (OVERSC01): when the display is zoomed in FINER
+  // than this cell's compilation scale, hatch the cell so the mariner sees the
+  // chart is magnified beyond its survey detail. "Finer" = display 1:N SMALLER
+  // than the cell's native 1:N. The hatch is a set of evenly-spaced verticals
+  // across the cell bbox, screen-fixed spacing (rebuilt on zoom), inside the
+  // cell's own clipped subtree so a finer cell drawn on top hides it.
+  if (!m_overscale_hatch || scale <= 0.0) return;
+  // Show only when overscaled (a small hysteresis avoids flicker right at the
+  // boundary). m_native_scale 0 = unknown -> never hatch.
+  const bool overscaled =
+      m_native_scale > 0 && chart_scale_n < m_native_scale * 0.99;
+  m_overscale_hatch->setOpacity(overscaled ? 1.0 : 0.0);
+  if (!overscaled) return;  // skip the geometry rebuild while hidden
+
+  auto* node = m_overscale_hatch->childCount() > 0
+                   ? static_cast<QSGGeometryNode*>(m_overscale_hatch->firstChild())
+                   : nullptr;
+  if (!node) return;
+  // One vertical line every ~kSpacingPx screen px, across the bbox, full height.
+  constexpr double kSpacingPx = 14.0;
+  const double stepLon = kSpacingPx / scale;  // world (deg) between verticals
+  if (stepLon <= 0.0) return;
+  const double yt = Viewport::latToWorldY(m_north);
+  const double yb = Viewport::latToWorldY(m_south);
+  // Cap the vertical count so a coarse cell at extreme overscale can't allocate
+  // an unbounded buffer (the cell is clipped to the view anyway).
+  int count = static_cast<int>((m_east - m_west) / stepLon);
+  if (count < 1) return;
+  count = std::min(count, 4000);
+  QSGGeometry* geom = node->geometry();
+  geom->allocate(count * 2);
+  QSGGeometry::Point2D* v = geom->vertexDataAsPoint2D();
+  for (int i = 0; i < count; ++i) {
+    const float x = static_cast<float>(m_west + (i + 0.5) * stepLon);
+    v[i * 2].set(x, static_cast<float>(yt));
+    v[i * 2 + 1].set(x, static_cast<float>(yb));
+  }
+  node->markDirty(QSGNode::DirtyGeometry);
+}
+
 void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   const double s = viewport.scale();  // pixels per degree
   if (s <= 0.0) return;
+  const double rot = viewport.rotation();  // chart rotation (rad), 0 = north-up
 
   // Scale-dependent, pan-invariant re-layout (pattern UVs, complex lines,
   // static SCAMIN, and the per-billboard `kept` flag + counter-scale matrix).
@@ -416,6 +652,7 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
 
   rebuildComplexLines(s, chart_scale_n);  // screen-fixed LC glyphs along lines
   updateScaminNodes(chart_scale_n);       // hide static fills/lines past SCAMIN
+  rebuildOverscaleHatch(s, chart_scale_n);  // S-52 over-scale hatch over bbox
 
   // Effective SCAMIN: many ENC objects (esp. buoys, lights, their sector arcs)
   // carry NO SCAMIN, so they'd pile up at every zoom. Give those a configurable
@@ -483,9 +720,12 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
       // De-clutter (P2.23a): only suppress overlapping labels when the toggle
       // is on. Off (the wx default) keeps every label -- overlap allowed.
       if (!m_declutter) { labelKeep[i] = true; continue; }
-      // Screen-pixel bbox of the label (centred on the anchor), in occupancy
-      // cells.
-      const double sx = b.worldPos.x() * s, sy = b.worldPos.y() * s;
+      // Screen-pixel bbox of the label, in occupancy cells. The box is centred
+      // on the anchor PLUS the S-52 placement offset (screenCx/Cy), so overlap
+      // is tested where the text actually draws -- offset names/light text no
+      // longer collide on the symbol anchor.
+      const double sx = b.worldPos.x() * s + b.screenCx;
+      const double sy = b.worldPos.y() * s + b.screenCy;
       const long c0x = std::lround((sx - b.screenW / 2.0) / kOccCellPx);
       const long c1x = std::lround((sx + b.screenW / 2.0) / kOccCellPx);
       const long c0y = std::lround((sy - b.screenH / 2.0) / kOccCellPx);
@@ -514,21 +754,15 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
     else if (!hidden && b.kind == BbKind::Label)
       hidden = !labelKeep.value(i, true);
     b.kept = !hidden;
-    if (b.kept && b.xform) {
-      // Under the World-anchored root (M = ...*scale(s)): translate to the world
-      // anchor, then scale(1/s) so the content stays screen-pixel-sized at any
-      // zoom.
-      QMatrix4x4 m;
-      m.translate(static_cast<float>(b.worldPos.x()),
-                  static_cast<float>(b.worldPos.y()));
-      m.scale(static_cast<float>(1.0 / s), static_cast<float>(1.0 / s));
-      b.xform->setMatrix(m);
-    }
+    if (b.kept && b.xform)
+      b.xform->setMatrix(billboardMatrix(b.worldPos, 1.0 / s, b.upright,
+                                         rot, QPointF(b.screenCx, b.screenCy)));
   }
   m_bb_scale = s;
+  m_bb_rotation = rot;
 }
 
-void S52VectorChartProvider::applyBillboardVisibility(double s,
+void S52VectorChartProvider::applyBillboardVisibility(double s, double rot,
                                                       const QRectF& worldView) {
   // Per-frame pass (pan + zoom): show a billboard only if it survived declutter
   // (`kept`) AND lies inside the view. Off-screen / culled ones get opacity 0,
@@ -536,24 +770,22 @@ void S52VectorChartProvider::applyBillboardVisibility(double s,
   // the draw-call count tracks ON-SCREEN detail, not the whole (often many-
   // screens-wide) cell -- the win that lets a dense harbour pan/zoom at speed.
   // setOpacity is a no-op when the value is unchanged, so a billboard that does
-  // not cross the view edge costs nothing. The counter-scale matrix is refreshed
-  // only when the scale changed (a zoom); a pure pan leaves it (recomputeDeclutter
-  // already set it for every kept billboard, on- or off-screen).
+  // not cross the view edge costs nothing. The matrix is refreshed only when the
+  // scale changed (a zoom) OR the chart rotation changed (a course-/head-up
+  // turn -- upright text counter-rotates and its offset rotates); a pure pan
+  // leaves it (recomputeDeclutter already set it for every kept billboard).
   if (s <= 0.0) return;
-  const bool scaleChanged = (s != m_bb_scale);
+  const bool needMatrix = (s != m_bb_scale) || (rot != m_bb_rotation);
   for (const Billboard& b : m_billboards) {
     if (!b.opacity || !b.xform) continue;
     const bool shown = b.kept && worldView.contains(b.worldPos);
     b.opacity->setOpacity(shown ? 1.0 : 0.0);
-    if (shown && scaleChanged) {
-      QMatrix4x4 m;
-      m.translate(static_cast<float>(b.worldPos.x()),
-                  static_cast<float>(b.worldPos.y()));
-      m.scale(static_cast<float>(1.0 / s), static_cast<float>(1.0 / s));
-      b.xform->setMatrix(m);
-    }
+    if (shown && needMatrix)
+      b.xform->setMatrix(billboardMatrix(b.worldPos, 1.0 / s, b.upright,
+                                         rot, QPointF(b.screenCx, b.screenCy)));
   }
   m_bb_scale = s;
+  m_bb_rotation = rot;
 }
 
 void S52VectorChartProvider::applyPrimCull(const QRectF& worldView) {
@@ -585,7 +817,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     }
     const QRectF worldView =
         viewport.visibleWorldBounds(kBillboardCullMarginPx);
-    applyBillboardVisibility(viewport.scale(), worldView);
+    applyBillboardVisibility(viewport.scale(), viewport.rotation(), worldView);
     applyPrimCull(worldView);
     return old_subtree;
   }
@@ -596,6 +828,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   auto* root = new TextureCacheNode(window);
   m_patterns.clear();
   m_scamin_nodes.clear();
+  m_overscale_hatch = nullptr;  // recreated below; old node freed with subtree
   m_bb_scale = -1.0;  // force the counter-scale matrices to be set on this build
 
   // Clip each chart to its own BOUNDING BOX -- a simple, reliable rectangle (the
@@ -841,6 +1074,20 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     m_complex_lines.append(g);
   }
 
+  // S-52 over-scale hatch (A): a thin grey vertical-line set over the whole
+  // cell bbox, shown by rebuildOverscaleHatch only when the display is zoomed
+  // finer than the cell's native scale. Inside `content` (the cell's clipped
+  // subtree) so a finer cell on top hides it; appended before the billboards so
+  // names/symbols stay legible over it. Geometry is filled by the relayout.
+  {
+    auto* hatch = sg::makeFlatColorNode(QColor(120, 120, 120, 140),
+                                        QSGGeometry::DrawLines, 0);
+    m_overscale_hatch = new QSGOpacityNode();
+    m_overscale_hatch->setOpacity(0.0);  // hidden until relayout decides
+    m_overscale_hatch->appendChildNode(hatch);
+    content->appendChildNode(m_overscale_hatch);
+  }
+
   // Billboarded point items: one QSGTransformNode (placed at the world
   // anchor, counter-scaled per viewport) wrapping a textured quad. Built
   // once with their textures; the per-frame passes only touch the transform.
@@ -848,7 +1095,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
                           QPointF pivotPx, int scamin, BbKind kind,
                           float depth, double rotationDeg = 0.0,
-                          int viewGroup = 0) {
+                          int viewGroup = 0, bool upright = false) {
     if (image.isNull() || !window) return;
     QSGTexture* tex = root->texture(image);  // cache-owned, deduped by name
     if (!tex) return;
@@ -856,10 +1103,19 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                                                     : 1.0;
     const qreal w = image.width() / dpr;
     const qreal h = image.height() / dpr;
+    // The rect-centre offset from the anchor (declutter uses this regardless of
+    // mode). For an upright label the image is instead drawn CENTRED on the node
+    // origin and this offset is carried in the per-frame matrix (so it rotates
+    // with the chart while the glyph counter-rotates upright); for a symbol the
+    // offset is baked straight into the rect and the glyph rotates with chart.
+    const QPointF centreOff(w / 2.0 - pivotPx.x(), h / 2.0 - pivotPx.y());
     auto* img = window->createImageNode();
     img->setTexture(tex);
     img->setOwnsTexture(false);  // TextureCacheNode (root) owns it
-    img->setRect(QRectF(-pivotPx.x(), -pivotPx.y(), w, h));
+    if (upright)
+      img->setRect(QRectF(-w / 2.0, -h / 2.0, w, h));  // centred; offset in mtx
+    else
+      img->setRect(QRectF(-pivotPx.x(), -pivotPx.y(), w, h));
     img->setFiltering(QSGTexture::Linear);
     auto* xform = new QSGTransformNode();
     if (rotationDeg != 0.0) {
@@ -887,6 +1143,9 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     b.depth = depth;
     b.screenW = static_cast<float>(w);
     b.screenH = static_cast<float>(h);
+    b.screenCx = static_cast<float>(centreOff.x());
+    b.screenCy = static_cast<float>(centreOff.y());
+    b.upright = upright;
     m_billboards.append(b);
   };
 
@@ -947,12 +1206,28 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     // independently toggleable (mirrors s52plib's ShowSoundings /
     // ShowS57Text).
     if (lab.isSounding ? !m_showSoundings : !m_showText) continue;
-    QImage img = renderLabelImage(lab);
+    // Soundings get the unit-aware S-52 SNDFRM layout (integer + subscript
+    // tenths, drying-height underline, safety-depth emphasis); other labels
+    // (feature names) render as plain text.
+    QImage img =
+        lab.isSounding
+            ? renderSoundingImage(
+                  lab.depth, m_depth_unit, m_safety_depth_m,
+                  lab.pointSize * static_cast<float>(m_sounding_scale),
+                  lab.soundingSwept, lab.soundingLowAccuracy)
+            : renderLabelImage(lab);
     const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
+    const qreal w = img.width() / dpr;
+    const qreal h = img.height() / dpr;
+    // Soundings stay centred on their position; other text (names, light
+    // descriptions, clearances) uses the S-52 justification + offsets so it
+    // sits clear of the symbol instead of stacked on top of it.
+    const QPointF pivot =
+        lab.isSounding ? QPointF(w / 2.0, h / 2.0) : labelPivot(w, h, lab);
     addBillboard(img, QPointF(lab.pos.x(), Viewport::latToWorldY(lab.pos.y())),
-                 QPointF(img.width() / dpr / 2.0, img.height() / dpr / 2.0),
-                 lab.scamin, lab.isSounding ? BbKind::Sounding : BbKind::Label,
-                 lab.depth, /*rotationDeg=*/0.0, lab.viewGroup);
+                 pivot, lab.scamin,
+                 lab.isSounding ? BbKind::Sounding : BbKind::Label, lab.depth,
+                 /*rotationDeg=*/0.0, lab.viewGroup, /*upright=*/true);
   }
 
   // Initial layout: declutter (sets `kept` + counter-scale on every kept
@@ -962,7 +1237,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   {
     const QRectF worldView =
         viewport.visibleWorldBounds(kBillboardCullMarginPx);
-    applyBillboardVisibility(viewport.scale(), worldView);
+    applyBillboardVisibility(viewport.scale(), viewport.rotation(), worldView);
     applyPrimCull(worldView);
   }
   m_emit_scale = viewport.scale();

@@ -674,6 +674,13 @@ ApplicationWindow {
                                         checked: DisplayConfig.showCompass
                                         onToggled: DisplayConfig.showCompass = checked
                                     }
+                                    CheckBox {
+                                        text: qsTr("Grey “no data” fill where no ENC coverage")
+                                        checked: DisplayConfig.showNoData
+                                        onToggled: DisplayConfig.showNoData = checked
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: qsTr("ECDIS look: paint uncovered areas the S-52 no-data grey instead of the world basemap")
+                                    }
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Label { text: qsTr("Mouse-wheel zoom:") }
@@ -2791,10 +2798,12 @@ ApplicationWindow {
     //     both inside the ChartCanvas QQuickItem.
     ChartCanvas {
         id: chart
+        clip: true   // never rasterise chart geometry into the tide drawer below
         anchors.left: parent.left
         anchors.top: parent.top
-        // Bottom follows the tide time-bar (which rides the graph drawer).
-        anchors.bottom: tideBar.top
+        // Bottom follows the tide graph drawer (which sits on the time bar);
+        // the chart shrinks for the bar, then further as the drawer opens.
+        anchors.bottom: tideDrawer.top
         // Right edge follows the HUD panel so opening it shrinks the chart.
         anchors.right: hudPanel.left
         // Hand the S-52 engine to the canvas so it scans the chart set's
@@ -3131,6 +3140,30 @@ ApplicationWindow {
             }
         }
 
+        // Over-scale warning (S-52): the displayed chart is magnified beyond
+        // its compilation scale, so detail is stretched and not survey-accurate.
+        // Shown top-centre (under any debug pill) when the factor exceeds ~2x.
+        Rectangle {
+            visible: chart.overscaleFactor > 2.0
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: root.showDebug ? 44 : 10
+            width: oscText.implicitWidth + 18
+            height: oscText.implicitHeight + 10
+            radius: 4
+            color: "#cc6a1010"           // muted dark red
+            border.color: "#ffcf4040"
+            Text {
+                id: oscText
+                anchors.centerIn: parent
+                text: qsTr("⚠ OVERSCALE ×%1").arg(
+                          Math.round(chart.overscaleFactor))
+                color: "#ffd0d0"
+                font.pointSize: 11
+                font.bold: true
+            }
+        }
+
         // AIS target info popup (P3.9) -- shown when a target is picked
         // (ChartCanvas hit-tests a click against the AisTargetStore).
         Popup {
@@ -3274,55 +3307,36 @@ ApplicationWindow {
         }
     }
 
-    // --- Tide/current graph drawer (P3.14 F): docked at the window bottom,
-    //     below the full-width time bar. Opens when a tide/current station is
-    //     clicked (chart.tideGraph.valid); the time bar rides on its top edge.
+    // --- Tide/current graph drawer (P3.14 F): the graph grows UP out of the
+    //     top of the time bar, so the bar's hour ticks ARE the graph's x-axis
+    //     (no gap). Opens when a tide/current station is clicked; the y-axis
+    //     sits at the window's left edge. Drag the graph (or the bar) to pan.
     Item {
         id: tideDrawer
         anchors.left: parent.left
         anchors.right: hudPanel.left
-        anchors.bottom: parent.bottom
+        anchors.bottom: tideBar.top          // grows up from the bar's top edge
         readonly property bool open: DisplayConfig.showTides
             && chart.tideGraph && chart.tideGraph.valid
-        height: open ? 190 : 0
+        height: open ? 170 : 0
         clip: true
         Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
-        Rectangle {
+        Rectangle {  // one continuous panel with the bar -- no borders/seams
             anchors.fill: parent
-            color: Qt.rgba(0.04, 0.06, 0.09, 0.97)
-            border.color: Qt.rgba(1, 1, 1, 0.12)
+            color: "#0b1118"
         }
 
-        RowLayout {  // header: station name + close
-            id: tideDrawerHeader
-            anchors.top: parent.top; anchors.left: parent.left
-            anchors.right: parent.right; anchors.margins: 6
-            Label {
-                text: chart.tideGraph && chart.tideGraph.valid
-                      ? chart.tideGraph.stationName : ""
-                color: "#e8eef6"; font.bold: true; font.pointSize: 11
-                elide: Text.ElideRight; Layout.fillWidth: true
-            }
-            ToolButton {
-                text: "✕"
-                onClicked: if (chart.tideGraph) chart.tideGraph.clear()
-                ToolTip.text: qsTr("Close"); ToolTip.visible: hovered
-            }
-        }
-
-        Canvas {  // the tide/current curve, aligned to the time bar's plot x-range
+        Canvas {  // the tide/current curve, sharing the bar's plot x-range
             id: graphCanvas
-            anchors.top: tideDrawerHeader.bottom; anchors.left: parent.left
-            anchors.right: parent.right; anchors.bottom: parent.bottom
-            anchors.bottomMargin: 4
+            anchors.fill: parent
             onPaint: {
                 var ctx = getContext("2d"); ctx.reset()
                 var tg = chart.tideGraph
                 if (!tg || !tg.valid) return
                 var pl = tideBar.plotLeft, pw = tideBar.plotWidth
                 if (pw <= 1) return
-                var topM = 6, botM = 14
+                var topM = 22, botM = 2   // header band on top; curve meets the bar at the bottom
                 var plotH = height - topM - botM
                 if (plotH < 10) return
                 var vmin = tg.minValue, vmax = tg.maxValue
@@ -3346,21 +3360,52 @@ ApplicationWindow {
                 for (var j = 1; j < vals.length; j++)
                     ctx.lineTo(pl + pw * j / (vals.length - 1), yOf(vals[j]))
                 ctx.strokeStyle = "#5bb0ff"; ctx.lineWidth = 2; ctx.stroke()
-                // now line
+                // current set vectors along the curve, every 15 min: a line in
+                // the compass set (N up), length proportional to drift speed.
+                if (tg.isCurrent) {
+                    var maxAbs = Math.max(Math.abs(vmin), Math.abs(vmax), 0.1)
+                    var arr = tg.currentArrows(tideBar.winStartMs, tideBar.winEndMs, 15)
+                    var span2 = tideBar.winEndMs - tideBar.winStartMs
+                    ctx.strokeStyle = "#ffb347"; ctx.fillStyle = "#ffb347"; ctx.lineWidth = 1
+                    for (var a = 0; a < arr.length; a++) {
+                        var L = Math.abs(arr[a].v) / maxAbs * 15
+                        if (L < 1.5) continue   // skip near-slack (too short to read)
+                        var ax = pl + pw * (arr[a].t - tideBar.winStartMs) / span2
+                        var ay = yOf(arr[a].v)
+                        var rad = arr[a].dir * Math.PI / 180
+                        var ux = Math.sin(rad), uy = -Math.cos(rad)   // compass -> screen (N up)
+                        var tx = ax + ux * L, ty = ay + uy * L
+                        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(tx, ty); ctx.stroke()
+                        var nx = -uy, ny = ux                          // arrowhead
+                        ctx.beginPath(); ctx.moveTo(tx, ty)
+                        ctx.lineTo(tx - ux * 4 + nx * 2.2, ty - uy * 4 + ny * 2.2)
+                        ctx.lineTo(tx - ux * 4 - nx * 2.2, ty - uy * 4 - ny * 2.2)
+                        ctx.closePath(); ctx.fill()
+                    }
+                }
+                // now line -- full height so it continues down into the bar
                 var nf = TimeController.nowFraction
                 if (nf >= 0 && nf <= 1) {
                     var nx = pl + pw * nf
                     ctx.strokeStyle = "#ff5b5b"; ctx.lineWidth = 1
-                    ctx.beginPath(); ctx.moveTo(nx, topM); ctx.lineTo(nx, topM + plotH); ctx.stroke()
+                    ctx.beginPath(); ctx.moveTo(nx, topM); ctx.lineTo(nx, height); ctx.stroke()
                 }
-                // fixed read-marker + value dot + readout
+                // fixed read-marker; the value blob sits ON the drawn curve at
+                // the marker (interpolate the samples) so it always intersects
+                // the curve and the height is read off at the selected time.
                 var mx = pl + pw * TimeController.markerFraction
                 ctx.strokeStyle = "#ffd27f"; ctx.lineWidth = 2
-                ctx.beginPath(); ctx.moveTo(mx, topM); ctx.lineTo(mx, topM + plotH); ctx.stroke()
-                var my = yOf(tg.valueAtMarker)
-                ctx.fillStyle = "#ffd27f"; ctx.beginPath(); ctx.arc(mx, my, 4, 0, 2 * Math.PI); ctx.fill()
-                ctx.fillStyle = "#ffffff"; ctx.font = "12px sans-serif"
-                ctx.fillText(tg.valueAtMarkerText, Math.min(width - 70, mx + 7), Math.max(12, my - 7))
+                ctx.beginPath(); ctx.moveTo(mx, topM); ctx.lineTo(mx, height); ctx.stroke()
+                var mIdx = TimeController.markerFraction * (vals.length - 1)
+                var i0 = Math.max(0, Math.min(vals.length - 2, Math.floor(mIdx)))
+                var mv = vals[i0] + (vals[i0 + 1] - vals[i0]) * (mIdx - i0)
+                var my = yOf(mv)
+                ctx.fillStyle = "#ffd27f"; ctx.beginPath(); ctx.arc(mx, my, 4.5, 0, 2 * Math.PI); ctx.fill()
+                // height/speed read off the curve at the marker -- recomputed
+                // every frame from the same samples, so it tracks the blob.
+                var mtxt = (tg.isCurrent ? Math.abs(mv) : mv).toFixed(1) + " " + tg.unitLabel
+                ctx.fillStyle = "#ffffff"; ctx.font = "bold 12px sans-serif"
+                ctx.fillText(mtxt, Math.min(width - 70, mx + 8), Math.max(topM + 12, my - 8))
                 // turning-point events (HW/LW or flood/ebb)
                 var evs = tg.events(tideBar.winStartMs, tideBar.winEndMs)
                 ctx.font = "10px sans-serif"
@@ -3373,13 +3418,28 @@ ApplicationWindow {
                     var tw = ctx.measureText(lbl).width
                     ctx.fillText(lbl, Math.max(pl, Math.min(pl + pw - tw, ex - tw / 2)), ey - 6)
                 }
-                // y-axis labels (user units), in the left gutter
-                ctx.fillStyle = "#90a4b8"; ctx.font = "10px sans-serif"
+                // y-axis: a vertical line at t=0 (the left edge of the plot)
+                // rising from the x-axis, with right-aligned figures + ticks.
+                ctx.strokeStyle = "#6b7a8d"; ctx.lineWidth = 1
+                ctx.beginPath(); ctx.moveTo(pl, topM); ctx.lineTo(pl, height); ctx.stroke()
+                ctx.fillStyle = "#9fb1c4"; ctx.font = "10px sans-serif"
+                ctx.textAlign = "right"; ctx.textBaseline = "middle"
                 for (var g = 0; g <= 4; g++) {
                     var vv = vmin + (vmax - vmin) * g / 4
-                    ctx.fillText(Number(vv).toFixed(1), 4, yOf(vv) - 1)
+                    var gy = yOf(vv)
+                    ctx.beginPath(); ctx.moveTo(pl - 3, gy); ctx.lineTo(pl, gy); ctx.stroke()
+                    ctx.fillText(Number(vv).toFixed(1), pl - 6, gy)
                 }
-                ctx.fillStyle = "#c0d0e0"; ctx.fillText(tg.unitLabel, 4, topM + 9)
+                // rotated axis title (replaces the unit that overlapped the top
+                // figure): "Height (m)" for tides, "Speed (kn)" for currents.
+                ctx.save()
+                ctx.translate(9, topM + plotH / 2)
+                ctx.rotate(-Math.PI / 2)
+                ctx.textAlign = "center"; ctx.textBaseline = "middle"
+                ctx.fillStyle = "#c0d0e0"; ctx.font = "10px sans-serif"
+                ctx.fillText((tg.isCurrent ? "Speed (" : "Height (") + tg.unitLabel + ")", 0, 0)
+                ctx.restore()
+                ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"
             }
             Connections {
                 target: chart.tideGraph
@@ -3395,72 +3455,95 @@ ApplicationWindow {
                 onTriggered: graphCanvas.requestPaint()
             }
         }
+
+        // Drag anywhere on the graph to pan time as well (mirrors the bar).
+        MouseArea {
+            anchors.fill: parent
+            property real lastX: 0
+            property real pressX: 0
+            onPressed: (m) => { lastX = m.x; pressX = m.x }
+            onReleased: (m) => {
+                if (Math.abs(m.x - pressX) < 4 && tideBar.plotWidth > 1)
+                    TimeController.setDisplayFraction((m.x - tideBar.plotLeft) / tideBar.plotWidth)
+            }
+            onPositionChanged: (m) => {
+                if (pressed && tideBar.plotWidth > 1) {
+                    TimeController.panPixels(m.x - lastX, tideBar.plotWidth)
+                    lastX = m.x
+                }
+            }
+        }
+
+        // Header band (on top of the canvas): station name + close.
+        Label {
+            anchors.top: parent.top; anchors.left: parent.left
+            anchors.topMargin: 4; anchors.leftMargin: 8
+            width: parent.width - 36
+            text: chart.tideGraph && chart.tideGraph.valid
+                  ? chart.tideGraph.stationName : ""
+            color: "#e8eef6"; font.bold: true; font.pointSize: 10
+            elide: Text.ElideRight
+        }
+        Label {  // plain close glyph (no button background), top-right
+            anchors.top: parent.top; anchors.right: parent.right
+            anchors.topMargin: 3; anchors.rightMargin: 8
+            text: "✕"; font.pointSize: 12
+            color: closeMA.containsMouse ? "#ffffff" : "#8a97a6"
+            MouseArea {
+                id: closeMA; anchors.fill: parent; hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: if (chart.tideGraph) chart.tideGraph.clear()
+            }
+        }
     }
 
-    // --- Time bar (P3.14 F): full-width, pinned to the window bottom, riding
-    //     the tide drawer's top edge. A fixed read-marker with a pannable,
-    //     infinite axis (drag to pan time; chart tides + graph animate; click to
-    //     read a time). Visible only when tides are on (MUIBar ≋).
+    // --- Time bar (P3.14 F): the graph's x-axis. A thin solid strip pinned to
+    //     the window bottom (above the status bar). The chart shrinks above it,
+    //     and further when the drawer opens. A fixed read-marker over a
+    //     pannable, infinite axis (drag to pan; click to read; ▶ animates;
+    //     Now re-snaps). Visible only when tides are on (MUIBar ≋).
     Item {
         id: tideBar
         anchors.left: parent.left
         anchors.right: hudPanel.left
-        anchors.bottom: tideDrawer.top
-        height: DisplayConfig.showTides ? 54 : 0
+        anchors.bottom: parent.bottom
+        height: DisplayConfig.showTides ? 30 : 0
         visible: DisplayConfig.showTides
         clip: true
         Behavior on height { NumberAnimation { duration: 150 } }
 
-        // Shared time->x mapping consumed by the bar ticks AND the graph Canvas.
+        // Single source of truth for the time->x mapping, consumed by the bar
+        // ticks AND the graph Canvas. The plot starts past a left gutter so the
+        // graph's y-axis lines up with the window's left edge.
         readonly property real plotLeft: plot.x
         readonly property real plotWidth: plot.width
         readonly property double winStartMs: TimeController.windowStart.getTime()
         readonly property double winEndMs: TimeController.windowEnd.getTime()
 
-        Rectangle {
+        Rectangle {  // one continuous panel with the drawer -- no borders/seams
             anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.62); border.color: Qt.rgba(1, 1, 1, 0.12)
+            color: "#0b1118"
         }
 
-        Row {  // left controls
-            id: leftBtns
+        Label {  // play/pause in the bottom-left corner (where the axes meet)
+            id: playBtn
             anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: 6; spacing: 1
-            ToolButton {
-                text: TimeController.playing ? "⏸" : "▶"
+            anchors.leftMargin: 8
+            text: TimeController.playing ? "⏸" : "▶"
+            color: playMA.containsMouse ? "#ffffff" : "#d8e2ec"; font.pointSize: 13
+            MouseArea {
+                id: playMA; anchors.fill: parent; hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
                 onClicked: TimeController.togglePlay()
-                ToolTip.text: qsTr("Animate through time"); ToolTip.visible: hovered
-            }
-            ToolButton {
-                text: "‹"; onClicked: TimeController.stepMinutes(-60)
-                ToolTip.text: qsTr("Back 1 hour"); ToolTip.visible: hovered
-            }
-            ToolButton {
-                text: "›"; onClicked: TimeController.stepMinutes(60)
-                ToolTip.text: qsTr("Forward 1 hour"); ToolTip.visible: hovered
-            }
-        }
-        Row {  // right controls
-            id: rightBtns
-            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-            anchors.rightMargin: 6; spacing: 4
-            Label {
-                anchors.verticalCenter: parent.verticalCenter
-                text: TimeController.dateLabel + "  " + TimeController.timeLabel
-                color: TimeController.live ? "#8fd0ff" : "#ffd27f"; font.pointSize: 10
-            }
-            ToolButton {
-                text: qsTr("Now"); highlighted: TimeController.live
-                onClicked: TimeController.goLive()
-                ToolTip.text: qsTr("Snap to the live clock"); ToolTip.visible: hovered
             }
         }
 
-        Item {  // plot area: hour ticks + fixed marker + now line + pan handler
+        Item {  // plot: x-axis ticks + fixed marker + now line + readout + pan
             id: plot
-            anchors.left: leftBtns.right; anchors.right: rightBtns.left
+            anchors.left: parent.left; anchors.right: parent.right
             anchors.top: parent.top; anchors.bottom: parent.bottom
-            anchors.leftMargin: 8; anchors.rightMargin: 8
+            anchors.leftMargin: 44   // y-axis gutter (axis title + figures)
+            anchors.rightMargin: 8
 
             Canvas {
                 id: barCanvas
@@ -3477,13 +3560,13 @@ ApplicationWindow {
                         var x = xOf(t)
                         var hr = new Date(t).getHours()
                         var major = (hr % 3 === 0)
+                        // ticks hang from the top edge (the graph baseline)
                         ctx.strokeStyle = major ? "#80ffffff" : "#38ffffff"; ctx.lineWidth = 1
                         ctx.beginPath()
-                        ctx.moveTo(x, height * (major ? 0.32 : 0.58)); ctx.lineTo(x, height)
-                        ctx.stroke()
+                        ctx.moveTo(x, 0); ctx.lineTo(x, major ? 9 : 5); ctx.stroke()
                         if (major) {
                             ctx.fillStyle = "#b0c0d0"; ctx.font = "9px sans-serif"
-                            ctx.fillText((hr < 10 ? "0" : "") + hr, x - 6, height * 0.26)
+                            ctx.fillText((hr < 10 ? "0" : "") + hr, x - 6, height - 3)
                         }
                     }
                 }
@@ -3493,7 +3576,7 @@ ApplicationWindow {
                 }
             }
 
-            Rectangle {  // now line (moves with real time / pan)
+            Rectangle {  // now line
                 visible: TimeController.nowFraction >= 0 && TimeController.nowFraction <= 1
                 x: plot.width * TimeController.nowFraction - 1
                 width: 2; height: plot.height; color: "#ff5b5b"
@@ -3501,10 +3584,6 @@ ApplicationWindow {
             Rectangle {  // fixed read-marker (the axis pans under it)
                 x: plot.width * TimeController.markerFraction - 1
                 width: 2; height: plot.height; color: "#ffd27f"
-            }
-            Rectangle {  // marker handle
-                x: plot.width * TimeController.markerFraction - 6; y: -3
-                width: 12; height: 12; radius: 6; color: "#ffd27f"; border.color: "black"
             }
 
             MouseArea {
@@ -3522,6 +3601,36 @@ ApplicationWindow {
                         TimeController.panPixels(m.x - lastX, plot.width)
                         lastX = m.x
                     }
+                }
+            }
+
+            // Date/time readout pinned beside the gold marker; double-click =
+            // snap to Now (frees the right side for a full-width plot).
+            Rectangle {
+                id: readout
+                x: Math.min(plot.width - width - 2,
+                            plot.width * TimeController.markerFraction + 6)
+                y: 1; height: 15; width: readoutText.width + 8; radius: 2
+                color: Qt.rgba(0, 0, 0, 0.55)
+                Text {
+                    id: readoutText; anchors.centerIn: parent
+                    text: TimeController.dateLabel + " " + TimeController.timeLabel
+                    color: TimeController.live ? "#8fd0ff" : "#ffd27f"
+                    font.pointSize: 9; font.bold: true
+                }
+                MouseArea {
+                    anchors.fill: parent; hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    property real lastX: 0
+                    onPressed: (m) => lastX = m.x
+                    onDoubleClicked: TimeController.goLive()
+                    onPositionChanged: (m) => {
+                        if (pressed) {
+                            TimeController.panPixels(m.x - lastX, plot.width); lastX = m.x
+                        }
+                    }
+                    ToolTip.text: qsTr("Double-click to snap to now")
+                    ToolTip.visible: containsMouse; ToolTip.delay: 600
                 }
             }
         }

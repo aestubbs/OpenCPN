@@ -49,6 +49,7 @@
 #include "chart_worker.h"
 #include "config_store.h"
 #include "demo_nav_data_provider.h"
+#include "pick_highlight_provider.h"
 #include "shapefile_basemap_provider.h"
 #include "own_ship_config.h"
 #include "own_ship_layer.h"
@@ -131,6 +132,7 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_basemap =
       new ShapefileBasemapProvider(QString::fromUtf8(OCPN_QT_BASEMAP_SHP));
   auto* world = m_basemap;
+  m_basemap->setNoDataMode(DisplayConfig::instance().showNoData());  // B (ECDIS)
   auto* world_layer = new ChartLayer(world, m_viewport.get());
   world_layer->setZOrder(-1000);
   m_compositor->addLayer(world_layer);
@@ -227,6 +229,22 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_tide_layer = new TideLayer(m_viewport.get());
   m_tide_layer->setZOrder(1750);
   m_compositor->addLayer(m_tide_layer);
+
+  // Object-query pick highlight (F): outlines the feature currently shown in
+  // the query popup. Above charts/nav overlays so it is never hidden; driven
+  // by the query view-model below. Owned by its ChartLayer in the compositor.
+  m_pick_highlight = new PickHighlightProvider(QStringLiteral("pick.highlight"),
+                                               m_viewport.get());
+  auto* pick_layer = new ChartLayer(m_pick_highlight, m_viewport.get());
+  pick_layer->setZOrder(2100);
+  m_compositor->addLayer(pick_layer);
+  // Refresh the highlight whenever the query result or the stepped index
+  // changes (so prev/next moves the outline to the newly-shown feature).
+  connect(m_object_query.get(), &ObjectQueryViewModel::changed, this, [this]() {
+    if (m_pick_highlight)
+      m_pick_highlight->setShape(m_object_query->currentShape(),
+                                 m_object_query->currentGeom());
+  });
 
   // Recentre on the active source's own-ship fix once after each mode switch
   // (the Hakefjord demo and a live feed are both at their real positions,
@@ -330,6 +348,9 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
     if (DisplayConfig::instance().depthUnit() != m_depth_unit ||
         DisplayConfig::instance().heightUnit() != m_height_unit)
       applyChartConfig();
+    // ECDIS NODATA fill (B): re-tint the world backdrop grey / restore it.
+    if (m_basemap)
+      m_basemap->setNoDataMode(DisplayConfig::instance().showNoData());
   });
   // Vessel safety depth -> ENC sounding bold threshold (render-time re-raster).
   connect(&OwnShipConfig::instance(), &OwnShipConfig::changed, this, [this]() {
@@ -624,6 +645,7 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   const QString layerId = "enc." + id;
   auto* provider = new S52VectorChartProvider(layerId, buffer, north, south,
                                               west, east, m_viewport.get());
+  provider->setNativeScale(cat.nativeScale);  // drives the over-scale hatch (A)
   applyDisplaySettings(provider);
   auto* layer = new ChartLayer(provider, m_viewport.get());
   layer->setZOrder(zOrderForScale(cat.nativeScale));
@@ -799,6 +821,33 @@ void ChartCanvas::updateVisibleCells() {
   if (!evict.isEmpty()) update();
   // Refresh the chart bar's coverage list only when the displayed set changed.
   if (needed_changed) Q_EMIT chartCoverageChanged();
+
+  // Over-scale (S-52): a chart is "overscaled" when the display is zoomed in
+  // FINER than the chart's compilation scale -- factor = chart 1:N / display
+  // 1:N (both are 1:N denominators; the display N shrinks as you zoom in, so
+  // overscale is chart/display > 1, NOT the reciprocal). This is a per-chart
+  // property, so the banner reflects the chart actually under the view CENTRE
+  // (the one the mariner is looking at), not the finest cell anywhere in the
+  // quilt -- a small overscaled cell in a corner must not drive the readout.
+  // The hatch overlay (per provider) shows it on each overscaled cell directly.
+  const double cLat = m_viewport->centerLat();
+  const double cLon = m_viewport->centerLon();
+  int centreN = 0;  // finest displayed cell covering the view centre
+  for (const QString& name : m_needed) {
+    auto it = m_catalog.constFind(name);
+    if (it == m_catalog.cend() || it->nativeScale <= 0) continue;
+    if (!it->covers(cLat, cLon)) continue;
+    if (centreN == 0 || it->nativeScale < centreN) centreN = it->nativeScale;
+  }
+  const double newOverscale =
+      (centreN > 0 && displayN > 0.0) ? centreN / displayN : 0.0;
+  // Quantise relative to the current value (a fixed absolute step would churn
+  // at large factors and barely move near 1). 5% change is the HUD threshold.
+  if (std::abs(newOverscale - m_overscale_factor) >
+      0.05 * std::max(1.0, m_overscale_factor)) {
+    m_overscale_factor = newOverscale;
+    Q_EMIT overscaleChanged();
+  }
 }
 
 QVariantList ChartCanvas::chartBarCells() const {

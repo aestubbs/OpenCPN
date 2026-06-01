@@ -34,6 +34,7 @@ OwnShipConfig::OwnShipConfig() {
   m_gps_dx = c.getDouble("ownship/gpsOffsetX", m_gps_dx);
   m_gps_dy = c.getDouble("ownship/gpsOffsetY", m_gps_dy);
   m_min_screen = c.getDouble("ownship/minScreenSize", m_min_screen);
+  m_safety_depth = c.getDouble("ownship/safetyDepth", m_safety_depth);
   m_show_wp_dir = c.getBool("ownship/showWaypointDir", m_show_wp_dir);
   m_show_rings = c.getBool("ownship/showRangeRings", m_show_rings);
   m_ring_count = c.getInt("ownship/ringCount", m_ring_count);
@@ -86,6 +87,9 @@ void OwnShipConfig::setGpsOffsetY(double v) {
 }
 void OwnShipConfig::setMinScreenSize(double v) {
   OCPN_OS_SET(m_min_screen, v, "ownship/minScreenSize", setDouble)
+}
+void OwnShipConfig::setSafetyDepth(double v) {
+  OCPN_OS_SET(m_safety_depth, v, "ownship/safetyDepth", setDouble)
 }
 void OwnShipConfig::setShowWaypointDirection(bool v) {
   OCPN_OS_SET(m_show_wp_dir, v, "ownship/showWaypointDir", setBool)

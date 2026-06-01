@@ -86,19 +86,31 @@ void ShapefileBasemapProvider::setColorScheme(int scheme) {
       m_sea = QColor(70, 92, 120);
       m_land = QColor(110, 104, 86);
       m_coast = QColor(70, 64, 52);
+      m_nodata_fill = QColor(120, 120, 120);
+      m_nodata_coast = QColor(90, 90, 90);
       break;
     case 2:  // night
       m_sea = QColor(18, 28, 44);
       m_land = QColor(34, 32, 27);
       m_coast = QColor(48, 44, 36);
+      m_nodata_fill = QColor(40, 40, 40);
+      m_nodata_coast = QColor(64, 64, 64);
       break;
     default:  // day
       m_sea = QColor(170, 195, 220);
       m_land = QColor(225, 213, 180);
       m_coast = QColor(120, 110, 90);
+      m_nodata_fill = QColor(200, 200, 200);
+      m_nodata_coast = QColor(150, 150, 150);
       break;
   }
   Q_EMIT changed();
+}
+
+void ShapefileBasemapProvider::setNoDataMode(bool on) {
+  if (on == m_nodata) return;
+  m_nodata = on;
+  Q_EMIT changed();  // forces a rebuild (renderChart re-tints the backdrop)
 }
 
 void ShapefileBasemapProvider::load(const QString& shp_path) {
@@ -208,9 +220,16 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
 
   auto* root = new QSGNode();
 
+  // ECDIS NODATA mode: paint the whole backdrop (sea + land) the S-52 no-data
+  // grey, so wherever an ENC cell doesn't draw over it the mariner sees the
+  // standard no-coverage fill rather than the cartographic world map.
+  const QColor seaCol = m_nodata ? m_nodata_fill : m_sea;
+  const QColor landCol = m_nodata ? m_nodata_fill : m_land;
+  const QColor coastCol = m_nodata ? m_nodata_coast : m_coast;
+
   // 1. Sea backdrop quad over the whole world (drawn first).
   {
-    auto* sea = sg::makeFlatColorNode(m_sea, QSGGeometry::DrawTriangles, 6);
+    auto* sea = sg::makeFlatColorNode(seaCol, QSGGeometry::DrawTriangles, 6);
     QSGGeometry::Point2D* v = sea->geometry()->vertexDataAsPoint2D();
     // World Y spans the clamped Mercator range (lat +/-kMercMaxLat).
     const float xl = -180, xr = 180;
@@ -223,7 +242,7 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
 
   // 2. Land fill: the tessellated triangle list.
   {
-    auto* land = sg::makeFlatColorNode(m_land, QSGGeometry::DrawTriangles,
+    auto* land = sg::makeFlatColorNode(landCol, QSGGeometry::DrawTriangles,
                                        m_land_tris.size());
     QSGGeometry::Point2D* v = land->geometry()->vertexDataAsPoint2D();
     for (int i = 0; i < m_land_tris.size(); ++i)
@@ -236,11 +255,14 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
   //    fading to transparent ~6px inland) so land lifts off the water. Built
   //    from the same fill-boundary loops as the outline (and the fill), so its
   //    coastal edge sits exactly on the land/sea boundary. Skip grid clip
-  //    edges so the tile boundaries aren't shaded.
-  if (auto* shade = makeCoastShadeNode(
-          m_coastlines, QColor(0, 0, 0), /*width_px=*/6.0f, /*max_alpha=*/0.38f,
-          [](const QPointF& a, const QPointF& b) { return !isGridEdge(a, b); }))
-    root->appendChildNode(shade);
+  //    edges so the tile boundaries aren't shaded. Suppressed in NODATA mode --
+  //    the backdrop is a flat no-coverage grey, not a cartographic shoreline.
+  if (!m_nodata)
+    if (auto* shade = makeCoastShadeNode(
+            m_coastlines, QColor(0, 0, 0), /*width_px=*/6.0f,
+            /*max_alpha=*/0.38f,
+            [](const QPointF& a, const QPointF& b) { return !isGridEdge(a, b); }))
+      root->appendChildNode(shade);
 
   // 4. Coastline outline: real-coast segments only (grid clip edges skipped),
   //    so the basemap shows a clean coast and no tile grid.
@@ -261,7 +283,7 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
       }
     }
     if (!seg.empty()) {
-      auto* coast = sg::makeFlatColorNode(m_coast, QSGGeometry::DrawLines,
+      auto* coast = sg::makeFlatColorNode(coastCol, QSGGeometry::DrawLines,
                                           static_cast<int>(seg.size()));
       std::memcpy(coast->geometry()->vertexData(), seg.data(),
                   seg.size() * sizeof(QSGGeometry::Point2D));

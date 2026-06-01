@@ -74,10 +74,22 @@ void ObjectQueryViewModel::setObjects(const QList<s52sg::QueryObject>& objs) {
                       .arg(name.isEmpty() ? a.name : name, value);
     }
     it.attrs = it.attrs.trimmed();
+    it.shape = o.shape;
+    it.geom = o.geom;
     m_items.append(it);
   }
   m_index = 0;
   Q_EMIT changed();
+}
+
+QList<QPointF> ObjectQueryViewModel::currentShape() const {
+  return (m_index >= 0 && m_index < m_items.size()) ? m_items[m_index].shape
+                                                    : QList<QPointF>();
+}
+
+s52sg::QueryGeom ObjectQueryViewModel::currentGeom() const {
+  return (m_index >= 0 && m_index < m_items.size()) ? m_items[m_index].geom
+                                                    : s52sg::QueryGeom::Area;
 }
 
 QString ObjectQueryViewModel::className() const {

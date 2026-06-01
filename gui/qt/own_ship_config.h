@@ -51,6 +51,11 @@ class OwnShipConfig : public QObject {
   // Minimum on-screen symbol size, mm (real-scale clamps to this).
   Q_PROPERTY(double minScreenSize READ minScreenSize WRITE setMinScreenSize
                  NOTIFY changed)
+  // Safety depth, metres. ENC soundings at or shallower than this are drawn
+  // bold/black (the S-52 SOUNDS emphasis). Vessel-related (draft + margin), so
+  // it lives with the vessel settings rather than the chart options.
+  Q_PROPERTY(double safetyDepth READ safetyDepth WRITE setSafetyDepth NOTIFY
+                 changed)
   // Draw an arrow toward the active waypoint.
   Q_PROPERTY(bool showWaypointDirection READ showWaypointDirection WRITE
                  setShowWaypointDirection NOTIFY changed)
@@ -91,6 +96,8 @@ public:
   void setGpsOffsetY(double v);
   double minScreenSize() const { return m_min_screen; }
   void setMinScreenSize(double v);
+  double safetyDepth() const { return m_safety_depth; }
+  void setSafetyDepth(double v);
   bool showWaypointDirection() const { return m_show_wp_dir; }
   void setShowWaypointDirection(bool v);
   bool showRangeRings() const { return m_show_rings; }
@@ -116,6 +123,7 @@ private:
   double m_gps_dx = 0.0;
   double m_gps_dy = 0.0;
   double m_min_screen = 0.0;
+  double m_safety_depth = 5.0;  // metres; ENC sounding bold threshold
   bool m_show_wp_dir = true;
   bool m_show_rings = false;
   int m_ring_count = 0;

@@ -126,8 +126,14 @@ bool S52Engine::init(const QString& data_dir) {
   ChartCtx ctx(false, 0);
   m_impl->lib->SetPLIBColorScheme(GLOBAL_COLOR_SCHEME_DAY, ctx);
   m_impl->lib->SetDisplayCategory(STANDARD);
+  // Match the ChartDisplaySettings defaults (symbolStyle 0 -> PAPER_CHART,
+  // boundaryStyle 0 -> PLAIN_BOUNDARIES). The decode-time point/area LUP lookups
+  // now read these (m_nSymbolStyle / m_nBoundaryStyle) rather than hardcoding a
+  // table, so a cell decoded BEFORE applyDisplaySettings first runs must still
+  // resolve against the same table the settings will select -- otherwise a
+  // class with only a PAPER_CHART LUP (no SIMPLIFIED) would drop on first load.
   m_impl->lib->m_nBoundaryStyle = PLAIN_BOUNDARIES;
-  m_impl->lib->m_nSymbolStyle = SIMPLIFIED;
+  m_impl->lib->m_nSymbolStyle = PAPER_CHART;
   m_impl->lib->UpdateMarinerParams();
 
   m_impl->status =
@@ -333,7 +339,10 @@ void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
   }
   obj->SetAreaGeometry(ptg, ref_lat, ref_lon);
 
-  LUPrec* lup = plib->S52_LUPLookup(PLAIN_BOUNDARIES, obj->FeatureName, obj);
+  // Area boundary table per the Plain vs Symbolized option
+  // (m_nBoundaryStyle = PLAIN_BOUNDARIES | SYMBOLIZED_BOUNDARIES).
+  LUPrec* lup =
+      plib->S52_LUPLookup(plib->m_nBoundaryStyle, obj->FeatureName, obj);
   if (!lup) {
     delete obj;
     return;
@@ -478,6 +487,35 @@ struct LoadCounts {
   int areas = 0, lines = 0, points = 0;
 };
 
+// Does an S-57 list attribute (arriving comma-separated, e.g. "4,6"; a single
+// value is bare) contain any of the wanted enum codes?
+bool s57ListHas(const QString& list, std::initializer_list<int> wanted) {
+  if (list.isEmpty()) return false;
+  const QList<QString> parts = list.split(QLatin1Char(','), Qt::SkipEmptyParts);
+  for (const QString& p : parts) {
+    bool ok = false;
+    const int v = p.trimmed().toInt(&ok);
+    if (ok)
+      for (int w : wanted)
+        if (v == w) return true;
+  }
+  return false;
+}
+
+// Resolve the S-52 SNDFRM sounding-quality flags from a sounding's S-57
+// attributes (TECSOU/QUASOU/STATUS as list strings, QUAPOS as an int; absent =
+// empty/0). Mirrors libs/s52plib SNDFRM02: swept = TECSOU "swept by wire drag"
+// (6); low accuracy = doubtful/unreliable/no-bottom/reported QUASOU
+// (3,4,5,8,9), existence-doubtful STATUS (18), or approximate QUAPOS (2..9).
+void applySoundingQuality(s52sg::Label& lab, const QString& tecsou,
+                          const QString& quasou, const QString& status,
+                          int quapos) {
+  lab.soundingSwept = s57ListHas(tecsou, {6});
+  lab.soundingLowAccuracy = s57ListHas(quasou, {3, 4, 5, 8, 9}) ||
+                            s57ListHas(status, {18}) ||
+                            (quapos >= 2 && quapos <= 9);
+}
+
 // Open one ENC cell via the OGR S-57 driver and append its features to
 // `buf` (decoded through `plib`). Shares the registrar across cells.
 // Returns false (and sets `err`) if the cell can't be opened.
@@ -587,7 +625,17 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
           buf.queryObjects.append(std::move(qo));
         }
 
-        if (gt == wkbPolygon || gt == wkbMultiPolygon) {
+        // S-52 meta objects (M_QUAL/M_COVR/M_NSYS/M_NPUB/...) are the chart's
+        // quality / coverage / publication metadata. wx (s52plib.cpp:10680)
+        // suppresses them unless "chart info objects" (m_bShowMeta) is on; the
+        // OSENC path already gates on it, so gate the OGR path too for parity.
+        // The query snapshot above is built first, so a meta object stays
+        // queryable (right-click ZOC/CATZOC) even when not drawn. (Not a
+        // `continue` -- the feature must still reach DestroyFeature below.)
+        const bool drawFeature =
+            plib->m_bShowMeta || className[0] != 'M' || className[1] != '_';
+
+        if (drawFeature && (gt == wkbPolygon || gt == wkbMultiPolygon)) {
           auto emitOne = [&](OGRPolygon* poly) {
             OGRLinearRing* ext = poly->getExteriorRing();
             if (!ext || ext->getNumPoints() < 3) return;  // skip degenerate
@@ -614,7 +662,8 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             for (int k = 0; k < mp->getNumGeometries(); ++k)
               emitOne(static_cast<OGRPolygon*>(mp->getGeometryRef(k)));
           }
-        } else if (gt == wkbLineString || gt == wkbMultiLineString) {
+        } else if (drawFeature &&
+                   (gt == wkbLineString || gt == wkbMultiLineString)) {
           // The OGR driver assembles line geometry in lon/lat directly, so
           // no SM round-trip: build a minimal GEO_LINE S57Obj for the LUP
           // lookup, then emit each line string's points with the resolved
@@ -661,18 +710,20 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             for (int k = 0; k < ml->getNumGeometries(); ++k)
               emitLine(static_cast<OGRLineString*>(ml->getGeometryRef(k)));
           }
-        } else if (gt == wkbPoint || gt == wkbMultiPoint) {
+        } else if (drawFeature && (gt == wkbPoint || gt == wkbMultiPoint)) {
           auto emitPoint = [&](OGRPoint* pt) {
             const double lon = pt->getX(), lat = pt->getY();
             if (strncmp(className, "SOUNDG", 6) == 0) {
               // Sounding: the depth rides in the Z ordinate (we opened the
-              // cell with ADD_SOUNDG_DEPTH + SPLIT_MULTIPOINT). Format it as
-              // a label; metres, one decimal under 10 fathoms-equivalent.
+              // cell with ADD_SOUNDG_DEPTH + SPLIT_MULTIPOINT), always metres.
+              // The provider formats it per the S-52 SNDFRM convention (unit
+              // conversion, subscript tenths, drying underline) from `depth`;
+              // `text` is only a plain-metres fallback.
               const double depth = pt->getZ();
               s52sg::Label lab;
               lab.pos = QPointF(lon, lat);
               lab.color = QColor(60, 60, 60);
-              lab.pointSize = 9.0f;
+              lab.pointSize = 11.0f;
               lab.text = depth < 10.0 ? QString::number(depth, 'f', 1)
                                       : QString::number(qRound(depth));
               const int si = feat->GetFieldIndex("SCAMIN");
@@ -680,6 +731,20 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
                 lab.scamin = feat->GetFieldAsInteger(si);
               lab.isSounding = true;
               lab.depth = static_cast<float>(depth);
+              // SNDFRM quality. Split SOUNDG points inherit the parent's
+              // attributes, so TECSOU/QUASOU/STATUS/QUAPOS are on `feat`.
+              auto strField = [&](const char* n) -> QString {
+                const int fi = feat->GetFieldIndex(n);
+                return (fi >= 0 && feat->IsFieldSet(fi))
+                           ? QString::fromUtf8(feat->GetFieldAsString(fi))
+                           : QString();
+              };
+              int quapos = 0;
+              const int qpi = feat->GetFieldIndex("QUAPOS");
+              if (qpi >= 0 && feat->IsFieldSet(qpi))
+                quapos = feat->GetFieldAsInteger(qpi);
+              applySoundingQuality(lab, strField("TECSOU"), strField("QUASOU"),
+                                   strField("STATUS"), quapos);
               buf.labels.push_back(lab);
               ++n_points;
               return;
@@ -693,8 +758,10 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             obj->m_lat = lat;
             obj->m_lon = lon;
             CopyFeatureAttributes(feat, obj);
-            LUPrec* lup =
-                plib->S52_LUPLookup(PAPER_CHART, obj->FeatureName, obj);
+            // Point symbol table per the Paper-chart vs Simplified option
+            // (m_nSymbolStyle = PAPER_CHART | SIMPLIFIED).
+            LUPrec* lup = plib->S52_LUPLookup(plib->m_nSymbolStyle,
+                                              obj->FeatureName, obj);
             if (!lup) {
               delete obj;
               return;
@@ -1038,7 +1105,9 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
         // Soundings: extent(4 doubles) + point_count(uint32) + per point
         // (easting, northing, depth) as SM-metre floats relative to the cell
         // ref. Emit each as a depth label, mirroring the NOAA SOUNDG path; the
-        // provider declutters them (shallowest-per-cell) and applies SCAMIN.
+        // provider declutters them (shallowest-per-cell), applies SCAMIN, and
+        // formats `depth` (metres) per the S-52 SNDFRM convention in the user's
+        // depth unit -- `text` here is only a plain-metres fallback.
         if (cur && plen >= 4 * sizeof(double) + sizeof(uint32_t)) {
           uint32_t pc = 0;
           std::memcpy(&pc, pl + 32, 4);
@@ -1046,6 +1115,15 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
           const qint64 need = static_cast<qint64>(pc) * 3 * sizeof(float);
           if (static_cast<qint64>(plen) - 36 >= need) {
             const int scamin = cur->Scamin;
+            // SNDFRM quality: the multipoint's TECSOU/QUASOU/STATUS/QUAPOS apply
+            // to every sounding in it -- read once. (GetAttrValueAsString is
+            // wx-side; convert to QString.)
+            auto attr = [&](const char* n) -> QString {
+              return QString::fromUtf8(cur->GetAttrValueAsString(n).ToUTF8().data());
+            };
+            const QString tecsou = attr("TECSOU"), quasou = attr("QUASOU"),
+                          status = attr("STATUS");
+            const int quapos = attr("QUAPOS").toInt();
             for (uint32_t i = 0; i < pc; ++i) {
               float v[3];
               std::memcpy(v, tbl + i * 3 * sizeof(float), 3 * sizeof(float));
@@ -1055,12 +1133,13 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
               s52sg::Label lab;
               lab.pos = QPointF(lon, lat);
               lab.color = QColor(60, 60, 60);
-              lab.pointSize = 9.0f;
+              lab.pointSize = 11.0f;
               lab.text = depth < 10.0 ? QString::number(depth, 'f', 1)
                                       : QString::number(qRound(depth));
               lab.scamin = scamin;
               lab.isSounding = true;
               lab.depth = static_cast<float>(depth);
+              applySoundingQuality(lab, tecsou, quasou, status, quapos);
               buf.labels.push_back(lab);
               // Make each sounding queryable (right-click depth -> SOUNDG with
               // its value), mirroring the OGR SPLIT_MULTIPOINT path. The SOUNDG
@@ -1225,7 +1304,9 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
     // the cell native scale so the per-frame cull thins over-zoomed-out detail.
     ApplySuperScamin(obj, native_scale, plib->m_bUseSUPER_SCAMIN);
     if (obj->Primitive_type == GEO_POINT) {
-      LUPrec* lup = plib->S52_LUPLookup(PAPER_CHART, obj->FeatureName, obj);
+      // Paper-chart vs Simplified point symbols (m_nSymbolStyle).
+      LUPrec* lup =
+          plib->S52_LUPLookup(plib->m_nSymbolStyle, obj->FeatureName, obj);
       if (!lup) continue;
       plib->_LUP2rules(lup, obj);
       ObjRazRules rz;
@@ -1263,7 +1344,9 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
       plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
       plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
     } else if (obj->Primitive_type == GEO_AREA) {
-      LUPrec* lup = plib->S52_LUPLookup(PLAIN_BOUNDARIES, obj->FeatureName, obj);
+      // Plain vs Symbolized area boundaries (m_nBoundaryStyle).
+      LUPrec* lup =
+          plib->S52_LUPLookup(plib->m_nBoundaryStyle, obj->FeatureName, obj);
       if (!lup) continue;
       plib->_LUP2rules(lup, obj);
       ObjRazRules rz;
@@ -1514,6 +1597,14 @@ void S52Engine::applyDisplaySettings(const ChartDisplaySettings& s) {
   lib->SetShowNationalText(s.nationalText);
   lib->SetTextOverlapAvoid(s.declutterText);
   lib->m_bUseSUPER_SCAMIN = s.superScamin;
+  // Object-height unit (VERCLR/HEIGHT/ELEVAT text + light descriptions). s52plib
+  // converts m->ft in _getParamVal / _LITDSN01 when this is 1; baked at decode.
+  lib->m_nHeightUnitDisplay = s.heightUnit;
+  // Depth unit for SNDFRM02-generated soundings on wrecks/rocks/obstructions.
+  // s52plib uses a different code order than DisplayConfig (0 feet, 1 metres,
+  // 2 fathoms), so remap from DisplayConfig's (0 metres, 1 feet, 2 fathoms).
+  lib->m_nDepthUnitDisplay =
+      s.depthUnit == 0 ? 1 : (s.depthUnit == 1 ? 0 : 2);
   // Depth shading + contours (the DEPARE/DEPCNT colour-fill conditional
   // symbology reads these mariner params). Safety contour drives the
   // safety-depth shade too.

@@ -59,6 +59,8 @@ qt_add_qml_module(opencpn-qt
     chart_extent.h
     chart_boundary_provider.h
     chart_boundary_provider.cpp
+    pick_highlight_provider.h
+    pick_highlight_provider.cpp
     chart_worker.h
     chart_worker.cpp
     shapefile_basemap_provider.h

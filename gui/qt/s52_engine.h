@@ -55,6 +55,15 @@ struct ChartDisplaySettings {
   double safetyContour = 5.0;      // metres (S52_MAR_SAFETY_CONTOUR/_DEPTH)
   double shallowContour = 2.0;     // metres (S52_MAR_SHALLOW_CONTOUR)
   double deepContour = 10.0;       // metres (S52_MAR_DEEP_CONTOUR)
+  // Object-height display unit: m_nHeightUnitDisplay (0 = metres, 1 = feet).
+  // s52plib bakes the converted value + suffix into VERCLR/HEIGHT/ELEVAT text
+  // and light descriptions at decode time, so it rides the re-decode path.
+  int heightUnit = 0;
+  // Depth display unit in DisplayConfig order (0 = metres, 1 = feet,
+  // 2 = fathoms). Soundings on SOUNDG features are formatted by the provider at
+  // render time, but soundings baked onto wrecks/rocks/obstructions by s52plib's
+  // SNDFRM02 (CS path) use m_nDepthUnitDisplay -- set at decode for consistency.
+  int depthUnit = 0;
   // P2.16 -- the cartography toggles previously persisted-but-inert. All bake
   // into the decode (object/text selection + SCAMIN), so they ride the same
   // re-decode path as the fields above.

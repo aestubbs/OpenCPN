@@ -66,6 +66,10 @@ class DisplayConfig : public QObject {
   // Show tide stations (and the bottom timeline). Mirrors wx g_bShowTide.
   // The tide/current scene-graph Layer (P3.14 phase D) will also gate on this.
   Q_PROPERTY(bool showTides READ showTides WRITE setShowTides NOTIFY changed)
+  // ECDIS NODATA fill: paint the world backdrop the S-52 no-coverage grey so
+  // areas with no ENC read as "unsurveyed" rather than the roamable world map.
+  // Off by default (keeps the world basemap). Mirrors the ECDIS no-data look.
+  Q_PROPERTY(bool showNoData READ showNoData WRITE setShowNoData NOTIFY changed)
   // Time display: 0 = UTC, 1 = local (OS) time zone.
   Q_PROPERTY(int timeZone READ timeZone WRITE setTimeZone NOTIFY changed)
   // Own-ship COG/SOG predictor vector length, in minutes of run.
@@ -142,6 +146,8 @@ public:
   void setShowCompass(bool v);
   bool showTides() const { return m_show_tides; }
   void setShowTides(bool v);
+  bool showNoData() const { return m_show_nodata; }
+  void setShowNoData(bool v);
   int timeZone() const { return m_time_zone; }
   void setTimeZone(int v);
   double cogPredictorMinutes() const { return m_cog_predict_min; }
@@ -192,6 +198,13 @@ public:
   // (applying the user/auto variation). Auto variation is the supplied value.
   Q_INVOKABLE QString formatBearing(double true_deg,
                                     double auto_variation = 0.0) const;
+  // Depth/draught unit conversion for editable fields (ECDIS: a depth-unit
+  // choice governs every depth entry + display). The canonical store stays in
+  // metres; these convert for the UI. `toUserDepth` metres -> selected unit,
+  // `fromUserDepth` selected unit -> metres, `depthUnitLabel` the short suffix.
+  Q_INVOKABLE double toUserDepth(double metres) const;
+  Q_INVOKABLE double fromUserDepth(double value) const;
+  Q_INVOKABLE QString depthUnitLabel() const;
 
 Q_SIGNALS:
   void changed();
@@ -205,6 +218,7 @@ private:
   double m_wheel_zoom = 1.3;
   bool m_show_compass = true;
   bool m_show_tides = false;
+  bool m_show_nodata = false;
   int m_time_zone = 0;
   double m_cog_predict_min = 6.0;
   double m_sogcog_damping = 0.0;

@@ -62,6 +62,14 @@ public:
    *  palette. */
   void setColorScheme(int scheme);
 
+  /** NODATA mode (ECDIS): when on, the whole backdrop (sea + land) is painted
+   *  the S-52 "no data" grey instead of the cartographic sea/land tint, so
+   *  wherever an ENC cell does NOT draw over it the mariner sees the standard
+   *  unsurveyed/no-coverage fill rather than a friendly world map. Off by
+   *  default (the basemap stays a roamable world map). Rebuilds on change. */
+  void setNoDataMode(bool on);
+  bool noDataMode() const { return m_nodata; }
+
   /** Land fill-boundary contours (world coords, x=lon y=-lat), each a closed
    *  loop. These are libtess2's BOUNDARY_CONTOURS of the filled region (same
    *  even-odd rule as the fill), so they coincide exactly with the land/sea
@@ -78,6 +86,11 @@ private:
   QColor m_land{225, 213, 180};
   QColor m_coast{120, 110, 90};
   bool m_loaded = false;
+  bool m_nodata = false;  // paint backdrop S-52 NODATA grey (ECDIS toggle)
+  // S-52 NODTA fill (the no-coverage grey); land/coast slightly darker so the
+  // coastline still reads when the backdrop is grey.
+  QColor m_nodata_fill{200, 200, 200};
+  QColor m_nodata_coast{150, 150, 150};
 };
 
 }  // namespace ocpn::qtui

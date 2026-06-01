@@ -102,6 +102,26 @@ public:
   // Default minimum-display scale (1:N) for objects that carry no SCAMIN, so
   // un-SCAMIN'd detail (buoys, lights, sector arcs) thins out when zoomed out.
   void setDetailScale(double n);
+  // Sounding display unit (DisplayConfig order: 0 = metres, 1 = feet,
+  // 2 = fathoms). Soundings carry their depth in metres and are formatted +
+  // rasterised at build time, so changing the unit just re-rasters the labels
+  // (no re-decode). Changing forces a rebuild (emits changed()).
+  void setDepthUnit(int unit);
+  int depthUnit() const { return m_depth_unit; }
+  // Safety depth in metres: a sounding at or shallower than this is emphasised
+  // (bold/black), mirroring the S-52 SOUNDS vs SOUNDG split. Changing forces a
+  // rebuild (emits changed()).
+  void setSafetyDepth(double metres);
+  double safetyDepth() const { return m_safety_depth_m; }
+  // Multiplier on the base sounding figure size (1.0 = nominal), driven by the
+  // ENC sounding-size slider. Render-time, so a change just re-rasters.
+  void setSoundingScale(double mult);
+  double soundingScale() const { return m_sounding_scale; }
+  // The cell's compilation scale (1:N). When the display is zoomed in finer
+  // than this, the cell is OVERSCALED and an S-52 over-scale hatch is drawn
+  // over its extent. 0 (unknown) disables the hatch. Set after construction
+  // (the catalog scale is known then). Triggers a re-layout (emits changed()).
+  void setNativeScale(int n);
 
 private:
   // One billboarded point item (symbol or text): a transform node placed at
@@ -121,6 +141,19 @@ private:
     float depth = 0.0f;       // sounding depth (metres) for shallowest-wins
     float screenW = 0.0f;     // on-screen size (logical px) -- for label
     float screenH = 0.0f;     // bounding-box declutter
+    // Screen offset (logical px, +x right / +y down) of the label's rect CENTRE
+    // from the world anchor, BEFORE chart rotation. Zero for centred items
+    // (symbols, soundings); for S-52 offset text it is the hjust/vjust +
+    // xoffs/yoffs shift. Declutter tests the box where the text draws; the
+    // per-frame matrix rotates this vector by the viewport rotation so the
+    // offset follows the chart under course-/head-up.
+    float screenCx = 0.0f;
+    float screenCy = 0.0f;
+    // True for system-font TEXT (labels/soundings): the glyph is held UPRIGHT
+    // under chart rotation (the billboard counter-rotates), and its offset
+    // rotates with the chart. False for symbols/vector marks, which rotate
+    // with the chart so an ORIENT'd light/beacon keeps its bearing.
+    bool upright = false;
     bool kept = true;         // survived SCAMIN + density declutter (scale-only;
                               // the per-frame view-cull is applied on top)
   };
@@ -176,7 +209,8 @@ private:
   // the counter-scale only when the scale changed (zoom), so a pure pan just
   // toggles opacity. This bounds the draw-call count to on-screen content at any
   // zoom, and keeps text/symbols screen-fixed during a zoom gesture.
-  void applyBillboardVisibility(double scale, const QRectF& worldView);
+  void applyBillboardVisibility(double scale, double rotationRad,
+                                const QRectF& worldView);
   // Per-frame pass: hide (opacity 0) any prim tile whose world bbox is fully
   // outside the view, so a cell only batches/draws the fills & lines on screen.
   void applyPrimCull(const QRectF& worldView);
@@ -201,6 +235,11 @@ private:
   // per-frame view-cull skips re-setting matrices while this is unchanged (a
   // pan), and refreshes them when it differs (a zoom). Reset to -1 on build.
   double m_bb_scale = -1.0;
+  // Chart rotation (radians) at which the billboard matrices were last set. An
+  // upright text billboard's matrix counter-rotates by this AND rotates its
+  // offset by it, so when the rotation changes (course-/head-up turn) the
+  // matrices are refreshed -- like a zoom. NaN-safe sentinel forces first set.
+  double m_bb_rotation = 0.0;
   // Last scale the viewport reported, to tell a zoom (scale change -> arm the
   // settle relayout) from a pan (same scale -> view-cull only).
   double m_emit_scale = -1.0;
@@ -219,6 +258,17 @@ private:
   bool m_showLights = true;
   bool m_showBuoys = true;
   bool m_declutter = false;  // P2.23a: label overlap-avoid (wx default off)
+  int m_depth_unit = 0;          // sounding unit: 0 metres, 1 feet, 2 fathoms
+  double m_safety_depth_m = 5.0;  // <= this (metres) -> emphasised sounding
+  double m_sounding_scale = 1.0;  // ENC sounding-size slider multiplier
+  int m_native_scale = 0;         // cell compilation 1:N (0 = unknown)
+  // S-52 over-scale hatch: vertical lines over the cell's extent, shown only
+  // when the display is zoomed finer than the cell's native scale. Built once
+  // (a fixed set of world-X verticals across the bbox); shown/hidden + line
+  // spacing rebuilt by the scale-dependent re-layout. Pixel-spaced like the
+  // SCAMIN nodes. nullptr until the first build with a known native scale.
+  QSGOpacityNode* m_overscale_hatch = nullptr;
+  void rebuildOverscaleHatch(double scale, double chart_scale_n);
   double m_unset_scamin_n = 100000.0;  // default min display scale (no SCAMIN)
   // True if the symbol/vector-symbol's viewing group is currently enabled.
   bool viewGroupEnabled(int vg) const;

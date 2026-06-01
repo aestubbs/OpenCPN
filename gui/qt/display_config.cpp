@@ -43,6 +43,7 @@ DisplayConfig::DisplayConfig() {
   m_wheel_zoom = c.getDouble("display/wheelZoom", m_wheel_zoom);
   m_show_compass = c.getBool("display/showCompass", m_show_compass);
   m_show_tides = c.getBool("display/showTides", m_show_tides);
+  m_show_nodata = c.getBool("display/showNoData", m_show_nodata);
   m_time_zone = c.getInt("display/timeZone", m_time_zone);
   m_cog_predict_min = c.getDouble("display/cogPredictMin", m_cog_predict_min);
   m_sogcog_damping = c.getDouble("display/sogCogDamping", m_sogcog_damping);
@@ -96,6 +97,10 @@ void DisplayConfig::setShowCompass(bool v) {
 void DisplayConfig::setShowTides(bool v) {
   OCPN_SET(m_show_tides, v,
            ConfigStore::instance().setBool("display/showTides", v))
+}
+void DisplayConfig::setShowNoData(bool v) {
+  OCPN_SET(m_show_nodata, v,
+           ConfigStore::instance().setBool("display/showNoData", v))
 }
 void DisplayConfig::setTimeZone(int v) {
   OCPN_SET(m_time_zone, v, ConfigStore::instance().setInt("display/timeZone", v))
@@ -186,6 +191,30 @@ QString DisplayConfig::formatDistance(double nm) const {
       return QStringLiteral("%1 mi").arg(nm * kKnotToMph, 0, 'f', 2);
     default:
       return QStringLiteral("%1 NM").arg(nm, 0, 'f', 2);
+  }
+}
+
+double DisplayConfig::toUserDepth(double metres) const {
+  switch (m_depth_unit) {
+    case 1: return metres / 0.3048;        // feet
+    case 2: return metres / 0.3048 / 6.0;  // fathoms
+    default: return metres;                // metres
+  }
+}
+
+double DisplayConfig::fromUserDepth(double value) const {
+  switch (m_depth_unit) {
+    case 1: return value * 0.3048;        // feet
+    case 2: return value * 0.3048 * 6.0;  // fathoms
+    default: return value;                // metres
+  }
+}
+
+QString DisplayConfig::depthUnitLabel() const {
+  switch (m_depth_unit) {
+    case 1: return QStringLiteral("ft");
+    case 2: return QStringLiteral("fm");
+    default: return QStringLiteral("m");
   }
 }
 

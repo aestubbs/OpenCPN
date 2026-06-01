@@ -217,6 +217,8 @@ static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
   label.pointSize = text->bsize > 0 ? static_cast<float>(text->bsize) : 10.0f;
   label.hjust = text->hjust;
   label.vjust = text->vjust;
+  label.xoffs = text->xoffs;
+  label.yoffs = text->yoffs;
   label.scamin = scamin;
   label.dispCat = dispCat;
   label.viewGroup = viewGroup;
@@ -515,7 +517,12 @@ int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     Rule *pr = r->razRule;
     S52color *c = pr->colRef.LCRF ? getColor(pr->colRef.LCRF + 1) : nullptr;
     const QColor col = c ? QColor(c->R, c->G, c->B) : QColor(0, 0, 0);
-    const int isym = pr->pos.line.bnbox_w.SYHL;       // repeat length, 0.01 mm
+    // Symbol repeat length (0.01 mm units): the glyph bbox width PLUS the
+    // left-margin offset (LBXC - LICL), exactly as the legacy RenderLC computes
+    // it. Using bnbox_w.SYHL alone under-counts the period and, for narrow
+    // glyphs, can collapse lengthPx below the 1 px guard -> spurious fallback.
+    const int isym = pr->pos.line.bnbox_w.SYHL +
+                     (pr->pos.line.bnbox_x.LBXC - pr->pos.line.pivot_x.LICL);
     const float lengthPx = isym > 0 ? isym * GetPPMM() / 100.0f : 0.0f;
     if (pr->vector.LVCT && lengthPx >= 1.0f) {
       extern float g_scaminScale;

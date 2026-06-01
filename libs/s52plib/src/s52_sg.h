@@ -167,12 +167,24 @@ struct Label {
   float pointSize = 10.0f;
   char hjust = '1';
   char vjust = '1';
+  // S-52 text offsets from the object anchor (PresLib TX/TE): xoffs in units of
+  // average char width, yoffs in units of char height (+x right, +y down). With
+  // hjust/vjust these place names/light text clear of the symbol (and each
+  // other) instead of stacked on it.
+  int xoffs = 0;
+  int yoffs = 0;
   // S-52 SCAMIN: hidden when the chart is more zoomed out than 1:scamin.
   int scamin = 100000002;
   // Soundings get spatial density declutter keeping the SHALLOWEST per
   // cell (safety). isSounding marks them; depth is the value in metres.
   bool isSounding = false;
   float depth = 0.0f;
+  // S-52 SNDFRM quality flags (consulted only when isSounding). `soundingSwept`
+  // is TECSOU "swept by wire drag" -> the figures get a swept-depth bracket;
+  // `soundingLowAccuracy` is a doubtful/unreliable QUASOU, existence-doubtful
+  // STATUS, or approximate QUAPOS -> the figures render italic.
+  bool soundingSwept = false;
+  bool soundingLowAccuracy = false;
   int dispCat = CatStandard;
   // Per-feature-class viewing group (Lights/BuoysBeacons/Other), so the
   // consumer can apply the nav-aid detail-scale cap to a light/buoy name too.

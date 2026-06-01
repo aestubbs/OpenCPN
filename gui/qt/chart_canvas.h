@@ -70,6 +70,7 @@ class LayerCompositor;
 class Viewport;
 class S52VectorChartProvider;
 class ChartBoundaryProvider;
+class PickHighlightProvider;
 class ShapefileBasemapProvider;
 class ChartWorker;
 class DemoNavDataProvider;
@@ -116,6 +117,13 @@ class ChartCanvas : public QQuickItem {
   // detail earlier. Configurable in the chart-settings dialog.
   Q_PROPERTY(double overzoomFactor READ overzoomFactor WRITE setOverzoomFactor
                  NOTIFY overzoomFactorChanged)
+  // Over-scale factor: how many times more zoomed-in the display is than the
+  // finest chart covering the view was compiled for (display 1:N / chart 1:N).
+  // <= ~1 means at/within native scale; > 1 means the chart is magnified beyond
+  // its survey detail (S-52 overscale). 0 when no chart is displayed. The QML
+  // HUD shows an "OVERSCALE xN" warning when this exceeds the threshold.
+  Q_PROPERTY(double overscaleFactor READ overscaleFactor NOTIFY
+                 overscaleChanged)
 
   // Demo mode: feed the nav overlays (AIS / own-ship) from the synthetic
   // DemoNavDataProvider (animated). When off, the demo animation freezes;
@@ -219,6 +227,7 @@ public:
   double detailScale() const { return m_detail_scale; }
   void setDetailScale(double n);
   double overzoomFactor() const { return m_overzoom_k; }
+  double overscaleFactor() const { return m_overscale_factor; }
   void setOverzoomFactor(double k);
 
   bool demoMode() const { return m_demo_mode; }
@@ -313,6 +322,7 @@ Q_SIGNALS:
   void showBuoysChanged();
   void detailScaleChanged();
   void overzoomFactorChanged();
+  void overscaleChanged();
   void demoModeChanged();
   void overlayVisibilityChanged();
   void viewChanged();
@@ -447,6 +457,7 @@ private:
   int m_depth_unit = 0;
   double m_detail_scale = 100000.0;  // default min display scale (no SCAMIN)
   double m_overzoom_k = 2.0;  // quilt over-zoom factor (render at <= native*k)
+  double m_overscale_factor = 0.0;  // display 1:N / finest displayed chart 1:N
   // Push the current display category + viewing-group toggles onto a newly
   // created provider (called at both provider-creation sites).
   void applyDisplaySettings(S52VectorChartProvider* provider) const;
@@ -471,6 +482,9 @@ private:
   ChartWorker* m_worker = nullptr;
   // Boundary overlay (owned by its ChartLayer in the compositor).
   ChartBoundaryProvider* m_boundary_provider = nullptr;
+  // Pick-highlight overlay: outlines the feature shown in the object-query
+  // popup (owned by its ChartLayer in the compositor).
+  PickHighlightProvider* m_pick_highlight = nullptr;
   // World basemap provider (owned by its ChartLayer); kept for colour-scheme
   // re-tinting.
   ShapefileBasemapProvider* m_basemap = nullptr;

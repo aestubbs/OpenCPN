@@ -24,7 +24,9 @@
 #ifndef OCPN_QT_OBJECT_QUERY_VIEW_MODEL_H_
 #define OCPN_QT_OBJECT_QUERY_VIEW_MODEL_H_
 
+#include <QList>
 #include <QObject>
+#include <QPointF>
 #include <QString>
 #include <QStringList>
 
@@ -49,6 +51,11 @@ public:
   QString className() const;
   QString text() const;
 
+  /** Geometry of the currently-shown feature (lon/lat shape + geom kind), for
+   *  the on-chart pick highlight. Empty shape when nothing is selected. */
+  QList<QPointF> currentShape() const;
+  s52sg::QueryGeom currentGeom() const;
+
   /** Set the queried features (ordered specific->general; current = first). */
   void setObjects(const QList<s52sg::QueryObject>& objs);
   /** Step toward the more-general (containing) object. */
@@ -65,6 +72,8 @@ private:
   struct Item {
     QString className;
     QString attrs;  // pre-formatted attribute lines
+    QList<QPointF> shape;  // (lon, lat) geometry, for the pick highlight
+    s52sg::QueryGeom geom = s52sg::QueryGeom::Area;
   };
   QList<Item> m_items;  // ordered most-specific -> most-general
   int m_index = 0;
