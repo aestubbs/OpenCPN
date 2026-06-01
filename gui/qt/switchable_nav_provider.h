@@ -120,6 +120,10 @@ public:
   QList<AisTarget> aisTargets() const override {
     return current() ? current()->aisTargets() : QList<AisTarget>();
   }
+  QVector<AisTrackPoint> aisTrack(int mmsi, qint64 since_ms) const override {
+    return current() ? current()->aisTrack(mmsi, since_ms)
+                     : QVector<AisTrackPoint>();
+  }
   OwnShipState ownShip() const override {
     return current() ? current()->ownShip() : OwnShipState{};
   }

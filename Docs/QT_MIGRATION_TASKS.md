@@ -1252,14 +1252,39 @@ render anything onto the chart, only manages the plugin lifecycle.
       DST/timezone tick labels, and the **active-tides** sounding adjustment
       (the per-(lat,lon,time) seam lives in `TideLayer`/the engine).
       *(severity: medium — large effort)*
-- [ ] **P3.15** **Alert engine (sound triggering).** The Qt **sound engine**
-      (`SoundPlayer`, P3 UI→Sounds) plays files and the **Test** buttons are
-      live, but nothing *fires* the alerts automatically yet. Wire: AIS
-      **CPA/TCPA** danger (`ais_cpa` already detects it) → AIS alert sound +
-      alert dialog; **anchor watch** (drag circle) → anchor alarm; **SART** /
-      **DSC** distress → their sounds; and **ship's bells** (a clock timer,
-      `UIConfig.playShipsBells`). Each gated on its `UIConfig`/`AisConfig`
-      enable + file. *(severity: medium)*
+- [x] **P3.15** **Alert engine (sound triggering). DONE (2026-06-01).** All
+      four trigger sources are wired through one `AlertEngine`
+      (`gui/qt/alert_engine.{h,cpp}`, owned by `ChartCanvas`, exposed to QML as
+      `chart.alerts`). `ChartCanvas` feeds it the CPA-enriched `aisTargets()`
+      (computed once, shared with the AIS info popup) and the own-ship fix on
+      each dynamic tick. A pulsing **alert banner** in `Main.qml` shows the
+      highest-priority alert and emits `soundRequested(file)` →
+      `SoundPlayer.play()`; **Acknowledge** silences it.
+      - **AIS CPA/TCPA** — per-MMSI state (active / acked-with-hold-off /
+        already-sounded). Banner = lowest-TCPA target; gated on
+        `AisConfig.cpaAlert` (banner) + `cpaAlertSound` + `UIConfig.aisSoundFile`
+        (sound); ack holds off `AisConfig.ackTimeoutMin`; leaving the danger
+        zone re-arms.
+      - **SART / DSC distress** — `AisTarget` gained `isSart`/`isDsc`, populated
+        in `ModelNavDataProvider::mirrorTargets` from `AisTargetData::Class ==
+        AIS_SART/AIS_DSC` (+ `b_isDSCtarget`). Distress always banners
+        (independent of the CPA gate) and outranks a CPA alert; sound gated on
+        `UIConfig.sart/dscAlertSound` + the matching file.
+      - **Anchor watch** — `dropAnchor()` pins the watch at the last own-ship
+        fix (persisted in ConfigStore: `anchor/{set,lat,lon,radiusM}`, survives
+        restart); a fix outside `anchorRadiusM` raises the (red) anchor alarm
+        (`UIConfig.anchorAlarmSound` + file), held off on ack until the boat
+        returns inside. `AnchorWatchLayer` (new world-anchored Layer) draws the
+        cos(lat)-scaled circle, amber→red on breach. On-chart control: a ⚓
+        MUIBar button opens a popup (drop / raise / radius spinbox).
+      - **Ship's bells** — a re-arming half-hour `QTimer`; on the boundary, if
+        `UIConfig.playShipsBells`, strikes 1–8 bells (the 4-hour-watch count)
+        using the bundled `data/sounds/{1,2}bells.wav` (new `OCPN_QT_SOUNDS_DIR`
+        compile def), sequenced via `QTimer::singleShot`.
+      All build clean; app launches with no QML errors. **Polish deferred:**
+      distinctive SART/DSC chart rendering (they currently draw as normal
+      targets — only the banner/sound flags them), and an anchor-watch
+      panel in Options (today it's the MUIBar popup only).
 
 ### P3.6 — Options / Settings dialog breakdown
 
@@ -1356,13 +1381,18 @@ toggles stay on `chart` (ChartCanvas).
 - [x] **Vector Chart Display** → Display Category (Base / Standard / All;
       wx also has Mariner's Standard). Qt has Base/Standard/All wired.
 - [x] Vector → detail toggles (live): soundings, text, lights, buoys/beacons.
-- [p] Vector → remaining detail/cartography: chart-info objects, buoy/light
-      labels, light descriptions, extended light sectors, national text,
-      important-text-only, de-cluttered text, reduced detail at small scale,
-      super-SCAMIN, graphics style (paper / simplified), boundaries (plain /
-      symbolised), 2-/4-colour, shallow / safety / deep depth contours, CM93
-      detail-level slider — all present and persisted (`ChartConfig.*`),
-      applied once the s52 provider exposes the matching viewing groups.
+- [x] Vector → detail/cartography & style — **live** (corrected 2026-06-01;
+      the earlier "persisted-pending" note was stale). `ChartConfig.*` →
+      `ChartCanvas::applyChartConfig` → `S52Engine::applyDisplaySettings` sets
+      the s52plib flags and re-decodes resident cells (run at startup + on any
+      change, debounced): chart-info objects, buoy/light labels, light
+      descriptions, extended light sectors, national text, important-text-only,
+      de-cluttered text, reduced detail at small scale (SCAMIN), super-SCAMIN,
+      **graphics style (paper/simplified → `m_nSymbolStyle`), boundaries
+      (plain/symbolised → `m_nBoundaryStyle`), 2-/4-colour (`S52_MAR_TWO_SHADES`),
+      shallow/safety/deep depth contours (`S52_MAR_*_CONTOUR`)**.
+- [ ] Vector → CM93 detail-level slider + offset — still inert (needs the CM93
+      decode path, **P2.19**).
 - [ ] Vector → CM93 offset, "User Standard Objects" checklist (select-all /
       clear-all / reset-to-standard), ECDIS help (not surfaced).
 - [x] **Chart Groups (2026-05-31).** Qt-native named-group editor in
@@ -1411,13 +1441,22 @@ stuck; singletons are compile-time resolved and always available.)
 
 **Ships → Own ship** (wx sub-panel: Own ship)
 - [x] Identity: vessel name + own MMSI (drives AIS self-exclusion).
-- [p] Display: ship-icon type (Default / Real-scale bitmap / Real-scale
-      vector), real-size dimensions (LOA, beam, GPS offsets, minimum screen
-      size), show direction to active waypoint, range rings (count, spacing,
-      unit) — all controls present and persisted (`OwnShipConfig.*`); the
-      own-ship marker is a fixed symbol until the real-scale icon / GPS-offset
-      / range-ring render paths land. (COG predictor length lives on Display →
-      General and is consumed live.)
+- [x] Display: range rings (show, count, spacing, unit) — consumed live by
+      `OwnShipLayer` (2026-06-01). Draws `ringCount` concentric world-anchored
+      circles at `ringSpacing` (NM / km / statute-mile), sized by the
+      cos(latitude) Mercator scale so they're true geographic circles; resized
+      on an `OwnShipConfig` change or noticeable N/S drift.
+- [x] Display: real-scale ship icon (icon type, LOA, beam, GPS offsets, minimum
+      screen size) — **live** (2026-06-01). `OwnShipLayer` draws a to-scale hull
+      pentagon in world units (cos(lat)-scaled, oriented by heading, GPS-antenna
+      offset baked in) when the icon type is real-scale and the dimensions are
+      set; it falls back to the fixed marker when the hull would be below
+      `minScreenSize` (≈4 px/mm) on screen. Both real-scale-bitmap and
+      real-scale-vector map to the vector hull (no bitmap asset).
+- [p] Display: show direction to active waypoint — present and persisted
+      (`OwnShipConfig.showWaypointDirection`); pending an active-waypoint
+      accessor on the NavDataProvider. (COG predictor length lives on Display →
+      General, consumed live.)
 - [ ] Range-ring colour, HDT (separate from COG) predictor length.
 
 **Ships → AIS Targets** (wx sub-panel: AIS Targets) — controls built;
@@ -1426,13 +1465,35 @@ all persisted (`AisConfig.*`); the **CPA/TCPA engine is now implemented**
 filtering and the alert sound/dialog engine are still pending
 - [x] CPA/TCPA: max target range, CPA warn distance, TCPA warn time — consumed
       live by the CPA/TCPA engine (`ais_cpa.cpp`); dangerous targets flagged.
-- [p] Lost targets: mark-lost / remove-lost timeouts.
-- [p] Display: COG-predictor length (+ "sync with own ship"), target tracks
-      length, suppress-anchored speed max, attenuation threshold, show area
-      notices, show real size, show names, WPL handling.
+- [x] Lost targets: mark-lost / remove-lost timeouts — **live** (2026-06-01).
+      `ChartCanvas::syncAisModelGlobals` pushes `AisConfig.markLostMin` /
+      `removeLostMin` (+ `suppressAnchoredSpeedMax` → moored kts) into the reused
+      model decoder's globals (`g_bMarkLost`/`g_MarkLost_Mins`/`g_bRemoveLost`/
+      `g_RemoveLost_Mins`/`g_ShowMoored_Kts`), which set `b_lost`/`b_removed`;
+      `mirrorTargets` skips those, so targets age out per the user's timeouts.
+- [x] Display: COG-predictor length (+ "sync with own ship"), show names —
+      consumed live by `AisLayer` (2026-06-01): the predictor reach reads
+      `AisConfig.predictorMinutes` or, when sync is on, `DisplayConfig`'s
+      own-ship predictor length; the name label is suppressed when Show names is
+      off; an `AisConfig`/`DisplayConfig` change rebuilds the retained target
+      nodes.
+- [x] AIS trails (target tracks) — **live** (2026-06-01). Global position
+      history is recorded to a new append-only `ais_track(mmsi,t,lat,lon,cog,
+      sog,hdg)` table in `SqliteAisTargetStore` (deduped per moved fix, batched
+      on the prune tick), purged past `AisConfig.trackRetentionDays` (default 7,
+      configurable in Options → Ships → AIS Targets). A trail is drawn only for
+      vessels the user *selects + toggles* ("Show trail" in the AIS info popup →
+      `ChartCanvas::setAisTrail` → `AisLayer`): a 2px light-grey AA-line seeded
+      from SQLite (`NavDataProvider::aisTrack`) over the last **5× the predictor
+      reach**, then slid live each tick. COG/SOG/HDG are stored (not derived) for
+      faithful historical replay.
+- [p] Display (still pending): suppress-anchored speed max, attenuation
+      threshold, show area notices, show real size, WPL handling.
 - [p] Rollover info block toggles: class/type/status, SOG/COG, CPA/TCPA.
-- [p] Alerts: alert dialog, alert sound (Test button disabled pending the
-      sound engine), suppress for moored, acknowledge timeout.
+- [x] Alerts: alert dialog + alert sound — wired (2026-06-01) via the
+      `AlertEngine` (P3.15): `cpaAlert` shows the banner, `cpaAlertSound` +
+      `UIConfig.aisSoundFile` play it, `suppressMooredAlerts` gates inside
+      `ais_cpa`, and `ackTimeoutMin` is the Acknowledge hold-off.
 - [ ] Realtime-prediction speed min (control not yet surfaced).
 
 **Ships → MMSI Properties** (wx sub-panel: MMSI Properties)
@@ -1483,11 +1544,10 @@ QML-singleton (persisted). Several controls are wired live to the shell.
       audio file. The per-event **Test** buttons (anchor / AIS / SART / DSC) are
       now live (`SoundPlayer.play(file)`); files + enables persist via
       `UIConfig`. (`sound_player.{h,cpp}`, `Main.qml` Sounds page.)
-- [ ] **Alert-engine triggering** (the part that *fires* each sound): anchor
-      watch, AIS CPA/TCPA alert, SART, DSC, plus ship's bells. The playback
-      primitive (`SoundPlayer.play`) and the CPA/TCPA danger detection
-      (`ais_cpa`) exist; wiring danger → sound + the anchor-watch / bells timers
-      is **P3.15**.
+- [x] **Alert-engine triggering** (the part that *fires* each sound) — DONE
+      (2026-06-01, **P3.15**): the `AlertEngine` fires AIS CPA/TCPA, SART/DSC
+      distress, anchor-watch and ship's-bells, each gated on its `UIConfig`
+      enable + file and routed to `SoundPlayer.play` via `soundRequested`.
 - [ ] Sound-output device selection / custom play command (not surfaced).
 
 **Plugins page**
@@ -1973,3 +2033,62 @@ QML-singleton (persisted). Several controls are wired live to the shell.
   round-trips, `gui/config_compat_helpers.h`) centralize the small
   surface of conversions remaining. Next: Phase 2 — the scene graph +
   `LayerCompositor` chart-rendering port to QtQuick.
+- 2026-06-01 — Started closing the persisted-only settings tail + the alert
+  engine (two threads chosen after a migration-state review). Landed: (1) AIS
+  predictor length / "sync with own ship" / show-names now consumed live by
+  `AisLayer`, with an `AisConfig`/`DisplayConfig`-change rebuild; (2) own-ship
+  **range rings** drawn by `OwnShipLayer` as cos(lat)-scaled world circles; (3)
+  **P3.15 AIS CPA/TCPA alert** — new `AlertEngine` (`gui/qt/alert_engine.*`,
+  `chart.alerts`) fed the CPA-enriched target list each tick, raising a pulsing
+  `Main.qml` banner + the user's AIS sound, with per-MMSI ack/hold-off state.
+  All build clean; `opencpn-qt` launches with no QML errors. Remaining P3.15:
+  anchor watch, SART/DSC, ship's bells. Remaining tail: AIS tracks/lost-target
+  timeouts/display filters, own-ship real-scale icon, vector chart style
+  options (graphics/boundary/colour/contours).
+- 2026-06-01 (cont.) — **P3.15 finished.** Added the three remaining alert
+  sources to the `AlertEngine`: (a) **anchor watch** — drop/raise/radius +
+  ConfigStore persistence, a cos(lat)-scaled `AnchorWatchLayer` circle (amber→
+  red on breach), and a ⚓ MUIBar popup control; (b) **SART/DSC distress** —
+  new `AisTarget.isSart/isDsc` populated from `AisTargetData::Class` in
+  `mirrorTargets`, distress banners unconditionally and outranks CPA, sound via
+  `UIConfig.sart/dscSoundFile`; (c) **ship's bells** — re-arming half-hour
+  `QTimer` striking 1–8 bells from `data/sounds/{1,2}bells.wav` (new
+  `OCPN_QT_SOUNDS_DIR`), gated on `UIConfig.playShipsBells`. Banner priority:
+  SART/DSC distress > anchor breach > AIS CPA. All build clean; launches with no
+  QML errors. Deferred polish: distinctive SART/DSC chart icons, an Options
+  anchor-watch panel.
+- 2026-06-01 (cont.) — **Thread-3 settings tail.** (1) Found the **vector chart
+  style options** (graphics/boundary/2-4-colour/contours) were already live via
+  `applyChartConfig` → `S52Engine::applyDisplaySettings` — the `[p]` inventory
+  note was stale; corrected. (2) **AIS lost-target timeouts** wired:
+  `ChartCanvas::syncAisModelGlobals` pushes `AisConfig.markLostMin`/`removeLostMin`
+  /`suppressAnchoredSpeedMax` into the reused model decoder's globals
+  (`g_bMarkLost`/`g_MarkLost_Mins`/`g_bRemoveLost`/`g_RemoveLost_Mins`/
+  `g_ShowMoored_Kts`), declared as externs locally to avoid the wxString-laden
+  `ais_state_vars.h`. (3) **Own-ship real-scale icon**: `OwnShipLayer` swaps the
+  fixed marker for a to-scale, heading-oriented hull (world units, cos(lat),
+  GPS-offset) when the icon type is real-scale and it's big enough on screen
+  (minScreenSize floor). All build clean; launches with no QML errors. Tail
+  still open: AIS display filters (names done; tracks need AIS-track rendering),
+  rollover info block, waypoint-direction arrow (needs an active-waypoint
+  accessor), CM93 (P2.19).
+- 2026-06-01 (cont.) — **AIS trails (target tracks).** Global, persistent,
+  timeline-ready. New append-only `ais_track(mmsi,t,lat,lon,cog,sog,hdg)` table
+  in `SqliteAisTargetStore`: records every moved fix (deduped, batched on the
+  prune flush), `trackSince(mmsi,since)` query, time-based purge past
+  `AisConfig.trackRetentionDays` (default 7, configurable; indexed on `t`).
+  Exposed via `NavDataProvider::aisTrack` (model forwards to the store;
+  switchable delegates; demo empty). `AisLayer` draws a trail **only for
+  user-selected+toggled vessels** (a mess otherwise): a 2px light-grey AA-line
+  seeded from SQLite over the last 5× the predictor reach, then slid live each
+  tick (new point on the front, expired points off the back). UI: a "Show
+  trail" check in the AIS info popup (`ChartCanvas::setAisTrail`) + a retention
+  spinbox in Options. **COG/SOG/HDG stored, not derived** (per the design
+  call): heading is underivable from position and reported COG/SOG beat noisy
+  deltas, so a historical target can later be redrawn with its true orientation
+  + speed — the groundwork for scrubbing the timeline to "unwind" the AIS scene
+  (the same `gTimeSource` spine tides/currents follow). Schema auto-migrates an
+  existing 4-column table via ALTER. Builds clean; `ais_track` verified created
+  + migrated in `navobj.db`; app launches with no QML errors. **Not yet done:**
+  the timeline-scrub replay itself (the layer reading `gTimeSource` to query
+  positions at a past time) — recording is in place to enable it next.

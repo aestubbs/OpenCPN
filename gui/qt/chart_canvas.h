@@ -50,6 +50,7 @@
 #include "nmea_monitor_model.h"  // complete type needed for Q_PROPERTY
 #include "nav_state_view_model.h"  // complete type needed for Q_PROPERTY
 #include "object_query_view_model.h"  // complete type needed for Q_PROPERTY
+#include "alert_engine.h"  // complete type needed for Q_PROPERTY
 #include "route_list_view_model.h"    // complete type needed for Q_PROPERTY
 #include "s52_engine.h"    // S52Engine -- complete type needed for Q_PROPERTY
 
@@ -144,6 +145,10 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(ocpn::qtui::ObjectQueryViewModel* objectQuery READ objectQuery
                  CONSTANT)
 
+  // Navigation alert engine (AIS CPA/TCPA danger, ...) for the alert banner
+  // (P3.15).
+  Q_PROPERTY(ocpn::qtui::AlertEngine* alerts READ alerts CONSTANT)
+
   // Route & mark manager (P3.7): the route/waypoint lists + per-layer
   // visibility toggles.
   Q_PROPERTY(ocpn::qtui::RouteListViewModel* routeList READ routeList CONSTANT)
@@ -237,6 +242,7 @@ public:
   AisSelectionViewModel* selectedAis() const { return m_ais_selection.get(); }
   TideGraphViewModel* tideGraph() const { return m_tide_graph.get(); }
   ObjectQueryViewModel* objectQuery() const { return m_object_query.get(); }
+  AlertEngine* alerts() const { return m_alert_engine.get(); }
   RouteListViewModel* routeList() const { return m_route_list.get(); }
   ConnectionsViewModel* connections() const { return m_connections.get(); }
   ChartSourceModel* chartSource() const { return m_chart_source.get(); }
@@ -290,6 +296,11 @@ public:
   // the objectQuery view-model (the QML query window binds to it).
   Q_INVOKABLE void centerViewHere();
   Q_INVOKABLE void queryObjectsHere();
+
+  // AIS trail toggle for a vessel (driven by the "Show trail" check in the AIS
+  // info popup). The trail draws its recorded path; see AisLayer (P3.15/tail).
+  Q_INVOKABLE void setAisTrail(int mmsi, bool on);
+  Q_INVOKABLE bool aisTrailEnabled(int mmsi) const;
 
   // Chart bar / "Piano" (P3.8): the catalogued ENC cells whose coverage
   // intersects the current view, each a QVariantMap { name, band, scale,
@@ -406,6 +417,8 @@ private:
   std::unique_ptr<TideGraphViewModel> m_tide_graph;
   // S-57 object-query result for the query popup (P3.9).
   std::unique_ptr<ObjectQueryViewModel> m_object_query;
+  // Navigation alert engine (AIS CPA/TCPA danger, ...) (P3.15).
+  std::unique_ptr<AlertEngine> m_alert_engine;
   // Route/waypoint lists for the route & mark manager (P3.7).
   std::unique_ptr<RouteListViewModel> m_route_list;
   // Data-source connections (Options > Connections, #34).

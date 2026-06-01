@@ -74,6 +74,10 @@ qt_add_qml_module(opencpn-qt
     ais_layer.cpp
     own_ship_layer.h
     own_ship_layer.cpp
+    alert_engine.h
+    alert_engine.cpp
+    anchor_watch_layer.h
+    anchor_watch_layer.cpp
     route_overlay_layers.h
     route_overlay_layers.cpp
     ais_target_store.h
@@ -156,6 +160,8 @@ target_compile_definitions(opencpn-qt PRIVATE
   # by ShapefileBasemapProvider. basemap_low is the better default map;
   # basemap_crude_10x10 is the fallback.
   OCPN_QT_BASEMAP_SHP="${CMAKE_SOURCE_DIR}/data/basemap_shp/basemap_low.shp"
+  # Bundled alert sounds (ship's bells, P3.15). 1bells/2bells.wav for striking.
+  OCPN_QT_SOUNDS_DIR="${CMAKE_SOURCE_DIR}/data/sounds"
 )
 
 # libtess2: the basemap provider tessellates the land polygons.

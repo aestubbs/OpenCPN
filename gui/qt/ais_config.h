@@ -48,6 +48,12 @@ class AisConfig : public QObject {
   Q_PROPERTY(double removeLostMin READ removeLostMin WRITE setRemoveLostMin
                  NOTIFY changed)
 
+  // --- Trail history -------------------------------------------------------
+  // Days of recorded AIS position history to keep in SQLite (global record;
+  // selected vessels' trails are drawn from it). 0 = keep nothing.
+  Q_PROPERTY(int trackRetentionDays READ trackRetentionDays WRITE
+                 setTrackRetentionDays NOTIFY changed)
+
   // --- Display -------------------------------------------------------------
   Q_PROPERTY(double predictorMinutes READ predictorMinutes WRITE
                  setPredictorMinutes NOTIFY changed)
@@ -105,6 +111,8 @@ public:
   void setMarkLostMin(double v);
   double removeLostMin() const { return m_remove_lost; }
   void setRemoveLostMin(double v);
+  int trackRetentionDays() const { return m_track_retention_days; }
+  void setTrackRetentionDays(int v);
 
   double predictorMinutes() const { return m_predictor_min; }
   void setPredictorMinutes(double v);
@@ -154,6 +162,7 @@ private:
   double m_tcpa_warn = 30.0;
   double m_mark_lost = 8.0;
   double m_remove_lost = 10.0;
+  int m_track_retention_days = 7;
 
   double m_predictor_min = 6.0;
   bool m_sync_predictor = true;

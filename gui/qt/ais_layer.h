@@ -25,6 +25,7 @@
 #define OCPN_QT_AIS_LAYER_H_
 
 #include <QHash>
+#include <QVector>
 
 #include "nav_layer.h"
 
@@ -41,16 +42,18 @@ class AisLayer : public NavLayer {
 
 public:
   AisLayer(NavDataProvider* provider, const Viewport* viewport,
-           QObject* parent = nullptr)
-      : NavLayer(provider, viewport, parent) {
-    setOwner(QStringLiteral("core.ais"));
-    connectData(&NavDataProvider::dynamicChanged);
-  }
+           QObject* parent = nullptr);
 
   QString id() const override { return QStringLiteral("core.ais"); }
   QString name() const override { return QStringLiteral("AIS"); }
 
   QSGNode* updateSubtree(QSGNode* old, QQuickWindow* window) override;
+
+  // Per-vessel trail toggle (driven from the AIS info popup via ChartCanvas).
+  // A trail is drawn only for enabled MMSIs -- drawing every target's history
+  // would swamp the chart. Trail length = 5x the COG/SOG predictor reach.
+  void setTrailEnabled(int mmsi, bool on);
+  bool trailEnabled(int mmsi) const { return m_trails.contains(mmsi); }
 
 private:
   // One target's retained nodes. `pos` (child of the layer root) translates
@@ -74,9 +77,23 @@ private:
   TargetNode buildTarget(const AisTarget& t, QQuickWindow* window);
   void updateTarget(TargetNode& tn, const AisTarget& t, bool scale_changed);
 
+  // A selected vessel's trail: the recorded path seeded once from SQLite
+  // (provider->aisTrack) then slid live each tick (new point on the front,
+  // points past the window dropped off the back). One 2px light-grey AA-line
+  // (a child of the layer root, world-anchored) per enabled MMSI.
+  struct Trail {
+    QSGGeometryNode* node = nullptr;
+    QVector<AisTrackPoint> points;  // oldest-first (geo + epoch ms)
+    bool seeded = false;            // SQLite history pulled yet?
+    bool dirty = true;              // geometry needs a rebuild
+  };
+  void updateTrails(const QList<AisTarget>& targets, qint64 now_ms);
+
   QSGNode* m_root = nullptr;          // returned subtree; children are pos nodes
   QHash<int, TargetNode> m_nodes;     // by MMSI
+  QHash<int, Trail> m_trails;         // by MMSI (enabled trails only)
   double m_built_scale = 0.0;         // scale at last transform refresh
+  bool m_config_dirty = false;        // AisConfig/DisplayConfig changed -> rebuild
 };
 
 }  // namespace ocpn::qtui

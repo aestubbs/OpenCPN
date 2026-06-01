@@ -2068,6 +2068,17 @@ ApplicationWindow {
                                             value: Math.round(AisConfig.removeLostMin)
                                             onValueModified: AisConfig.removeLostMin = value
                                         }
+                                        Label {
+                                            text: qsTr("Keep trail history (days):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        SpinBox {
+                                            from: 0; to: 90
+                                            value: AisConfig.trackRetentionDays
+                                            onValueModified: AisConfig.trackRetentionDays = value
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("Days of AIS position history kept in the database for vessel trails (0 = none).")
+                                        }
                                     }
 
                                     MenuSeparator { Layout.fillWidth: true }
@@ -2822,6 +2833,49 @@ ApplicationWindow {
         // context property set in main.cpp.
         s52Engine: s52
 
+        // --- AIS CPA/TCPA danger alert (P3.15). The C++ AlertEngine raises
+        //     the banner and requests the user's AIS alert sound; Acknowledge
+        //     silences it for AisConfig.ackTimeoutMin.
+        Connections {
+            target: chart.alerts
+            function onSoundRequested(file) { SoundPlayer.play(file) }
+        }
+        Rectangle {
+            id: alertBanner
+            z: 100
+            visible: chart.alerts.alertActive
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 12
+            width: Math.min(parent.width - 24, alertRow.implicitWidth + 28)
+            height: alertRow.implicitHeight + 14
+            radius: 6
+            color: "#e6c81e1e"            // alert red, slightly translucent
+            border.color: "#ffd6d6"; border.width: 1
+            // Gentle pulse so the alert draws the eye while active.
+            SequentialAnimation on opacity {
+                running: alertBanner.visible
+                loops: Animation.Infinite
+                NumberAnimation { from: 1.0; to: 0.62; duration: 700 }
+                NumberAnimation { from: 0.62; to: 1.0; duration: 700 }
+            }
+            RowLayout {
+                id: alertRow
+                anchors.centerIn: parent
+                spacing: 14
+                Text {
+                    text: "⚠  " + chart.alerts.alertText
+                    color: "white"
+                    font.pixelSize: 15
+                    font.bold: true
+                }
+                Button {
+                    text: qsTr("Acknowledge")
+                    onClicked: chart.alerts.acknowledge()
+                }
+            }
+        }
+
         // Compass rose (mirrors wx's ocpnCompass overlay). The chart is
         // north-up, so the rose is fixed N-up; the red needle shows own-ship
         // COG. Top-right corner.
@@ -3122,8 +3176,63 @@ ApplicationWindow {
                     onClicked: DisplayConfig.showTides = checked
                 }
                 MuiTool {
+                    id: anchorBtn
+                    text: "⚓"
+                    ToolTip.text: qsTr("Anchor watch")
+                    // Highlight when armed; the banner + red circle show a drag.
+                    highlighted: chart.alerts.anchorSet
+                    onClicked: anchorPopup.open()
+                }
+                MuiTool {
                     text: "☰"; ToolTip.text: qsTr("Canvas display options")
                     onClicked: canvasOptions.open()
+                }
+            }
+        }
+
+        // Anchor-watch control (P3.15): drop the watch at the current fix, set
+        // the radius, or raise it. The circle is drawn by AnchorWatchLayer and
+        // the alarm by the AlertEngine.
+        Popup {
+            id: anchorPopup
+            parent: chart
+            x: parent.width - width - 12
+            y: parent.height - height - 56
+            padding: 12
+            modal: false
+            ColumnLayout {
+                spacing: 8
+                Label {
+                    text: chart.alerts.anchorBreach
+                              ? qsTr("⚓ DRAGGING — outside watch circle")
+                              : chart.alerts.anchorSet
+                                  ? qsTr("⚓ Anchor watch armed")
+                                  : qsTr("Anchor watch off")
+                    color: chart.alerts.anchorBreach ? "#e02020" : palette.windowText
+                    font.bold: chart.alerts.anchorBreach
+                }
+                RowLayout {
+                    spacing: 6
+                    Label { text: qsTr("Watch radius") }
+                    SpinBox {
+                        from: 5; to: 1000; stepSize: 5
+                        value: Math.round(chart.alerts.anchorRadiusM)
+                        onValueModified: chart.alerts.setAnchorRadiusM(value)
+                    }
+                    Label { text: qsTr("m") }
+                }
+                RowLayout {
+                    spacing: 6
+                    Button {
+                        text: qsTr("Drop anchor")
+                        enabled: !chart.alerts.anchorSet
+                        onClicked: chart.alerts.dropAnchor()
+                    }
+                    Button {
+                        text: qsTr("Raise anchor")
+                        enabled: chart.alerts.anchorSet
+                        onClicked: chart.alerts.raiseAnchor()
+                    }
                 }
             }
         }
@@ -3238,6 +3347,16 @@ ApplicationWindow {
                           qsTr("   TCPA ") + (aisInfo.sel ? aisInfo.sel.tcpaText : "")
                     color: aisInfo.danger ? "#ff8c80" : "#e0e0e0"
                     font.pointSize: 11; font.bold: aisInfo.danger
+                }
+                // Draw this vessel's recorded trail (last 5x the predictor
+                // reach) from the SQLite history. Per-vessel; off by default.
+                CheckBox {
+                    text: qsTr("Show trail")
+                    font.pointSize: 10
+                    checked: aisInfo.sel ? chart.aisTrailEnabled(aisInfo.sel.mmsi)
+                                         : false
+                    onToggled: if (aisInfo.sel)
+                                   chart.setAisTrail(aisInfo.sel.mmsi, checked)
                 }
             }
         }

@@ -60,6 +60,7 @@ public:
   ~ModelNavDataProvider() override;
 
   QList<AisTarget> aisTargets() const override;
+  QVector<AisTrackPoint> aisTrack(int mmsi, qint64 since_ms) const override;
   OwnShipState ownShip() const override;
   QList<NavRoute> routes() const override;
   QList<NavWaypoint> waypoints() const override;

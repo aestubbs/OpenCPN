@@ -31,6 +31,7 @@
 #define OCPN_QT_NAV_DATA_PROVIDER_H_
 
 #include <QObject>
+#include <QVector>
 
 #include "nav_data.h"
 
@@ -48,6 +49,13 @@ public:
   virtual QList<NavRoute> routes() const = 0;
   virtual QList<NavWaypoint> waypoints() const = 0;
   virtual QList<NavTrack> tracks() const = 0;
+
+  /** The recorded position trail for one MMSI since `since_ms` (oldest-first).
+   *  Empty unless the provider has a persisting AIS store. */
+  virtual QVector<AisTrackPoint> aisTrack(int /*mmsi*/,
+                                          qint64 /*since_ms*/) const {
+    return {};
+  }
 
 Q_SIGNALS:
   /** High-frequency data changed (AIS targets / own ship moving). The

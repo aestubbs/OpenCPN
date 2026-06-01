@@ -39,11 +39,7 @@ class OwnShipLayer : public NavLayer {
 
 public:
   OwnShipLayer(NavDataProvider* provider, const Viewport* viewport,
-               QObject* parent = nullptr)
-      : NavLayer(provider, viewport, parent) {
-    setOwner(QStringLiteral("core.ownship"));
-    connectData(&NavDataProvider::dynamicChanged);
-  }
+               QObject* parent = nullptr);
 
   QString id() const override { return QStringLiteral("core.ownship"); }
   QString name() const override { return QStringLiteral("Own ship"); }
@@ -52,13 +48,27 @@ public:
 
 private:
   void buildOnce();
+  // (Re)build the concentric range-ring circles centred on the ship, sized
+  // from OwnShipConfig at the given latitude. No-op group when rings are off.
+  void rebuildRings(double lat);
+  // Set the symbol child of m_symbolXf: the fixed-size marker triangle, or a
+  // to-scale hull (world units, from OwnShipConfig LOA/beam/GPS-offset at lat).
+  void makeTriangleSymbol();
+  void makeHullSymbol(double lat);
 
   QSGNode* m_root = nullptr;
   QSGOpacityNode* m_opacity = nullptr;   // hide while fix invalid
   QSGTransformNode* m_pos = nullptr;     // translate to world position
-  QSGTransformNode* m_symbolXf = nullptr;// rotate(hdg/cog) * scale(world/px)
+  QSGTransformNode* m_symbolXf = nullptr;// rotate(hdg/cog) [* scale(world/px)]
+  QSGGeometryNode* m_symbol = nullptr;   // marker triangle OR real-scale hull
   QSGGeometryNode* m_predictor = nullptr;// COG/SOG vector (world units)
   QSGGeometryNode* m_laylines = nullptr; // port + starboard laylines
+  QSGNode* m_rings = nullptr;            // range-ring group (child of m_pos)
+  double m_rings_lat = 999.0;            // latitude the rings were sized for
+  bool m_rings_dirty = true;             // OwnShipConfig changed -> resize
+  bool m_symbol_is_hull = false;         // current symbol mode
+  bool m_symbol_dirty = true;            // OwnShipConfig changed -> rebuild
+  double m_symbol_lat = 999.0;           // latitude the hull was sized for
   double m_cog = -1.0;
   double m_sog = -1.0;
   double m_built_scale = 0.0;

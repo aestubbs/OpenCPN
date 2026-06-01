@@ -155,6 +155,8 @@ void ModelNavDataProvider::mirrorTargets() {
     t.hdg = td->HDG;
     t.shipType = td->ShipType;
     t.name = td->GetFullName().trimmed();
+    t.isSart = (td->Class == AIS_SART);
+    t.isDsc = (td->Class == AIS_DSC) || td->b_isDSCtarget;
     m_ais_store->upsert(t, now);
   }
   m_ais_store->prune(now, kStaleMs);
@@ -192,6 +194,12 @@ QList<AisTarget> ModelNavDataProvider::aisTargets() const {
   const AisConfig& cfg = AisConfig::instance();
   for (AisTarget& t : list) computeCpa(own, t, cfg);
   return list;
+}
+
+QVector<AisTrackPoint> ModelNavDataProvider::aisTrack(int mmsi,
+                                                      qint64 since_ms) const {
+  return m_ais_store ? m_ais_store->trackSince(mmsi, since_ms)
+                     : QVector<AisTrackPoint>();
 }
 
 OwnShipState ModelNavDataProvider::ownShip() const {

@@ -52,7 +52,9 @@
 #include "pick_highlight_provider.h"
 #include "shapefile_basemap_provider.h"
 #include "own_ship_config.h"
+#include "ais_config.h"
 #include "own_ship_layer.h"
+#include "anchor_watch_layer.h"
 #include "ui_config.h"
 #include "route_overlay_layers.h"
 #include "tide_layer.h"
@@ -81,6 +83,15 @@
 #define OCPN_QT_BASEMAP_SHP ""
 #endif
 
+// AIS model-decoder globals (model/ais_state_vars.h). Declared here rather than
+// included because that header also declares wxString globals, which a Qt TU
+// can't pull in; we touch only these bool/double prune thresholds.
+extern bool g_bMarkLost;
+extern double g_MarkLost_Mins;
+extern bool g_bRemoveLost;
+extern double g_RemoveLost_Mins;
+extern double g_ShowMoored_Kts;
+
 namespace ocpn::qtui {
 
 namespace {
@@ -89,6 +100,21 @@ constexpr double kTestNorth = 55.0;
 constexpr double kTestSouth = 50.0;
 constexpr double kTestWest = 0.0;
 constexpr double kTestEast = 10.0;
+
+// Push the AIS-target preferences the reused MODEL decoder (g_pAIS) honours
+// into its global state. Most AIS display settings are consumed directly by the
+// Qt layers (AisLayer reads show-names / predictor length; ais_cpa reads the
+// CPA thresholds), but lost/remove-target pruning and the moored-speed
+// classification live in the model decoder (ais_decoder.cpp), so the user's
+// timeouts must reach its globals or they have no effect.
+void syncAisModelGlobals() {
+  const AisConfig& a = AisConfig::instance();
+  g_bMarkLost = a.markLostMin() > 0.0;
+  g_MarkLost_Mins = a.markLostMin();
+  g_bRemoveLost = a.removeLostMin() > 0.0;
+  g_RemoveLost_Mins = a.removeLostMin();
+  g_ShowMoored_Kts = a.suppressAnchoredSpeedMax();
+}
 }  // namespace
 
 ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
@@ -167,6 +193,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_tide_graph = std::make_unique<TideGraphViewModel>();
   // S-57 object-query result model (P3.9).
   m_object_query = std::make_unique<ObjectQueryViewModel>();
+  // Navigation alert engine (AIS CPA/TCPA danger) (P3.15).
+  m_alert_engine = std::make_unique<AlertEngine>();
   // Route/waypoint list model for the manager (P3.7).
   m_route_list = std::make_unique<RouteListViewModel>(m_nav_provider.get());
 
@@ -212,6 +240,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_own_ship_layer = new OwnShipLayer(m_nav_provider.get(), m_viewport.get());
   m_own_ship_layer->setZOrder(2001);
   m_compositor->addLayer(m_own_ship_layer);
+
+  // Anchor-watch circle (P3.15) -- world-anchored, driven by the AlertEngine.
+  auto* anchor_watch = new AnchorWatchLayer(m_alert_engine.get());
+  anchor_watch->setZOrder(1900);
+  m_compositor->addLayer(anchor_watch);
 
   // Static nav overlays: tracks (under), routes, then waypoints on top.
   auto* tracks = new TrackLayer(m_nav_provider.get(), m_viewport.get());
@@ -307,15 +340,22 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // active track recorder (#29) -- append each fresh own-ship fix.
   connect(m_nav_provider.get(), &NavDataProvider::dynamicChanged, this,
           [this]() {
+            // CPA-enriched target snapshot, shared by the popup + alert engine.
+            const QList<AisTarget> targets = m_nav_provider->aisTargets();
             // Keep the open AIS info popup's CPA/TCPA live as the fix updates.
             if (m_ais_selection && m_ais_selection->valid())
-              m_ais_selection->refresh(m_nav_provider->aisTargets());
+              m_ais_selection->refresh(targets);
+            // Raise / clear AIS CPA-TCPA danger + anchor-watch alerts (P3.15).
+            const OwnShipState s = m_nav_provider->ownShip();
+            if (m_alert_engine) {
+              m_alert_engine->evaluateAis(targets);
+              m_alert_engine->evaluateAnchor(s);
+            }
             // Course-Up / Head-Up track the live COG/HDT.
             updateChartRotation();
             // Track recording is handled by the model ActiveTrack itself
             // (its own timer off the own-ship fix); here we only follow.
             if (!m_follow_own_ship) return;
-            const OwnShipState s = m_nav_provider->ownShip();
             if (!s.valid) return;
             double clat = s.lat, clon = s.lon;
             // Look-ahead: shift the view ahead along the course so more water
@@ -365,6 +405,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
     for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
       if (it.value().provider) it.value().provider->setSoundingScale(sc);
   });
+  // AIS lost/remove-target timeouts + moored-speed -> the model decoder globals
+  // it prunes by; applied now and whenever the AIS preferences change.
+  syncAisModelGlobals();
+  connect(&AisConfig::instance(), &AisConfig::changed, this,
+          []() { syncAisModelGlobals(); });
   // On resize, repaint AND re-evaluate visible cells: the initial fit +
   // selection can run before the canvas has its real size (the catalog scan
   // starts at launch), sampling a too-small view rect and missing cells in
@@ -1337,6 +1382,15 @@ void ChartCanvas::centerViewHere() {
   m_viewport->setCenter(m_ctx_lat, m_ctx_lon);
   Q_EMIT viewChanged();
   update();
+}
+
+void ChartCanvas::setAisTrail(int mmsi, bool on) {
+  if (m_ais_layer) m_ais_layer->setTrailEnabled(mmsi, on);
+  update();
+}
+
+bool ChartCanvas::aisTrailEnabled(int mmsi) const {
+  return m_ais_layer && m_ais_layer->trailEnabled(mmsi);
 }
 
 void ChartCanvas::queryObjectsHere() {

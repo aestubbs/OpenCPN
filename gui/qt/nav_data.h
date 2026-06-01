@@ -45,6 +45,8 @@ struct AisTarget {
   double hdg = kHeadingUnavailable;    // heading, deg true (511 = N/A)
   int shipType = 0;                    // AIS ship-and-cargo type (0-99)
   QString name;
+  bool isSart = false;                 // SART / MOB / EPIRB distress beacon
+  bool isDsc = false;                  // DSC distress relay target
 
   // CPA/TCPA solution vs own ship (mirrors wx AisTargetData; computed by
   // ais_cpa.cpp). Valid only when cpaValid; -1 = not computed.
@@ -54,6 +56,20 @@ struct AisTarget {
   double tcpaMin = -1.0;   // time to CPA, minutes (>=0 when valid)
   bool cpaValid = false;   // CPA/TCPA solution available
   bool dangerous = false;  // crosses the CPA/TCPA warning thresholds
+};
+
+// One recorded past position of an AIS target (the persisted trail). Stored
+// globally in SQLite and queried back to draw a selected vessel's trail.
+// COG/SOG/HDG are the vessel's *reported* values (kept, not derived: heading
+// is underivable from position, and reported COG/SOG beat noisy deltas) so a
+// historical target can be redrawn with its true orientation + speed.
+struct AisTrackPoint {
+  qint64 t = 0;     // epoch ms
+  double lat = 0.0;
+  double lon = 0.0;
+  double cog = -1.0;                   // course over ground, deg true (-1 = n/a)
+  double sog = -1.0;                   // speed over ground, knots (-1 = n/a)
+  double hdg = kHeadingUnavailable;    // heading, deg true (511 = n/a)
 };
 
 struct OwnShipState {

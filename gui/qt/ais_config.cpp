@@ -31,6 +31,8 @@ AisConfig::AisConfig() {
   m_tcpa_warn = c.getDouble("ais/tcpaWarn", m_tcpa_warn);
   m_mark_lost = c.getDouble("ais/markLost", m_mark_lost);
   m_remove_lost = c.getDouble("ais/removeLost", m_remove_lost);
+  m_track_retention_days =
+      c.getInt("ais/trackRetentionDays", m_track_retention_days);
   m_predictor_min = c.getDouble("ais/predictorMin", m_predictor_min);
   m_sync_predictor = c.getBool("ais/syncPredictor", m_sync_predictor);
   m_tracks_len = c.getDouble("ais/tracksLen", m_tracks_len);
@@ -71,6 +73,10 @@ void AisConfig::setMarkLostMin(double v) {
 }
 void AisConfig::setRemoveLostMin(double v) {
   OCPN_AIS_SET(m_remove_lost, v, "ais/removeLost", setDouble)
+}
+void AisConfig::setTrackRetentionDays(int v) {
+  if (v < 0) v = 0;
+  OCPN_AIS_SET(m_track_retention_days, v, "ais/trackRetentionDays", setInt)
 }
 void AisConfig::setPredictorMinutes(double v) {
   OCPN_AIS_SET(m_predictor_min, v, "ais/predictorMin", setDouble)

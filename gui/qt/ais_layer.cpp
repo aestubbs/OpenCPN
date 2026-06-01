@@ -15,6 +15,7 @@
 
 #include "ais_layer.h"
 
+#include <QDateTime>
 #include <QMatrix4x4>
 #include <QQuickWindow>
 #include <QSGGeometry>
@@ -26,6 +27,8 @@
 #include <QSet>
 
 #include "aa_line.h"
+#include "ais_config.h"
+#include "display_config.h"
 #include "sg_builder.h"  // SgBuilder::renderText
 #include "sg_helpers.h"
 
@@ -34,10 +37,17 @@ namespace ocpn::qtui {
 namespace {
 // Symbol size (logical px).
 constexpr float kSymbolPx = 11.0f;
-// COG/SOG predictor: how far ahead, in minutes. World length =
-// sog_knots * (minutes/60) / 60 degrees.
-constexpr double kPredictMinutes = 6.0;
 constexpr float kVectorPx = 2.0f;  // COG/SOG predictor line width
+
+// COG/SOG predictor reach, in minutes. The AIS-target predictor length is
+// user-set (Options > Ships > AIS Targets); when "sync with own ship" is on it
+// follows the own-ship predictor (Options > Display > General) instead.
+double predictMinutes() {
+  const AisConfig& a = AisConfig::instance();
+  return a.syncPredictorWithOwnShip()
+             ? DisplayConfig::instance().cogPredictorMinutes()
+             : a.predictorMinutes();
+}
 
 // Vessel category from the AIS ship-and-cargo type (0-99).
 enum class AisCat { Default, Sailing, Pleasure, Fishing, Hsc, Service,
@@ -59,6 +69,10 @@ AisCat catOf(int st) {
 // vivid alert red, overriding their category colour -- mirrors wx's AIS alert
 // rendering.
 const QColor kDangerColor(255, 0, 0);
+
+// Selected-vessel trail: a thin light-grey poly-line of where it has been.
+const QColor kTrailColor(190, 190, 190);
+constexpr float kTrailPx = 2.0f;
 
 QColor catColor(AisCat c) {
   switch (c) {
@@ -103,6 +117,22 @@ QSGGeometryNode* makeSymbol(AisCat cat, bool dangerous) {
 }
 }  // namespace
 
+AisLayer::AisLayer(NavDataProvider* provider, const Viewport* viewport,
+                   QObject* parent)
+    : NavLayer(provider, viewport, parent) {
+  setOwner(QStringLiteral("core.ais"));
+  connectData(&NavDataProvider::dynamicChanged);
+  // An AIS or own-ship-predictor setting change (predictor length, sync,
+  // show-names) rebuilds the retained target nodes on the next sync. These
+  // fire on user action, not per frame, so a wholesale rebuild is cheap.
+  auto bump = [this]() {
+    m_config_dirty = true;
+    Q_EMIT dirty();
+  };
+  connect(&AisConfig::instance(), &AisConfig::changed, this, bump);
+  connect(&DisplayConfig::instance(), &DisplayConfig::changed, this, bump);
+}
+
 AisLayer::TargetNode AisLayer::buildTarget(const AisTarget& t,
                                            QQuickWindow* window) {
   TargetNode tn;
@@ -122,7 +152,8 @@ AisLayer::TargetNode AisLayer::buildTarget(const AisTarget& t,
   // with zoom, as a real predicted distance should), width screen-fixed.
 
   // Name label: rendered once to a texture, screen-fixed via labelXf scale.
-  if (window && !t.name.isEmpty()) {
+  // Suppressed when Options > Ships > AIS Targets > Show names is off.
+  if (window && !t.name.isEmpty() && AisConfig::instance().showNames()) {
     const QImage img =
         SgBuilder::renderText(t.name, catColor(catOf(t.shipType)), 9.0f);
     if (!img.isNull()) {
@@ -196,7 +227,7 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
       delete tn.predictor;
       tn.predictor = nullptr;
     }
-    const double len_deg = t.sog * (kPredictMinutes / 60.0) / 60.0;
+    const double len_deg = t.sog * (predictMinutes() / 60.0) / 60.0;
     if (len_deg > 0.0) {
       const QColor vc = t.dangerous ? kDangerColor : catColor(catOf(t.shipType));
       tn.predictor = makeAaLineNode({QPointF(0, 0), headingVec(t.cog) * len_deg},
@@ -219,6 +250,24 @@ void AisLayer::updateTarget(TargetNode& tn, const AisTarget& t,
 
 QSGNode* AisLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* window) {
   if (!m_root) m_root = new QSGNode();
+
+  // A settings change (predictor length / sync / show-names) drops the retained
+  // nodes so they rebuild this frame with the new values; the per-MMSI loop
+  // below then re-creates them via buildTarget.
+  if (m_config_dirty) {
+    m_config_dirty = false;
+    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
+      m_root->removeChildNode(it.value().pos);
+      delete it.value().pos;  // deletes the whole group
+    }
+    m_nodes.clear();
+    // The predictor length may have changed, so the trail window (5x) did too:
+    // re-seed each trail from SQLite over the new window.
+    for (auto it = m_trails.begin(); it != m_trails.end(); ++it) {
+      it.value().seeded = false;
+      it.value().dirty = true;
+    }
+  }
 
   const bool scale_changed = (currentScale() != m_built_scale);
   m_built_scale = currentScale();
@@ -250,7 +299,75 @@ QSGNode* AisLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* window) {
     it = m_nodes.erase(it);
   }
 
+  updateTrails(targets, QDateTime::currentMSecsSinceEpoch());
   return m_root;
+}
+
+void AisLayer::setTrailEnabled(int mmsi, bool on) {
+  if (on) {
+    if (!m_trails.contains(mmsi))
+      m_trails.insert(mmsi, Trail{});  // seeded + drawn on the next sync
+  } else if (auto it = m_trails.find(mmsi); it != m_trails.end()) {
+    if (it.value().node && m_root) {
+      m_root->removeChildNode(it.value().node);
+      delete it.value().node;
+    }
+    m_trails.erase(it);
+  }
+  Q_EMIT dirty();
+}
+
+void AisLayer::updateTrails(const QList<AisTarget>& targets, qint64 now_ms) {
+  if (m_trails.isEmpty()) return;
+  const qint64 window_ms = static_cast<qint64>(5.0 * predictMinutes() * 60000.0);
+  const qint64 cutoff = now_ms - window_ms;
+
+  for (auto it = m_trails.begin(); it != m_trails.end(); ++it) {
+    const int mmsi = it.key();
+    Trail& tr = it.value();
+
+    // Seed the recorded history once (oldest-first) from the persistent store.
+    if (!tr.seeded) {
+      tr.points =
+          provider() ? provider()->aisTrack(mmsi, cutoff) : QVector<AisTrackPoint>();
+      tr.seeded = true;
+      tr.dirty = true;
+    }
+    // Slide the live end: append the current fix if the target is present and
+    // has moved since the last recorded point.
+    for (const AisTarget& t : targets) {
+      if (t.mmsi != mmsi) continue;
+      if (tr.points.isEmpty() || tr.points.last().lat != t.lat ||
+          tr.points.last().lon != t.lon) {
+        tr.points.append({now_ms, t.lat, t.lon});
+        tr.dirty = true;
+      }
+      break;
+    }
+    // Drop points that have slid out of the window (oldest at the front).
+    int drop = 0;
+    while (drop < tr.points.size() && tr.points[drop].t < cutoff) ++drop;
+    if (drop > 0) {
+      tr.points.remove(0, drop);
+      tr.dirty = true;
+    }
+
+    if (!tr.dirty) continue;
+    tr.dirty = false;
+    if (tr.node) {
+      m_root->removeChildNode(tr.node);
+      delete tr.node;
+      tr.node = nullptr;
+    }
+    if (tr.points.size() >= 2) {
+      QList<QPointF> wpts;
+      wpts.reserve(tr.points.size());
+      for (const AisTrackPoint& p : tr.points) wpts.append(world(p.lat, p.lon));
+      tr.node = makeAaLineNode(wpts, kTrailColor, kTrailPx);
+      if (tr.node)
+        m_root->prependChildNode(tr.node);  // draw under the target symbols
+    }
+  }
 }
 
 }  // namespace ocpn::qtui

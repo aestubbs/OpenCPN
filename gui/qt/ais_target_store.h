@@ -32,6 +32,7 @@
 #define OCPN_QT_AIS_TARGET_STORE_H_
 
 #include <QList>
+#include <QVector>
 
 #include "nav_data.h"
 
@@ -42,7 +43,8 @@ public:
   virtual ~AisTargetStore() = default;
 
   /** Insert or update `t` (keyed by MMSI), stamping its last-seen time with
-   *  `now_ms` (monotonic-ish epoch ms). */
+   *  `now_ms` (monotonic-ish epoch ms). A persisting store also appends the
+   *  position to the target's trail history. */
   virtual void upsert(const AisTarget& t, qint64 now_ms) = 0;
 
   /** A snapshot of the current targets, for rendering. */
@@ -54,6 +56,13 @@ public:
 
   /** Number of targets currently held (diagnostics). */
   virtual int count() const = 0;
+
+  /** The recorded trail for one MMSI, oldest-first, from `since_ms` to now.
+   *  Empty for non-persisting stores (the default). */
+  virtual QVector<AisTrackPoint> trackSince(int /*mmsi*/,
+                                            qint64 /*since_ms*/) const {
+    return {};
+  }
 };
 
 }  // namespace ocpn::qtui
