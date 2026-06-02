@@ -133,7 +133,12 @@ TrackPoint::TrackPoint(double lat, double lon, QDateTime dt)
 
 // Copy Constructor
 TrackPoint::TrackPoint(TrackPoint *orig)
-    : m_lat(orig->m_lat), m_lon(orig->m_lon), m_GPXTrkSegNo(1) {
+    : m_lat(orig->m_lat),
+      m_lon(orig->m_lon),
+      m_cog(orig->m_cog),
+      m_sog(orig->m_sog),
+      m_hdg(orig->m_hdg),
+      m_GPXTrkSegNo(1) {
   SetCreateTime(orig->GetCreateTime());
 }
 
@@ -680,6 +685,10 @@ void Track::AddPointFinalized(TrackPoint *pNewPoint) {
 
 TrackPoint *Track::AddNewPoint(vector2D point, QDateTime time) {
   TrackPoint *tPoint = new TrackPoint(point.lat, point.lon, time);
+  // Stamp the point with what own-ship was doing at this fix.
+  tPoint->m_cog = gCog;
+  tPoint->m_sog = gSog;
+  tPoint->m_hdg = gHdt;
 
   AddPointFinalized(tPoint);
 

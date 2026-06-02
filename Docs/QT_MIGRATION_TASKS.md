@@ -1144,7 +1144,24 @@ render anything onto the chart, only manages the plugin lifecycle.
 - [ ] **P3.5** Toolbar / main controls in QML (touch-friendly).
 - [ ] **P3.6** Settings / preferences UI in QML — the Options dialog
       (see the breakdown below).
-- [ ] **P3.7** Route & mark manager UI in QML.
+- [x] **P3.7** **Route / mark / track manager UI in QML. DONE (2026-06-02).**
+      Left-edge `Drawer` with a Routes | Marks | Tracks tab selector; visibility
+      and selection are independent throughout (per-item "eye" toggles replaced
+      the old master layer switches). Routes: tiles (name + length + legs), tap
+      selects + zooms, explicit Edit mode (node drag/insert/delete) behind the ⋯
+      menu (+ Rename/Duplicate/Reverse/Delete). Marks (free `m_bIsolatedMark`
+      RoutePoints): drop via right-click → New Mark dialog (name + comment +
+      icon picker), `WaypointIconProvider` (`image://wpicon/`), Recent/Nearest
+      sort. Tracks (own-vessel, dated, `#n` same-day suffix): Start/Stop/Reset +
+      rename/delete, newest-first. All persist via `NavObj_dB`.
+      **Schema convergence (2026-06-02):** own-vessel `trk_points` converged
+      toward `ais_track` — `timestamp` is now integer epoch-ms (was ISO-8601
+      TEXT) and `cog`/`sog`/`hdg` REAL columns added (`TrackPoint::m_cog/m_sog/
+      m_hdg`, captured from `gCog`/`gSog`/`gHdt` in `Track::AddNewPoint`). The
+      two tables stay separate (different identity/lifecycle/retention/volume).
+      Existing DBs upgraded in place by a one-shot `MigrateTrkPointsSchema()`
+      table-rebuild (transaction-wrapped, FK off; ISO→epoch via `strftime`);
+      verified against the live `navobj.db` (schema changed, routes survived).
 - [ ] **P3.8** Chart selection / quilting UI.
 - [ ] **P3.9** Dialogs (AIS target info, object query, alarms) in QML.
 - [ ] **P3.10** i18n via Qt Linguist (`.ts`/`tr()`); migrate translatable strings.

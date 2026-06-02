@@ -96,6 +96,10 @@ public:
   };
 
   double m_lat, m_lon;
+  // Own-ship motion captured at this point. Sentinels mean "unknown": cog/sog
+  // = -1 (no fix), hdg = 511 (NMEA "no heading"). Persisted to trk_points so a
+  // recorded track carries what the vessel was doing, mirroring ais_track.
+  double m_cog = -1.0, m_sog = -1.0, m_hdg = 511.0;
   int m_GPXTrkSegNo;
 
 private:

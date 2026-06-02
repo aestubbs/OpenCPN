@@ -65,6 +65,66 @@ static bool executeSQL(sqlite3* db, const QString& sql) {
   return executeSQL(db, sql.toStdString().c_str());
 }
 
+// Bring a pre-existing trk_points table up to the current schema: timestamp
+// stored as integer epoch-ms (was ISO-8601 TEXT) plus cog/sog/hdg columns, so
+// own-vessel tracks converge with ais_track. SQLite can't change a column's
+// type in place, so rebuild the table once. A fresh DB already gets the new
+// schema from CreateTables, so this is a no-op there (cog column present).
+static void MigrateTrkPointsSchema(sqlite3* db) {
+  // Already migrated? (new schema has a cog column)
+  bool has_cog = false;
+  sqlite3_stmt* chk = nullptr;
+  if (sqlite3_prepare_v2(
+          db, "SELECT COUNT(*) FROM pragma_table_info('trk_points') "
+              "WHERE name='cog'",
+          -1, &chk, nullptr) == SQLITE_OK) {
+    if (sqlite3_step(chk) == SQLITE_ROW)
+      has_cog = sqlite3_column_int(chk, 0) > 0;
+    sqlite3_finalize(chk);
+  }
+  if (has_cog) return;
+
+  // Rebuild trk_points, converting the ISO-8601 timestamp text to epoch-ms and
+  // defaulting cog/sog/hdg for points recorded before they were tracked.
+  // foreign_keys must be toggled outside the transaction (it is a no-op inside).
+  sqlite3_exec(db, "PRAGMA foreign_keys = OFF;", nullptr, nullptr, nullptr);
+  const char* migrate_sql = R"(
+        BEGIN TRANSACTION;
+        CREATE TABLE trk_points_new (
+            track_guid TEXT NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            timestamp INTEGER NOT NULL,
+            point_order INTEGER,
+            cog REAL DEFAULT -1,
+            sog REAL DEFAULT -1,
+            hdg REAL DEFAULT 511,
+            FOREIGN KEY (track_guid) REFERENCES tracks(guid) ON DELETE CASCADE
+        );
+        INSERT INTO trk_points_new
+            (track_guid, latitude, longitude, timestamp, point_order, cog, sog, hdg)
+        SELECT track_guid, latitude, longitude,
+            COALESCE(CAST(strftime('%s', timestamp) AS INTEGER) * 1000, 0),
+            point_order, -1, -1, 511
+        FROM trk_points;
+        DROP TABLE trk_points;
+        ALTER TABLE trk_points_new RENAME TO trk_points;
+        CREATE INDEX IF NOT EXISTS idx_track_points ON trk_points (track_guid);
+        COMMIT;
+    )";
+  char* errMsg = nullptr;
+  if (sqlite3_exec(db, migrate_sql, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+    sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+    if (errMsg) {
+      wxLogMessage("trk_points schema migration failed: %s", errMsg);
+      sqlite3_free(errMsg);
+    }
+  } else {
+    wxLogMessage("trk_points schema migrated (epoch time + cog/sog/hdg)");
+  }
+  sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
+}
+
 bool CreateTables(sqlite3* db) {
   // Track tables
   const char* create_tables_sql = R"(
@@ -85,8 +145,11 @@ bool CreateTables(sqlite3* db) {
             track_guid TEXT NOT NULL,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
-            timestamp TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
             point_order INTEGER,
+            cog REAL DEFAULT -1,
+            sog REAL DEFAULT -1,
+            hdg REAL DEFAULT 511,
             FOREIGN KEY (track_guid) REFERENCES tracks(guid) ON DELETE CASCADE
         );
 
@@ -180,6 +243,9 @@ bool CreateTables(sqlite3* db) {
 
   if (!executeSQL(db, create_tables_sql)) return false;
 
+  // Upgrade a legacy trk_points table (ISO-text time, no cog/sog/hdg) in place.
+  MigrateTrkPointsSchema(db);
+
   return true;
 }
 
@@ -243,10 +309,11 @@ bool DeleteAllCommentsForTrack(sqlite3* db, const std::string& track_guid) {
 }
 
 bool InsertTrackPoint(sqlite3* db, const std::string& track_guid, double lat,
-                      double lon, const std::string& timestamp, int i_point) {
+                      double lon, qint64 timestamp_ms, double cog, double sog,
+                      double hdg, int i_point) {
   const char* sql = R"(
-        INSERT INTO trk_points (track_guid, latitude, longitude, timestamp, point_order)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO trk_points (track_guid, latitude, longitude, timestamp, point_order, cog, sog, hdg)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     )";
   sqlite3_stmt* stmt;
 
@@ -254,8 +321,11 @@ bool InsertTrackPoint(sqlite3* db, const std::string& track_guid, double lat,
     sqlite3_bind_text(stmt, 1, track_guid.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(stmt, 2, lat);
     sqlite3_bind_double(stmt, 3, lon);
-    sqlite3_bind_text(stmt, 4, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 4, timestamp_ms);
     sqlite3_bind_int(stmt, 5, i_point);
+    sqlite3_bind_double(stmt, 6, cog);
+    sqlite3_bind_double(stmt, 7, sog);
+    sqlite3_bind_double(stmt, 8, hdg);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
       ReportError("InsertTrackPoint:step");
       sqlite3_finalize(stmt);
@@ -835,7 +905,8 @@ bool NavObj_dB::InsertTrack(Track* track) {
     auto point = track->GetPoint(i);
     //  Add the bare trkpoint
     InsertTrackPoint(m_db, track->m_GUID.toStdString(), point->m_lat,
-                     point->m_lon, point->GetTimeString(), i);
+                     point->m_lon, point->GetCreateTime().toMSecsSinceEpoch(),
+                     point->m_cog, point->m_sog, point->m_hdg, i);
   }
 
   //  Add HTML links to track
@@ -897,7 +968,8 @@ bool NavObj_dB::UpdateTrack(Track* track) {
     //  Add the bare point
     if (point) {
       InsertTrackPoint(m_db, track->m_GUID.toStdString(), point->m_lat,
-                       point->m_lon, point->GetTimeString(), i);
+                       point->m_lon, point->GetCreateTime().toMSecsSinceEpoch(),
+                       point->m_cog, point->m_sog, point->m_hdg, i);
     }
   }
 
@@ -1008,8 +1080,9 @@ bool NavObj_dB::AddTrackPoint(Track* track, TrackPoint* point) {
 
   // Add the linked point to the dB
   if (!InsertTrackPoint(m_db, track->m_GUID.toStdString(), point->m_lat,
-                        point->m_lon, point->GetTimeString(),
-                        this_point_index - 1))
+                        point->m_lon,
+                        point->GetCreateTime().toMSecsSinceEpoch(), point->m_cog,
+                        point->m_sog, point->m_hdg, this_point_index - 1))
     return false;
 
   return true;
@@ -1053,7 +1126,7 @@ bool NavObj_dB::LoadAllTracks() {
 
     //  Add the trk_points
     const char* sql = R"(
-        SELECT  latitude, longitude, timestamp, point_order
+        SELECT  latitude, longitude, timestamp, point_order, cog, sog, hdg
         FROM trk_points
         WHERE track_guid = ?
         ORDER BY point_order ASC
@@ -1085,12 +1158,15 @@ bool NavObj_dB::LoadAllTracks() {
 
       double latitude = sqlite3_column_double(stmtp, 0);
       double longitude = sqlite3_column_double(stmtp, 1);
-      std::string timestamp =
-          reinterpret_cast<const char*>(sqlite3_column_text(stmtp, 2));
+      qint64 timestamp_ms = sqlite3_column_int64(stmtp, 2);
       int point_order = sqlite3_column_int(stmtp, 3);
 
-      auto point = new TrackPoint(latitude, longitude,
-                                  QString::fromStdString(timestamp));
+      auto point = new TrackPoint(
+          latitude, longitude,
+          QDateTime::fromMSecsSinceEpoch(timestamp_ms, Qt::UTC));
+      point->m_cog = sqlite3_column_double(stmtp, 4);
+      point->m_sog = sqlite3_column_double(stmtp, 5);
+      point->m_hdg = sqlite3_column_double(stmtp, 6);
 
       point->m_GPXTrkSegNo = GPXTrkSeg;
       new_trk->AddPoint(point);
