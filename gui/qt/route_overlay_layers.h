@@ -19,6 +19,9 @@
 #ifndef OCPN_QT_ROUTE_OVERLAY_LAYERS_H_
 #define OCPN_QT_ROUTE_OVERLAY_LAYERS_H_
 
+#include <QSet>
+#include <QString>
+
 #include "nav_layer.h"
 
 namespace ocpn::qtui {
@@ -54,12 +57,31 @@ public:
     Q_EMIT dirty();
   }
 
+  /** GUIDs whose visibility "eye" is on. A route is drawn when its eye is on
+   *  OR it is the selected route -- visibility and selection are independent
+   *  (P3.7). Default empty: only the selected route shows. */
+  void setVisibleRouteGuids(const QSet<QString>& guids) {
+    m_visible = guids;
+    Q_EMIT dirty();
+  }
+
+  /** Whether the selected route is in edit mode. Only then does it get the
+   *  large draggable node handles; a merely-selected route gets a subtle
+   *  selection accent (so selection and edit look distinct). */
+  void setEditing(bool editing) {
+    if (editing == m_editing) return;
+    m_editing = editing;
+    Q_EMIT dirty();
+  }
+
 protected:
   void draw(SgBuilder& b, double world_per_px) override;
 
 private:
   int m_scheme = 0;
   QString m_selected;
+  QSet<QString> m_visible;
+  bool m_editing = false;
 };
 
 /** Tracks: a polyline per recorded track. */
@@ -73,11 +95,22 @@ public:
   QString id() const override { return QStringLiteral("core.tracks"); }
   QString name() const override { return QStringLiteral("Tracks"); }
 
+  /** GUID of the selected track (drawn emphasised). Empty = none. */
+  void setSelectedTrackGuid(const QString& guid) {
+    if (guid == m_selected) return;
+    m_selected = guid;
+    Q_EMIT dirty();
+  }
+
 protected:
   void draw(SgBuilder& b, double world_per_px) override;
+
+private:
+  QString m_selected;
 };
 
-/** Standalone waypoints: a marker plus a name label each. */
+/** Standalone waypoints (free marks): a marker plus a name label each. Honours
+ *  the per-mark visibility flag (the eye); the selected mark is emphasised. */
 class WaypointLayer : public StaticNavLayer {
   Q_OBJECT
 public:
@@ -89,8 +122,18 @@ public:
   QString id() const override { return QStringLiteral("core.waypoints"); }
   QString name() const override { return QStringLiteral("Waypoints"); }
 
+  /** GUID of the selected mark (drawn emphasised). Empty = none. */
+  void setSelectedWaypointGuid(const QString& guid) {
+    if (guid == m_selected) return;
+    m_selected = guid;
+    Q_EMIT dirty();
+  }
+
 protected:
   void draw(SgBuilder& b, double world_per_px) override;
+
+private:
+  QString m_selected;
 };
 
 }  // namespace ocpn::qtui

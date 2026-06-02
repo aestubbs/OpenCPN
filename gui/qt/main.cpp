@@ -45,6 +45,7 @@
 
 #include "ocharts_service.h"
 #include "s52_engine.h"
+#include "waypoint_icon_provider.h"
 #include "tcmgr.h"      // P3.14 tide/current prediction engine (libs/tides)
 #include "idx_entry.h"
 #include "tide_model.h"  // P3.14 phase B: tide data-set list + engine bridge
@@ -191,6 +192,10 @@ int main(int argc, char* argv[]) {
   tideModel.reload();
 
   QQmlApplicationEngine engine;
+  // Waypoint-icon catalogue for the mark editor's icon picker (P3.7):
+  // image://wpicon/<iconKey>. The engine takes ownership.
+  engine.addImageProvider(QStringLiteral("wpicon"),
+                          new ocpn::qtui::WaypointIconProvider);
   engine.rootContext()->setContextProperty("s52", &s52);
   engine.rootContext()->setContextProperty("app", &appController);
   engine.rootContext()->setContextProperty("tides", &tideModel);

@@ -19,6 +19,10 @@
 
 #include "switchable_nav_provider.h"
 
+#include <algorithm>
+
+#include <QDate>
+
 #include "model/navobj_db.h"
 #include "model/route.h"
 #include "model/route_point.h"
@@ -71,8 +75,14 @@ QList<NavWaypoint> SwitchableNavDataProvider::waypoints() const {
     if (!wp || wp->m_bIsInRoute) continue;  // route points draw via routes()
     NavWaypoint nw;
     nw.name = wp->GetName();
+    nw.guid = wp->m_GUID;
+    nw.comment = wp->GetDescription();
+    nw.iconName = wp->GetIconName();
     nw.lat = wp->m_lat;
     nw.lon = wp->m_lon;
+    nw.visible = wp->IsVisible();
+    const QDateTime ct = wp->GetCreateTime();
+    nw.createTimeMs = ct.isValid() ? ct.toMSecsSinceEpoch() : 0;
     out.append(nw);
   }
   return out;
@@ -80,20 +90,121 @@ QList<NavWaypoint> SwitchableNavDataProvider::waypoints() const {
 
 QList<NavTrack> SwitchableNavDataProvider::tracks() const {
   QList<NavTrack> out;
-  const auto append = [&](Track* tk, const QColor& color) {
-    if (!tk) return;
+  // The recording track lives in g_TrackList too (started by startTrack); mark
+  // it active + violet. All tracks are listed (the drawer tab lists them even
+  // with <2 points); the TrackLayer skips drawing a polyline under 2 points.
+  for (Track* tk : g_TrackList) {
+    if (!tk) continue;
+    const bool active = (tk == g_pActiveTrack);
     NavTrack nt;
-    nt.color = color;
+    nt.name = tk->GetName(true);  // dated auto-name if unnamed
+    nt.guid = tk->m_GUID;
+    nt.lengthNm = tk->Length();
+    nt.visible = tk->IsVisible();
+    nt.active = active;
+    nt.color = active ? QColor(150, 0, 200) : QColor(60, 60, 60);
     const int n = tk->GetnPoints();
     for (int i = 0; i < n; ++i)
       if (TrackPoint* tp = tk->GetPoint(i))
         nt.points.append(QPointF(tp->m_lon, tp->m_lat));
-    if (nt.points.size() >= 2) out.append(nt);
-  };
-  for (Track* tk : g_TrackList) append(tk, QColor(60, 60, 60));
-  if (g_pActiveTrack && g_pActiveTrack->IsRunning())
-    append(g_pActiveTrack, QColor(150, 0, 200));  // recording track violet
+    if (n > 0)
+      if (TrackPoint* first = tk->GetPoint(0)) {
+        const QDateTime ct = first->GetCreateTime();
+        nt.startTimeMs = ct.isValid() ? ct.toMSecsSinceEpoch() : 0;
+      }
+    out.append(nt);
+  }
   return out;
+}
+
+// Dated track name with a #n suffix to disambiguate same-day tracks.
+QString SwitchableNavDataProvider::makeTrackName() const {
+  const QString date = QDate::currentDate().toString(Qt::ISODate);
+  int sameDay = 0;
+  for (Track* tk : g_TrackList)
+    if (tk && tk->GetName(true).startsWith(date)) ++sameDay;
+  return sameDay > 0 ? QStringLiteral("%1 #%2").arg(date).arg(sameDay + 1)
+                     : date;
+}
+
+void SwitchableNavDataProvider::startTrack() {
+  if (g_pActiveTrack && g_pActiveTrack->IsRunning()) return;  // already on
+  // Discard the stale empty ActiveTrack nav_core pre-creates (never started,
+  // not in the list) so we don't leak it.
+  if (g_pActiveTrack && g_pActiveTrack->GetnPoints() == 0 &&
+      std::find(g_TrackList.begin(), g_TrackList.end(), g_pActiveTrack) ==
+          g_TrackList.end()) {
+    delete g_pActiveTrack;
+    g_pActiveTrack = nullptr;
+  }
+  auto* t = new ActiveTrack();
+  t->SetName(makeTrackName());
+  g_TrackList.push_back(t);
+  g_pActiveTrack = t;
+  NavObj_dB::GetInstance().InsertTrack(t);
+  t->Start();  // self-records off the own-ship fix
+  m_recording = true;
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::stopTrack() {
+  if (!g_pActiveTrack) return;
+  g_pActiveTrack->Stop();
+  if (g_pActiveTrack->GetnPoints() < 2) {  // too short -> discard
+    NavObj_dB::GetInstance().DeleteTrack(g_pActiveTrack);
+    g_TrackList.erase(
+        std::remove(g_TrackList.begin(), g_TrackList.end(), g_pActiveTrack),
+        g_TrackList.end());
+    delete g_pActiveTrack;
+  } else {
+    NavObj_dB::GetInstance().UpdateTrack(g_pActiveTrack);  // finalize
+  }
+  g_pActiveTrack = nullptr;
+  m_recording = false;
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::resetTrack() {
+  stopTrack();
+  startTrack();  // a fresh dated track -> a new tile
+}
+
+void SwitchableNavDataProvider::renameTrack(const QString& guid,
+                                            const QString& name) {
+  for (Track* tk : g_TrackList)
+    if (tk && tk->m_GUID == guid) {
+      tk->SetName(name);
+      NavObj_dB::GetInstance().UpdateTrack(tk);
+      Q_EMIT staticChanged();
+      return;
+    }
+}
+
+void SwitchableNavDataProvider::setTrackVisible(const QString& guid,
+                                                bool visible) {
+  for (Track* tk : g_TrackList)
+    if (tk && tk->m_GUID == guid) {
+      tk->SetVisible(visible);
+      NavObj_dB::GetInstance().UpdateTrack(tk);
+      Q_EMIT staticChanged();
+      return;
+    }
+}
+
+void SwitchableNavDataProvider::deleteTrack(const QString& guid) {
+  for (auto it = g_TrackList.begin(); it != g_TrackList.end(); ++it) {
+    Track* tk = *it;
+    if (!tk || tk->m_GUID != guid) continue;
+    NavObj_dB::GetInstance().DeleteTrack(tk);
+    if (tk == g_pActiveTrack) {
+      g_pActiveTrack = nullptr;
+      m_recording = false;
+    }
+    g_TrackList.erase(it);
+    delete tk;
+    Q_EMIT staticChanged();
+    return;
+  }
 }
 
 bool SwitchableNavDataProvider::finishRoute() {
@@ -180,6 +291,26 @@ void SwitchableNavDataProvider::reverseRoute(int route) {
   Q_EMIT staticChanged();
 }
 
+void SwitchableNavDataProvider::duplicateRoute(int route) {
+  if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
+    return;
+  Route* src = (*pRouteList)[route];
+  if (!src) return;
+  Route* dup = new Route();
+  const QString base = src->m_RouteNameString.isEmpty()
+                           ? QStringLiteral("Route")
+                           : src->m_RouteNameString;
+  dup->m_RouteNameString = base + QStringLiteral(" copy");
+  const int n = src->GetnPoints();
+  for (int i = 1; i <= n; ++i) {  // GetPoint is 1-based
+    RoutePoint* p = src->GetPoint(i);
+    if (p) dup->AddPoint(new RoutePoint(p->m_lat, p->m_lon, QString(), QString()));
+  }
+  pRouteList->push_back(dup);
+  NavObj_dB::GetInstance().InsertRoute(dup);  // persists route + its points
+  Q_EMIT staticChanged();
+}
+
 void SwitchableNavDataProvider::renameRoute(int route, const QString& name) {
   if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
     return;
@@ -190,16 +321,79 @@ void SwitchableNavDataProvider::renameRoute(int route, const QString& name) {
   Q_EMIT staticChanged();
 }
 
+// --- Marks (free / isolated waypoints) ---------------------------------------
+
+void SwitchableNavDataProvider::dropMark(double lat, double lon,
+                                         const QString& name,
+                                         const QString& comment,
+                                         const QString& icon) {
+  if (!pWayPointMan) return;
+  const QString ic = icon.isEmpty() ? QStringLiteral("triangle") : icon;
+  // The ctor (bAddToList defaults true) registers it with pWayPointMan and
+  // assigns a GUID + create-time.
+  RoutePoint* wp = new RoutePoint(lat, lon, ic, name, QString());
+  wp->m_bIsolatedMark = true;
+  wp->m_MarkDescription = comment;
+  NavObj_dB::GetInstance().InsertRoutePoint(wp);  // persist mark + position
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::renameWaypoint(const QString& guid,
+                                               const QString& name) {
+  RoutePoint* wp =
+      pWayPointMan ? pWayPointMan->FindRoutePointByGUID(guid) : nullptr;
+  if (!wp) return;
+  wp->SetName(name);
+  NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::setWaypointComment(const QString& guid,
+                                                   const QString& comment) {
+  RoutePoint* wp =
+      pWayPointMan ? pWayPointMan->FindRoutePointByGUID(guid) : nullptr;
+  if (!wp) return;
+  wp->m_MarkDescription = comment;
+  NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::setWaypointIcon(const QString& guid,
+                                                const QString& icon) {
+  RoutePoint* wp =
+      pWayPointMan ? pWayPointMan->FindRoutePointByGUID(guid) : nullptr;
+  if (!wp || icon.isEmpty()) return;
+  wp->SetIconName(icon);
+  NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::setWaypointVisible(const QString& guid,
+                                                   bool visible) {
+  RoutePoint* wp =
+      pWayPointMan ? pWayPointMan->FindRoutePointByGUID(guid) : nullptr;
+  if (!wp) return;
+  wp->SetVisible(visible);
+  NavObj_dB::GetInstance().UpdateDBRoutePointViz(wp);
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::deleteWaypoint(const QString& guid) {
+  RoutePoint* wp =
+      pWayPointMan ? pWayPointMan->FindRoutePointByGUID(guid) : nullptr;
+  if (!wp) return;
+  NavObj_dB::GetInstance().DeleteRoutePoint(wp);
+  pWayPointMan->RemoveRoutePoint(wp);  // unlist (does not free)
+  delete wp;
+  Q_EMIT staticChanged();
+}
+
 void SwitchableNavDataProvider::setRecordingTrack(bool on) {
   if (on == m_recording) return;
-  m_recording = on;
-  if (g_pActiveTrack) {
-    if (on)
-      g_pActiveTrack->Start();  // self-records off the own-ship fix + persists
-    else
-      g_pActiveTrack->Stop();
-  }
-  Q_EMIT staticChanged();
+  if (on)
+    startTrack();
+  else
+    stopTrack();
 }
 
 }  // namespace ocpn::qtui

@@ -80,6 +80,8 @@ class SwitchableNavDataProvider;
 class AisLayer;
 class OwnShipLayer;
 class RouteLayer;
+class WaypointLayer;
+class TrackLayer;
 class TideLayer;
 
 class ChartCanvas : public QQuickItem {
@@ -182,6 +184,15 @@ class ChartCanvas : public QQuickItem {
   // click drops a route vertex and a right click finishes the route.
   Q_PROPERTY(bool routeBuildMode READ routeBuildMode WRITE setRouteBuildMode
                  NOTIFY routeBuildModeChanged)
+  // True while a selected route is editable (drag nodes / insert / delete);
+  // entered via the drawer's Edit action, exited by deselecting.
+  Q_PROPERTY(bool routeEditMode READ routeEditMode WRITE setRouteEditMode NOTIFY
+                 routeEditModeChanged)
+  // Bumped whenever a route's visibility "eye" changes, so QML eye bindings
+  // (chart.routeVisible(index)) re-evaluate. Visibility is independent of
+  // selection: a route draws when its eye is on or it is selected (P3.7).
+  Q_PROPERTY(int routeVisibilityRevision READ routeVisibilityRevision NOTIFY
+                 routeVisibilityChanged)
 
   // Own-ship track recording (#29). While on, each own-ship fix is appended
   // to the active track and drawn by the track overlay.
@@ -263,6 +274,13 @@ public:
   void setRouteBuildMode(bool on);
   bool trackRecording() const { return m_track_recording; }
   void setTrackRecording(bool on);
+
+  // --- Tracks (own-vessel), P3.7 ---
+  Q_INVOKABLE void resetTrack();   // finalize current + start a fresh one
+  Q_INVOKABLE void showTrack(const QString& guid);   // select + zoom to extent
+  Q_INVOKABLE void renameTrack(const QString& guid, const QString& name);
+  Q_INVOKABLE void deleteTrack(const QString& guid);
+  Q_INVOKABLE void setTrackVisible(const QString& guid, bool on);
   int colorScheme() const { return m_color_scheme; }
   void setColorScheme(int scheme);
   int selectedRoute() const { return m_selected_route; }
@@ -274,8 +292,40 @@ public:
 
   // Route-manager actions on a route by index (#33).
   Q_INVOKABLE void reverseRoute(int index);
+  Q_INVOKABLE void duplicateRoute(int index);
   Q_INVOKABLE void renameRoute(int index, const QString& name);
   Q_INVOKABLE void deleteRoute(int index);
+  // Select (highlight) the route and zoom the viewport to its extent -- the
+  // route-drawer tile click (P3.7).
+  Q_INVOKABLE void showRoute(int index);
+  // Like showRoute, then put the route into edit mode (drag nodes / insert /
+  // delete) -- the drawer's per-tile "Edit" action.
+  Q_INVOKABLE void editRoute(int index);
+  bool routeEditMode() const { return m_route_edit_mode; }
+  void setRouteEditMode(bool on);
+  // Per-route visibility "eye" (independent of selection). index is into the
+  // route list (RouteListViewModel order); resolved to a stable GUID inside.
+  Q_INVOKABLE bool routeVisible(int index) const;
+  Q_INVOKABLE void setRouteVisible(int index, bool on);
+  int routeVisibilityRevision() const { return m_route_vis_rev; }
+
+  // --- Marks (free waypoints), P3.7 ---
+  // Drop a mark at the last right-click point (m_ctx_lat/lon); the QML New Mark
+  // dialog supplies name / comment / icon. markDropLat/Lon expose that point so
+  // the dialog can show it.
+  Q_INVOKABLE void dropMarkHere(const QString& name, const QString& comment,
+                                const QString& icon);
+  Q_INVOKABLE double markDropLat() const { return m_ctx_lat; }
+  Q_INVOKABLE double markDropLon() const { return m_ctx_lon; }
+  Q_INVOKABLE void showMark(const QString& guid);   // select + centre
+  Q_INVOKABLE void setMarkVisible(const QString& guid, bool on);
+  Q_INVOKABLE void renameMark(const QString& guid, const QString& name);
+  Q_INVOKABLE void setMarkComment(const QString& guid, const QString& comment);
+  Q_INVOKABLE void setMarkIcon(const QString& guid, const QString& icon);
+  Q_INVOKABLE void deleteMark(const QString& guid);
+  // All waypoint-icon keys (for the editor's icon picker; images come from the
+  // wpicon image provider).
+  Q_INVOKABLE QStringList markIconNames() const;
   bool followOwnShip() const { return m_follow_own_ship; }
   void setFollowOwnShip(bool on);
   double chartRotationDeg() const;
@@ -341,6 +391,8 @@ Q_SIGNALS:
   void perfTextChanged();
   void cursorMoved();
   void routeBuildModeChanged();
+  void routeEditModeChanged();
+  void routeVisibilityChanged();
   void trackRecordingChanged();
   void colorSchemeChanged();
   void selectedRouteChanged();
@@ -439,6 +491,10 @@ private:
   AisLayer* m_ais_layer = nullptr;
   OwnShipLayer* m_own_ship_layer = nullptr;
   RouteLayer* m_route_layer = nullptr;  // for colour-scheme line tinting
+  WaypointLayer* m_waypoint_layer = nullptr;  // for mark selection highlight
+  QString m_selected_waypoint_guid;           // selected mark (drawer / chart)
+  TrackLayer* m_track_layer = nullptr;        // for track selection highlight
+  QString m_selected_track_guid;              // selected track (drawer / chart)
   TideLayer* m_tide_layer = nullptr;    // tide/current stations (P3.14 D)
   // Demo (Hakefjord replay) is OFF by default and opt-in only: the app boots
   // into the live setup (persisted connections auto-start). Persisted in
@@ -543,6 +599,9 @@ private:
   QString m_cursor_text;
   QString m_cursor_brgrng_text;
   bool m_route_build_mode = false;
+  bool m_route_edit_mode = false;  // selected route is editable (P3.7)
+  QSet<QString> m_visible_routes;  // route GUIDs with the visibility eye on
+  int m_route_vis_rev = 0;         // bumps on any eye change (QML re-eval)
   bool m_track_recording = false;
   int m_color_scheme = 0;  // 0 day, 1 dusk, 2 night
 

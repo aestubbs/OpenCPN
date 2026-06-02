@@ -2112,3 +2112,55 @@ QML-singleton (persisted). Several controls are wired live to the shell.
   + migrated in `navobj.db`; app launches with no QML errors. **Not yet done:**
   the timeline-scrub replay itself (the layer reading `gTimeSource` to query
   positions at a past time) — recording is in place to enable it next.
+- 2026-06-02 — **Route manager redesign (P3.7).** Replaced the modal
+  "Routes & marks" window (flat list + a clumsy centred rename dialog) with a
+  **left-edge `Drawer` of route tiles**. Each tile shows the route name + stats
+  (length in NM · legs), clicking the tile body selects + zooms to the route's
+  extent (`ChartCanvas::showRoute(index)` = select + fitBounds), and a `⋯`
+  overflow menu holds **Rename (inline TextField in the tile) / Duplicate /
+  Reverse / Delete**. Backend additions: `RouteListViewModel` route maps gain
+  `lengthNm` (haversine sum); `SwitchableNavDataProvider::duplicateRoute` clones
+  a route's points into a new "<name> copy" (persisted); `ChartCanvas` gains
+  `duplicateRoute` + `showRoute` invokables. Layer toggles (Routes/Tracks/Marks)
+  + a compact marks list kept in the drawer. The toolbar ▤ button toggles the
+  drawer. Builds clean; QML compiles. **Visual check blocked** (machine locked
+  at the time) — built/compiled only, not eyeballed.
+  Refinements (same day, after user review): layer switches restored to normal
+  (default) size; an explicit **edit mode** — the tile `⋯` menu gains "Edit"
+  (`ChartCanvas::editRoute` = show + `routeEditMode` on), and node-drag /
+  leg-insert / node-delete are now gated behind `m_route_edit_mode` (so a plain
+  tile click only views/zooms — no accidental node drags); a top-left "Editing
+  route … Done" banner reflects + exits the mode (deselecting also exits).
+  **Visibility model (visibility ≠ selection):** each tile has a per-route
+  visibility **"eye"** (`ChartCanvas::routeVisible`/`setRouteVisible`, keyed by
+  GUID in `m_visible_routes`, pushed to `RouteLayer::setVisibleRouteGuids`); a
+  route draws when its eye is on **OR** it is the selected route. Default: eyes
+  off, so only the selected route shows (clicking a tile selects + shows + zooms
+  without changing its eye). `routeVisibilityRevision` (NOTIFY) keeps the QML
+  eye bindings reactive. Replaces the earlier auto-solo. Built/ran clean (no QML
+  errors). Next: execute/follow a route.
+- 2026-06-02 — **Marks + tracks management (P3.7), 3 phases.** The drawer became
+  a tabbed manager: **Routes | Marks | Tracks** (`TabBar`+`StackLayout`; master
+  Tracks/Marks switches removed — per-item eyes replace them).
+  **Marks (free waypoints):** `NavWaypoint` gained guid/comment/icon/visible/
+  createTime; `SwitchableNavDataProvider` got `dropMark`/`rename`/`setComment`/
+  `setIcon`/`setVisible`/`deleteWaypoint` (all via `NavObj_dB` Insert/Update/
+  Delete RoutePoint, `m_bIsolatedMark`); `ChartCanvas` invokables
+  (`dropMarkHere`/`showMark`/`set*`/`delete`/`markIconNames`);
+  `RouteListViewModel.waypoints` enriched + a **Recent/Nearest sort** (haversine
+  range from own ship). Drop is right-click "Drop mark here" → a **New Mark
+  dialog** (name + comment + **visual icon picker**); the same dialog edits.
+  Icons are surfaced to QML via a new `WaypointIconProvider`
+  (`image://wpicon/<key>`), and `WaypointLayer` now renders the chosen icon
+  (was a dot) + per-mark eye + cyan selection ring; fixed a latent
+  plain-`-lat` (non-Mercator) mark positioning bug.
+  **Tracks (own-vessel):** `NavTrack` gained name/guid/length/startTime/visible/
+  active; reworked the recording lifecycle — `startTrack` creates a dated
+  ActiveTrack (`#n` suffix for same-day) in `g_TrackList` + `InsertTrack`,
+  `stopTrack` finalizes (discards <2 pts), `resetTrack` = stop+start (new tile),
+  plus `rename`/`delete`/`setVisible`; `TrackLayer` honours per-track eye +
+  selection; `RouteListViewModel.tracks` newest-first. Tracks tab has
+  Start/Stop/Reset + tiles (name, length, ● REC badge, eye, rename, delete).
+  All build + run clean (no QML errors). **Deferred:** the trk_points schema
+  convergence (add cog/sog/hdg + integer-epoch time) — a model-DB change +
+  migration to do as a focused, separately-verified step.

@@ -65,6 +65,7 @@
 #include "model/ocpn_config.h"
 #include "model/georef.h"  // DistanceBearingMercator -- cursor brg/rng
 #include "model/track.h"  // g_pActiveTrack -- own-ship track recording
+#include "model/routeman.h"  // pWayPointMan -- waypoint icon catalogue
 #include "display_config.h"
 #include "model_nav_data_provider.h"
 #include "nav_state_view_model.h"
@@ -247,15 +248,19 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_compositor->addLayer(anchor_watch);
 
   // Static nav overlays: tracks (under), routes, then waypoints on top.
-  auto* tracks = new TrackLayer(m_nav_provider.get(), m_viewport.get());
-  tracks->setZOrder(1500);
-  m_compositor->addLayer(tracks);
+  m_track_layer = new TrackLayer(m_nav_provider.get(), m_viewport.get());
+  m_track_layer->setZOrder(1500);
+  m_compositor->addLayer(m_track_layer);
   m_route_layer = new RouteLayer(m_nav_provider.get(), m_viewport.get());
   m_route_layer->setZOrder(1600);
   m_compositor->addLayer(m_route_layer);
-  auto* waypoints = new WaypointLayer(m_nav_provider.get(), m_viewport.get());
-  waypoints->setZOrder(1700);
-  m_compositor->addLayer(waypoints);
+  // The route layer is always enabled; which routes draw is governed per-route
+  // by the eye toggle + selection (P3.7), so there's no master Routes switch to
+  // strand it off. Force visible in case an old config persisted it hidden.
+  m_route_layer->setVisible(true);
+  m_waypoint_layer = new WaypointLayer(m_nav_provider.get(), m_viewport.get());
+  m_waypoint_layer->setZOrder(1700);
+  m_compositor->addLayer(m_waypoint_layer);
 
   // Tide/current stations (P3.14 D) -- world-anchored, queried from the engine
   // (ptcmgr) at the timeline's display time; hidden unless Show Tides is on.
@@ -1075,9 +1080,24 @@ bool ChartCanvas::hitRouteSegment(const QPointF& sp, int& route, int& seg,
   return found;
 }
 
+void ChartCanvas::setRouteEditMode(bool on) {
+  if (on == m_route_edit_mode) return;
+  m_route_edit_mode = on;
+  if (m_route_layer) m_route_layer->setEditing(on);  // big handles only in edit
+  Q_EMIT routeEditModeChanged();
+  update();
+}
+
+void ChartCanvas::editRoute(int index) {
+  showRoute(index);          // select + solo + zoom to extent
+  setRouteEditMode(true);    // now nodes are draggable / legs insertable
+}
+
 void ChartCanvas::selectRoute(int route) {
   if (route == m_selected_route) return;
   m_selected_route = route;
+  setRouteEditMode(false);  // changing the selection leaves edit mode
+
   if (m_route_layer) {
     QString guid;
     if (m_nav_provider && route >= 0) {
@@ -1107,6 +1127,154 @@ void ChartCanvas::deleteSelectedRoute() {
 
 void ChartCanvas::reverseRoute(int index) {
   if (m_nav_provider) m_nav_provider->reverseRoute(index);
+}
+
+void ChartCanvas::duplicateRoute(int index) {
+  if (m_nav_provider) m_nav_provider->duplicateRoute(index);
+}
+
+void ChartCanvas::showRoute(int index) {
+  if (!m_nav_provider) return;
+  const QList<NavRoute> rs = m_nav_provider->userRoutes();
+  if (index < 0 || index >= rs.size() || rs[index].points.isEmpty()) return;
+  double n = -90, s = 90, e = -180, w = 180;
+  for (const QPointF& p : rs[index].points) {  // (lon, lat)
+    n = std::max(n, p.y());
+    s = std::min(s, p.y());
+    e = std::max(e, p.x());
+    w = std::min(w, p.x());
+  }
+  selectRoute(index);   // highlight it
+  fitBounds(n, s, e, w);  // zoom to its extent
+}
+
+bool ChartCanvas::routeVisible(int index) const {
+  if (!m_nav_provider) return false;
+  const QList<NavRoute> rs = m_nav_provider->userRoutes();
+  if (index < 0 || index >= rs.size()) return false;
+  return m_visible_routes.contains(rs[index].guid);
+}
+
+void ChartCanvas::setRouteVisible(int index, bool on) {
+  if (!m_nav_provider) return;
+  const QList<NavRoute> rs = m_nav_provider->userRoutes();
+  if (index < 0 || index >= rs.size()) return;
+  const QString guid = rs[index].guid;
+  if (guid.isEmpty()) return;
+  const bool had = m_visible_routes.contains(guid);
+  if (had == on) return;
+  if (on)
+    m_visible_routes.insert(guid);
+  else
+    m_visible_routes.remove(guid);
+  if (m_route_layer) m_route_layer->setVisibleRouteGuids(m_visible_routes);
+  ++m_route_vis_rev;
+  Q_EMIT routeVisibilityChanged();
+  update();
+}
+
+// --- Marks (free waypoints) -------------------------------------------------
+
+void ChartCanvas::dropMarkHere(const QString& name, const QString& comment,
+                               const QString& icon) {
+  if (m_nav_provider) m_nav_provider->dropMark(m_ctx_lat, m_ctx_lon, name,
+                                               comment, icon);
+  update();
+}
+
+void ChartCanvas::showMark(const QString& guid) {
+  if (!m_nav_provider || !m_viewport) return;
+  for (const NavWaypoint& wp : m_nav_provider->waypoints()) {
+    if (wp.guid != guid) continue;
+    m_selected_waypoint_guid = guid;
+    if (m_waypoint_layer) m_waypoint_layer->setSelectedWaypointGuid(guid);
+    m_viewport->setCenter(wp.lat, wp.lon);  // centre (a point has no extent)
+    Q_EMIT viewChanged();
+    update();
+    return;
+  }
+}
+
+void ChartCanvas::setMarkVisible(const QString& guid, bool on) {
+  if (m_nav_provider) m_nav_provider->setWaypointVisible(guid, on);
+  update();
+}
+
+void ChartCanvas::renameMark(const QString& guid, const QString& name) {
+  if (m_nav_provider && !name.isEmpty())
+    m_nav_provider->renameWaypoint(guid, name);
+}
+
+void ChartCanvas::setMarkComment(const QString& guid, const QString& comment) {
+  if (m_nav_provider) m_nav_provider->setWaypointComment(guid, comment);
+}
+
+void ChartCanvas::setMarkIcon(const QString& guid, const QString& icon) {
+  if (m_nav_provider) m_nav_provider->setWaypointIcon(guid, icon);
+  update();
+}
+
+void ChartCanvas::deleteMark(const QString& guid) {
+  if (m_nav_provider) m_nav_provider->deleteWaypoint(guid);
+  if (guid == m_selected_waypoint_guid) {
+    m_selected_waypoint_guid.clear();
+    if (m_waypoint_layer) m_waypoint_layer->setSelectedWaypointGuid(QString());
+  }
+  update();
+}
+
+QStringList ChartCanvas::markIconNames() const {
+  QStringList out;
+  if (!pWayPointMan) return out;
+  const int n = pWayPointMan->GetNumIcons();
+  out.reserve(n);
+  for (int i = 0; i < n; ++i)
+    if (QString* key = pWayPointMan->GetIconKey(i)) out.append(*key);
+  return out;
+}
+
+// --- Tracks (own-vessel) ----------------------------------------------------
+
+void ChartCanvas::resetTrack() {
+  if (m_nav_provider) m_nav_provider->resetTrack();
+  update();
+}
+
+void ChartCanvas::showTrack(const QString& guid) {
+  if (!m_nav_provider) return;
+  for (const NavTrack& t : m_nav_provider->tracks()) {
+    if (t.guid != guid || t.points.isEmpty()) continue;
+    m_selected_track_guid = guid;
+    if (m_track_layer) m_track_layer->setSelectedTrackGuid(guid);
+    double n = -90, s = 90, e = -180, w = 180;
+    for (const QPointF& p : t.points) {  // (lon, lat)
+      n = std::max(n, p.y());
+      s = std::min(s, p.y());
+      e = std::max(e, p.x());
+      w = std::min(w, p.x());
+    }
+    fitBounds(n, s, e, w);
+    return;
+  }
+}
+
+void ChartCanvas::renameTrack(const QString& guid, const QString& name) {
+  if (m_nav_provider && !name.isEmpty())
+    m_nav_provider->renameTrack(guid, name);
+}
+
+void ChartCanvas::deleteTrack(const QString& guid) {
+  if (m_nav_provider) m_nav_provider->deleteTrack(guid);
+  if (guid == m_selected_track_guid) {
+    m_selected_track_guid.clear();
+    if (m_track_layer) m_track_layer->setSelectedTrackGuid(QString());
+  }
+  update();
+}
+
+void ChartCanvas::setTrackVisible(const QString& guid, bool on) {
+  if (m_nav_provider) m_nav_provider->setTrackVisible(guid, on);
+  update();
 }
 
 void ChartCanvas::renameRoute(int index, const QString& name) {
@@ -1340,7 +1508,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
     // Route editing: grabbing a node selects its route and starts a drag.
     int rt = -1, nd = -1;
-    if (hitRouteNode(event->position(), rt, nd)) {
+    if (m_route_edit_mode && hitRouteNode(event->position(), rt, nd)) {
       selectRoute(rt);
       m_dragging_node = true;
       m_drag_node = nd;
@@ -1354,7 +1522,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
   } else if (event->button() == Qt::RightButton) {
     // Right-click on a route node -> the node menu (delete point/route).
     int rt = -1, nd = -1;
-    if (hitRouteNode(event->position(), rt, nd)) {
+    if (m_route_edit_mode && hitRouteNode(event->position(), rt, nd)) {
       selectRoute(rt);
       m_menu_route = rt;
       m_menu_node = nd;
@@ -1455,7 +1623,7 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
       int rt = -1, seg = -1;
       double ilat = 0, ilon = 0;
       if (hitRouteSegment(event->position(), rt, seg, ilat, ilon)) {
-        if (rt == m_selected_route && m_nav_provider)
+        if (m_route_edit_mode && rt == m_selected_route && m_nav_provider)
           m_nav_provider->insertRoutePoint(rt, seg, ilat, ilon);
         else
           selectRoute(rt);

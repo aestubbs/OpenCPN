@@ -110,7 +110,25 @@ public:
   void deleteRoutePoint(int route, int pt);
   void deleteRoute(int route);
   void reverseRoute(int route);                       // flip course direction
+  void duplicateRoute(int route);                     // clone -> "<name> copy"
   void renameRoute(int route, const QString& name);   // set + persist name
+
+  // --- Marks (free waypoints), all persisted via NavObj_dB ---
+  void dropMark(double lat, double lon, const QString& name,
+                const QString& comment, const QString& icon);
+  void renameWaypoint(const QString& guid, const QString& name);
+  void setWaypointComment(const QString& guid, const QString& comment);
+  void setWaypointIcon(const QString& guid, const QString& icon);
+  void setWaypointVisible(const QString& guid, bool visible);
+  void deleteWaypoint(const QString& guid);
+
+  // --- Tracks (own-vessel recording), persisted via NavObj_dB ---
+  void startTrack();   // new dated ActiveTrack -> g_TrackList, begins recording
+  void stopTrack();    // finalize (discard if < 2 points)
+  void resetTrack();   // stop + start: a fresh dated track tile
+  void renameTrack(const QString& guid, const QString& name);
+  void setTrackVisible(const QString& guid, bool visible);
+  void deleteTrack(const QString& guid);
 
   // --- Own-ship track recording (#29): the model ActiveTrack records off
   //     the own-ship fix on its own timer and persists to the DB. ----------
@@ -133,6 +151,7 @@ public:
 
 private:
   NavDataProvider* current() const { return m_use_live ? m_live : m_demo; }
+  QString makeTrackName() const;  // dated, #n-suffixed for same-day tracks
 
   NavDataProvider* m_demo;
   NavDataProvider* m_live;

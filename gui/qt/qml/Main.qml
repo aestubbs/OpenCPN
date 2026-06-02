@@ -253,14 +253,17 @@ ApplicationWindow {
         }
     }
 
-    // --- Route & mark manager: a real (non-modal) dialog window (P3.7/C) --
-    Window {
-        id: routeManagerWindow
-        title: qsTr("Routes & marks")
-        flags: Qt.Dialog
-        width: 460
-        height: 560
-        color: palette.window
+    // --- Route & mark manager: a left-edge drawer of route tiles (P3.7).
+    //     Non-modal + undimmed so the chart stays live behind it; a tile shows
+    //     the route name + stats, click zooms to its extent, and the ... menu
+    //     holds rename (inline) / duplicate / reverse / delete.
+    Drawer {
+        id: routeDrawer
+        edge: Qt.LeftEdge
+        width: 340
+        height: root.height
+        modal: false
+        dim: false
 
         readonly property var rl: chart.routeList
 
@@ -269,134 +272,490 @@ ApplicationWindow {
             anchors.margins: 12
             spacing: 8
 
-            // Layer visibility.
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 12
-                Switch {
-                    text: qsTr("Routes"); font.pointSize: 12
-                    checked: chart.showRoutes
-                    onToggled: chart.showRoutes = checked
+                Label {
+                    text: qsTr("Routes & marks")
+                    font.pointSize: 14; font.bold: true
+                    Layout.fillWidth: true
                 }
-                Switch {
-                    text: qsTr("Tracks"); font.pointSize: 12
-                    checked: chart.showTracks
-                    onToggled: chart.showTracks = checked
-                }
-                Switch {
-                    text: qsTr("Marks"); font.pointSize: 12
-                    checked: chart.showWaypoints
-                    onToggled: chart.showWaypoints = checked
-                }
+                ToolButton { text: "✕"; onClicked: routeDrawer.close() }
             }
 
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#40808080" }
-
-            Label {
-                text: qsTr("Routes (") +
-                      (routeManagerWindow.rl ? routeManagerWindow.rl.routes.length : 0) + ")"
-                font.pointSize: 13; font.bold: true
-            }
-            ListView {
+            TabBar {
+                id: drawerTabs
                 Layout.fillWidth: true
-                Layout.preferredHeight: parent.height * 0.35
-                clip: true
-                model: routeManagerWindow.rl ? routeManagerWindow.rl.routes : []
-                delegate: ItemDelegate {
-                    required property var modelData
-                    required property int index
-                    width: ListView.view.width
-                    height: root.touchSize
-                    contentItem: RowLayout {
-                        spacing: 4
-                        Label {
-                            text: (modelData.name.length > 0 ? modelData.name
-                                                             : qsTr("(unnamed)"))
-                                  + "  (" + modelData.points + ")"
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                        }
-                        ToolButton {
-                            text: qsTr("Rename")
-                            onClicked: {
-                                renameDialog.routeIndex = index
-                                renameField.text = modelData.name
-                                renameDialog.open()
-                            }
-                        }
-                        ToolButton {
-                            text: qsTr("Reverse")
-                            onClicked: chart.reverseRoute(index)
-                        }
-                        ToolButton {
-                            text: qsTr("Zoom")
-                            onClicked: {
-                                chart.fitBounds(modelData.north, modelData.south,
-                                                modelData.east, modelData.west)
-                                routeManagerWindow.close()
-                            }
-                        }
-                        ToolButton {
-                            text: "✕"
-                            onClicked: chart.deleteRoute(index)
-                        }
-                    }
-                }
+                TabButton { text: qsTr("Routes") }
+                TabButton { text: qsTr("Marks") }
+                TabButton { text: qsTr("Tracks") }
             }
 
-            // Rename dialog: prompts for a new name for routeIndex.
-            Dialog {
-                id: renameDialog
-                title: qsTr("Rename route")
-                anchors.centerIn: parent
-                modal: true
-                standardButtons: Dialog.Ok | Dialog.Cancel
-                property int routeIndex: -1
-                onAccepted: chart.renameRoute(routeIndex, renameField.text)
-                TextField {
-                    id: renameField
-                    implicitWidth: 260
-                    selectByMouse: true
-                    onAccepted: renameDialog.accept()
-                }
-            }
-
-            Label {
-                text: qsTr("Marks (") +
-                      (routeManagerWindow.rl ? routeManagerWindow.rl.waypoints.length : 0) + ")"
-                font.pointSize: 13; font.bold: true
-            }
-            ListView {
+            StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
-                model: routeManagerWindow.rl ? routeManagerWindow.rl.waypoints : []
-                delegate: ItemDelegate {
-                    required property var modelData
-                    width: ListView.view.width
-                    height: root.touchSize
-                    contentItem: RowLayout {
-                        Label {
-                            text: modelData.name
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
+                currentIndex: drawerTabs.currentIndex
+
+                // --- Routes page ---------------------------------------------
+                ColumnLayout {
+                    spacing: 6
+                    Label {
+                        text: qsTr("Routes (") +
+                              (routeDrawer.rl ? routeDrawer.rl.routes.length : 0) + ")"
+                        font.pointSize: 11; color: "#9aa0a6"
+                    }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 8
+                        model: routeDrawer.rl ? routeDrawer.rl.routes : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            required property int index
+                            property bool editing: false
+                            width: ListView.view.width
+                            height: tileCol.implicitHeight + 16
+                            radius: 6
+                            color: tileMouse.containsMouse ? "#26ffffff" : "#14ffffff"
+                            border.color: "#33808080"; border.width: 1
+                            MouseArea {
+                                id: tileMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: chart.showRoute(index)
+                            }
+                            ColumnLayout {
+                                id: tileCol
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 2
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    ToolButton {
+                                        text: "👁"
+                                        font.pointSize: 13
+                                        implicitWidth: 34
+                                        opacity: (chart.routeVisibilityRevision,
+                                                  chart.routeVisible(index)) ? 1.0 : 0.3
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: qsTr("Show / hide this route")
+                                        onClicked: chart.setRouteVisible(
+                                                       index, !chart.routeVisible(index))
+                                    }
+                                    Label {
+                                        visible: !editing
+                                        text: modelData.name.length > 0 ? modelData.name
+                                                                        : qsTr("(unnamed)")
+                                        font.pointSize: 13; font.bold: true
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+                                    TextField {
+                                        id: nameEdit
+                                        visible: editing
+                                        Layout.fillWidth: true
+                                        selectByMouse: true
+                                        font.pointSize: 13
+                                        onAccepted: {
+                                            chart.renameRoute(index, text)
+                                            editing = false
+                                        }
+                                        Keys.onEscapePressed: editing = false
+                                        onActiveFocusChanged:
+                                            if (!activeFocus && editing) {
+                                                chart.renameRoute(index, text)
+                                                editing = false
+                                            }
+                                    }
+                                    ToolButton {
+                                        text: "⋯"
+                                        font.pointSize: 15
+                                        onClicked: tileMenu.open()
+                                        Menu {
+                                            id: tileMenu
+                                            MenuItem {
+                                                text: qsTr("Edit")
+                                                onTriggered: chart.editRoute(index)
+                                            }
+                                            MenuItem {
+                                                text: qsTr("Rename")
+                                                onTriggered: {
+                                                    nameEdit.text = modelData.name
+                                                    editing = true
+                                                    nameEdit.forceActiveFocus()
+                                                    nameEdit.selectAll()
+                                                }
+                                            }
+                                            MenuItem {
+                                                text: qsTr("Duplicate")
+                                                onTriggered: chart.duplicateRoute(index)
+                                            }
+                                            MenuItem {
+                                                text: qsTr("Reverse")
+                                                onTriggered: chart.reverseRoute(index)
+                                            }
+                                            MenuSeparator {}
+                                            MenuItem {
+                                                text: qsTr("Delete")
+                                                onTriggered: chart.deleteRoute(index)
+                                            }
+                                        }
+                                    }
+                                }
+                                Label {
+                                    text: modelData.lengthNm.toFixed(1) + qsTr(" NM · ") +
+                                          Math.max(0, modelData.points - 1) + qsTr(" legs")
+                                    color: "#9aa0a6"; font.pointSize: 10
+                                }
+                            }
                         }
-                        ToolButton {
-                            text: qsTr("Zoom")
-                            onClicked: {
-                                chart.fitBounds(modelData.lat, modelData.lat,
-                                                modelData.lon, modelData.lon)
-                                routeManagerWindow.close()
+                    }
+                }
+
+                // --- Marks page ----------------------------------------------
+                ColumnLayout {
+                    spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("Marks (") +
+                                  (routeDrawer.rl ? routeDrawer.rl.waypoints.length : 0) + ")"
+                            font.pointSize: 11; color: "#9aa0a6"
+                            Layout.fillWidth: true
+                        }
+                        Label { text: qsTr("Sort"); font.pointSize: 10; color: "#9aa0a6" }
+                        ComboBox {
+                            model: [qsTr("Recent"), qsTr("Nearest")]
+                            currentIndex: routeDrawer.rl ? routeDrawer.rl.markSortMode : 0
+                            onActivated: if (routeDrawer.rl) routeDrawer.rl.markSortMode = currentIndex
+                            implicitWidth: 120
+                        }
+                    }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 8
+                        model: routeDrawer.rl ? routeDrawer.rl.waypoints : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            property bool editing: false
+                            width: ListView.view.width
+                            height: mtileCol.implicitHeight + 16
+                            radius: 6
+                            color: mtileMouse.containsMouse ? "#26ffffff" : "#14ffffff"
+                            border.color: "#33808080"; border.width: 1
+                            MouseArea {
+                                id: mtileMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: chart.showMark(modelData.guid)
+                            }
+                            ColumnLayout {
+                                id: mtileCol
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 2
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    ToolButton {
+                                        text: "👁"
+                                        font.pointSize: 13
+                                        implicitWidth: 34
+                                        opacity: modelData.visible ? 1.0 : 0.3
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: qsTr("Show / hide this mark")
+                                        onClicked: chart.setMarkVisible(
+                                                       modelData.guid, !modelData.visible)
+                                    }
+                                    Image {
+                                        source: "image://wpicon/" + modelData.icon
+                                        Layout.preferredWidth: 24
+                                        Layout.preferredHeight: 22
+                                        sourceSize.height: 22
+                                        fillMode: Image.PreserveAspectFit
+                                    }
+                                    Label {
+                                        visible: !editing
+                                        text: modelData.name
+                                        font.pointSize: 13; font.bold: true
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+                                    TextField {
+                                        id: mNameEdit
+                                        visible: editing
+                                        Layout.fillWidth: true
+                                        selectByMouse: true
+                                        font.pointSize: 13
+                                        onAccepted: {
+                                            chart.renameMark(modelData.guid, text)
+                                            editing = false
+                                        }
+                                        Keys.onEscapePressed: editing = false
+                                        onActiveFocusChanged:
+                                            if (!activeFocus && editing) {
+                                                chart.renameMark(modelData.guid, text)
+                                                editing = false
+                                            }
+                                    }
+                                    ToolButton {
+                                        text: "⋯"
+                                        font.pointSize: 15
+                                        onClicked: mtileMenu.open()
+                                        Menu {
+                                            id: mtileMenu
+                                            MenuItem {
+                                                text: qsTr("Edit")
+                                                onTriggered: markEditor.openForEdit(
+                                                    modelData.guid, modelData.name,
+                                                    modelData.comment, modelData.icon)
+                                            }
+                                            MenuItem {
+                                                text: qsTr("Rename")
+                                                onTriggered: {
+                                                    mNameEdit.text = modelData.name
+                                                    editing = true
+                                                    mNameEdit.forceActiveFocus()
+                                                    mNameEdit.selectAll()
+                                                }
+                                            }
+                                            MenuSeparator {}
+                                            MenuItem {
+                                                text: qsTr("Delete")
+                                                onTriggered: chart.deleteMark(modelData.guid)
+                                            }
+                                        }
+                                    }
+                                }
+                                Label {
+                                    visible: modelData.comment.length > 0
+                                    text: modelData.comment
+                                    color: "#9aa0a6"; font.pointSize: 10
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 2; elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Label {
+                                    text: modelData.rangeNm >= 0
+                                          ? modelData.rangeNm.toFixed(1) + qsTr(" NM away")
+                                          : qsTr("position unknown")
+                                    color: "#9aa0a6"; font.pointSize: 9
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- Tracks page ---------------------------------------------
+                ColumnLayout {
+                    spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button {
+                            text: chart.trackRecording ? qsTr("Stop") : qsTr("Start")
+                            onClicked: chart.trackRecording = !chart.trackRecording
+                        }
+                        Button {
+                            text: qsTr("Reset")
+                            enabled: chart.trackRecording
+                            onClicked: chart.resetTrack()
+                        }
+                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: qsTr("(") +
+                                  (routeDrawer.rl ? routeDrawer.rl.tracks.length : 0) + ")"
+                            font.pointSize: 11; color: "#9aa0a6"
+                        }
+                    }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 8
+                        model: routeDrawer.rl ? routeDrawer.rl.tracks : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            property bool editing: false
+                            width: ListView.view.width
+                            height: ttileCol.implicitHeight + 16
+                            radius: 6
+                            color: ttileMouse.containsMouse ? "#26ffffff" : "#14ffffff"
+                            border.color: modelData.active ? "#7f9b00c8" : "#33808080"
+                            border.width: modelData.active ? 2 : 1
+                            MouseArea {
+                                id: ttileMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: chart.showTrack(modelData.guid)
+                            }
+                            ColumnLayout {
+                                id: ttileCol
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 2
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+                                    ToolButton {
+                                        text: "👁"
+                                        font.pointSize: 13
+                                        implicitWidth: 34
+                                        opacity: modelData.visible ? 1.0 : 0.3
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: qsTr("Show / hide this track")
+                                        onClicked: chart.setTrackVisible(
+                                                       modelData.guid, !modelData.visible)
+                                    }
+                                    Label {
+                                        visible: !editing
+                                        text: modelData.name +
+                                              (modelData.active ? qsTr("  ● REC") : "")
+                                        font.pointSize: 13; font.bold: true
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                        color: modelData.active ? "#d070ff"
+                                                                : palette.windowText
+                                    }
+                                    TextField {
+                                        id: tNameEdit
+                                        visible: editing
+                                        Layout.fillWidth: true
+                                        selectByMouse: true
+                                        font.pointSize: 13
+                                        onAccepted: {
+                                            chart.renameTrack(modelData.guid, text)
+                                            editing = false
+                                        }
+                                        Keys.onEscapePressed: editing = false
+                                        onActiveFocusChanged:
+                                            if (!activeFocus && editing) {
+                                                chart.renameTrack(modelData.guid, text)
+                                                editing = false
+                                            }
+                                    }
+                                    ToolButton {
+                                        text: "⋯"
+                                        font.pointSize: 15
+                                        onClicked: ttileMenu.open()
+                                        Menu {
+                                            id: ttileMenu
+                                            MenuItem {
+                                                text: qsTr("Rename")
+                                                onTriggered: {
+                                                    tNameEdit.text = modelData.name
+                                                    editing = true
+                                                    tNameEdit.forceActiveFocus()
+                                                    tNameEdit.selectAll()
+                                                }
+                                            }
+                                            MenuSeparator {}
+                                            MenuItem {
+                                                text: qsTr("Delete")
+                                                onTriggered: chart.deleteTrack(modelData.guid)
+                                            }
+                                        }
+                                    }
+                                }
+                                Label {
+                                    text: modelData.lengthNm.toFixed(1) + qsTr(" NM")
+                                    color: "#9aa0a6"; font.pointSize: 10
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+    }
 
-            DialogButtonBox {
+    // --- Mark editor (P3.7): one dialog for "New mark" (dropped via the chart
+    //     right-click) and "Edit mark" (the drawer tile's Edit). Captures name,
+    //     comment, and a visual icon pick (images via the wpicon provider).
+    Dialog {
+        id: markEditor
+        title: editMode ? qsTr("Edit mark") : qsTr("New mark")
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        width: 380
+        standardButtons: Dialog.Ok | Dialog.Cancel
+
+        property bool editMode: false
+        property string guid: ""
+        property string iconName: "triangle"
+
+        function openNew() {
+            editMode = false; guid = "";
+            markNameField.text = ""; markCommentField.text = "";
+            iconName = "triangle";
+            open()
+        }
+        function openForEdit(g, nm, cm, ic) {
+            editMode = true; guid = g;
+            markNameField.text = nm; markCommentField.text = cm;
+            iconName = ic.length > 0 ? ic : "triangle";
+            open()
+        }
+        onAccepted: {
+            if (editMode) {
+                chart.renameMark(guid, markNameField.text)
+                chart.setMarkComment(guid, markCommentField.text)
+                chart.setMarkIcon(guid, iconName)
+            } else {
+                chart.dropMarkHere(markNameField.text, markCommentField.text,
+                                   iconName)
+            }
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 8
+            Label {
+                visible: !markEditor.editMode
+                text: qsTr("At ") + chart.markDropLat().toFixed(4) + ", " +
+                      chart.markDropLon().toFixed(4)
+                color: "#9aa0a6"; font.pointSize: 10
+            }
+            TextField {
+                id: markNameField
+                placeholderText: qsTr("Name")
                 Layout.fillWidth: true
-                standardButtons: DialogButtonBox.Close
-                onRejected: routeManagerWindow.close()
+                selectByMouse: true
+            }
+            TextField {
+                id: markCommentField
+                placeholderText: qsTr("Comment")
+                Layout.fillWidth: true
+                selectByMouse: true
+            }
+            Label { text: qsTr("Icon"); font.pointSize: 10; color: "#9aa0a6" }
+            GridView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 132
+                clip: true
+                cellWidth: 44; cellHeight: 44
+                model: chart.markIconNames()
+                delegate: Rectangle {
+                    required property var modelData
+                    width: 42; height: 42; radius: 4
+                    color: modelData === markEditor.iconName ? "#553b82f6"
+                                                             : "transparent"
+                    border.color: modelData === markEditor.iconName ? "#3b82f6"
+                                                                    : "#33808080"
+                    Image {
+                        anchors.centerIn: parent
+                        source: "image://wpicon/" + modelData
+                        sourceSize.height: 28
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: markEditor.iconName = modelData
+                    }
+                }
             }
         }
     }
@@ -2876,6 +3235,34 @@ ApplicationWindow {
             }
         }
 
+        // Route edit-mode banner (P3.7): shown while a selected route is
+        // editable. Top-left so it clears the centred alert/overscale banners.
+        Rectangle {
+            visible: chart.routeEditMode
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 12
+            z: 100
+            width: editRow.implicitWidth + 24
+            height: editRow.implicitHeight + 14
+            radius: 6
+            color: "#e6244062"
+            border.color: "#7fb0d0ff"; border.width: 1
+            RowLayout {
+                id: editRow
+                anchors.centerIn: parent
+                spacing: 12
+                Label {
+                    text: qsTr("Editing route — drag a node, click a leg to add, right-click a node to remove")
+                    color: "white"; font.pointSize: 11
+                }
+                Button {
+                    text: qsTr("Done")
+                    onClicked: chart.routeEditMode = false
+                }
+            }
+        }
+
         // Compass rose (mirrors wx's ocpnCompass overlay). The chart is
         // north-up, so the rose is fixed N-up; the red needle shows own-ship
         // COG. Top-right corner.
@@ -3382,7 +3769,10 @@ ApplicationWindow {
                 onTriggered: chart.routeBuildMode = true
             }
             // wx canvas-menu items not yet wired (kept for layout parity).
-            MenuItem { text: qsTr("Drop mark here"); enabled: false }
+            MenuItem {
+                text: qsTr("Drop mark here")
+                onTriggered: markEditor.openNew()  // dialog uses the ctx point
+            }
             MenuItem { text: qsTr("Measure"); enabled: false }
         }
         Connections {
@@ -3416,25 +3806,9 @@ ApplicationWindow {
             }
         }
 
-        // Editing hint banner: shown while a route is selected for editing.
-        Rectangle {
-            visible: chart.selectedRoute >= 0
-            anchors.top: parent.top
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.topMargin: 10
-            width: editHint.implicitWidth + 20
-            height: editHint.implicitHeight + 12
-            radius: 4
-            color: "#cc1a1e10"
-            border.color: "#80ffc83c"
-            Text {
-                id: editHint
-                anchors.centerIn: parent
-                text: qsTr("Editing route — drag nodes · click line to add · " +
-                           "right-click node to delete · click water to finish")
-                color: "#ffe0a0"; font.pointSize: 10
-            }
-        }
+        // (The old selection-bound "Editing route…" hint was removed: selection
+        // and edit are now distinct -- the edit banner above is gated on
+        // chart.routeEditMode, P3.7.)
     }
 
     // --- Tide/current graph drawer (P3.14 F): the graph grows UP out of the
@@ -4068,7 +4442,8 @@ ApplicationWindow {
             Tool {
                 visible: !root.toolbarCollapsed
                 text: "▤"; ToolTip.text: qsTr("Route && mark manager")
-                onClicked: { routeManagerWindow.show(); routeManagerWindow.raise() }
+                onClicked: routeDrawer.opened ? routeDrawer.close()
+                                              : routeDrawer.open()
             }
             // wx ID_TRACK.
             Tool {

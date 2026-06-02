@@ -97,12 +97,23 @@ struct NavRoute {
 
 struct NavWaypoint {
   QString name;
+  QString guid;                        // model RoutePoint GUID (stable id)
+  QString comment;                     // RoutePoint m_MarkDescription
+  QString iconName;                    // RoutePoint icon id (e.g. "triangle")
   double lat = 0.0;
   double lon = 0.0;
+  bool visible = true;                 // RoutePoint m_bIsVisible (the eye)
+  qint64 createTimeMs = 0;             // creation time, for reverse-chrono sort
   QColor color = QColor(255, 140, 0);
 };
 
 struct NavTrack {
+  QString name;
+  QString guid;                        // model Track GUID
+  double lengthNm = 0.0;
+  qint64 startTimeMs = 0;              // first point's time, for reverse-chrono
+  bool visible = true;
+  bool active = false;                 // the live recording track
   QColor color = QColor(60, 60, 60);
   QList<QPointF> points;               // (lon, lat)
 };

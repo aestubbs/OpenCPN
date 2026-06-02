@@ -78,6 +78,8 @@ qt_add_qml_module(opencpn-qt
     alert_engine.cpp
     anchor_watch_layer.h
     anchor_watch_layer.cpp
+    waypoint_icon_provider.h
+    waypoint_icon_provider.cpp
     route_overlay_layers.h
     route_overlay_layers.cpp
     ais_target_store.h

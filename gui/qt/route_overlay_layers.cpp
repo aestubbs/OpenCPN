@@ -25,6 +25,7 @@
 #include <QImage>
 #include <QTransform>
 
+#include "model/routeman.h"  // pWayPointMan -- waypoint icon catalogue
 #include "viewport.h"
 
 namespace ocpn::qtui {
@@ -61,6 +62,10 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
   for (const NavRoute& r : provider()->routes()) {
     if (r.points.size() < 1) continue;
     const bool selected = !m_selected.isEmpty() && r.guid == m_selected;
+    // Draw a route only when its visibility "eye" is on OR it is the selected
+    // route (visibility and selection are independent). The in-progress draft
+    // has no GUID, so it always shows while drawing.
+    if (!r.guid.isEmpty() && !selected && !m_visible.contains(r.guid)) continue;
     QList<QPointF> pts;
     pts.reserve(r.points.size());
     for (const QPointF& ll : r.points) pts.append(lonLatToWorld(ll));
@@ -107,12 +112,16 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
                     img);
       }
     }
-    // Route-point markers: filled dot with a thin white ring. The selected
-    // route gets larger handles ringed in amber to signal it is editable.
-    const double radius = (selected ? 6.0 : 4.0) * wpp;
+    // Route-point markers. Three states, visually distinct: edit mode gets
+    // large draggable handles ringed amber; a merely-selected route gets a
+    // small cyan accent ring (selection, not edit); others a thin white ring.
+    const bool editing = selected && m_editing;
+    const double radius = (editing ? 6.0 : 4.0) * wpp;
+    const QColor ring = editing ? QColor(255, 200, 60)        // amber: editable
+                                : (selected ? QColor(90, 200, 255)  // cyan: selected
+                                            : QColor(255, 255, 255));
     b.setBrush(lineColor);
-    b.setPen(selected ? QColor(255, 200, 60) : QColor(255, 255, 255),
-             selected ? 2.0f : 1.0f);
+    b.setPen(ring, editing ? 2.0f : 1.0f);
     for (const QPointF& w : pts)
       b.drawCircle(w, static_cast<float>(radius));  // radius: world units
   }
@@ -121,11 +130,13 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
 void TrackLayer::draw(SgBuilder& b, double wpp) {
   if (!provider()) return;
   for (const NavTrack& t : provider()->tracks()) {
+    if (!t.visible) continue;          // per-track eye
     if (t.points.size() < 2) continue;
     QList<QPointF> pts;
     pts.reserve(t.points.size());
     for (const QPointF& ll : t.points) pts.append(lonLatToWorld(ll));
-    b.setPen(t.color, 1.5f);  // px
+    const bool selected = !m_selected.isEmpty() && t.guid == m_selected;
+    b.setPen(selected ? QColor(90, 200, 255) : t.color, selected ? 2.5f : 1.5f);
     b.noBrush();
     b.drawPolyline(pts);
   }
@@ -134,10 +145,31 @@ void TrackLayer::draw(SgBuilder& b, double wpp) {
 void WaypointLayer::draw(SgBuilder& b, double wpp) {
   if (!provider()) return;
   for (const NavWaypoint& wp : provider()->waypoints()) {
-    const QPointF w(wp.lon, -wp.lat);  // world
-    b.setBrush(wp.color);
-    b.setPen(QColor(40, 40, 40), 1.0f);              // px
-    b.drawCircle(w, static_cast<float>(5.0 * wpp));  // radius: world units
+    if (!wp.visible) continue;  // the per-mark eye (default on)
+    const QPointF w = lonLatToWorld(QPointF(wp.lon, wp.lat));  // Mercator world
+    const bool selected = !m_selected.isEmpty() && wp.guid == m_selected;
+
+    // Draw the chosen icon (screen-fixed); fall back to a coloured dot if the
+    // icon catalogue has no such key. The selected mark gets a cyan ring.
+    const QImage* icon =
+        pWayPointMan ? pWayPointMan->GetIconBitmap(wp.iconName) : nullptr;
+    if (icon && !icon->isNull()) {
+      const qreal dpr =
+          icon->devicePixelRatio() > 0 ? icon->devicePixelRatio() : 1.0;
+      const double iw = icon->width() / dpr * wpp;
+      const double ih = icon->height() / dpr * wpp;
+      b.drawImage(QRectF(w.x() - iw / 2.0, w.y() - ih / 2.0, iw, ih), *icon);
+      if (selected) {
+        b.noBrush();
+        b.setPen(QColor(90, 200, 255), 2.0f);
+        b.drawCircle(w, static_cast<float>((iw > ih ? iw : ih) * 0.75));
+      }
+    } else {
+      b.setBrush(wp.color);
+      b.setPen(selected ? QColor(90, 200, 255) : QColor(40, 40, 40),
+               selected ? 2.0f : 1.0f);
+      b.drawCircle(w, static_cast<float>((selected ? 7.0 : 5.0) * wpp));
+    }
 
     if (!wp.name.isEmpty()) {
       const QImage img = SgBuilder::renderText(wp.name, QColor(20, 20, 20), 9.0f);

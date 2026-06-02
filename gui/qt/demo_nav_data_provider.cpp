@@ -98,10 +98,17 @@ void DemoNavDataProvider::seedAround(double lat, double lon) {
   r.points = {P(-0.45, -0.35), P(0.0, 0.10), P(0.45, 0.25), P(0.70, 0.45)};
   m_routes = {r};
 
+  const auto WP = [](const QString& nm, double la, double lo) {
+    NavWaypoint w;
+    w.name = nm;
+    w.lat = la;
+    w.lon = lo;
+    return w;
+  };
   m_waypoints = {
-      {QStringLiteral("WP1"), lat - 0.35 * span, lon - 0.45 * span},
-      {QStringLiteral("WP2"), lat + 0.25 * span, lon + 0.50 * span},
-      {QStringLiteral("Harbour"), lat + 0.50 * span, lon + 0.70 * span},
+      WP(QStringLiteral("WP1"), lat - 0.35 * span, lon - 0.45 * span),
+      WP(QStringLiteral("WP2"), lat + 0.25 * span, lon + 0.50 * span),
+      WP(QStringLiteral("Harbour"), lat + 0.50 * span, lon + 0.70 * span),
   };
 
   NavTrack t;

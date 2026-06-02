@@ -28,10 +28,15 @@ class NavDataProvider;
 
 class RouteListViewModel : public QObject {
   Q_OBJECT
-  // Each element a map: routes {name, points, north, south, east, west};
-  // waypoints {name, lat, lon}.
+  // Each element a map: routes {name, points, lengthNm, north..west};
+  // waypoints {name, guid, comment, icon, lat, lon, visible, createTimeMs,
+  // rangeNm}. markSortMode: 0 = most recent first, 1 = nearest first.
   Q_PROPERTY(QVariantList routes READ routes NOTIFY changed)
   Q_PROPERTY(QVariantList waypoints READ waypoints NOTIFY changed)
+  Q_PROPERTY(int markSortMode READ markSortMode WRITE setMarkSortMode NOTIFY
+                 changed)
+  // tracks {name, guid, lengthNm, startTimeMs, visible, active}, newest first.
+  Q_PROPERTY(QVariantList tracks READ tracks NOTIFY changed)
   Q_PROPERTY(int trackCount READ trackCount NOTIFY changed)
 
 public:
@@ -40,6 +45,9 @@ public:
 
   QVariantList routes() const { return m_routes; }
   QVariantList waypoints() const { return m_waypoints; }
+  int markSortMode() const { return m_mark_sort; }
+  void setMarkSortMode(int mode);
+  QVariantList tracks() const { return m_tracks; }
   int trackCount() const { return m_track_count; }
 
 Q_SIGNALS:
@@ -51,6 +59,8 @@ private:
   NavDataProvider* m_provider;
   QVariantList m_routes;
   QVariantList m_waypoints;
+  QVariantList m_tracks;
+  int m_mark_sort = 0;  // 0 = recent, 1 = nearest
   int m_track_count = 0;
 };
 
