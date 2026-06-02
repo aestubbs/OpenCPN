@@ -1318,14 +1318,15 @@ QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,
 }
 
 void ChartCanvas::mousePressEvent(QMouseEvent* event) {
-  // Route-building mode (Create Route): left adds a vertex, right finishes.
+  // Route-building mode (Create Route). Left-press begins a gesture that is a
+  // PAN if the cursor moves, or places a vertex if it stays put -- decided on
+  // release (reusing the click/drag threshold) so the chart stays fully
+  // pannable (and wheel-zoomable) while drawing. Right finishes the route.
   if (m_route_build_mode && m_nav_provider) {
-    double lat = 0, lon = 0;
-    const QPointF p = event->position();
-    m_viewport->screenToLatLon(p.x(), p.y(), static_cast<int>(width()),
-                               static_cast<int>(height()), lat, lon);
     if (event->button() == Qt::LeftButton) {
-      m_nav_provider->addRoutePoint(lat, lon);
+      m_dragging = true;
+      m_drag_last_pos = event->position();
+      m_press_pos = event->position();
     } else if (event->button() == Qt::RightButton) {
       m_nav_provider->finishRoute();
       m_route_build_mode = false;
@@ -1421,6 +1422,22 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
+  // Route-building: a left-release that barely moved places a vertex; one that
+  // moved was a pan (already applied live in mouseMoveEvent) -- no vertex.
+  if (m_route_build_mode && event->button() == Qt::LeftButton) {
+    const bool was_press = m_dragging;
+    m_dragging = false;
+    const QPointF d = event->position() - m_press_pos;
+    if (was_press && d.manhattanLength() <= 6 && m_nav_provider && m_viewport) {
+      double lat = 0, lon = 0;
+      m_viewport->screenToLatLon(event->position().x(), event->position().y(),
+                                 static_cast<int>(width()),
+                                 static_cast<int>(height()), lat, lon);
+      m_nav_provider->addRoutePoint(lat, lon);
+    }
+    event->accept();
+    return;
+  }
   if (event->button() == Qt::LeftButton && m_dragging_node) {
     m_dragging_node = false;
     m_drag_node = -1;

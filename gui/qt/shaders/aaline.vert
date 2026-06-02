@@ -9,6 +9,8 @@ layout(location = 0) in vec2 center;   // centreline position (world coords)
 layout(location = 1) in vec2 normal;   // unit perpendicular (world direction)
 layout(location = 2) in float side;    // +1 / -1 : which edge of the quad
 layout(location = 3) in float arclen;  // cumulative arc length (world units)
+layout(location = 4) in vec2 tangent;  // unit along-segment (world direction)
+layout(location = 5) in float cap;     // -1 start / +1 end : square-cap extend
 
 layout(location = 0) out float v_dist;   // signed px distance from centreline
 layout(location = 1) out float v_arcpx;  // arc length in device px (for dashes)
@@ -29,15 +31,26 @@ void main() {
     // Project the centreline and a point one world-normal away, take the
     // difference in screen pixels to get the screen-space normal direction.
     vec4 c0 = ubuf.qt_Matrix * vec4(center, 0.0, 1.0);
-    vec4 c1 = ubuf.qt_Matrix * vec4(center + normal, 0.0, 1.0);
+    vec4 cn = ubuf.qt_Matrix * vec4(center + normal, 0.0, 1.0);
     vec2 p0 = c0.xy / c0.w;
-    vec2 p1 = c1.xy / c1.w;
-    vec2 dir = (p1 - p0) * ubuf.viewportPx;
-    float len = length(dir);
-    vec2 ndir = (len > 0.0) ? dir / len : vec2(0.0, 1.0);
+    vec2 pn = cn.xy / cn.w;
+    vec2 dn = (pn - p0) * ubuf.viewportPx;
+    float ln = length(dn);
+    vec2 ndir = (ln > 0.0) ? dn / ln : vec2(0.0, 1.0);
+
+    // Screen-space tangent direction (same projection trick) for the square
+    // cap: each segment is its own quad, extended halfWidth along its own
+    // direction at both ends so consecutive segments overlap at the joints --
+    // no miter pinch at acute angles. Guard against a zero tangent so a
+    // degenerate segment can't produce a NaN offset (cap * NaN).
+    vec4 ct = ubuf.qt_Matrix * vec4(center + tangent, 0.0, 1.0);
+    vec2 pt = ct.xy / ct.w;
+    vec2 dt = (pt - p0) * ubuf.viewportPx;
+    float lt = length(dt);
+    vec2 tdir = (lt > 0.0) ? dt / lt : vec2(0.0, 0.0);
 
     float ext = ubuf.halfWidthPx + ubuf.featherPx;  // extend for the AA ramp
-    vec2 offPx = ndir * ext * side;
+    vec2 offPx = ndir * ext * side + tdir * ubuf.halfWidthPx * cap;
     vec2 offNdc = offPx / ubuf.viewportPx * 2.0;
 
     gl_Position = vec4(c0.xy + offNdc * c0.w, c0.z, c0.w);

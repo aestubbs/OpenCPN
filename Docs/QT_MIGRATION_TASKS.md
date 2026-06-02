@@ -1153,7 +1153,27 @@ render anything onto the chart, only manages the plugin lifecycle.
       `slots` / `emit` keywords now that no wx/system headers remain to clash
       with. Touches the QObject classes added during Phase 1 (`observable_qt`,
       `comm_drv_*`). Introduced by P1.5a.
-- [ ] **P3.13** **Route-creation interaction parity (pan/zoom while routing).**
+- [~] **P3.13** **Route-creation interaction parity (pan/zoom while routing).**
+      **Drag-to-pan + line rendering done (2026-06-01); keyboard / edge-pan /
+      snap pending.** Interaction model chosen: **drag = pan, click = place
+      vertex, wheel = zoom** — reusing the canvas's existing 6 px click/drag
+      threshold (consistent with select/insert elsewhere), rather than a special
+      hold-to-place gesture (inconsistent + slower per node). In route-build
+      mode `mousePressEvent` now starts a *potential pan* on left-press and
+      `mouseReleaseEvent` decides: barely moved → `addRoutePoint`, else it was a
+      pan (already applied live). Right-click still finishes. Route **line
+      rendering** also fixed: the shared AA-line (`aa_line.cpp` + `aaline.vert`)
+      pinched to invisibility at acute angles because it extruded an averaged,
+      re-normalised **bisector** normal by exactly halfWidth. Rebuilt as
+      **per-segment quads using each segment's own normal + square caps** (a new
+      tangent+cap vertex attribute extends each segment halfWidth along its own
+      direction at both ends, so consecutive segments overlap at the joints — no
+      pinch). Benefits every AA-line consumer (routes/tracks/AIS vectors/own-ship
+      /rings/anchor/tide arrows/trails). Route line is now 2 px graphite. Builds
+      clean (qsb regenerates all backends); runs with no shader/Metal errors.
+      Still pending below: keyboard nav, edge auto-pan, nearby-waypoint snap,
+      touch affordances, and round caps/joins (square accepted for now).
+      Remaining detail (original analysis):
       Route *rendering* and the manager (P3.7) are good, but the *entry* UX is
       hard to use: **you cannot pan the chart while creating a route.** In
       `ChartCanvas::mousePressEvent` (`gui/qt/chart_canvas.cpp:1156`) route-build

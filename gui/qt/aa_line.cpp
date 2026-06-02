@@ -27,14 +27,17 @@ namespace ocpn::qtui {
 
 namespace {
 
-// One emitted strip vertex: centreline position + perpendicular normal +
-// which edge (+/-1) + cumulative arc length. Matches the aaline.vert inputs
-// and the attribute set below.
+// One emitted quad vertex: centreline position + per-segment perpendicular
+// normal + which edge (+/-1) + cumulative arc length + per-segment tangent +
+// square-cap direction (-1 start / +1 end). Matches the aaline.vert inputs and
+// the attribute set below; struct field order must match the attribute order.
 struct AaVertex {
   float cx, cy;    // location 0: center (treated as position)
   float nx, ny;    // location 1: normal
   float side;      // location 2
   float arclen;    // location 3
+  float tx, ty;    // location 4: tangent
+  float cap;       // location 5
 };
 
 const QSGGeometry::AttributeSet& aaAttributeSet() {
@@ -43,8 +46,10 @@ const QSGGeometry::AttributeSet& aaAttributeSet() {
       QSGGeometry::Attribute::create(1, 2, QSGGeometry::FloatType, false),
       QSGGeometry::Attribute::create(2, 1, QSGGeometry::FloatType, false),
       QSGGeometry::Attribute::create(3, 1, QSGGeometry::FloatType, false),
+      QSGGeometry::Attribute::create(4, 2, QSGGeometry::FloatType, false),
+      QSGGeometry::Attribute::create(5, 1, QSGGeometry::FloatType, false),
   };
-  static const QSGGeometry::AttributeSet set = {4, sizeof(AaVertex), attrs};
+  static const QSGGeometry::AttributeSet set = {6, sizeof(AaVertex), attrs};
   return set;
 }
 
@@ -142,33 +147,25 @@ QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
   const int n = static_cast<int>(world_pts.size());
   if (n < 2) return nullptr;
 
-  // Per-vertex bisector normals (averaged adjacent segment normals) and
-  // cumulative arc length, in world units.
+  // Each segment is an INDEPENDENT quad using its own segment normal (not an
+  // averaged bisector). The old bisector normalised the averaged normal and
+  // extruded by exactly halfWidth, so an acute turn pinched the line to
+  // halfWidth*sin(half-angle) -- thin/invisible at sharp angles. Per-segment
+  // normals draw each segment at full width; the shader's square cap (extend
+  // halfWidth along the tangent at both ends) makes consecutive segments
+  // overlap at the joints so there is no gap or pinch. Square caps now; round
+  // joins/caps can come later.
   const int count = closed ? n + 1 : n;  // repeat first point to close
   QList<QPointF> pts;
   pts.reserve(count);
   for (int i = 0; i < n; ++i) pts.append(world_pts[i]);
   if (closed) pts.append(world_pts[0]);
 
-  QList<QPointF> normal;
+  // Cumulative arc length per point (world units) for the dash phase.
   QList<float> arc;
-  normal.reserve(count);
   arc.reserve(count);
-  const auto segN = [](const QPointF& a, const QPointF& b, bool& ok) {
-    double dx = b.x() - a.x(), dy = b.y() - a.y();
-    double len = std::hypot(dx, dy);
-    ok = len > 0.0;
-    return ok ? QPointF(-dy / len, dx / len) : QPointF(0, 0);
-  };
   float acc = 0.0f;
   for (int i = 0; i < count; ++i) {
-    QPointF nIn, nOut;
-    bool okIn = false, okOut = false;
-    if (i > 0) nIn = segN(pts[i - 1], pts[i], okIn);
-    if (i + 1 < count) nOut = segN(pts[i], pts[i + 1], okOut);
-    QPointF nm = (okIn && okOut) ? (nIn + nOut) : (okOut ? nOut : nIn);
-    const double l = std::hypot(nm.x(), nm.y());
-    normal.append(l > 1e-9 ? nm / l : QPointF(0, 0));
     if (i > 0)
       acc += static_cast<float>(std::hypot(pts[i].x() - pts[i - 1].x(),
                                            pts[i].y() - pts[i - 1].y()));
@@ -183,19 +180,33 @@ QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
   auto* v = static_cast<AaVertex*>(geo->vertexData());
 
   int k = 0;
-  const auto put = [&](int i, float side) {
-    v[k].cx = static_cast<float>(pts[i].x());
-    v[k].cy = static_cast<float>(pts[i].y());
-    v[k].nx = static_cast<float>(normal[i].x());
-    v[k].ny = static_cast<float>(normal[i].y());
+  const auto put = [&](const QPointF& c, const QPointF& nrm, const QPointF& tan,
+                       float side, float cap, float al) {
+    v[k].cx = static_cast<float>(c.x());
+    v[k].cy = static_cast<float>(c.y());
+    v[k].nx = static_cast<float>(nrm.x());
+    v[k].ny = static_cast<float>(nrm.y());
     v[k].side = side;
-    v[k].arclen = arc[i];
+    v[k].arclen = al;
+    v[k].tx = static_cast<float>(tan.x());
+    v[k].ty = static_cast<float>(tan.y());
+    v[k].cap = cap;
     ++k;
   };
   for (int i = 0; i < segs; ++i) {
-    // quad corners: a+ a- b+ b-  -> tris (a+,b+,b-) (a+,b-,a-)
-    put(i, +1.0f);     put(i + 1, +1.0f); put(i + 1, -1.0f);
-    put(i, +1.0f);     put(i + 1, -1.0f); put(i, -1.0f);
+    const double dx = pts[i + 1].x() - pts[i].x();
+    const double dy = pts[i + 1].y() - pts[i].y();
+    const double len = std::hypot(dx, dy);
+    const QPointF t = len > 0.0 ? QPointF(dx / len, dy / len) : QPointF(0, 0);
+    const QPointF nrm(-t.y(), t.x());  // left perpendicular
+    // a (start) extends back (cap -1), b (end) extends forward (cap +1).
+    // tris: (a+,b+,b-) (a+,b-,a-)
+    put(pts[i], nrm, t, +1.0f, -1.0f, arc[i]);
+    put(pts[i + 1], nrm, t, +1.0f, +1.0f, arc[i + 1]);
+    put(pts[i + 1], nrm, t, -1.0f, +1.0f, arc[i + 1]);
+    put(pts[i], nrm, t, +1.0f, -1.0f, arc[i]);
+    put(pts[i + 1], nrm, t, -1.0f, +1.0f, arc[i + 1]);
+    put(pts[i], nrm, t, -1.0f, -1.0f, arc[i]);
   }
 
   auto* mat = new AaLineMaterial();

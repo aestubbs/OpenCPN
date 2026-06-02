@@ -66,7 +66,7 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
     for (const QPointF& ll : r.points) pts.append(lonLatToWorld(ll));
 
     if (pts.size() >= 2) {
-      b.setPen(lineColor, 3.0f);  // 3 px (AA-line shader is screen-fixed)
+      b.setPen(lineColor, 2.0f);  // 2 px graphite (AA-line shader screen-fixed)
       b.noBrush();
       b.drawPolyline(pts);
 
