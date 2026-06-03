@@ -52,7 +52,6 @@ class NavStateViewModel : public QObject {
   Q_PROPERTY(bool twaValid READ twaValid NOTIFY changed)
   Q_PROPERTY(double tws READ tws NOTIFY changed)
   Q_PROPERTY(double stw READ stw NOTIFY changed)
-  Q_PROPERTY(int aisTargetCount READ aisTargetCount NOTIFY changed)
 
 public:
   explicit NavStateViewModel(NavDataProvider* provider,
@@ -76,7 +75,6 @@ public:
   QString sogText() const;
   QString cogText() const;
   QString hdgText() const;
-  int aisTargetCount() const { return m_ais_count; }
 
 Q_SIGNALS:
   void changed();
@@ -86,7 +84,6 @@ private:
 
   NavDataProvider* m_provider;
   OwnShipState m_own;
-  int m_ais_count = 0;
 };
 
 }  // namespace ocpn::qtui

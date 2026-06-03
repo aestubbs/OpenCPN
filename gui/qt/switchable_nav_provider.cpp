@@ -37,6 +37,8 @@ namespace {
 QList<NavRoute> readModelRoutes() {
   QList<NavRoute> out;
   if (!pRouteList) return out;
+  RoutePoint* active_wp =
+      g_pRouteMan ? g_pRouteMan->GetpActivePoint() : nullptr;
   for (Route* r : *pRouteList) {
     NavRoute nr;
     if (r) {
@@ -45,6 +47,12 @@ QList<NavRoute> readModelRoutes() {
       if (r->pRoutePointList)
         for (RoutePoint* wp : *r->pRoutePointList)
           if (wp) nr.points.append(QPointF(wp->m_lon, wp->m_lat));
+      // Route-following state (P3.16): mark the active route + active leg so
+      // the overlay can highlight it (the active destination's 0-based index).
+      if (r->m_bRtIsActive) {
+        nr.active = true;
+        if (active_wp) nr.activeLeg = r->GetIndexOf(active_wp);  // 0-based, -1
+      }
     }
     out.append(nr);  // keep even empty routes to preserve index alignment
   }

@@ -313,11 +313,17 @@ ApplicationWindow {
                             required property var modelData
                             required property int index
                             property bool editing: false
+                            // Is this route the one currently being followed?
+                            // (P3.16) -- live via the follower's signal.
+                            property bool isActiveRoute:
+                                chart.routeFollower.activeRouteGuid.length > 0 &&
+                                chart.routeFollower.activeRouteGuid === modelData.guid
                             width: ListView.view.width
                             height: tileCol.implicitHeight + 16
                             radius: 6
                             color: tileMouse.containsMouse ? "#26ffffff" : "#14ffffff"
-                            border.color: "#33808080"; border.width: 1
+                            border.color: isActiveRoute ? "#ff5a28" : "#33808080"
+                            border.width: isActiveRoute ? 2 : 1
                             MouseArea {
                                 id: tileMouse
                                 anchors.fill: parent
@@ -374,6 +380,19 @@ ApplicationWindow {
                                         onClicked: tileMenu.open()
                                         Menu {
                                             id: tileMenu
+                                            MenuItem {
+                                                text: isActiveRoute ? qsTr("Deactivate")
+                                                                    : qsTr("Activate")
+                                                onTriggered: isActiveRoute
+                                                    ? chart.deactivateRoute()
+                                                    : chart.activateRoute(index)
+                                            }
+                                            MenuItem {
+                                                text: qsTr("Skip waypoint")
+                                                enabled: isActiveRoute
+                                                onTriggered: chart.skipWaypoint()
+                                            }
+                                            MenuSeparator {}
                                             MenuItem {
                                                 text: qsTr("Edit")
                                                 onTriggered: chart.editRoute(index)
@@ -3263,6 +3282,82 @@ ApplicationWindow {
             }
         }
 
+        // --- Test ship (P3.16): cursor-key steering. A transparent overlay
+        //     that holds keyboard focus while the sim is active so the arrow
+        //     keys steer it (Left/Right course, Up/Down speed, Space run). It
+        //     has no MouseArea, so chart pan/zoom is unaffected.
+        Item {
+            id: simKeyHandler
+            anchors.fill: parent
+            z: 90
+            focus: chart.simShip.active
+            Keys.onPressed: function(e) {
+                if (!chart.simShip.active) { e.accepted = false; return }
+                switch (e.key) {
+                case Qt.Key_Left:  chart.simShip.steer(-5);    e.accepted = true; break
+                case Qt.Key_Right: chart.simShip.steer(5);     e.accepted = true; break
+                case Qt.Key_Up:    chart.simShip.throttle(1);  e.accepted = true; break
+                case Qt.Key_Down:  chart.simShip.throttle(-1); e.accepted = true; break
+                case Qt.Key_Space: chart.simShip.toggleRun();  e.accepted = true; break
+                default: e.accepted = false
+                }
+            }
+        }
+
+        // --- Test ship control panel (P3.16): course/speed + run state, shown
+        //     while the test ship is active. Top-left.
+        Rectangle {
+            id: simPanel
+            visible: chart.simShip.active
+            z: 95
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 12
+            width: simCol.implicitWidth + 24
+            height: simCol.implicitHeight + 16
+            radius: 6
+            color: "#cc101418"
+            border.color: chart.simShip.running ? "#ff5a28" : "#3affffff"
+            border.width: 1
+            Column {
+                id: simCol
+                anchors.centerIn: parent
+                spacing: 3
+                Text {
+                    text: "▣ " + qsTr("Test ship") +
+                          (chart.simShip.running ? "  ▸ " + qsTr("under way")
+                                                 : "  ❚❚ " + qsTr("stopped"))
+                    color: chart.simShip.running ? "#ff9a6a" : "#e0e0e0"
+                    font.pointSize: 12; font.bold: true
+                }
+                Text {
+                    text: qsTr("HDG ") + chart.simShip.course.toFixed(0) + "°    " +
+                          qsTr("SPD ") + chart.simShip.speed.toFixed(1) + qsTr(" kn")
+                    color: "#e0e0e0"; font.pointSize: 11
+                }
+                Text {
+                    text: qsTr("← → course · ↑ ↓ speed · space run")
+                    color: "#90a0b0"; font.pointSize: 9
+                }
+                Row {
+                    spacing: 6; topPadding: 2
+                    Button {
+                        text: chart.simShip.running ? qsTr("Stop") : qsTr("Go")
+                        font.pointSize: 10
+                        onClicked: {
+                            chart.simShip.toggleRun()
+                            simKeyHandler.forceActiveFocus()
+                        }
+                    }
+                    Button {
+                        text: qsTr("Remove")
+                        font.pointSize: 10
+                        onClicked: chart.simShip.setActive(false)
+                    }
+                }
+            }
+        }
+
         // Compass rose (mirrors wx's ocpnCompass overlay). The chart is
         // north-up, so the rose is fixed N-up; the red needle shows own-ship
         // COG. Top-right corner.
@@ -3356,6 +3451,8 @@ ApplicationWindow {
             border.color: "#3affffff"
 
             readonly property var nav: chart.navState
+            // Active-route following solution (P3.16); null-safe via `active`.
+            readonly property var rf: chart.routeFollower
 
             Column {
                 id: hudCol
@@ -3374,11 +3471,57 @@ ApplicationWindow {
                     text: navHud.nav ? navHud.nav.positionText : "---"
                     color: "#b0d0ff"; font.pointSize: 11
                 }
+
+                // --- Active route (P3.16): the live nav solution, shown only
+                //     while a route is being followed. ---
+                readonly property bool following: navHud.rf && navHud.rf.active
+                Rectangle {
+                    visible: hudCol.following
+                    width: hudCol.width; height: 1
+                    color: "#30ffffff"
+                }
                 Text {
-                    text: qsTr("AIS  ") +
-                          (navHud.nav ? navHud.nav.aisTargetCount : 0) +
-                          qsTr(" targets")
-                    color: "#90ee90"; font.pointSize: 11
+                    visible: hudCol.following
+                    text: "▸ " + (navHud.rf ? navHud.rf.routeName : "") +
+                          "   " + (navHud.rf ? navHud.rf.legText : "")
+                    color: "#ff9a6a"; font.pointSize: 12; font.bold: true
+                }
+                Text {
+                    visible: hudCol.following
+                    text: "→ " + (navHud.rf ? navHud.rf.toWaypoint : "")
+                    color: "#e0e0e0"; font.pointSize: 11
+                }
+                Text {
+                    visible: hudCol.following
+                    text: qsTr("BRG ") + (navHud.rf ? navHud.rf.btwText : "") +
+                          qsTr("   DTW ") + (navHud.rf ? navHud.rf.dtwText : "")
+                    color: "#e0e0e0"; font.pointSize: 11
+                }
+                Text {
+                    visible: hudCol.following
+                    text: qsTr("XTE ") + (navHud.rf ? navHud.rf.xteText : "")
+                    color: "#e0e0e0"; font.pointSize: 11
+                }
+                Text {
+                    visible: hudCol.following
+                    text: qsTr("VMG ") + (navHud.rf ? navHud.rf.vmgText : "") +
+                          qsTr("   ETA ") + (navHud.rf ? navHud.rf.etaText : "")
+                    color: "#e0e0e0"; font.pointSize: 11
+                }
+                Row {
+                    visible: hudCol.following
+                    spacing: 6
+                    topPadding: 2
+                    Button {
+                        text: qsTr("Skip ▸")
+                        font.pointSize: 10
+                        onClicked: chart.skipWaypoint()
+                    }
+                    Button {
+                        text: qsTr("Stop ■")
+                        font.pointSize: 10
+                        onClicked: chart.deactivateRoute()
+                    }
                 }
             }
         }
@@ -3772,6 +3915,17 @@ ApplicationWindow {
             MenuItem {
                 text: qsTr("Drop mark here")
                 onTriggered: markEditor.openNew()  // dialog uses the ctx point
+            }
+            MenuSeparator {}
+            MenuItem {
+                // Test ship (P3.16): drop a synthetic GPS here and grab the
+                // keyboard so the cursor keys steer it straight away.
+                text: chart.simShip.active ? qsTr("Move test ship here")
+                                           : qsTr("Place test ship here")
+                onTriggered: {
+                    chart.placeSimShipHere()
+                    simKeyHandler.forceActiveFocus()
+                }
             }
             MenuItem { text: qsTr("Measure"); enabled: false }
         }

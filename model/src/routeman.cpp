@@ -42,6 +42,7 @@
 #include "model/comm_n0183_output.h"
 #include "model/config_vars.h"
 #include "model/georef.h"
+#include "model/gui_vars.h"  // g_bAdvanceRouteWaypointOnArrivalOnly, g_blink_rect
 #include "model/nav_object_database.h"
 #include "model/navutil_base.h"
 #include "model/navobj_db.h"
@@ -54,6 +55,7 @@
 #include "model/wx_qt_ui_types.h"
 
 #include "observable_globvar.h"
+#include "vector2D.h"
 
 #ifdef __ANDROID__
 #include "androidUTIL.h"
@@ -97,6 +99,7 @@ Routeman::Routeman(struct RoutePropDlgCtx ctx,
       pActivePoint(0),
       pRouteActivatePoint(0),
       m_NMEA0183(NmeaCtxFactory()),
+      m_prev_outbound_cross(NAN),
       m_prop_dlg_ctx(ctx),
       m_route_dlg_ctx(route_dlg_ctx) {
   GlobalVar<wxString> active_route(&g_active_route);
@@ -278,6 +281,7 @@ bool Routeman::ActivateRoute(Route *pRouteToActivate, RoutePoint *pStartPoint) {
   m_bArrival = false;
   m_arrival_min = 1e6;
   m_arrival_test = 0;
+  m_prev_outbound_cross = NAN;  // re-seed turn-anticipation for the new leg
 
   pRouteToActivate->m_bRtIsActive = true;
 
@@ -347,6 +351,7 @@ bool Routeman::ActivateRoutePoint(Route *pA, RoutePoint *pRP_target) {
   m_bArrival = false;
   m_arrival_min = 1e6;
   m_arrival_test = 0;
+  m_prev_outbound_cross = NAN;  // re-seed turn-anticipation for the new leg
 
   //    Update the RouteProperties Dialog, if currently shown
   ///  if (pRoutePropDialog && pRoutePropDialog->IsShown()) {
@@ -399,6 +404,7 @@ bool Routeman::ActivateNextPoint(Route *pr, bool skipped) {
     m_bArrival = false;
     m_arrival_min = 1e6;
     m_arrival_test = 0;
+    m_prev_outbound_cross = NAN;  // re-seed turn-anticipation for the new leg
 
     //    Update the RouteProperties Dialog, if currently shown
     /// if (pRoutePropDialog && pRoutePropDialog->IsShown()) {
@@ -447,6 +453,246 @@ bool Routeman::DeactivateRoute(bool b_arrival) {
   m_bDataValid = false;
 
   return true;
+}
+
+namespace {
+// Honour the outbound-line (turn-anticipation) crossing only within this range
+// of the mark, so a far-off-track vessel doesn't turn miles early. Placeholder
+// for the future turning-circle lead-in (begin the turn one turn-radius out so
+// the arc rolls tangentially onto the next leg). NM.
+constexpr double kTurnAnticipationNm = 1.0;
+
+// Ship position resolved into along-track / cross-track offsets about a mark
+// for a given course. Units are simple-Mercator (≈ NM); only signs / relative
+// magnitudes are used here.
+//   along > 0 : ship is AHEAD of the mark along `course_deg`
+//   cross > 0 : ship is to STARBOARD of the line through the mark on course_deg
+struct TrackOffset {
+  double along;
+  double cross;
+};
+
+TrackOffset MarkRelativeOffset(double ship_lat, double ship_lon, double mark_lat,
+                               double mark_lon, double course_deg) {
+  double ex, ny;  // ship east / north from the mark (simple Mercator)
+  toSM(ship_lat, ship_lon, mark_lat, mark_lon, &ex, &ny);
+  const double su = sin(course_deg * PI / 180.0);
+  const double cu = cos(course_deg * PI / 180.0);
+  return {ex * su + ny * cu,    // along course (ahead +)
+          ex * cu - ny * su};   // cross course (starboard +)
+}
+
+// Course (deg, 0..360) of the leg a -> b, the simple-Mercator bearing (matches
+// how CurrentSegmentCourse is derived).
+double LegCourse(double a_lat, double a_lon, double b_lat, double b_lon) {
+  double bx, by;
+  toSM(b_lat, b_lon, a_lat, a_lon, &bx, &by);
+  double c = atan2(bx, by) * 180.0 / PI;
+  if (c < 0) c += 360.0;
+  return c;
+}
+
+// --- Independent sequencing criteria. Kept as separate predicates so the
+//     policy in ShouldSequenceWaypoint() can chain them differently per
+//     waypoint role (and future criteria -- turning circles, fly-over marks --
+//     slot alongside).
+
+// (1) Inside the arrival circle: straight-line range to the mark <= radius.
+bool ReachedArrivalCircle(double range_nm, double radius_nm) {
+  return radius_nm > 0.0 && range_nm <= radius_nm;
+}
+
+// (2) Crossed the abeam line: the line through the mark PERPENDICULAR to the
+//     reference course; true once the ship is level with / past the mark along
+//     that course.
+bool CrossedAbeamLine(const TrackOffset& off) { return off.along >= 0.0; }
+
+// (3) Crossed the outbound track line: the next leg's line through the mark,
+//     extended both ways; a sign change of the cross-track offset to that line
+//     between ticks. prev = NaN means "not seeded yet" -> no trigger.
+bool CrossedOutboundLine(double prev_cross, double now_cross) {
+  if (std::isnan(prev_cross)) return false;
+  return prev_cross == 0.0 || (prev_cross > 0.0) != (now_cross > 0.0);
+}
+}  // namespace
+
+bool Routeman::ShouldSequenceWaypoint() {
+  RoutePoint *W = pActivePoint;
+  if (!W || !pActiveRoute) return false;
+
+  const double radius = W->GetWaypointArrivalRadius();
+  if (radius <= 0.0) return false;  // arrival disabled (e.g. MOB auto-route)
+
+  const double range = CurrentRngToActivePoint;  // straight range to the mark
+
+  // (1) Arrival circle -- the universal "really there" test, always honoured.
+  if (ReachedArrivalCircle(range, radius)) return true;
+
+  // "Advance on arrival circle only" mode: no pass-by / anticipation
+  // sequencing.
+  if (g_bAdvanceRouteWaypointOnArrivalOnly) return false;
+
+  // Classify the mark within the route.
+  const int idx = pActiveRoute->GetIndexOf(W);  // 0-based, -1 if not found
+  const bool is_first = (idx == 0);
+  RoutePoint *next = nullptr;
+  if (idx >= 0 && idx + 1 < pActiveRoute->GetnPoints())
+    next = pActiveRoute->GetPoint(idx + 2);  // GetPoint is 1-based
+  const bool is_final = (next == nullptr);
+
+  if (is_final) {
+    // Destination: no outbound leg to capture -- sequence (arrive) when level
+    // with the mark along the inbound leg, backing up the circle test above.
+    const TrackOffset in =
+        MarkRelativeOffset(gLat, gLon, W->m_lat, W->m_lon, CurrentSegmentCourse);
+    if (CrossedAbeamLine(in)) return true;
+  } else {
+    const double out_course =
+        LegCourse(W->m_lat, W->m_lon, next->m_lat, next->m_lon);
+    const TrackOffset out =
+        MarkRelativeOffset(gLat, gLon, W->m_lat, W->m_lon, out_course);
+    if (is_first) {
+      // First mark (inbound leg is only the virtual activation segment): no
+      // turn to anticipate, so sequence when abeam the mark relative to the
+      // OUTBOUND course.
+      if (CrossedAbeamLine(out)) return true;
+    } else {
+      // Intermediate mark: turn anticipation. Sequence the instant the ship
+      // crosses the OUTBOUND track line -- it then rolls onto the next leg,
+      // cutting the corner according to side-of-track + turn direction -- but
+      // only once within the anticipation band so a far-off-track ship doesn't
+      // turn miles early.
+      const bool crossed = CrossedOutboundLine(m_prev_outbound_cross, out.cross);
+      m_prev_outbound_cross = out.cross;  // (re)seed for next tick
+      if (crossed && range <= kTurnAnticipationNm) return true;
+    }
+  }
+
+  // (4) Backstop: closest approach to the inbound arrival perpendicular passed
+  //     and now opening for 2+ ticks -- catches any crossing the above missed,
+  //     so the route never strands on a mark.
+  if ((CurrentRangeToActiveNormalCrossing - m_arrival_min) > radius) {
+    if (++m_arrival_test > 2) return true;
+  } else {
+    m_arrival_test = 0;
+  }
+  return false;
+}
+
+void Routeman::AdvanceToNextPoint() {
+  if (!ActivateNextPoint(pActiveRoute, false)) {  // at the end?
+    Route *pthis_route = pActiveRoute;
+    DeactivateRoute(true);  // this is an arrival
+
+    if (pthis_route && pthis_route->m_bDeleteOnArrival &&
+        !pthis_route->m_bIsBeingEdited) {
+      DeleteRoute(pthis_route);
+    }
+  }
+}
+
+bool Routeman::UpdateProgress() {
+  bool bret_val = false;
+
+  if (!pActiveRoute) {
+    m_bDataValid = true;
+    return false;
+  }
+
+  //  Update bearing, range, and crosstrack error
+
+  //  Bearing is calculated as Mercator Sailing, i.e. a cartographic "bearing"
+  double north, east;
+  toSM(pActivePoint->m_lat, pActivePoint->m_lon, gLat, gLon, &east, &north);
+  double a = atan(north / east);
+  if (fabs(pActivePoint->m_lon - gLon) < 180.) {
+    if (pActivePoint->m_lon >= gLon)
+      CurrentBrgToActivePoint = 90. - (a * 180 / PI);
+    else
+      CurrentBrgToActivePoint = 270. - (a * 180 / PI);
+  } else {
+    if (pActivePoint->m_lon >= gLon)
+      CurrentBrgToActivePoint = 270. - (a * 180 / PI);
+    else
+      CurrentBrgToActivePoint = 90. - (a * 180 / PI);
+  }
+
+  //  Calculate range using Great Circle Formula
+  CurrentRngToActivePoint =
+      DistGreatCircle(gLat, gLon, pActivePoint->m_lat, pActivePoint->m_lon);
+
+  //  Get the XTE vector, normal to current segment
+  vector2D va, vb, vn;
+
+  double brg1, dist1, brg2, dist2;
+  DistanceBearingMercator(pActivePoint->m_lat, pActivePoint->m_lon,
+                          pActiveRouteSegmentBeginPoint->m_lat,
+                          pActiveRouteSegmentBeginPoint->m_lon, &brg1, &dist1);
+  vb.x = dist1 * sin(brg1 * PI / 180.);
+  vb.y = dist1 * cos(brg1 * PI / 180.);
+
+  DistanceBearingMercator(pActivePoint->m_lat, pActivePoint->m_lon, gLat, gLon,
+                          &brg2, &dist2);
+  va.x = dist2 * sin(brg2 * PI / 180.);
+  va.y = dist2 * cos(brg2 * PI / 180.);
+
+  double sdelta = vGetLengthOfNormal(&va, &vb, &vn);  // NM
+  CurrentXTEToActivePoint = sdelta;
+
+  //  Distance to the arrival line, perpendicular to the current route segment,
+  //  taking advantage of the normal from current position to segment (vn).
+  vector2D vToArriveNormal;
+  vSubtractVectors(&va, &vn, &vToArriveNormal);
+  CurrentRangeToActiveNormalCrossing = vVectorMagnitude(&vToArriveNormal);
+
+  //  Compute current segment course (simple Mercator projection)
+  double x1, y1, x2, y2;
+  toSM(pActiveRouteSegmentBeginPoint->m_lat,
+       pActiveRouteSegmentBeginPoint->m_lon,
+       pActiveRouteSegmentBeginPoint->m_lat,
+       pActiveRouteSegmentBeginPoint->m_lon, &x1, &y1);
+  toSM(pActivePoint->m_lat, pActivePoint->m_lon,
+       pActiveRouteSegmentBeginPoint->m_lat,
+       pActiveRouteSegmentBeginPoint->m_lon, &x2, &y2);
+
+  double e1 = atan2((x2 - x1), (y2 - y1));
+  CurrentSegmentCourse = e1 * 180 / PI;
+  if (CurrentSegmentCourse < 0) CurrentSegmentCourse += 360;
+
+  //  Compute XTE direction
+  double h = atan(vn.y / vn.x);
+  if (vn.x > 0)
+    CourseToRouteSegment = 90. - (h * 180 / PI);
+  else
+    CourseToRouteSegment = 270. - (h * 180 / PI);
+
+  h = CurrentBrgToActivePoint - CourseToRouteSegment;
+  if (h < 0) h = h + 360;
+  XTEDir = (h > 180) ? 1 : -1;
+
+  //  Determine arrival / leg sequencing (policy in ShouldSequenceWaypoint).
+  bool bDidArrival = false;
+
+  // Duplicate points can result in NaN for normal crossing range.
+  if (std::isnan(CurrentRangeToActiveNormalCrossing))
+    CurrentRangeToActiveNormalCrossing = CurrentRngToActivePoint;
+
+  if (ShouldSequenceWaypoint()) {
+    m_bArrival = true;
+    UpdateAutopilot();
+    bDidArrival = true;
+    AdvanceToNextPoint();
+  }
+
+  if (!bDidArrival)
+    m_arrival_min = std::min(m_arrival_min, CurrentRangeToActiveNormalCrossing);
+
+  // Only once on arrival
+  if (!bDidArrival) UpdateAutopilot();
+  bret_val = true;  // a route is active
+
+  m_bDataValid = true;
+  return bret_val;
 }
 
 bool Routeman::UpdateAutopilot() {

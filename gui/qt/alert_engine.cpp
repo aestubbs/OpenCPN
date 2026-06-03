@@ -186,8 +186,25 @@ void AlertEngine::evaluateAnchor(const OwnShipState& own) {
     Q_EMIT changed();
 }
 
+void AlertEngine::noteRouteEvent(const QString& text, bool sound) {
+  m_route_active = true;
+  m_route_text = text;
+  if (sound) {
+    // Ring the ship's bell on arrival -- a guaranteed-present bundled sample,
+    // so route feedback never depends on a user sound being configured.
+    Q_EMIT soundRequested(QStringLiteral(OCPN_QT_SOUNDS_DIR "/1bells.wav"));
+  }
+  Q_EMIT changed();
+}
+
 void AlertEngine::acknowledge() {
   bool any = false;
+  // Route event: a one-shot banner -- acknowledge simply clears it.
+  if (m_route_active) {
+    m_route_active = false;
+    m_route_text.clear();
+    any = true;
+  }
   // AIS: hold off the currently-shown targets for the ack timeout.
   if (!m_active_mmsis.isEmpty() || m_ais_active) {
     const qint64 now = QDateTime::currentMSecsSinceEpoch();

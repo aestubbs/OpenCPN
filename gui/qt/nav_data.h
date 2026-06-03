@@ -93,6 +93,11 @@ struct NavRoute {
   QString guid;                        // model Route GUID ("" for the draft)
   QColor color = QColor(200, 0, 200);  // S-52-ish route magenta
   QList<QPointF> points;               // (lon, lat) in geographic degrees
+  // Route-following state (P3.16). active = this is the route being navigated;
+  // activeLeg = 0-based index of the active destination point in points[] (the
+  // active leg runs points[activeLeg-1] -> points[activeLeg]). -1 when none.
+  bool active = false;
+  int activeLeg = -1;
 };
 
 struct NavWaypoint {

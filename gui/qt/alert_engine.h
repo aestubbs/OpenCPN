@@ -61,10 +61,15 @@ class AlertEngine : public QObject {
 public:
   explicit AlertEngine(QObject* parent = nullptr);
 
-  // Combined banner state -- an anchor breach (safety) outranks an AIS alert.
-  bool alertActive() const { return m_anchor_active || m_ais_active; }
+  // Combined banner state -- an anchor breach (safety) outranks a route event,
+  // which outranks an AIS alert.
+  bool alertActive() const {
+    return m_anchor_active || m_route_active || m_ais_active;
+  }
   QString alertText() const {
-    return m_anchor_active ? m_anchor_text : m_ais_text;
+    if (m_anchor_active) return m_anchor_text;
+    if (m_route_active) return m_route_text;
+    return m_ais_text;
   }
 
   bool anchorSet() const { return m_anchor_set; }
@@ -80,6 +85,11 @@ public:
   /** Re-evaluate the anchor watch against the latest own-ship fix (also
    *  remembered for dropAnchor()). Call on each dynamic data tick. */
   void evaluateAnchor(const OwnShipState& own);
+
+  /** Raise a route-following event in the banner (P3.16): a waypoint arrival
+   *  or route end. Holds until acknowledge(); rings the ship's bell unless
+   *  `sound` is false. */
+  void noteRouteEvent(const QString& text, bool sound = true);
 
   /** Silence the current alert(s): an AIS alert for AisConfig::ackTimeoutMin,
    *  an anchor breach until the boat returns inside the watch circle. */
@@ -111,6 +121,10 @@ private:
   QSet<int> m_active_mmsis;       // targets in the current (shown) alert
   QHash<int, qint64> m_acked;     // mmsi -> acknowledge time (ms since epoch)
   QSet<int> m_sounded;            // mmsi already sounded this incursion
+
+  // Route-following event (waypoint arrival / route end). Sticky until acked.
+  bool m_route_active = false;
+  QString m_route_text;
 
   // Anchor watch.
   bool m_anchor_set = false;

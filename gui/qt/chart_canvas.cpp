@@ -53,6 +53,7 @@
 #include "shapefile_basemap_provider.h"
 #include "own_ship_config.h"
 #include "ais_config.h"
+#include "route_defaults_config.h"
 #include "own_ship_layer.h"
 #include "anchor_watch_layer.h"
 #include "ui_config.h"
@@ -199,6 +200,33 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // Route/waypoint list model for the manager (P3.7).
   m_route_list = std::make_unique<RouteListViewModel>(m_nav_provider.get());
 
+  // Active-route follower (P3.16): runs the model nav engine each fix and
+  // publishes the solution to QML. Test ship: a synthetic GPS for simulating
+  // a voyage so following can be exercised without a live feed.
+  m_route_follower = std::make_unique<RouteFollower>();
+  m_sim_ship = std::make_unique<SimShipController>();
+  // Re-run the follow solution on every own-ship tick (cheap no-op when no
+  // route is active).
+  connect(m_nav_provider.get(), &NavDataProvider::dynamicChanged, this,
+          [this]() {
+            if (m_route_follower) m_route_follower->update();
+          });
+  // Activating / deactivating a route changes which route draws as "active";
+  // repaint so the accent appears at once rather than on the next tick.
+  connect(m_route_follower.get(), &RouteFollower::activeRouteChanged, this,
+          [this]() { update(); });
+  // Surface waypoint-arrival / route-end through the alert banner (P3.16).
+  connect(m_route_follower.get(), &RouteFollower::arrived, this,
+          [this](const QString& wp) {
+            if (m_alert_engine)
+              m_alert_engine->noteRouteEvent(tr("Arrived: %1").arg(wp));
+          });
+  connect(m_route_follower.get(), &RouteFollower::ended, this,
+          [this](const QString& route) {
+            if (m_alert_engine)
+              m_alert_engine->noteRouteEvent(tr("Route complete: %1").arg(route));
+          });
+
   // Demo (Hakefjord replay) is opt-in: read the persisted choice (default
   // off). The app otherwise boots into the live setup.
   m_demo_mode = ConfigStore::instance().getBool("display/demoMode", false);
@@ -228,6 +256,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
 
   // Restore the persisted colour scheme (#35).
   setColorScheme(ConfigStore::instance().getInt("display/colorScheme", 0));
+  // Force the route-defaults singleton up now so it seeds the model's
+  // arrival-circle radius (g_n_arrival_circle_radius) before any route is
+  // followed -- it's otherwise a lazy QML singleton and would stay 0.0,
+  // disabling waypoint-arrival detection (P3.16).
+  RouteDefaultsConfig::instance();
   // Restore the persisted detail scale (default min display 1:N for un-SCAMIN'd
   // objects). Set the member directly; providers are seeded via
   // applyDisplaySettings as they load.
@@ -258,6 +291,13 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // by the eye toggle + selection (P3.7), so there's no master Routes switch to
   // strand it off. Force visible in case an old config persisted it hidden.
   m_route_layer->setVisible(true);
+  // Active-route accent (P3.16): highlighted active leg + ship-to-active line,
+  // above the plain route line, below the waypoints. Rebuilds per tick.
+  m_route_follow_layer =
+      new RouteFollowLayer(m_nav_provider.get(), m_viewport.get());
+  m_route_follow_layer->setZOrder(1650);
+  m_compositor->addLayer(m_route_follow_layer);
+  m_route_follow_layer->setVisible(true);
   m_waypoint_layer = new WaypointLayer(m_nav_provider.get(), m_viewport.get());
   m_waypoint_layer->setZOrder(1700);
   m_compositor->addLayer(m_waypoint_layer);
@@ -1027,6 +1067,10 @@ bool ChartCanvas::hitRouteNode(const QPointF& sp, int& route, int& node) const {
   const QList<NavRoute>& rs = m_nav_provider->userRoutes();
   for (int ri = 0; ri < rs.size(); ++ri) {
     const NavRoute& r = rs[ri];
+    // Only hit routes that are actually drawn: eye on, or the selected route
+    // (matches RouteLayer's draw rule) -- an invisible route must not be
+    // summoned by a click where it happens to lie.
+    if (!m_visible_routes.contains(r.guid) && ri != m_selected_route) continue;
     for (int pi = 0; pi < r.points.size(); ++pi) {
       const QPointF s = m.map(QPointF(
           r.points[pi].x(), Viewport::latToWorldY(r.points[pi].y())));
@@ -1054,6 +1098,9 @@ bool ChartCanvas::hitRouteSegment(const QPointF& sp, int& route, int& seg,
   const QList<NavRoute>& rs = m_nav_provider->userRoutes();
   for (int ri = 0; ri < rs.size(); ++ri) {
     const NavRoute& r = rs[ri];
+    // Only hit routes that are actually drawn (eye on, or selected) -- don't
+    // let a click on empty water select a hidden route lying under it.
+    if (!m_visible_routes.contains(r.guid) && ri != m_selected_route) continue;
     for (int si = 0; si + 1 < r.points.size(); ++si) {
       const QPointF a = m.map(QPointF(
           r.points[si].x(), Viewport::latToWorldY(r.points[si].y())));
@@ -1146,6 +1193,55 @@ void ChartCanvas::showRoute(int index) {
   }
   selectRoute(index);   // highlight it
   fitBounds(n, s, e, w);  // zoom to its extent
+}
+
+void ChartCanvas::activateRoute(int index) {
+  if (!m_route_follower || !m_nav_provider) return;
+  const QList<NavRoute> rs = m_nav_provider->userRoutes();
+  if (index < 0 || index >= rs.size()) return;
+  // Make sure the route's "eye" is on so the followed route is visible.
+  if (!rs[index].guid.isEmpty() && !m_visible_routes.contains(rs[index].guid))
+    setRouteVisible(index, true);
+  if (!m_route_follower->activate(index)) return;
+  // Zoom to the route's extent (wx ZoomtoRoute), leaving the edit selection
+  // untouched (following is not editing).
+  if (!rs[index].points.isEmpty()) {
+    double n = -90, s = 90, e = -180, w = 180;
+    for (const QPointF& p : rs[index].points) {  // (lon, lat)
+      n = std::max(n, p.y());
+      s = std::min(s, p.y());
+      e = std::max(e, p.x());
+      w = std::min(w, p.x());
+    }
+    fitBounds(n, s, e, w);
+  }
+  update();
+}
+
+void ChartCanvas::deactivateRoute() {
+  if (m_route_follower) m_route_follower->deactivate();
+  update();
+}
+
+void ChartCanvas::skipWaypoint() {
+  if (m_route_follower) m_route_follower->skip();
+  update();
+}
+
+void ChartCanvas::placeSimShipHere() {
+  if (!m_sim_ship) return;
+  // The test ship IS the live position source, so leave demo mode and make
+  // sure the model is polled (mirrors the globals the sim writes into the
+  // overlays + HUD + the route follower).
+  if (m_demo_mode) setDemoMode(false);
+  if (m_model_provider) m_model_provider->setModelPolling(true);
+  m_sim_ship->place(m_ctx_lat, m_ctx_lon);
+  if (m_viewport) {
+    m_viewport->setCenter(m_ctx_lat, m_ctx_lon);
+    Q_EMIT viewChanged();
+  }
+  m_live_centered = true;  // we explicitly centred on the test ship
+  update();
 }
 
 bool ChartCanvas::routeVisible(int index) const {

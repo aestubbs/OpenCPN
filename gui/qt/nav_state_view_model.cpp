@@ -37,7 +37,6 @@ NavStateViewModel::NavStateViewModel(NavDataProvider* provider,
 void NavStateViewModel::refresh() {
   if (!m_provider) return;
   m_own = m_provider->ownShip();
-  m_ais_count = static_cast<int>(m_provider->aisTargets().size());
   Q_EMIT changed();
 }
 

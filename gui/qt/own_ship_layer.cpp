@@ -204,10 +204,22 @@ QSGNode* OwnShipLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* /*window*/)
   if (m_rings_dirty || std::abs(s.lat - m_rings_lat) > kRingLatEpsilon)
     rebuildRings(s.lat);
 
-  // Orient by heading if known, else COG.
-  const double heading = (s.hdg < 360.0) ? s.hdg : s.cog;
+  // Orient by true heading if available; else by COG while moving. With no
+  // heading and a near-zero / dropped-out COG, HOLD the last orientation
+  // instead of snapping to north -- a momentary COG dropout (e.g. the GPS /
+  // velocity watchdog nulling gCog ~1 Hz on a gappy feed) would otherwise spin
+  // the boat icon to north and back every second.
+  double heading;
+  if (s.hdg < 360.0)
+    heading = s.hdg;
+  else if (s.sog > 0.2)
+    heading = s.cog;
+  else
+    heading = (m_heading >= 0.0) ? m_heading : s.cog;
+
   const bool scale_changed = (currentScale() != m_built_scale);
   m_built_scale = currentScale();
+  const bool heading_changed = (heading != m_heading);
   const bool course_changed = (s.cog != m_cog) || (s.sog != m_sog);
 
   // Real-scale own-ship icon (Options > Ships > Own ship): draw a to-scale hull
@@ -239,13 +251,14 @@ QSGNode* OwnShipLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* /*window*/)
   }
   m_symbol_dirty = false;
 
-  if (course_changed || scale_changed || symbol_rebuilt) {
+  if (heading_changed || scale_changed || symbol_rebuilt) {
     QMatrix4x4 m;
     // The hull is already in world units; the marker is fixed logical-px size.
     if (!m_symbol_is_hull) m.scale(static_cast<float>(worldPerPx()));
     m.rotate(static_cast<float>(heading), 0.0f, 0.0f, 1.0f);
     m_symbolXf->setMatrix(m);
   }
+  m_heading = heading;
 
   if (course_changed) {
     // Rebuild the AA-line vectors (world units; widths screen-fixed by the

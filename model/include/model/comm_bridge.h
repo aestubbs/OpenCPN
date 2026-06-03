@@ -121,6 +121,18 @@ public:
   bool Initialize();
 
   /**
+   * Reset all data watchdogs to healthy, as if fresh data had just arrived.
+   *
+   * The watchdog timer (~1 Hz) nulls gCog/gSog/gHdt when no NMEA *message* has
+   * petted the watchdog within the timeout. A synthetic position source that
+   * writes the own-ship globals directly (the Qt test ship, SimShipController)
+   * bypasses the message pipeline, so without this its COG/SOG/heading would
+   * be nulled once a second. Call this each tick while such a source is active
+   * to keep the globals it writes from being clobbered.
+   */
+  void PetWatchdogs() { PresetWatchdogs(); }
+
+  /**
    * Processes NMEA 0183 AIVDO sentences containing own vessel's AIS data.
    *
    * AIVDO messages provide navigation data broadcast by the vessel's own AIS

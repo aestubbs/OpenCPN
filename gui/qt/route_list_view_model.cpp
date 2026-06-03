@@ -71,12 +71,14 @@ void RouteListViewModel::refresh() {
     QVariantMap m;
     m["name"] = r.name.isEmpty() ? QStringLiteral("Route %1").arg(idx + 1)
                                  : r.name;
+    m["guid"] = r.guid;
     m["points"] = static_cast<int>(r.points.size());
     m["lengthNm"] = length_nm;
     m["north"] = n;
     m["south"] = s;
     m["east"] = e;
     m["west"] = w;
+    m["active"] = r.active;  // currently being followed (P3.16)
     m_routes.append(m);
     ++idx;
   }

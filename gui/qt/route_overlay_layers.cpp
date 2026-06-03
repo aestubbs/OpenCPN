@@ -78,6 +78,27 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
       // Per-segment compass bearing label, rotated to lie along the segment
       // (kept upright) and offset just off the line.
       for (int i = 0; i + 1 < r.points.size(); ++i) {
+        // Direction chevron at the leg midpoint, pointing the way the route
+        // runs (so a route's travel direction reads at a glance).
+        {
+          const QPointF a = pts[i], c = pts[i + 1];
+          const double dx = c.x() - a.x(), dy = c.y() - a.y();
+          const double len = std::hypot(dx, dy);
+          if (len > 0.0) {
+            const double ux = dx / len, uy = dy / len;  // along the leg
+            const double nx = -uy, ny = ux;             // leg normal
+            const double sz = 7.0 * wpp;                // chevron size (world)
+            const QPointF mid = (a + c) / 2.0;
+            const QPointF tip(mid.x() + ux * sz, mid.y() + uy * sz);
+            const QPointF wL(mid.x() - ux * sz + nx * sz,
+                             mid.y() - uy * sz + ny * sz);
+            const QPointF wR(mid.x() - ux * sz - nx * sz,
+                             mid.y() - uy * sz - ny * sz);
+            b.setPen(lineColor, 2.0f);
+            b.noBrush();
+            b.drawPolyline(QList<QPointF>{wL, tip, wR});
+          }
+        }
         const double brg = bearingDeg(r.points[i], r.points[i + 1]);
         const QString txt =
             QStringLiteral("%1°").arg(
@@ -124,6 +145,47 @@ void RouteLayer::draw(SgBuilder& b, double wpp) {
     b.setPen(ring, editing ? 2.0f : 1.0f);
     for (const QPointF& w : pts)
       b.drawCircle(w, static_cast<float>(radius));  // radius: world units
+  }
+}
+
+void RouteFollowLayer::draw(SgBuilder& b, double wpp) {
+  if (!provider()) return;
+  // Active-route accent colour (orange-red), distinct from the grey route line
+  // and the cyan selection / amber edit handles.
+  const QColor accent(255, 90, 40);
+  const OwnShipState own = provider()->ownShip();
+
+  for (const NavRoute& r : provider()->routes()) {
+    if (!r.active || r.points.size() < 2) continue;
+    QList<QPointF> pts;
+    pts.reserve(r.points.size());
+    for (const QPointF& ll : r.points) pts.append(lonLatToWorld(ll));
+
+    const int leg = r.activeLeg;
+    const bool haveActive = leg >= 0 && leg < pts.size();
+
+    // Highlight the active leg (previous active point -> active waypoint).
+    if (haveActive && leg >= 1) {
+      b.setPen(accent, 4.0f);
+      b.noBrush();
+      b.drawPolyline(QList<QPointF>{pts[leg - 1], pts[leg]});
+    }
+
+    // Ship-to-active rubber-band line (wx g_bShowShipToActive): from the boat
+    // straight to the active waypoint, so the steer-to target is unmistakable.
+    if (own.valid && haveActive) {
+      const QPointF shipW = lonLatToWorld(QPointF(own.lon, own.lat));
+      b.setPen(accent, 1.5f);
+      b.noBrush();
+      b.drawPolyline(QList<QPointF>{shipW, pts[leg]});
+    }
+
+    // Emphasise the active waypoint with a ring.
+    if (haveActive) {
+      b.noBrush();
+      b.setPen(accent, 2.0f);
+      b.drawCircle(pts[leg], static_cast<float>(8.0 * wpp));
+    }
   }
 }
 

@@ -106,6 +106,10 @@ qt_add_qml_module(opencpn-qt
     s57_dictionary.cpp
     route_list_view_model.h
     route_list_view_model.cpp
+    route_follower.h
+    route_follower.cpp
+    sim_ship_controller.h
+    sim_ship_controller.cpp
     connections_view_model.h
     connections_view_model.cpp
     chart_source_model.h

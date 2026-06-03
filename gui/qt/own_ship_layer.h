@@ -71,6 +71,7 @@ private:
   double m_symbol_lat = 999.0;           // latitude the hull was sized for
   double m_cog = -1.0;
   double m_sog = -1.0;
+  double m_heading = -1.0;  // last applied symbol orientation (deg), -1 = unset
   double m_built_scale = 0.0;
 };
 

@@ -216,6 +216,27 @@ public:
   RoutePoint *FindBestActivatePoint(Route *pR, double lat, double lon,
                                     double cog, double sog);
 
+  /**
+   * Recompute the live navigation solution for the active route and drive
+   * waypoint advancement + autopilot output. Call once per navigation tick
+   * (e.g. on each own-ship fix) while a route is active.
+   *
+   * From the current own-ship position (gLat/gLon) this updates the bearing,
+   * range, cross-track error, segment course and XTE direction to the active
+   * waypoint, detects arrival (entering the arrival circle, or moving away
+   * from the closest approach), advances to the next waypoint on arrival
+   * (deactivating / optionally deleting the route at the end), and emits the
+   * autopilot NMEA sentences + the plugin leg-info message via
+   * UpdateAutopilot().
+   *
+   * This is the de-wx'd model-side engine ported from the legacy
+   * RoutemanGui::UpdateProgress(); it carries no GUI/canvas dependency so it
+   * can be driven from either the wx or the Qt front end.
+   *
+   * @return true if a route is active (a solution was produced), false if not.
+   */
+  bool UpdateProgress();
+
   bool UpdateAutopilot();
   bool DeactivateRoute(bool b_arrival = false);
   bool IsAnyRouteActive(void) { return (pActiveRoute != NULL); }
@@ -306,8 +327,38 @@ private:
 
   NMEA0183 m_NMEA0183;  // For autopilot output
 
+  // Arrival -> advance to the next waypoint (or deactivate / delete the route
+  // at the end). Factored out of UpdateProgress, mirroring the legacy
+  // RoutemanGui::DoAdvance().
+  void AdvanceToNextPoint();
+
+  /**
+   * Decide whether the active waypoint has been "reached" and the route should
+   * sequence to the next leg, this tick.
+   *
+   * The policy chains several independent geometric criteria (each a small
+   * predicate, so they can be recombined later) according to the waypoint's
+   * role in the route:
+   *   - arrival circle  : straight range to the mark <= its arrival radius
+   *                       (always honoured -- the real "arrived" test);
+   *   - first mark      : abeam the mark relative to the OUTBOUND course (the
+   *                       inbound leg is only the virtual activation segment);
+   *   - intermediate    : crossed the OUTBOUND track line (turn anticipation --
+   *                       roll onto the next leg, cutting the corner), within
+   *                       an anticipation band;
+   *   - final mark      : abeam the destination along the inbound leg;
+   *   - backstop        : closest-approach passed and now opening, so a missed
+   *                       crossing never strands the route.
+   * @return true if the route should advance to the next waypoint now.
+   */
+  bool ShouldSequenceWaypoint();
+
   double m_arrival_min;
   int m_arrival_test;
+  // Cross-track offset (signed) to the active mark's OUTBOUND track line on the
+  // previous tick; a sign change is the turn-anticipation trigger. NaN until
+  // seeded after a (re)activation.
+  double m_prev_outbound_cross;
   struct RoutePropDlgCtx m_prop_dlg_ctx;
   struct RoutemanDlgCtx m_route_dlg_ctx;
 

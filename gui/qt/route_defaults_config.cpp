@@ -16,6 +16,7 @@
 #include "route_defaults_config.h"
 
 #include "config_store.h"
+#include "model/config_vars.h"  // g_n_arrival_circle_radius
 
 namespace ocpn::qtui {
 
@@ -33,6 +34,11 @@ RouteDefaultsConfig::RouteDefaultsConfig() {
   m_waypoint_icon = c.getString("routes/waypointIcon", m_waypoint_icon);
   m_routepoint_icon = c.getString("routes/routepointIcon", m_routepoint_icon);
   m_arrival_nm = c.getDouble("routes/arrivalNm", m_arrival_nm);
+  // Mirror into the model global that Routeman::UpdateProgress() reads for
+  // arrival detection (it gates on radius > 0). Without this it stays 0.0 and
+  // no waypoint ever "arrives". RoutePoint::GetWaypointArrivalRadius() heals
+  // any 0-radius points to this value, so existing routes pick it up too.
+  g_n_arrival_circle_radius = m_arrival_nm;
   m_scamin_min = c.getInt("routes/scaminMin", m_scamin_min);
   m_scamin_max = c.getInt("routes/scaminMax", m_scamin_max);
   m_track_auto_daily = c.getInt("routes/trackAutoDaily", m_track_auto_daily);
@@ -69,7 +75,11 @@ void RouteDefaultsConfig::setRoutepointIcon(const QString& v) {
   OCPN_RT_SET(m_routepoint_icon, v, "routes/routepointIcon", setString)
 }
 void RouteDefaultsConfig::setArrivalCircleNm(double v) {
-  OCPN_RT_SET(m_arrival_nm, v, "routes/arrivalNm", setDouble)
+  if (m_arrival_nm == v) return;
+  m_arrival_nm = v;
+  g_n_arrival_circle_radius = v;  // keep the model's arrival radius in step
+  ConfigStore::instance().setDouble("routes/arrivalNm", v);
+  Q_EMIT changed();
 }
 void RouteDefaultsConfig::setScaminMin(int v) {
   OCPN_RT_SET(m_scamin_min, v, "routes/scaminMin", setInt)

@@ -52,6 +52,8 @@
 #include "object_query_view_model.h"  // complete type needed for Q_PROPERTY
 #include "alert_engine.h"  // complete type needed for Q_PROPERTY
 #include "route_list_view_model.h"    // complete type needed for Q_PROPERTY
+#include "route_follower.h"           // complete type needed for Q_PROPERTY
+#include "sim_ship_controller.h"      // complete type needed for Q_PROPERTY
 #include "s52_engine.h"    // S52Engine -- complete type needed for Q_PROPERTY
 
 class OcpnConfig;
@@ -80,9 +82,12 @@ class SwitchableNavDataProvider;
 class AisLayer;
 class OwnShipLayer;
 class RouteLayer;
+class RouteFollowLayer;
 class WaypointLayer;
 class TrackLayer;
 class TideLayer;
+class RouteFollower;
+class SimShipController;
 
 class ChartCanvas : public QQuickItem {
   Q_OBJECT
@@ -154,6 +159,14 @@ class ChartCanvas : public QQuickItem {
   // Route & mark manager (P3.7): the route/waypoint lists + per-layer
   // visibility toggles.
   Q_PROPERTY(ocpn::qtui::RouteListViewModel* routeList READ routeList CONSTANT)
+
+  // Active-route following (P3.16): the live nav solution (BTW/DTW/XTE/ETA,
+  // active waypoint, arrival) for the nav strip + arrival banner.
+  Q_PROPERTY(ocpn::qtui::RouteFollower* routeFollower READ routeFollower CONSTANT)
+
+  // Test ship (P3.16): a synthetic, mouse-placed + cursor-key-steered GPS for
+  // simulating a voyage; binds the on-chart sim panel.
+  Q_PROPERTY(ocpn::qtui::SimShipController* simShip READ simShip CONSTANT)
 
   // Data-source connections for the Options > Connections tab (#34).
   Q_PROPERTY(ocpn::qtui::ConnectionsViewModel* connections READ connections
@@ -255,6 +268,8 @@ public:
   ObjectQueryViewModel* objectQuery() const { return m_object_query.get(); }
   AlertEngine* alerts() const { return m_alert_engine.get(); }
   RouteListViewModel* routeList() const { return m_route_list.get(); }
+  RouteFollower* routeFollower() const { return m_route_follower.get(); }
+  SimShipController* simShip() const { return m_sim_ship.get(); }
   ConnectionsViewModel* connections() const { return m_connections.get(); }
   ChartSourceModel* chartSource() const { return m_chart_source.get(); }
   NmeaMonitorModel* nmeaMonitor() const { return m_nmea_monitor.get(); }
@@ -295,6 +310,15 @@ public:
   Q_INVOKABLE void duplicateRoute(int index);
   Q_INVOKABLE void renameRoute(int index, const QString& name);
   Q_INVOKABLE void deleteRoute(int index);
+  // Route-following actions (P3.16), mirroring the wx Route Manager's
+  // Activate/Deactivate. activateRoute makes the route visible, zooms to it,
+  // and starts following from the best waypoint for the current fix.
+  Q_INVOKABLE void activateRoute(int index);
+  Q_INVOKABLE void deactivateRoute();
+  Q_INVOKABLE void skipWaypoint();      // advance past the current waypoint
+  // Drop the test ship at the last right-click point (m_ctx_lat/lon) and make
+  // it the live position source (P3.16).
+  Q_INVOKABLE void placeSimShipHere();
   // Select (highlight) the route and zoom the viewport to its extent -- the
   // route-drawer tile click (P3.7).
   Q_INVOKABLE void showRoute(int index);
@@ -473,6 +497,11 @@ private:
   std::unique_ptr<AlertEngine> m_alert_engine;
   // Route/waypoint lists for the route & mark manager (P3.7).
   std::unique_ptr<RouteListViewModel> m_route_list;
+  // Active-route follower (P3.16): drives g_pRouteMan->UpdateProgress() each
+  // nav tick and publishes the solution to QML.
+  std::unique_ptr<RouteFollower> m_route_follower;
+  // Test ship (P3.16): synthetic GPS for simulating a voyage.
+  std::unique_ptr<SimShipController> m_sim_ship;
   // Data-source connections (Options > Connections, #34).
   std::unique_ptr<ConnectionsViewModel> m_connections;
   // Chart directories (Options > Charts > Chart Files); drives the scan.
@@ -491,6 +520,7 @@ private:
   AisLayer* m_ais_layer = nullptr;
   OwnShipLayer* m_own_ship_layer = nullptr;
   RouteLayer* m_route_layer = nullptr;  // for colour-scheme line tinting
+  RouteFollowLayer* m_route_follow_layer = nullptr;  // active-route accent
   WaypointLayer* m_waypoint_layer = nullptr;  // for mark selection highlight
   QString m_selected_waypoint_guid;           // selected mark (drawer / chart)
   TrackLayer* m_track_layer = nullptr;        // for track selection highlight

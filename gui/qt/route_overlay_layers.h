@@ -84,6 +84,28 @@ private:
   bool m_editing = false;
 };
 
+/** Active-route following overlay (P3.16): the highlighted active leg, an
+ *  emphasised active waypoint, and the "ship-to-active" rubber-band line from
+ *  own ship to the active waypoint. Unlike RouteLayer (static), this rebuilds
+ *  on every own-ship tick because the rubber-band tracks the moving boat -- but
+ *  it draws only a few segments (no per-segment text), so the per-tick rebuild
+ *  is cheap. */
+class RouteFollowLayer : public StaticNavLayer {
+  Q_OBJECT
+public:
+  RouteFollowLayer(NavDataProvider* p, const Viewport* v,
+                   QObject* parent = nullptr)
+      : StaticNavLayer(p, v, parent) {
+    setOwner(QStringLiteral("core.routefollow"));
+    connectData(&NavDataProvider::dynamicChanged);  // track the moving boat
+  }
+  QString id() const override { return QStringLiteral("core.routefollow"); }
+  QString name() const override { return QStringLiteral("Active route"); }
+
+protected:
+  void draw(SgBuilder& b, double world_per_px) override;
+};
+
 /** Tracks: a polyline per recorded track. */
 class TrackLayer : public StaticNavLayer {
   Q_OBJECT
