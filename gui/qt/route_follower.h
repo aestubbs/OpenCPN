@@ -88,6 +88,10 @@ public:
   /** Manually advance to the next waypoint (skip the current one). */
   void skip();
 
+  /** Re-activate the route persisted last session, if "Persist active route"
+   *  is on and the route still exists. Call once at startup after routes load. */
+  void restorePersisted();
+
   /** Recompute the solution from the latest fix. Wire to the nav data
    *  provider's dynamicChanged() so it runs once per own-ship tick. */
   void update();

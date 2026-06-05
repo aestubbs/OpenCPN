@@ -16,7 +16,8 @@
 #include "route_defaults_config.h"
 
 #include "config_store.h"
-#include "model/config_vars.h"  // g_n_arrival_circle_radius
+#include "model/config_vars.h"  // route/track model globals (see below)
+#include "model/wx_qt_string.h"  // QString_to_wxString (icon name globals)
 
 namespace ocpn::qtui {
 
@@ -47,6 +48,14 @@ RouteDefaultsConfig::RouteDefaultsConfig() {
   if (!tc.isEmpty()) m_track_color = QColor(tc);
   m_tracking_precision =
       c.getInt("routes/trackingPrecision", m_tracking_precision);
+
+  // Mirror the persisted defaults into the model globals the nav / track code
+  // reads, so the dialog actually drives behaviour (not just persistence).
+  g_persist_active_route = m_persist_active;
+  g_nTrackPrecision = m_tracking_precision;
+  g_bHighliteTracks = m_track_highlight;
+  g_default_wp_icon = QString_to_wxString(m_waypoint_icon);
+  g_default_routepoint_icon = QString_to_wxString(m_routepoint_icon);
 }
 
 // guard, store, persist, notify.
@@ -66,13 +75,25 @@ void RouteDefaultsConfig::setRouteStyle(int v) {
   OCPN_RT_SET(m_route_style, v, "routes/routeStyle", setInt)
 }
 void RouteDefaultsConfig::setPersistActiveRoute(bool v) {
-  OCPN_RT_SET(m_persist_active, v, "routes/persistActive", setBool)
+  if (m_persist_active == v) return;
+  m_persist_active = v;
+  g_persist_active_route = v;
+  ConfigStore::instance().setBool("routes/persistActive", v);
+  Q_EMIT changed();
 }
 void RouteDefaultsConfig::setWaypointIcon(const QString& v) {
-  OCPN_RT_SET(m_waypoint_icon, v, "routes/waypointIcon", setString)
+  if (m_waypoint_icon == v) return;
+  m_waypoint_icon = v;
+  g_default_wp_icon = QString_to_wxString(v);
+  ConfigStore::instance().setString("routes/waypointIcon", v);
+  Q_EMIT changed();
 }
 void RouteDefaultsConfig::setRoutepointIcon(const QString& v) {
-  OCPN_RT_SET(m_routepoint_icon, v, "routes/routepointIcon", setString)
+  if (m_routepoint_icon == v) return;
+  m_routepoint_icon = v;
+  g_default_routepoint_icon = QString_to_wxString(v);
+  ConfigStore::instance().setString("routes/routepointIcon", v);
+  Q_EMIT changed();
 }
 void RouteDefaultsConfig::setArrivalCircleNm(double v) {
   if (m_arrival_nm == v) return;
@@ -91,7 +112,11 @@ void RouteDefaultsConfig::setTrackAutoDaily(int v) {
   OCPN_RT_SET(m_track_auto_daily, v, "routes/trackAutoDaily", setInt)
 }
 void RouteDefaultsConfig::setTrackHighlight(bool v) {
-  OCPN_RT_SET(m_track_highlight, v, "routes/trackHighlight", setBool)
+  if (m_track_highlight == v) return;
+  m_track_highlight = v;
+  g_bHighliteTracks = v;
+  ConfigStore::instance().setBool("routes/trackHighlight", v);
+  Q_EMIT changed();
 }
 void RouteDefaultsConfig::setTrackColor(const QColor& v) {
   if (m_track_color == v) return;
@@ -100,7 +125,11 @@ void RouteDefaultsConfig::setTrackColor(const QColor& v) {
   Q_EMIT changed();
 }
 void RouteDefaultsConfig::setTrackingPrecision(int v) {
-  OCPN_RT_SET(m_tracking_precision, v, "routes/trackingPrecision", setInt)
+  if (m_tracking_precision == v) return;
+  m_tracking_precision = v;
+  g_nTrackPrecision = v;  // the model ActiveTrack reads this on Start()
+  ConfigStore::instance().setInt("routes/trackingPrecision", v);
+  Q_EMIT changed();
 }
 
 #undef OCPN_RT_SET

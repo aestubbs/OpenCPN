@@ -31,6 +31,10 @@
 
 #include "nav_data_provider.h"
 
+QT_BEGIN_NAMESPACE
+class QTimer;
+QT_END_NAMESPACE
+
 namespace ocpn::qtui {
 
 class SwitchableNavDataProvider : public NavDataProvider {
@@ -112,6 +116,7 @@ public:
   void reverseRoute(int route);                       // flip course direction
   void duplicateRoute(int route);                     // clone -> "<name> copy"
   void renameRoute(int route, const QString& name);   // set + persist name
+  void setRoutePointIcon(int route, const QString& icon);  // all points' icon
 
   // --- Marks (free waypoints), all persisted via NavObj_dB ---
   void dropMark(double lat, double lon, const QString& name,
@@ -152,6 +157,9 @@ public:
 private:
   NavDataProvider* current() const { return m_use_live ? m_live : m_demo; }
   QString makeTrackName() const;  // dated, #n-suffixed for same-day tracks
+  // Auto-create-daily (RouteDefaultsConfig.trackAutoDaily): while recording,
+  // roll the track to a fresh one when the day changes in the chosen time base.
+  void checkDailyRollover();
 
   NavDataProvider* m_demo;
   NavDataProvider* m_live;
@@ -165,6 +173,9 @@ private:
   int m_route_seq = 0;
 
   bool m_recording = false;
+
+  QTimer* m_rollover_timer = nullptr;  // daily track-rollover check (lazy)
+  int m_track_day = -1;                // julian day the recording track began
 };
 
 }  // namespace ocpn::qtui

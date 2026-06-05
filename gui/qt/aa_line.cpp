@@ -53,8 +53,9 @@ const QSGGeometry::AttributeSet& aaAttributeSet() {
   return set;
 }
 
-// std140 UBO layout shared with aaline.{vert,frag}. Total 112 bytes.
-constexpr int kUboSize = 112;
+// std140 UBO layout shared with aaline.{vert,frag}. The pencil float at offset
+// 112 rounds the block up to 128 (std140 16-byte multiple).
+constexpr int kUboSize = 128;
 
 }  // namespace
 
@@ -112,6 +113,9 @@ public:
         static_cast<float>((xn - on).length() * 0.5 * vp.width());
     std::memcpy(p + 108, &pxPerWorld, 4);
 
+    const float pencil = mat->pencil;
+    std::memcpy(p + 112, &pencil, 4);
+
     return true;
   }
 };
@@ -135,6 +139,7 @@ int AaLineMaterial::compare(const QSGMaterial* other) const {
   if (widthPx != o->widthPx) return widthPx < o->widthPx ? -1 : 1;
   if (dashOnPx != o->dashOnPx) return dashOnPx < o->dashOnPx ? -1 : 1;
   if (dashOffPx != o->dashOffPx) return dashOffPx < o->dashOffPx ? -1 : 1;
+  if (pencil != o->pencil) return pencil < o->pencil ? -1 : 1;
   return 0;
 }
 
@@ -143,7 +148,7 @@ int AaLineMaterial::compare(const QSGMaterial* other) const {
 QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
                                 const QColor& color, float width_px,
                                 bool closed, float dash_on_px,
-                                float dash_off_px) {
+                                float dash_off_px, float pencil) {
   const int n = static_cast<int>(world_pts.size());
   if (n < 2) return nullptr;
 
@@ -214,6 +219,7 @@ QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
   mat->widthPx = width_px;
   mat->dashOnPx = dash_on_px;
   mat->dashOffPx = dash_off_px;
+  mat->pencil = pencil;
 
   auto* node = new QSGGeometryNode();
   node->setGeometry(geo);

@@ -99,7 +99,7 @@ Q_SIGNALS:
 private:
   RouteDefaultsConfig();  // loads from the config store
 
-  QColor m_route_color{0, 0, 255};
+  QColor m_route_color{58, 64, 70};  // graphite (pencil-on-chart default)
   int m_route_style = 0;
   bool m_persist_active = true;
   QString m_waypoint_icon{QStringLiteral("diamond")};
@@ -110,7 +110,7 @@ private:
 
   int m_track_auto_daily = 0;
   bool m_track_highlight = false;
-  QColor m_track_color{200, 0, 0};
+  QColor m_track_color{120, 72, 40};  // brown (dashed breadcrumb default)
   int m_tracking_precision = 0;
 };
 

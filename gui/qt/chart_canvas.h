@@ -310,6 +310,10 @@ public:
   Q_INVOKABLE void duplicateRoute(int index);
   Q_INVOKABLE void renameRoute(int index, const QString& name);
   Q_INVOKABLE void deleteRoute(int index);
+  // Per-route mark icon (route-details dialog): set all the route's points to
+  // `icon`; routePointIcon reads the current one ("" = plain dots).
+  Q_INVOKABLE void setRoutePointIcon(int index, const QString& icon);
+  Q_INVOKABLE QString routePointIcon(int index) const;
   // Route-following actions (P3.16), mirroring the wx Route Manager's
   // Activate/Deactivate. activateRoute makes the route visible, zooms to it,
   // and starts following from the best waypoint for the current fix.

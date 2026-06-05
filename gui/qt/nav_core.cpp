@@ -25,6 +25,7 @@
 #include "model/routeman.h"     // g_pRouteMan, pRouteList, Routeman, WayPointman
 #include "model/select.h"       // pSelect, pSelectAIS
 #include "model/track.h"        // g_pActiveTrack
+#include "waypoint_icons.h"     // loadDefaultWaypointIcons
 
 namespace ocpn::qtui {
 
@@ -44,8 +45,12 @@ void initNavCore() {
   if (!g_pRouteMan)
     g_pRouteMan = new Routeman(RoutePropDlgCtx(), RoutemanDlgCtx());
   if (!pRouteList) pRouteList = new RouteList();
-  if (!pWayPointMan)
+  if (!pWayPointMan) {
     pWayPointMan = new WayPointman([](QString) { return QColor(0, 0, 0); });
+    // The wx icon loader (WayPointmanGui::ProcessIcons) isn't compiled here, so
+    // populate the default mark-icon catalogue from the bundled SVGs.
+    loadDefaultWaypointIcons();
+  }
 
   if (!g_pAIS) g_pAIS = new AisDecoder(AisDecoderCallbacks());
 

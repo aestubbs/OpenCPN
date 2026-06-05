@@ -382,6 +382,14 @@ public:
   WayPointman(GlobalColourFunc colour_func);
   ~WayPointman();
   const QImage *GetIconBitmap(const QString &icon_key) const;
+  /**
+   * Register a mark icon (key + description + image) into the catalogue.
+   * Used by the Qt build to populate the default mark icons -- the wx
+   * WayPointmanGui::ProcessIcons path lives in the gui/ tree and is not
+   * compiled here, so without this the icon array is empty.
+   */
+  void AddMarkIcon(const QString &key, const QString &description,
+                   const QImage &image);
   bool GetIconPrescaled(const QString &icon_key) const;
   int GetIconIndex(const QImage *pbm) const;
   int GetIconImageListIndex(const QImage *pbm) const;

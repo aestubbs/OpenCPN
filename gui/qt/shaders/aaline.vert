@@ -25,6 +25,7 @@ layout(std140, binding = 0) uniform buf {
     float dashOnPx;     // dash on length, device px (0 = solid)
     float dashOffPx;    // dash gap length, device px
     float pxPerWorld;   // device px per world unit (for arc-length -> px)
+    float pencil;       // 0 = clean AA line, 1 = pencil (used in .frag)
 } ubuf;
 
 void main() {

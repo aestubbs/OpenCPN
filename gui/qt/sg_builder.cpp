@@ -56,6 +56,7 @@ void SgBuilder::setDash(float on_px, float off_px) {
   m_dash_off = off_px > 0.0f ? off_px : 0.0f;
 }
 void SgBuilder::noDash() { m_dash_on = m_dash_off = 0.0f; }
+void SgBuilder::setPencil(bool on) { m_pencil = on; }
 void SgBuilder::setBrush(const QColor& color) {
   m_brush_color = color;
   m_has_brush = color.isValid();
@@ -74,8 +75,9 @@ TextureCacheNode* SgBuilder::textureRoot() {
 // (width + dash in logical px, screen-fixed at any zoom).
 void SgBuilder::appendLine(const QList<QPointF>& pts, bool closed) {
   if (!m_parent || pts.size() < 2) return;
-  QSGGeometryNode* node = makeAaLineNode(pts, m_pen_color, m_pen_width, closed,
-                                         m_dash_on, m_dash_off);
+  QSGGeometryNode* node =
+      makeAaLineNode(pts, m_pen_color, m_pen_width, closed, m_dash_on,
+                     m_dash_off, m_pencil ? 1.0f : 0.0f);
   if (node) m_parent->appendChildNode(node);
 }
 

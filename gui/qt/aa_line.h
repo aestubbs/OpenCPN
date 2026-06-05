@@ -66,6 +66,10 @@ public:
   float widthPx = 1.0f;     // logical px
   float dashOnPx = 0.0f;    // 0 -> solid
   float dashOffPx = 0.0f;
+  // Pencil/graphite look (routes): 0 = clean AA line; 1 = grainy stroke with a
+  // rough (toothed) edge and modest along-stroke pressure variation. Ruler
+  // straight -- no geometry change, purely a fragment-coverage modulation.
+  float pencil = 0.0f;
 };
 
 /**
@@ -78,7 +82,7 @@ public:
 QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
                                 const QColor& color, float width_px,
                                 bool closed = false, float dash_on_px = 0.0f,
-                                float dash_off_px = 0.0f);
+                                float dash_off_px = 0.0f, float pencil = 0.0f);
 
 }  // namespace ocpn::qtui
 

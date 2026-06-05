@@ -398,13 +398,9 @@ ApplicationWindow {
                                                 onTriggered: chart.editRoute(index)
                                             }
                                             MenuItem {
-                                                text: qsTr("Rename")
-                                                onTriggered: {
-                                                    nameEdit.text = modelData.name
-                                                    editing = true
-                                                    nameEdit.forceActiveFocus()
-                                                    nameEdit.selectAll()
-                                                }
+                                                text: qsTr("Details…")
+                                                onTriggered: routeDetailsDialog.openFor(
+                                                    index, modelData.name)
                                             }
                                             MenuItem {
                                                 text: qsTr("Duplicate")
@@ -709,7 +705,9 @@ ApplicationWindow {
         function openNew() {
             editMode = false; guid = "";
             markNameField.text = ""; markCommentField.text = "";
-            iconName = "triangle";
+            // Default to the configured mark icon (Options > User Interface >
+            // Routes & Marks).
+            iconName = RouteDefaultsConfig.waypointIcon || "triangle";
             open()
         }
         function openForEdit(g, nm, cm, ic) {
@@ -775,6 +773,115 @@ ApplicationWindow {
                         onClicked: markEditor.iconName = modelData
                     }
                 }
+            }
+        }
+    }
+
+    // --- Route details: the route name + a per-route mark icon for its points
+    //     (the dot is the default; pick an icon to override all the route's
+    //     points). Opened from the routes drawer ⋯ menu.
+    Window {
+        id: routeDetailsDialog
+        title: qsTr("Route details")
+        flags: Qt.Dialog
+        modality: Qt.ApplicationModal
+        width: 420
+        height: 360
+        color: palette.window
+
+        property int routeIndex: -1
+        property string iconName: ""
+
+        // Build the icon model by hand: "" (plain dot) then the catalogue.
+        // [].concat(aQStringList) appends the list as a single element rather
+        // than spreading it, which broke the grid.
+        function iconModel() {
+            var names = chart.markIconNames()
+            var out = [""]
+            for (var i = 0; i < names.length; ++i) out.push(names[i])
+            return out
+        }
+        function openFor(idx, nm) {
+            routeIndex = idx
+            routeNameField.text = nm
+            iconName = chart.routePointIcon(idx)
+            show(); raise(); requestActivate()
+            routeNameField.forceActiveFocus()
+        }
+        function apply() {
+            if (routeIndex < 0) return
+            chart.renameRoute(routeIndex, routeNameField.text)
+            chart.setRoutePointIcon(routeIndex, iconName)
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 18
+            spacing: 14
+
+            GridLayout {
+                columns: 2
+                columnSpacing: 14
+                rowSpacing: 10
+                Layout.fillWidth: true
+
+                Label { text: qsTr("Name:"); Layout.alignment: Qt.AlignRight }
+                TextField {
+                    id: routeNameField
+                    Layout.fillWidth: true
+                    selectByMouse: true
+                }
+
+                Label {
+                    text: qsTr("Point icon:")
+                    Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                    Layout.topMargin: 6
+                }
+                Frame {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    padding: 4
+                    GridView {
+                        id: iconGrid
+                        anchors.fill: parent
+                        clip: true
+                        cellWidth: 46; cellHeight: 46
+                        model: routeDetailsDialog.iconModel()
+                        delegate: ItemDelegate {
+                            required property var modelData
+                            width: 44; height: 44
+                            padding: 0
+                            highlighted: modelData === routeDetailsDialog.iconName
+                            onClicked: routeDetailsDialog.iconName = modelData
+                            ToolTip.visible: hovered && modelData.length > 0
+                            ToolTip.text: modelData
+                            contentItem: Item {
+                                Image {
+                                    anchors.centerIn: parent
+                                    visible: modelData.length > 0
+                                    source: modelData.length > 0
+                                            ? "image://wpicon/" + modelData : ""
+                                    sourceSize.height: 30
+                                    fillMode: Image.PreserveAspectFit
+                                }
+                                // Empty entry = the plain "dot" default.
+                                Rectangle {
+                                    visible: modelData.length === 0
+                                    anchors.centerIn: parent
+                                    width: 9; height: 9; radius: 4.5
+                                    color: palette.windowText
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            DialogButtonBox {
+                Layout.fillWidth: true
+                standardButtons: DialogButtonBox.Ok | DialogButtonBox.Cancel
+                onAccepted: { routeDetailsDialog.apply(); routeDetailsDialog.close() }
+                onRejected: routeDetailsDialog.close()
             }
         }
     }
@@ -2167,19 +2274,6 @@ ApplicationWindow {
                             TabButton { text: qsTr("Own ship") }
                             TabButton { text: qsTr("AIS Targets") }
                             TabButton { text: qsTr("MMSI") }
-                            TabButton { text: qsTr("Routes/Points") }
-                        }
-
-                        // Colour pickers shared by the Routes/Points sub-tab.
-                        ColorDialog {
-                            id: routeColorDialog
-                            selectedColor: RouteDefaultsConfig.routeColor
-                            onAccepted: RouteDefaultsConfig.routeColor = selectedColor
-                        }
-                        ColorDialog {
-                            id: trackColorDialog
-                            selectedColor: RouteDefaultsConfig.trackColor
-                            onAccepted: RouteDefaultsConfig.trackColor = selectedColor
                         }
 
                         StackLayout {
@@ -2608,167 +2702,6 @@ ApplicationWindow {
                                     Item { Layout.fillHeight: true }
                                 }
                             }
-
-                            // --- Routes / Points defaults. ---
-                            ScrollView {
-                                id: routesScroll
-                                clip: true
-                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                                contentWidth: availableWidth
-                                ColumnLayout {
-                                    width: routesScroll.availableWidth
-                                    spacing: 8
-
-                                    Label { text: qsTr("New route"); font.bold: true }
-                                    GridLayout {
-                                        columns: 2
-                                        columnSpacing: 8; rowSpacing: 8
-                                        Layout.fillWidth: true
-                                        Label {
-                                            text: qsTr("Line colour:")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        Rectangle {
-                                            Layout.preferredWidth: 60
-                                            Layout.preferredHeight: 24
-                                            radius: 4
-                                            color: RouteDefaultsConfig.routeColor
-                                            border.color: "#80808080"
-                                            TapHandler { onTapped: routeColorDialog.open() }
-                                        }
-                                        Label {
-                                            text: qsTr("Line style:")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        ComboBox {
-                                            Layout.fillWidth: true
-                                            model: [qsTr("Solid"), qsTr("Dot"), qsTr("Long dash"),
-                                                    qsTr("Short dash"), qsTr("Dash-dot")]
-                                            currentIndex: RouteDefaultsConfig.routeStyle
-                                            onActivated: RouteDefaultsConfig.routeStyle = currentIndex
-                                        }
-                                    }
-                                    CheckBox {
-                                        text: qsTr("Persist active route across restarts")
-                                        checked: RouteDefaultsConfig.persistActiveRoute
-                                        onToggled: RouteDefaultsConfig.persistActiveRoute = checked
-                                    }
-
-                                    MenuSeparator { Layout.fillWidth: true }
-
-                                    Label { text: qsTr("Waypoints"); font.bold: true }
-                                    GridLayout {
-                                        columns: 2
-                                        columnSpacing: 8; rowSpacing: 8
-                                        Layout.fillWidth: true
-                                        Label {
-                                            text: qsTr("Default mark icon:")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        TextField {
-                                            Layout.fillWidth: true
-                                            text: RouteDefaultsConfig.waypointIcon
-                                            selectByMouse: true
-                                            onEditingFinished: RouteDefaultsConfig.waypointIcon = text
-                                        }
-                                        Label {
-                                            text: qsTr("Default route-point icon:")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        TextField {
-                                            Layout.fillWidth: true
-                                            text: RouteDefaultsConfig.routepointIcon
-                                            selectByMouse: true
-                                            onEditingFinished: RouteDefaultsConfig.routepointIcon = text
-                                        }
-                                        Label {
-                                            text: qsTr("Arrival circle (NM):")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        TextField {
-                                            implicitWidth: 90
-                                            text: RouteDefaultsConfig.arrivalCircleNm.toFixed(2)
-                                            validator: DoubleValidator { bottom: 0; top: 10; decimals: 2 }
-                                            selectByMouse: true
-                                            onEditingFinished: RouteDefaultsConfig.arrivalCircleNm = parseFloat(text)
-                                        }
-                                        Label {
-                                            text: qsTr("SCAMIN min / max:")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        RowLayout {
-                                            SpinBox {
-                                                from: 0; to: 4000000; stepSize: 1000
-                                                value: RouteDefaultsConfig.scaminMin
-                                                onValueModified: RouteDefaultsConfig.scaminMin = value
-                                            }
-                                            SpinBox {
-                                                from: 0; to: 4000000; stepSize: 1000
-                                                value: RouteDefaultsConfig.scaminMax
-                                                onValueModified: RouteDefaultsConfig.scaminMax = value
-                                            }
-                                        }
-                                    }
-
-                                    MenuSeparator { Layout.fillWidth: true }
-
-                                    Label { text: qsTr("Tracks"); font.bold: true }
-                                    GridLayout {
-                                        columns: 2
-                                        columnSpacing: 8; rowSpacing: 8
-                                        Layout.fillWidth: true
-                                        Label {
-                                            text: qsTr("Auto-create daily:")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        ComboBox {
-                                            Layout.fillWidth: true
-                                            model: [qsTr("Off"), qsTr("Computer time"),
-                                                    qsTr("UTC"), qsTr("Local mean time")]
-                                            currentIndex: RouteDefaultsConfig.trackAutoDaily
-                                            onActivated: RouteDefaultsConfig.trackAutoDaily = currentIndex
-                                        }
-                                        Label {
-                                            text: qsTr("Precision:")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        ComboBox {
-                                            Layout.fillWidth: true
-                                            model: [qsTr("High"), qsTr("Medium"), qsTr("Low")]
-                                            currentIndex: RouteDefaultsConfig.trackingPrecision
-                                            onActivated: RouteDefaultsConfig.trackingPrecision = currentIndex
-                                        }
-                                        Label {
-                                            text: qsTr("Highlight colour:")
-                                            Layout.alignment: Qt.AlignRight
-                                        }
-                                        RowLayout {
-                                            CheckBox {
-                                                text: qsTr("Highlight")
-                                                checked: RouteDefaultsConfig.trackHighlight
-                                                onToggled: RouteDefaultsConfig.trackHighlight = checked
-                                            }
-                                            Rectangle {
-                                                Layout.preferredWidth: 60
-                                                Layout.preferredHeight: 24
-                                                radius: 4
-                                                opacity: RouteDefaultsConfig.trackHighlight ? 1.0 : 0.4
-                                                color: RouteDefaultsConfig.trackColor
-                                                border.color: "#80808080"
-                                                TapHandler {
-                                                    enabled: RouteDefaultsConfig.trackHighlight
-                                                    onTapped: trackColorDialog.open()
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Label {
-                                        text: qsTr("Saved as defaults; new routes, marks and tracks will adopt them as the creation paths gain styling.")
-                                        wrapMode: Text.Wrap; Layout.fillWidth: true
-                                        color: palette.placeholderText; font.pointSize: 11
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -2792,6 +2725,18 @@ ApplicationWindow {
                         }
                     }
 
+                    // Colour pickers shared by the Routes & Marks sub-tab.
+                    ColorDialog {
+                        id: routeColorDialog
+                        selectedColor: RouteDefaultsConfig.routeColor
+                        onAccepted: RouteDefaultsConfig.routeColor = selectedColor
+                    }
+                    ColorDialog {
+                        id: trackColorDialog
+                        selectedColor: RouteDefaultsConfig.trackColor
+                        onAccepted: RouteDefaultsConfig.trackColor = selectedColor
+                    }
+
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 20
@@ -2802,6 +2747,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             TabButton { text: qsTr("General Options") }
                             TabButton { text: qsTr("Sounds") }
+                            TabButton { text: qsTr("Routes & Marks") }
                         }
 
                         StackLayout {
@@ -3037,6 +2983,156 @@ ApplicationWindow {
 
                                     Label {
                                         text: qsTr("Test plays the chosen file through the Qt sound engine. Automatic triggering of each alert (anchor watch, AIS CPA, SART, DSC) is wired as the alert engine lands.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                }
+                            }
+                            // --- Routes / Points defaults. ---
+                            ScrollView {
+                                id: routesScroll
+                                clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                contentWidth: availableWidth
+                                ColumnLayout {
+                                    width: routesScroll.availableWidth
+                                    spacing: 8
+
+                                    Label { text: qsTr("New route"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Line colour:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: 60
+                                            Layout.preferredHeight: 24
+                                            radius: 4
+                                            color: RouteDefaultsConfig.routeColor
+                                            border.color: "#80808080"
+                                            TapHandler { onTapped: routeColorDialog.open() }
+                                        }
+                                        Label {
+                                            text: qsTr("Line style:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Solid"), qsTr("Dot"), qsTr("Long dash"),
+                                                    qsTr("Short dash"), qsTr("Dash-dot")]
+                                            currentIndex: RouteDefaultsConfig.routeStyle
+                                            onActivated: RouteDefaultsConfig.routeStyle = currentIndex
+                                        }
+                                    }
+                                    CheckBox {
+                                        text: qsTr("Persist active route across restarts")
+                                        checked: RouteDefaultsConfig.persistActiveRoute
+                                        onToggled: RouteDefaultsConfig.persistActiveRoute = checked
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Waypoints"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Default mark icon:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            Layout.fillWidth: true
+                                            text: RouteDefaultsConfig.waypointIcon
+                                            selectByMouse: true
+                                            onEditingFinished: RouteDefaultsConfig.waypointIcon = text
+                                        }
+                                        Label {
+                                            text: qsTr("Arrival circle (NM):")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        TextField {
+                                            implicitWidth: 90
+                                            text: RouteDefaultsConfig.arrivalCircleNm.toFixed(2)
+                                            validator: DoubleValidator { bottom: 0; top: 10; decimals: 2 }
+                                            selectByMouse: true
+                                            onEditingFinished: RouteDefaultsConfig.arrivalCircleNm = parseFloat(text)
+                                        }
+                                        Label {
+                                            text: qsTr("SCAMIN min / max:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        RowLayout {
+                                            SpinBox {
+                                                from: 0; to: 4000000; stepSize: 1000
+                                                value: RouteDefaultsConfig.scaminMin
+                                                onValueModified: RouteDefaultsConfig.scaminMin = value
+                                            }
+                                            SpinBox {
+                                                from: 0; to: 4000000; stepSize: 1000
+                                                value: RouteDefaultsConfig.scaminMax
+                                                onValueModified: RouteDefaultsConfig.scaminMax = value
+                                            }
+                                        }
+                                    }
+
+                                    MenuSeparator { Layout.fillWidth: true }
+
+                                    Label { text: qsTr("Tracks"); font.bold: true }
+                                    GridLayout {
+                                        columns: 2
+                                        columnSpacing: 8; rowSpacing: 8
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("Auto-create daily:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("Off"), qsTr("Computer time"),
+                                                    qsTr("UTC"), qsTr("Local mean time")]
+                                            currentIndex: RouteDefaultsConfig.trackAutoDaily
+                                            onActivated: RouteDefaultsConfig.trackAutoDaily = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Precision:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            model: [qsTr("High"), qsTr("Medium"), qsTr("Low")]
+                                            currentIndex: RouteDefaultsConfig.trackingPrecision
+                                            onActivated: RouteDefaultsConfig.trackingPrecision = currentIndex
+                                        }
+                                        Label {
+                                            text: qsTr("Highlight colour:")
+                                            Layout.alignment: Qt.AlignRight
+                                        }
+                                        RowLayout {
+                                            CheckBox {
+                                                text: qsTr("Highlight")
+                                                checked: RouteDefaultsConfig.trackHighlight
+                                                onToggled: RouteDefaultsConfig.trackHighlight = checked
+                                            }
+                                            Rectangle {
+                                                Layout.preferredWidth: 60
+                                                Layout.preferredHeight: 24
+                                                radius: 4
+                                                opacity: RouteDefaultsConfig.trackHighlight ? 1.0 : 0.4
+                                                color: RouteDefaultsConfig.trackColor
+                                                border.color: "#80808080"
+                                                TapHandler {
+                                                    enabled: RouteDefaultsConfig.trackHighlight
+                                                    onTapped: trackColorDialog.open()
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Saved as defaults; new routes, marks and tracks will adopt them as the creation paths gain styling.")
                                         wrapMode: Text.Wrap; Layout.fillWidth: true
                                         color: palette.placeholderText; font.pointSize: 11
                                     }

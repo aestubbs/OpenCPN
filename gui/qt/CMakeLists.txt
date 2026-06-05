@@ -13,7 +13,7 @@ qt_add_executable(opencpn-qt
 
 # Custom AA-line shaders (P2.4 #5 / P2.13): baked to .qsb via qsb and exposed
 # as Qt resources at :/shaders/aaline.{vert,frag}.qsb (see aa_line.cpp).
-find_package(Qt6 REQUIRED COMPONENTS ShaderTools SerialPort Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS ShaderTools SerialPort Multimedia Svg)
 qt_add_shaders(opencpn-qt "opencpn_qt_shaders"
   PREFIX "/"
   FILES
@@ -80,6 +80,8 @@ qt_add_qml_module(opencpn-qt
     anchor_watch_layer.cpp
     waypoint_icon_provider.h
     waypoint_icon_provider.cpp
+    waypoint_icons.h
+    waypoint_icons.cpp
     route_overlay_layers.h
     route_overlay_layers.cpp
     ais_target_store.h
@@ -168,6 +170,8 @@ target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_BASEMAP_SHP="${CMAKE_SOURCE_DIR}/data/basemap_shp/basemap_low.shp"
   # Bundled alert sounds (ship's bells, P3.15). 1bells/2bells.wav for striking.
   OCPN_QT_SOUNDS_DIR="${CMAKE_SOURCE_DIR}/data/sounds"
+  # Default mark-icon SVGs (rendered into the WayPointman catalogue at startup).
+  OCPN_QT_MARKICONS_DIR="${CMAKE_SOURCE_DIR}/data/svg/markicons"
 )
 
 # libtess2: the basemap provider tessellates the land polygons.
@@ -229,6 +233,8 @@ target_link_libraries(opencpn-qt PRIVATE
   Qt6::SerialPort
   # QMediaPlayer/QAudioOutput for the alert-sound engine (SoundPlayer).
   Qt6::Multimedia
+  # QSvgRenderer -- rasterise the default mark-icon SVGs (waypoint_icons.cpp).
+  Qt6::Svg
   # libs/s52plib transitively brings ocpn::model, ocpn::geoprim,
   # ocpn::gl-headers, ocpn::pugixml, ocpn::gdal, ocpn::tess2 -- the
   # full set s52plib needs after the P2.8.0 standalone-link refactor.

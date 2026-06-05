@@ -22,14 +22,39 @@
 #include <algorithm>
 
 #include <QDate>
+#include <QDateTime>
+#include <QTimer>
 
+#include "route_defaults_config.h"  // trackAutoDaily mode
+#include "model/config_vars.h"  // g_default_wp_icon
 #include "model/navobj_db.h"
+#include "model/own_ship.h"   // gLon (LMT day)
 #include "model/route.h"
 #include "model/route_point.h"
 #include "model/routeman.h"  // pRouteList, pWayPointMan, g_pRouteMan
 #include "model/track.h"     // g_TrackList, g_pActiveTrack
+#include "model/wx_qt_string.h"  // wxString_to_QString
 
 namespace ocpn::qtui {
+
+namespace {
+// Julian-day index of "today" in the chosen time base (1 computer/local,
+// 2 UTC, 3 LMT ~ UTC + longitude/15h). 0 = off -> no rollover.
+qint64 trackDayIndex(int mode) {
+  const QDateTime utc = QDateTime::currentDateTimeUtc();
+  switch (mode) {
+    case 1: return QDate::currentDate().toJulianDay();  // computer local
+    case 2: return utc.date().toJulianDay();            // UTC
+    case 3: {                                            // local mean time
+      const double lon = std::isfinite(gLon) ? gLon : 0.0;
+      return utc.addSecs(static_cast<qint64>(lon / 15.0 * 3600.0))
+          .date()
+          .toJulianDay();
+    }
+    default: return 0;
+  }
+}
+}  // namespace
 
 namespace {
 // One NavRoute per model Route, in pRouteList order (so an index from
@@ -47,6 +72,17 @@ QList<NavRoute> readModelRoutes() {
       if (r->pRoutePointList)
         for (RoutePoint* wp : *r->pRoutePointList)
           if (wp) nr.points.append(QPointF(wp->m_lon, wp->m_lat));
+      // Per-route mark icon + SCAMIN: the route's points share one icon (set
+      // via the route-details dialog) and a SCAMIN; read both off the first
+      // point.
+      if (r->GetnPoints() > 0)
+        if (RoutePoint* p0 = r->GetPoint(1)) {
+          nr.pointIcon = p0->GetIconName();
+          // Only honour SCAMIN when it's actually enabled for the point
+          // (b_UseScamin); otherwise 0 = never cull. The default m_ScaMin is
+          // non-zero, so gating on the value alone hid ordinary routes.
+          nr.scamin = p0->GetUseSca() ? p0->GetScaMin() : 0;
+        }
       // Route-following state (P3.16): mark the active route + active leg so
       // the overlay can highlight it (the active destination's 0-based index).
       if (r->m_bRtIsActive) {
@@ -89,6 +125,7 @@ QList<NavWaypoint> SwitchableNavDataProvider::waypoints() const {
     nw.lat = wp->m_lat;
     nw.lon = wp->m_lon;
     nw.visible = wp->IsVisible();
+    nw.scamin = wp->GetUseSca() ? wp->GetScaMin() : 0;  // 0 = never cull
     const QDateTime ct = wp->GetCreateTime();
     nw.createTimeMs = ct.isValid() ? ct.toMSecsSinceEpoch() : 0;
     out.append(nw);
@@ -152,7 +189,31 @@ void SwitchableNavDataProvider::startTrack() {
   NavObj_dB::GetInstance().InsertTrack(t);
   t->Start();  // self-records off the own-ship fix
   m_recording = true;
+  // Auto-create-daily: remember the start day + run the minute-rollover check.
+  m_track_day = trackDayIndex(RouteDefaultsConfig::instance().trackAutoDaily());
+  if (!m_rollover_timer) {
+    m_rollover_timer = new QTimer(this);
+    m_rollover_timer->setInterval(60000);  // check each minute
+    connect(m_rollover_timer, &QTimer::timeout, this,
+            &SwitchableNavDataProvider::checkDailyRollover);
+  }
+  m_rollover_timer->start();
   Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::checkDailyRollover() {
+  if (!m_recording) return;
+  const int mode = RouteDefaultsConfig::instance().trackAutoDaily();
+  if (mode == 0) return;  // off
+  const qint64 today = trackDayIndex(mode);
+  if (m_track_day < 0) {
+    m_track_day = static_cast<int>(today);
+    return;
+  }
+  if (today != m_track_day) {
+    m_track_day = static_cast<int>(today);
+    resetTrack();  // finalize the day's track + start a fresh dated one
+  }
 }
 
 void SwitchableNavDataProvider::stopTrack() {
@@ -169,6 +230,7 @@ void SwitchableNavDataProvider::stopTrack() {
   }
   g_pActiveTrack = nullptr;
   m_recording = false;
+  if (m_rollover_timer) m_rollover_timer->stop();
   Q_EMIT staticChanged();
 }
 
@@ -221,8 +283,15 @@ bool SwitchableNavDataProvider::finishRoute() {
   if (ok) {
     Route* rte = new Route();
     rte->m_RouteNameString = m_draft.name;
-    for (const QPointF& ll : m_draft.points)  // ll = (lon, lat)
-      rte->AddPoint(new RoutePoint(ll.y(), ll.x(), QString(), QString()));
+    const long sca = RouteDefaultsConfig::instance().scaminMin();
+    for (const QPointF& ll : m_draft.points) {  // ll = (lon, lat)
+      RoutePoint* p = new RoutePoint(ll.y(), ll.x(), QString(), QString());
+      if (sca > 0) {  // declutter at small scale (SCAMIN), enabled per point
+        p->SetScaMin(sca);
+        p->SetUseSca(true);
+      }
+      rte->AddPoint(p);
+    }
     pRouteList->push_back(rte);
     NavObj_dB::GetInstance().InsertRoute(rte);  // persists route + its points
   }
@@ -312,7 +381,12 @@ void SwitchableNavDataProvider::duplicateRoute(int route) {
   const int n = src->GetnPoints();
   for (int i = 1; i <= n; ++i) {  // GetPoint is 1-based
     RoutePoint* p = src->GetPoint(i);
-    if (p) dup->AddPoint(new RoutePoint(p->m_lat, p->m_lon, QString(), QString()));
+    if (!p) continue;
+    RoutePoint* np = new RoutePoint(p->m_lat, p->m_lon, QString(), QString());
+    np->SetIconName(p->GetIconName());  // carry the per-route icon + SCAMIN
+    np->SetScaMin(p->GetScaMin());
+    np->SetUseSca(p->GetUseSca());
+    dup->AddPoint(np);
   }
   pRouteList->push_back(dup);
   NavObj_dB::GetInstance().InsertRoute(dup);  // persists route + its points
@@ -329,6 +403,21 @@ void SwitchableNavDataProvider::renameRoute(int route, const QString& name) {
   Q_EMIT staticChanged();
 }
 
+void SwitchableNavDataProvider::setRoutePointIcon(int route,
+                                                  const QString& icon) {
+  if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
+    return;
+  Route* r = (*pRouteList)[route];
+  if (!r) return;  // empty icon clears back to a plain dot
+  // One icon for the whole route's points (the route-details dialog's "Point
+  // icon"); stamp every point and persist.
+  const int n = r->GetnPoints();
+  for (int i = 1; i <= n; ++i)
+    if (RoutePoint* p = r->GetPoint(i)) p->SetIconName(icon);
+  NavObj_dB::GetInstance().UpdateRoute(r);
+  Q_EMIT staticChanged();
+}
+
 // --- Marks (free / isolated waypoints) ---------------------------------------
 
 void SwitchableNavDataProvider::dropMark(double lat, double lon,
@@ -336,12 +425,25 @@ void SwitchableNavDataProvider::dropMark(double lat, double lon,
                                          const QString& comment,
                                          const QString& icon) {
   if (!pWayPointMan) return;
-  const QString ic = icon.isEmpty() ? QStringLiteral("triangle") : icon;
+  // Fall back to the configured default mark icon (g_default_wp_icon, set from
+  // Options > User Interface > Routes & Marks) when none is supplied.
+  const QString ic =
+      !icon.isEmpty() ? icon
+                      : (g_default_wp_icon.IsEmpty()
+                             ? QStringLiteral("triangle")
+                             : wxString_to_QString(g_default_wp_icon));
   // The ctor (bAddToList defaults true) registers it with pWayPointMan and
   // assigns a GUID + create-time.
   RoutePoint* wp = new RoutePoint(lat, lon, ic, name, QString());
   wp->m_bIsolatedMark = true;
   wp->m_MarkDescription = comment;
+  // Stamp the default SCAMIN (Options > ... > Routes & Marks) so the mark
+  // declutters at small scale like a chart object.
+  const long sca = RouteDefaultsConfig::instance().scaminMin();
+  if (sca > 0) {
+    wp->SetScaMin(sca);
+    wp->SetUseSca(true);
+  }
   NavObj_dB::GetInstance().InsertRoutePoint(wp);  // persist mark + position
   Q_EMIT staticChanged();
 }

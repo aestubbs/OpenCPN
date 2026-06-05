@@ -256,11 +256,14 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
 
   // Restore the persisted colour scheme (#35).
   setColorScheme(ConfigStore::instance().getInt("display/colorScheme", 0));
-  // Force the route-defaults singleton up now so it seeds the model's
-  // arrival-circle radius (g_n_arrival_circle_radius) before any route is
-  // followed -- it's otherwise a lazy QML singleton and would stay 0.0,
-  // disabling waypoint-arrival detection (P3.16).
+  // Force the route-defaults singleton up now so it seeds the model globals
+  // (arrival-circle radius, persist-active-route, track precision/highlight,
+  // default icons) before any route is followed -- it's otherwise a lazy QML
+  // singleton (P3.16).
   RouteDefaultsConfig::instance();
+  // Restore the route that was active last session, if "Persist active route"
+  // is on (routes are already loaded by initNavCore()).
+  if (m_route_follower) m_route_follower->restorePersisted();
   // Restore the persisted detail scale (default min display 1:N for un-SCAMIN'd
   // objects). Set the member directly; providers are seeded via
   // applyDisplaySettings as they load.
@@ -301,6 +304,16 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_waypoint_layer = new WaypointLayer(m_nav_provider.get(), m_viewport.get());
   m_waypoint_layer->setZOrder(1700);
   m_compositor->addLayer(m_waypoint_layer);
+
+  // Re-render the route/track overlays when the route/track style settings
+  // change (Options > Routes: colour, line style, track colour) -- the layers
+  // read RouteDefaultsConfig at draw time, so a config change just needs a
+  // rebuild.
+  for (Layer* l : {static_cast<Layer*>(m_route_layer),
+                   static_cast<Layer*>(m_route_follow_layer),
+                   static_cast<Layer*>(m_track_layer)})
+    connect(&RouteDefaultsConfig::instance(), &RouteDefaultsConfig::changed, l,
+            &Layer::dirty);
 
   // Tide/current stations (P3.14 D) -- world-anchored, queried from the engine
   // (ptcmgr) at the timeline's display time; hidden unless Show Tides is on.
@@ -1178,6 +1191,18 @@ void ChartCanvas::reverseRoute(int index) {
 
 void ChartCanvas::duplicateRoute(int index) {
   if (m_nav_provider) m_nav_provider->duplicateRoute(index);
+}
+
+void ChartCanvas::setRoutePointIcon(int index, const QString& icon) {
+  if (m_nav_provider) m_nav_provider->setRoutePointIcon(index, icon);
+  update();
+}
+
+QString ChartCanvas::routePointIcon(int index) const {
+  if (!m_nav_provider) return QString();
+  const QList<NavRoute> rs = m_nav_provider->userRoutes();
+  if (index < 0 || index >= rs.size()) return QString();
+  return rs[index].pointIcon;
 }
 
 void ChartCanvas::showRoute(int index) {

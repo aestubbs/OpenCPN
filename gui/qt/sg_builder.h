@@ -81,6 +81,10 @@ public:
   void noPen();
   void setDash(float on_px, float off_px);
   void noDash();
+  // Pencil/graphite stroke style for subsequent pen lines (routes): grain +
+  // toothed edge + modest pressure, ruler-straight. Off by default; persists
+  // like the dash state until changed.
+  void setPencil(bool on);
   void setBrush(const QColor& color);
   void noBrush();
 
@@ -147,6 +151,7 @@ private:
   bool m_has_pen = true;
   float m_dash_on = 0.0f;   // logical px; 0 = solid
   float m_dash_off = 0.0f;
+  bool m_pencil = false;    // pencil/graphite stroke style for pen lines
   QColor m_brush_color;  // invalid by default -> no fill
   bool m_has_brush = false;
 };

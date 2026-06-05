@@ -93,6 +93,8 @@ struct NavRoute {
   QString guid;                        // model Route GUID ("" for the draft)
   QColor color = QColor(200, 0, 200);  // S-52-ish route magenta
   QList<QPointF> points;               // (lon, lat) in geographic degrees
+  QString pointIcon;                   // per-route mark icon ("" -> plain dot)
+  long scamin = 0;                     // SCAMIN: cull when display 1:N exceeds it
   // Route-following state (P3.16). active = this is the route being navigated;
   // activeLeg = 0-based index of the active destination point in points[] (the
   // active leg runs points[activeLeg-1] -> points[activeLeg]). -1 when none.
@@ -109,6 +111,7 @@ struct NavWaypoint {
   double lon = 0.0;
   bool visible = true;                 // RoutePoint m_bIsVisible (the eye)
   qint64 createTimeMs = 0;             // creation time, for reverse-chrono sort
+  long scamin = 0;                     // SCAMIN: hide when display 1:N exceeds it
   QColor color = QColor(255, 140, 0);
 };
 

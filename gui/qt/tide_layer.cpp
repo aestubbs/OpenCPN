@@ -81,6 +81,18 @@ void TideLayer::onTimeChanged() {
 void TideLayer::draw(SgBuilder& b, double wpp) {
   if (!ptcmgr || !ptcmgr->IsReady() || !m_vp) return;
 
+  // Declutter: only show tide & current stations once zoomed in to 1:100000 or
+  // finer -- at coarser scales there are far too many in view to be useful.
+  // Same display 1:N denominator as the quilt (ChartCanvas::displayScaleN):
+  // N = ground-metres-per-deg-lon / screen-metres-per-px.
+  const double scale = m_vp->scale();  // px per degree longitude
+  if (scale > 0.0) {
+    double clat = std::cos(m_vp->centerLat() * M_PI / 180.0);
+    if (clat < 0.05) clat = 0.05;
+    const double display_n = 111320.0 * clat * 3.78 * 1000.0 / scale;
+    if (display_n > 100000.0) return;  // too coarse -> hide stations
+  }
+
   const QRectF vb = m_vp->visibleWorldBounds(60.0);  // world coords (+margin)
   // Labels (height / speed) are only legible -- and cheap enough to re-render
   // every animation frame -- when zoomed in; at wide views draw markers/arrows

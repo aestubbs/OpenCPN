@@ -1342,6 +1342,28 @@ bool WayPointman::DoesIconExist(const QString &icon_key) const {
   return false;
 }
 
+void WayPointman::AddMarkIcon(const QString &key, const QString &description,
+                             const QImage &image) {
+  if (image.isNull() || key.isEmpty()) return;
+  // Replace an existing icon with the same key (so user icons can override).
+  for (MarkIcon *pmi : *m_pIconArray) {
+    if (pmi->icon_name == key) {
+      delete pmi->piconBitmap;
+      pmi->piconBitmap = nullptr;
+      pmi->iconImage = image;
+      pmi->icon_description = description;
+      pmi->preScaled = true;
+      return;
+    }
+  }
+  MarkIcon *pmi = new MarkIcon;
+  pmi->icon_name = key;
+  pmi->icon_description = description;
+  pmi->iconImage = image;
+  pmi->preScaled = true;
+  m_pIconArray->append(pmi);
+}
+
 const QImage *WayPointman::GetIconBitmap(const QString &icon_key) const {
   const QImage *pret = nullptr;
   MarkIcon *pmi = nullptr;

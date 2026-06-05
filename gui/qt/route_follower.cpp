@@ -17,12 +17,15 @@
 
 #include <cmath>
 
+#include "config_store.h"
 #include "display_config.h"
 
+#include "model/config_vars.h"  // g_persist_active_route, g_active_route
 #include "model/own_ship.h"     // gLat/gLon/gCog/gSog
 #include "model/route.h"
 #include "model/route_point.h"
 #include "model/routeman.h"     // g_pRouteMan, pRouteList, Routeman
+#include "model/wx_qt_string.h"  // QString_to_wxString
 
 namespace ocpn::qtui {
 
@@ -57,6 +60,12 @@ bool RouteFollower::activateFrom(int routeIndex, int wpIndex) {
   r->SetVisible(true);  // a hidden route can't be followed blind
   g_pRouteMan->ActivateRoute(r, start);
 
+  // Remember the active route so "Persist active route" can restore it next
+  // launch (g_active_route is the model's notion; the GUID is also stored in
+  // the Qt config since we drive the restore ourselves).
+  g_active_route = QString_to_wxString(r->GetGUID());
+  ConfigStore::instance().setString("routes/activeGuid", r->GetGUID());
+
   update();  // compute the first solution immediately
   Q_EMIT activeRouteChanged();
   return true;
@@ -65,9 +74,27 @@ bool RouteFollower::activateFrom(int routeIndex, int wpIndex) {
 void RouteFollower::deactivate() {
   if (g_pRouteMan && g_pRouteMan->IsAnyRouteActive()) {
     g_pRouteMan->DeactivateRoute(false);  // user-initiated, not an arrival
+    ConfigStore::instance().setString("routes/activeGuid", QString());
     snapshot();
     Q_EMIT activeRouteChanged();
     Q_EMIT changed();
+  }
+}
+
+void RouteFollower::restorePersisted() {
+  // "Persist active route across restarts": re-activate the route saved last
+  // session, if the option is on and it still exists. Called once at startup
+  // after the nav objects have loaded.
+  if (!g_persist_active_route || !pRouteList) return;
+  if (g_pRouteMan && g_pRouteMan->IsAnyRouteActive()) return;
+  const QString guid = ConfigStore::instance().getString("routes/activeGuid");
+  if (guid.isEmpty()) return;
+  for (int i = 0; i < static_cast<int>(pRouteList->size()); ++i) {
+    Route* r = (*pRouteList)[i];
+    if (r && r->GetGUID() == guid) {
+      activate(i);
+      return;
+    }
   }
 }
 
@@ -105,7 +132,9 @@ void RouteFollower::update() {
   Q_EMIT changed();
 
   if (was_active && !now_active) {
-    // The route deactivated itself during the tick -> reached the end.
+    // The route deactivated itself during the tick -> reached the end. Don't
+    // restore a completed route next launch.
+    ConfigStore::instance().setString("routes/activeGuid", QString());
     Q_EMIT activeRouteChanged();
     Q_EMIT ended(prev_route_name);
   } else if (was_active && now_active && now_wp != prev_wp) {
