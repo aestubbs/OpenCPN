@@ -129,6 +129,18 @@ public:
   // (mirrors wx EmbossOverzoomIndicator's 3.9x). Default 4.0.
   void setOverscaleThreshold(double t);
 
+  // Cross-cell de-duplication: the coverage polygons (in lon/lat) of every
+  // OTHER quilt cell that is FINER than this one and overlaps it. A point
+  // annotation (symbol, label, sounding, light sector) whose anchor falls in
+  // one of these regions is SUPPRESSED -- it is drawn by the finer cell that
+  // owns that spot, so each feature/name renders exactly once. This is the
+  // scene-graph analogue of wx's m_covered_region.Subtract (gui/src/quilt.cpp):
+  // wx clips a coarser cell to its coverage minus the finer cells'; here the
+  // fills/lines are bbox-clipped and the point annotations are owner-culled.
+  // Set by ChartCanvas whenever the loaded quilt set changes; triggers a
+  // declutter re-layout. Empty (the finest cell) -> nothing suppressed.
+  void setFinerCoverage(const QList<QPolygonF>& finer_lonlat);
+
 private:
   // One billboarded point item (symbol or text): a transform node placed at
   // the world anchor whose scale counters the viewport scale so the content
@@ -143,6 +155,7 @@ private:
     QPointF worldPos;  // (x=lon, y=-lat)
     int scamin = 100000002;  // hidden when chart scale 1:N > scamin
     BbKind kind = BbKind::Symbol;
+    QString text;             // label text (empty for non-labels): same-name dedup
     int viewGroup = 0;        // s52sg::ViewGroup -- nav aids get the detail cap
     float depth = 0.0f;       // sounding depth (metres) for shallowest-wins
     float screenW = 0.0f;     // on-screen size (logical px) -- for label
@@ -285,6 +298,14 @@ private:
   double m_north, m_south, m_west, m_east;
   const Viewport* m_viewport;
   QList<Billboard> m_billboards;
+  // Finer-cell coverage (from setFinerCoverage), transformed to WORLD coords
+  // (x = lon, y = latToWorldY(lat)) so a billboard's worldPos can be tested
+  // directly without inverting Mercator. A billboard whose anchor is inside any
+  // of these is owner-culled in recomputeDeclutter.
+  QList<QPolygonF> m_finer_coverage_world;
+  // True if a point annotation at this world anchor is owned by a finer cell
+  // (and so must be suppressed here). False when m_finer_coverage_world empty.
+  bool coveredByFiner(const QPointF& world_pos) const;
   bool m_built = false;
 };
 

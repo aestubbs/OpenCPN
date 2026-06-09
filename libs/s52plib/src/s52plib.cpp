@@ -11799,11 +11799,13 @@ void RenderFromHPGL::SetTargetSG(s52sg::VectorSymbol *vs) {
 void RenderFromHPGL::sgAddSeg(wxPoint a, wxPoint b) {
   if (!m_sgSymbol) return;
   const QColor c(penColor.Red(), penColor.Green(), penColor.Blue());
+  const float w = static_cast<float>(penWidth);  // current SW pen width
   if (m_sgSymbol->ops.isEmpty() || m_sgSymbol->ops.last().filled ||
-      m_sgSymbol->ops.last().color != c) {
+      m_sgSymbol->ops.last().color != c || m_sgSymbol->ops.last().width != w) {
     s52sg::VectorOp op;
     op.filled = false;
     op.color = c;
+    op.width = w;
     m_sgSymbol->ops.append(op);
   }
   m_sgSymbol->ops.last().verts << QPointF(a.x, a.y) << QPointF(b.x, b.y);

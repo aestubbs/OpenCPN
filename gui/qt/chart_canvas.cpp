@@ -577,6 +577,7 @@ void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
     m_depth_unit = DisplayConfig::instance().depthUnit();
     s.depthUnit = m_depth_unit;
     s.chartInfoObjects = c.chartInfoObjects();          // P2.16
+    s.dataQuality = c.dataQuality();                    // CATZOC overlay
     s.buoyLightLabels = c.buoyLightLabels();            // P2.16
     s.lightDescriptions = c.lightDescriptions();        // P2.16
     s.extendedLightSectors = c.extendedLightSectors();  // P2.16
@@ -760,6 +761,9 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   m_loaded.insert(id, lc);
   qWarning("onCellLoaded: ADD %s scale=%d cov=%lld", qPrintable(id),
            cat.nativeScale, static_cast<long long>(cat.coverage.size()));
+  // The new cell may own annotations in coarser cells (or be owned by finer
+  // ones already loaded) -- re-derive every loaded cell's finer-coverage.
+  updateFinerCoverage();
   Q_EMIT chartCoverageChanged();
   update();
 }
@@ -921,7 +925,12 @@ void ChartCanvas::updateVisibleCells() {
     m_loaded.remove(name);
     m_requested.remove(name);  // eligible to reload when needed again
   }
-  if (!evict.isEmpty()) update();
+  if (!evict.isEmpty()) {
+    update();
+    // A removed cell may have been the finer owner for cells that remain; they
+    // must reclaim the annotations it was suppressing.
+    updateFinerCoverage();
+  }
   // Refresh the chart bar's coverage list only when the displayed set changed.
   if (needed_changed) Q_EMIT chartCoverageChanged();
 
@@ -959,6 +968,43 @@ void ChartCanvas::updateVisibleCells() {
       0.05 * std::max(1.0, m_overscale_factor)) {
     m_overscale_factor = newOverscale;
     Q_EMIT overscaleChanged();
+  }
+}
+
+void ChartCanvas::updateFinerCoverage() {
+  // For each loaded cell, gather the coverage of every OTHER loaded cell that is
+  // strictly FINER (smaller native scale) and overlaps it, and hand it to the
+  // provider. A point annotation (symbol, label, sounding, light sector) whose
+  // anchor a finer cell owns is then suppressed there -- drawn once, by the
+  // finest owner. This is the scene-graph form of wx's quilt region-subtraction
+  // (gui/src/quilt.cpp: ActiveRegion = quilt_region - m_covered_region), applied
+  // at the point-annotation level so the fills/lines keep their cheap bbox clip.
+  for (auto it = m_loaded.begin(); it != m_loaded.end(); ++it) {
+    LoadedCell& lc = it.value();
+    if (!lc.provider || !lc.extent.valid() || lc.extent.nativeScale <= 0)
+      continue;
+    QList<QPolygonF> finer;
+    for (auto jt = m_loaded.cbegin(); jt != m_loaded.cend(); ++jt) {
+      if (jt.key() == it.key()) continue;
+      const CellExtent& f = jt.value().extent;
+      // Strictly finer (so it draws on top here) and actually overlapping.
+      if (!f.valid() || f.nativeScale <= 0 ||
+          f.nativeScale >= lc.extent.nativeScale)
+        continue;
+      if (!f.intersects(lc.extent.south, lc.extent.north, lc.extent.west,
+                        lc.extent.east))
+        continue;
+      if (!f.coverage.isEmpty()) {
+        finer += f.coverage;  // real M_COVR polygons (lon/lat)
+      } else {
+        // No M_COVR captured -> the finer cell owns its whole bounding box.
+        QPolygonF bb;
+        bb << QPointF(f.west, f.south) << QPointF(f.east, f.south)
+           << QPointF(f.east, f.north) << QPointF(f.west, f.north);
+        finer << bb;
+      }
+    }
+    lc.provider->setFinerCoverage(finer);
   }
 }
 
@@ -1840,6 +1886,7 @@ void ChartCanvas::applyChartConfig() {
   m_depth_unit = DisplayConfig::instance().depthUnit();
   s.depthUnit = m_depth_unit;
   s.chartInfoObjects = c.chartInfoObjects();          // P2.16
+  s.dataQuality = c.dataQuality();                    // CATZOC overlay
   s.buoyLightLabels = c.buoyLightLabels();            // P2.16
   s.lightDescriptions = c.lightDescriptions();        // P2.16
   s.extendedLightSectors = c.extendedLightSectors();  // P2.16

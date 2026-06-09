@@ -26,10 +26,13 @@
 
 #include <wx/wx.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
 #include <QHash>
+#include <QImage>
+#include <QPainter>
 #include <QString>
 #include <QStringList>
 
@@ -66,6 +69,180 @@ static QImage cachedAtlasImage(ChartSymbols& symbols, const char* name) {
   return q;
 }
 
+// --- Vector (HPGL) AP pattern support --------------------------------------
+//
+// cachedAtlasImage (above) only serves the handful of AP patterns baked into
+// the symbol atlas. The MAJORITY of S-52 area patterns are vector/HPGL
+// definitions (PADF=='V') with no atlas bitmap: the CATZOC quality overlays
+// (DQUAL*), marine farms (MARCUL02), marshes (MARSHES1), dredged areas
+// (DRGARE01), wooded areas, fishing/foul areas, sand waves, ... These are
+// rasterised on the fly below.
+//
+// NB: we do NOT reuse the legacy CreatePatternBufferSpec. It draws the pattern
+// through a wxMemoryDC + wxThePenList, but opencpn-qt only calls wxInitialize()
+// (no full wxApp), so wxThePenList is null and RenderFromHPGL::SetPen() crashes
+// (it documents exactly this). Instead we drive the same HPGL renderer with a
+// scene-graph target (SetTargetSG) -- the thread-safe path that captures the
+// pattern strokes as colour/line ops in tile-pixel space -- then paint them
+// with QPainter (raster engine, safe on the chart-worker thread). The tile
+// geometry mirrors CreatePatternBufferSpec so dot spacing matches the wx fill.
+
+// Rasterise a vector pattern Rule into a transparent RGBA tile. Returns a null
+// QImage on failure; on success writes the tile pixel size to *outW/*outH.
+static QImage rasterizeVectorPatternTile(RenderFromHPGL* hpgl, VPointCompat* vp,
+                                         float ppmm, Rule* prule, int* outW,
+                                         int* outH) {
+  if (!hpgl || !prule || !prule->vector.PVCT || ppmm <= 0.0f) return QImage();
+
+  // The s52plib decode runs at the default canvas_pix_per_mm (3.0); rendering
+  // the tile at that density makes the dots ~20% undersized vs the real ~3.78
+  // logical screen density, and -- rasterised low-res then magnified on a HiDPI
+  // canvas -- they wash out to invisibility. So render the tile at the real
+  // screen density (kScreenPpmm, for wx spacing parity) AND supersampled
+  // (kSuper, for crispness on a retina canvas). The reported logical tile period
+  // (*outW/H) is the supersampled size / kSuper, so the provider tiles at the
+  // wx-correct screen spacing while sampling a high-res texture.
+  constexpr double kScreenPpmm = 3.78;  // real logical screen density
+  // No artificial supersample: the texture is sampled with Nearest+Repeat, so
+  // rendering above the display density then reporting a smaller logical period
+  // would MINIFY the tile and drop the thin pattern strokes. Render at the real
+  // logical density and tile 1:1 (matches wx's nearest-neighbour pattern blit).
+  constexpr double kSuper = 1.0;
+  const double ppmm_eff = kScreenPpmm * kSuper;
+  const double fsf = 100.0 / ppmm_eff;  // 0.01mm pattern units per tile pixel
+  // HPGL::Render derives its own scaleFactor from plib->GetPPMM() (== `ppmm`
+  // here) divided by this scale arg; pass the ratio so it matches `fsf` above.
+  const float renderScale = static_cast<float>(ppmm_eff / ppmm);
+
+  // Tile box: the pattern bbox expanded to include the pivot, plus the
+  // min-distance spacing margin (matches CreatePatternBufferSpec).
+  const double bx = prule->pos.patt.bnbox_x.PBXC;
+  const double by = prule->pos.patt.bnbox_y.PBXR;
+  const double bw = prule->pos.patt.bnbox_w.PAHL;
+  const double bh = prule->pos.patt.bnbox_h.PAVL;
+  const double pvx = prule->pos.patt.pivot_x.PACL;
+  const double pvy = prule->pos.patt.pivot_y.PARW;
+  const double pad = prule->pos.patt.minDist.PAMI;
+  const double minx = std::min(bx, pvx), miny = std::min(by, pvy);
+  const double maxx = std::max(bx + bw, pvx), maxy = std::max(by + bh, pvy);
+  const int width = static_cast<int>((maxx - minx + pad) / fsf) + 1;
+  const int height = static_cast<int>((maxy - miny + pad) / fsf) + 1;
+  if (width <= 0 || height <= 0 || width > 4096 || height > 4096) return QImage();
+
+  // Capture the HPGL strokes as SG ops (tile-pixel coords). g_scaminScale must
+  // be 1 (the GL path sets it in ObjectRenderCheckCat, which we bypass), and
+  // bSymbol=false so no RV-scale division -- so scaleFactor == fsf, matching
+  // the box math above.
+  s52sg::VectorSymbol vs;
+  extern float g_scaminScale;
+  g_scaminScale = 1.0f;
+  hpgl->SetTargetSG(&vs);
+  hpgl->SetVP(vp);
+  wxPoint r0(static_cast<int>((pvx - minx) / fsf) + 1,
+             static_cast<int>((pvy - miny) / fsf) + 1);
+  wxPoint pivot(static_cast<int>(pvx), static_cast<int>(pvy));
+  wxPoint origin(static_cast<int>(bx), static_cast<int>(by));
+  hpgl->Render(prule->vector.PVCT, prule->colRef.PCRF, r0, pivot, origin,
+               renderScale, 0.0, false);
+
+  // Paint onto ARGB32_Premultiplied -- the canonical QPainter raster target.
+  // Format_RGBA8888 is uploadable as a texture (img.fill works) but is NOT a
+  // reliable QPainter paint device, so stroke drawing silently produced nothing
+  // there. Convert to RGBA8888 (straight alpha, R,G,B,A) for the texture path.
+  QImage img(width, height, QImage::Format_ARGB32_Premultiplied);
+  img.fill(Qt::transparent);
+  QPainter p(&img);
+  // Pen width mirrors SetPen: SW value * 0.2 mm (>= 1 px), at the tile's render
+  // density (ppmm_eff, not the decode ppmm). FlatCap so strokes don't bleed past
+  // the tile edge (which would break seamless Repeat tiling).
+  const double nominal = std::max(1.0, std::floor(ppmm_eff / 5.0));
+  for (const s52sg::VectorOp& op : vs.ops) {
+    if (op.filled) {
+      p.setPen(Qt::NoPen);
+      p.setBrush(op.color);
+      for (int i = 0; i + 2 < op.verts.size(); i += 3) {
+        const QPointF tri[3] = {op.verts[i], op.verts[i + 1], op.verts[i + 2]};
+        p.drawConvexPolygon(tri, 3);
+      }
+    } else {
+      // Dot/line patterns. A stipple "dot" is an HPGL PU;PD point -- a
+      // zero-length segment -- which FlatCap renders as NOTHING (no extent), so
+      // dredged-area (DRGARE01) and similar dot patterns vanished. Draw an
+      // explicit filled dot for any sub-pen-length segment (RoundCap on real
+      // lines), at a minimum visible diameter so the fine S-52 stipple reads at
+      // chart scale instead of collapsing to a single faint pixel.
+      const double pw = std::max(1.0, op.width * nominal);
+      const double dotDia = std::max(pw, 2.0 * kSuper);  // >= ~2 logical px
+      QPen pen(op.color);
+      pen.setWidthF(pw);
+      pen.setCapStyle(Qt::RoundCap);
+      pen.setJoinStyle(Qt::RoundJoin);
+      p.setBrush(op.color);
+      for (int i = 0; i + 1 < op.verts.size(); i += 2) {
+        const QPointF a = op.verts[i], b = op.verts[i + 1];
+        const double dx = b.x() - a.x(), dy = b.y() - a.y();
+        if (dx * dx + dy * dy <= pw * pw) {
+          p.setPen(Qt::NoPen);
+          p.drawEllipse(QPointF((a.x() + b.x()) * 0.5, (a.y() + b.y()) * 0.5),
+                        dotDia * 0.5, dotDia * 0.5);
+        } else {
+          p.setPen(pen);
+          p.drawLine(a, b);
+        }
+      }
+    }
+  }
+  p.end();
+  QImage outImg = img.convertToFormat(QImage::Format_RGBA8888);
+  // Report the LOGICAL tile period (rendered pixels / kSuper) so the provider
+  // tiles at the wx-correct screen spacing.
+  *outW = static_cast<int>(std::lround(width / kSuper));
+  *outH = static_cast<int>(std::lround(height / kSuper));
+  return outImg;
+}
+
+// S-52 "staggered" patterns (PATP=='S' -- the DQUAL* CATZOC overlays, marine
+// farms, marshes, ...) shift every other ROW by half the tile width. wx applies
+// that offset at fill time (dda_tri); the SG path tiles with plain
+// QSGTexture::Repeat and cannot offset alternate rows, so the stagger is baked
+// into a double-height tile: band 0 is the source row-for-row, band 1 is the
+// source rotated right by width/2. A vertical Repeat of the 2-row tile then
+// reproduces the half-width odd-row offset seamlessly.
+static QImage bakeStaggeredTile(const QImage& src) {
+  const int w = src.width();
+  const int h = src.height();
+  if (w <= 0 || h <= 0) return src;
+  const QImage tile = src.format() == QImage::Format_RGBA8888
+                          ? src
+                          : src.convertToFormat(QImage::Format_RGBA8888);
+  QImage out(w, 2 * h, QImage::Format_RGBA8888);
+  const int dx = w / 2;
+  for (int y = 0; y < h; ++y) {
+    const uchar* s = tile.constScanLine(y);
+    uchar* d0 = out.scanLine(y);      // band 0: unshifted
+    uchar* d1 = out.scanLine(h + y);  // band 1: rotated right by dx
+    for (int x = 0; x < w; ++x) {
+      const uchar* sp = s + x * 4;
+      memcpy(d0 + x * 4, sp, 4);
+      int xd = x + dx;
+      if (xd >= w) xd -= w;
+      memcpy(d1 + xd * 4, sp, 4);
+    }
+  }
+  return out;
+}
+
+// A rasterised vector pattern tile + its tiling period in logical px (the
+// period is the SINGLE-row width/height; a staggered tile's image is baked
+// double-height but still tiles on the single height -> tileH = 2*height).
+namespace {
+struct VectorPatternTile {
+  QImage img;
+  double tileW = 0.0;
+  double tileH = 0.0;
+};
+}  // namespace
+
 // Map an S-57 object class (FeatureName, e.g. "LIGHTS", "BOYLAT", "BCNCAR")
 // to a viewing group for the mariner display toggles (P2.9).
 static int viewGroupFor(const char* featureName) {
@@ -98,6 +275,12 @@ static int dispRank(DisCat disc) {
 // back to geographic coords so the consumer can project them itself.
 int s52plib::RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules,
                           Rules *rules) {
+  // DRGARE's depth-shade fill is baked into its DRGARE01 pattern tile (see
+  // RenderToSGAP) and must NOT be emitted as a separate opaque fill -- a coincident
+  // opaque fill z-fights with and hides the blended pattern. Skip it here.
+  if (rzRules->obj &&
+      std::strncmp(rzRules->obj->FeatureName, "DRGARE", 6) == 0)
+    return 0;
   S52color *c = getColor((char *)rules->INSTstr);
   if (!c) return 0;
 
@@ -640,19 +823,105 @@ static QList<QPointF> tessLonLatTriangles(PolyTessGeo *ppg_geo) {
 int s52plib::RenderToSGAP(s52sg::Buffer &out, ObjRazRules *rzRules,
                           Rules *rules) {
   Rule *prule = rules->razRule;
-  if (!prule || prule->definition.PADF != 'R') return 0;  // raster patterns
-  QImage qpat = cachedAtlasImage(m_chartSymbols, prule->name.PANM);
-  if (qpat.isNull()) return 0;
+  if (!prule) return 0;
   if (!rzRules->obj->pPolyTessGeo) return 0;
+
+  QImage qpat;
+  double tileW = 0.0, tileH = 0.0;  // logical-px tiling period (0 = use image)
+
+  if (prule->definition.PADF == 'R') {
+    // Raster pattern: straight from the symbol atlas (FOULAR01, NODATA04, ...).
+    // The consumer derives the tile size from the image dimensions (tileW/H 0).
+    qpat = cachedAtlasImage(m_chartSymbols, prule->name.PANM);
+  } else {
+    // Vector (HPGL) pattern: the common case (DQUAL* CATZOC overlays, MARCUL02
+    // marine farms, MARSHES1, DRGARE01, ...). Rasterise once per (pattern,
+    // colour-table) and memoise. Keyed by name + m_colortable_index so a
+    // colour-scheme change re-rasterises rather than serving a stale, wrongly
+    // coloured tile. The cache holds the final tile + its tiling period, so the
+    // HPGL render + stagger bake run at most once per distinct pattern.
+    //
+    // Coincident solid-fill bake: an area whose symbology is a SOLID fill PLUS
+    // this pattern over the *same* polygon (DRGARE: AC(DEPMD)+AP(DRGARE01))
+    // hits a scene-graph depth conflict -- the opaque fill and the coincident
+    // blended pattern z-fight and the pattern is dropped. So for those, bake the
+    // depth-shade fill colour into an OPAQUE tile (shade + stipple) and skip the
+    // separate AC fill (RenderToSGAC), turning the dredged area into a
+    // pattern-only feature that draws over the surrounding depth area like any
+    // other pattern. bakeColor is the AC colour from the object's expanded CS
+    // rules (empty for patterns with no coincident fill -> transparent tile).
+    QColor bakeColor;
+    if (rzRules->obj &&
+        std::strncmp(rzRules->obj->FeatureName, "DRGARE", 6) == 0) {
+      for (Rules *r = rzRules->obj->CSrules; r; r = r->next)
+        if (r->ruleType == RUL_ARE_CO) {
+          if (S52color *fc = getColor((char *)r->INSTstr))
+            bakeColor = QColor(fc->R, fc->G, fc->B);
+          break;
+        }
+    }
+    static QHash<QString, VectorPatternTile> vcache;
+    const QString key = QString::fromLatin1(prule->name.PANM, 8) +
+                        QLatin1Char(':') + QString::number(m_colortable_index) +
+                        QLatin1Char(':') +
+                        (bakeColor.isValid() ? bakeColor.name() : QString());
+    VectorPatternTile vt;
+    auto it = vcache.constFind(key);
+    if (it != vcache.constEnd()) {
+      vt = it.value();
+    } else {
+      int w = 0, h = 0;
+      QImage tile =
+          rasterizeVectorPatternTile(HPGL, &vp_plib, GetPPMM(), prule, &w, &h);
+      if (!tile.isNull()) {
+        // Bake the coincident fill shade UNDER the stipple (opaque tile).
+        if (bakeColor.isValid()) {
+          QImage opaque(tile.size(), QImage::Format_RGBA8888);
+          opaque.fill(bakeColor);
+          QPainter bp(&opaque);
+          bp.drawImage(0, 0, tile);
+          bp.end();
+          tile = opaque;
+        }
+        // Staggered patterns (PATP=='S') need the half-width odd-row offset
+        // baked in, since QSGTexture::Repeat can't stagger alternate rows.
+        if (prule->fillType.PATP == 'S') {
+          vt.img = bakeStaggeredTile(tile);
+          vt.tileW = w;         // period = single-row width
+          vt.tileH = 2.0 * h;   // image baked double-height
+        } else {
+          vt.img = tile;
+          vt.tileW = w;
+          vt.tileH = h;
+        }
+      }
+      vcache.insert(key, vt);
+    }
+    qpat = vt.img;
+    tileW = vt.tileW;
+    tileH = vt.tileH;
+  }
+
+  if (qpat.isNull()) return 0;
 
   s52sg::PatternFill pf;
   pf.tris = tessLonLatTriangles(rzRules->obj->pPolyTessGeo);
   if (pf.tris.isEmpty()) return 0;
   pf.pattern = qpat;
   pf.dispCat = dispRank(rzRules->LUP->DISC);
+  // M_QUAL (CATZOC zone-of-confidence overlay) is S-52 display category "Other",
+  // but its visibility is already governed by the dedicated data-quality toggle
+  // (it is only DECODED when that is on). So once emitted, it must show
+  // regardless of the Base/Standard/All display category -- matching wx, where
+  // SetQualityOfData(true) reveals M_QUAL irrespective of category. Force it to
+  // the base rank so the consumer's category cull never drops it.
+  if (rzRules->obj && strncmp(rzRules->obj->FeatureName, "M_QUAL", 6) == 0)
+    pf.dispCat = s52sg::CatBase;
   // SCAMIN (P2.14): real value only while Use-SCAMIN is on; the consumer
   // SCAMIN-culls a pattern fill only when it carries a real value.
   pf.scamin = (m_bUseSCAMIN && rzRules->obj) ? rzRules->obj->Scamin : 100000002;
+  pf.tileW = tileW;
+  pf.tileH = tileH;
   out.patternFills.push_back(std::move(pf));
   return 1;
 }

@@ -625,7 +625,7 @@ static void *DEPARE01(void *param) {
 
   drval1 = -1.0;  // default values
   drval1_found = GetDoubleAttr(obj, "DRVAL1", drval1);
-  // drval2 = drval1 + 0.01;
+  drval2 = drval1 + 0.01;  // default when DRVAL2 absent (e.g. DRGARE)
   GetDoubleAttr(obj, "DRVAL2", drval2);
   //make sure drval2 is higher then drval1, always even in bad charts
   if (drval2 <= drval1) drval2 = drval1 + 0.01;

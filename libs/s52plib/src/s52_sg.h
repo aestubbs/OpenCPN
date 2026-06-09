@@ -86,16 +86,23 @@ struct Prim {
 };
 
 /** An area filled with a repeated (tiled) pattern bitmap -- S-52 AP fills
- *  (foul areas, dredged-area stipple, restricted zones, ...). `tris` is the
- *  tessellated polygon as an independent triangle list in (lon, lat);
- *  `pattern` is the tile bitmap. The consumer tiles it at a fixed screen
- *  size (UVs recomputed on zoom), so the pattern density is constant
- *  regardless of zoom. Raster patterns only (vector/HPGL patterns deferred). */
+ *  (CATZOC quality overlays, marine farms, marshes, dredged-area stipple,
+ *  foul areas, ...). `tris` is the tessellated polygon as an independent
+ *  triangle list in (lon, lat); `pattern` is the tile bitmap. The consumer
+ *  tiles it at a fixed screen size (UVs recomputed on zoom), so the pattern
+ *  density is constant regardless of zoom. Both raster (atlas) and vector
+ *  (HPGL, rasterised at emit) patterns are supported; vector patterns carry
+ *  the tile size here rather than deriving it from the image, since a
+ *  staggered tile is baked double-height (see RenderToSGAP). */
 struct PatternFill {
   QList<QPointF> tris;  // (lon, lat) triangle list
   QImage pattern;       // RGBA tile
   int scamin = 100000002;
   int dispCat = CatStandard;
+  // Tiling period in logical px (screen-fixed). <= 0 means "derive from the
+  // image dimensions" (the raster-pattern default the consumer already used).
+  double tileW = 0.0;
+  double tileH = 0.0;
 };
 
 /** One drawing op of a vector symbol: either line segments (vertex pairs)
@@ -105,6 +112,7 @@ struct VectorOp {
   bool filled = false;     // false = line segments, true = triangles
   QList<QPointF> verts;    // local pixel coords
   QColor color;
+  float width = 1.0f;      // HPGL pen width (SW value); used by AP pattern raster
 };
 
 /** A vector (HPGL) point symbol -- buoys/beacons/light flares decoded from

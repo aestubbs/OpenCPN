@@ -1060,13 +1060,37 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       print threshold in the small harbour cell, not an absence of SCAMIN).
       Nothing to do here; closed.
 
-- [ ] **P2.25** **Chart-rendering defect sweep (specific cells).** Investigate
+- [~] **P2.25** **Chart-rendering defect sweep (specific cells).** Investigate
       and fix concrete rendering issues on the user's local UK South-Coast
       charts:
-      - **Yarmouth (Isle of Wight / Solent)** — chart **tiling** artefacts
-        (cell-boundary seams, quilt-edge / overlap glitches).
+      - **Yarmouth (Isle of Wight / Solent)** — **DONE 2026-06-06.** The
+        symptoms (overlapping/duplicate text, light-sector arcs sliced at the
+        cell edge) were all the composite quilt rendering each overlapping cell's
+        full content clipped to its own bbox, with no cross-cell de-dup. Root
+        cause + fix verified against the wx pipeline (`gui/src/quilt.cpp`:
+        `ActiveRegion = quilt_region - m_covered_region`; no cross-cell feature
+        ID exists — `S57Obj` has no LNAM/FOID, only a cell-local `Index` — so wx
+        uses spatial region-subtraction, not identity de-dup). Three fixes in
+        `gui/qt/s52_vector_chart_provider.{h,cpp}` + `gui/qt/chart_canvas.{h,cpp}`:
+        (1) **billboards unclipped** — point annotations (symbols, text labels,
+        CARC light-sector arcs) now append to the unclipped `root`, not the
+        per-cell bbox `QSGClipNode`, so an arc/name sweeping past the cell edge
+        is never sliced (fills/lines keep the bbox clip). (2) **Finest-owner
+        suppression** — `ChartCanvas::updateFinerCoverage()` hands each cell the
+        coverage of every finer overlapping cell (`setFinerCoverage`); a
+        billboard whose anchor a finer cell owns is culled in
+        `recomputeDeclutter` (`coveredByFiner`) — the scene-graph analogue of
+        `m_covered_region.Subtract`. Cells with no captured M_COVR (`cov=0`,
+        e.g. these o-charts cells) fall back to the finer cell's bbox. (3)
+        **Within-cell same-name de-dup** — a label whose text + screen rect
+        duplicates one already placed in the SAME cell is dropped (always on;
+        narrower than the `m_declutter` toggle). Net: harbour overlap gone; arcs
+        complete; the remaining spread-out "Isle of Wight"/"River Yar" labels
+        are genuine per-polygon `OBJNAM`s in the o-charts data (released wx
+        renders them too, *worse* — heavily stacked), so this is **cleaner than
+        wx** and accepted as done.
       - **Poole (Dorset)** — **missing areas** (chart area not rendering /
-        coverage gap).
+        coverage gap). STILL OPEN.
       Method: reproduce each, then isolate the cause — quilt composite vs
       per-cell bounding-box clip (cf. **P2.17** M_COVR), area emit /
       tessellation, or the decode path (OGR `.000` vs OSENC) — and fix.

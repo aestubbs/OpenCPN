@@ -466,6 +466,12 @@ private:
   // screen to be worth decoding), and evict loaded cells that have left the
   // view or shrunk too small. Debounced off Viewport::changed.
   void updateVisibleCells();
+  // Push each loaded cell its FINER-cell coverage (every other loaded cell of a
+  // smaller native scale that overlaps it) so the provider can suppress point
+  // annotations a finer cell owns -- one copy per feature, drawn by the finest
+  // owner. The scene-graph analogue of wx's m_covered_region.Subtract. Called
+  // whenever the loaded set changes (a cell loads or is evicted).
+  void updateFinerCoverage();
   // The ~1:N display-scale denominator for a viewport scale (px/degree), at
   // a nominal display density. Compared against cells' native CSCL to pick
   // the quilt tier.

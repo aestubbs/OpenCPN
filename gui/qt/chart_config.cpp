@@ -27,6 +27,7 @@ ChartConfig& ChartConfig::instance() {
 ChartConfig::ChartConfig() {
   ConfigStore& c = ConfigStore::instance();
   m_chart_info = c.getBool("vchart/chartInfo", m_chart_info);
+  m_data_quality = c.getBool("vchart/dataQuality", m_data_quality);
   m_buoy_light_labels = c.getBool("vchart/buoyLightLabels", m_buoy_light_labels);
   m_light_descriptions =
       c.getBool("vchart/lightDescriptions", m_light_descriptions);
@@ -56,6 +57,9 @@ ChartConfig::ChartConfig() {
 
 void ChartConfig::setChartInfoObjects(bool v) {
   OCPN_VC_SET(m_chart_info, v, "vchart/chartInfo", setBool)
+}
+void ChartConfig::setDataQuality(bool v) {
+  OCPN_VC_SET(m_data_quality, v, "vchart/dataQuality", setBool)
 }
 void ChartConfig::setBuoyLightLabels(bool v) {
   OCPN_VC_SET(m_buoy_light_labels, v, "vchart/buoyLightLabels", setBool)

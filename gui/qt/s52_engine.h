@@ -52,9 +52,9 @@ struct ChartDisplaySettings {
   int symbolStyle = 0;             // 0 = paper chart, 1 = simplified (m_nSymbolStyle)
   int boundaryStyle = 0;           // 0 = plain, 1 = symbolised (m_nBoundaryStyle)
   int twoShades = 0;               // 0 = four-colour depth, 1 = two-colour
-  double safetyContour = 5.0;      // metres (S52_MAR_SAFETY_CONTOUR/_DEPTH)
+  double safetyContour = 3.0;      // metres (S52_MAR_SAFETY_CONTOUR/_DEPTH)
   double shallowContour = 2.0;     // metres (S52_MAR_SHALLOW_CONTOUR)
-  double deepContour = 10.0;       // metres (S52_MAR_DEEP_CONTOUR)
+  double deepContour = 6.0;        // metres (S52_MAR_DEEP_CONTOUR)
   // Object-height display unit: m_nHeightUnitDisplay (0 = metres, 1 = feet).
   // s52plib bakes the converted value + suffix into VERCLR/HEIGHT/ELEVAT text
   // and light descriptions at decode time, so it rides the re-decode path.
@@ -68,6 +68,7 @@ struct ChartDisplaySettings {
   // into the decode (object/text selection + SCAMIN), so they ride the same
   // re-decode path as the fields above.
   bool chartInfoObjects = false;     // m_bShowMeta (M_* meta-object display)
+  bool dataQuality = false;          // m_qualityOfDataOn (M_QUAL CATZOC overlay)
   bool buoyLightLabels = true;       // SetShowAtonText (AtoN names)
   bool lightDescriptions = false;    // SetShowLdisText (light character text)
   bool extendedLightSectors = true;  // SetExtendLightSectors (full sector legs)

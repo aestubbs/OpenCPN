@@ -37,6 +37,11 @@ class ChartConfig : public QObject {
   // Cartography / text detail.
   Q_PROPERTY(bool chartInfoObjects READ chartInfoObjects WRITE
                  setChartInfoObjects NOTIFY changed)
+  // CATZOC "zone of confidence" / quality-of-data overlay (M_QUAL DQUAL*
+  // patterns). Separate from chartInfoObjects, matching wx's dedicated "Show
+  // chart data quality" control. Default off (wx m_qualityOfDataOn default).
+  Q_PROPERTY(bool dataQuality READ dataQuality WRITE setDataQuality NOTIFY
+                 changed)
   Q_PROPERTY(bool buoyLightLabels READ buoyLightLabels WRITE setBuoyLightLabels
                  NOTIFY changed)
   Q_PROPERTY(bool lightDescriptions READ lightDescriptions WRITE
@@ -90,6 +95,8 @@ public:
 
   bool chartInfoObjects() const { return m_chart_info; }
   void setChartInfoObjects(bool v);
+  bool dataQuality() const { return m_data_quality; }
+  void setDataQuality(bool v);
   bool buoyLightLabels() const { return m_buoy_light_labels; }
   void setBuoyLightLabels(bool v);
   bool lightDescriptions() const { return m_light_descriptions; }
@@ -135,6 +142,7 @@ private:
   ChartConfig();  // loads from the config store
 
   bool m_chart_info = false;
+  bool m_data_quality = false;
   bool m_buoy_light_labels = true;
   bool m_light_descriptions = false;
   bool m_ext_light_sectors = true;
@@ -149,8 +157,8 @@ private:
   int m_colour_count = 0;
 
   double m_shallow = 2.0;
-  double m_safety = 5.0;
-  double m_deep = 10.0;
+  double m_safety = 3.0;
+  double m_deep = 6.0;
 
   int m_cm93_detail = 0;
   double m_cm93_dx = 0.0;

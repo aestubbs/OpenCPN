@@ -142,6 +142,11 @@ ApplicationWindow {
             onToggled: ChartConfig.chartInfoObjects = checked
         }
         CheckBox {
+            text: qsTr("Show chart data quality")
+            checked: ChartConfig.dataQuality
+            onToggled: ChartConfig.dataQuality = checked
+        }
+        CheckBox {
             text: qsTr("Buoy / light labels")
             checked: ChartConfig.buoyLightLabels
             onToggled: ChartConfig.buoyLightLabels = checked

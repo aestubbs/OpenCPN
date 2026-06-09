@@ -629,11 +629,16 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
         // quality / coverage / publication metadata. wx (s52plib.cpp:10680)
         // suppresses them unless "chart info objects" (m_bShowMeta) is on; the
         // OSENC path already gates on it, so gate the OGR path too for parity.
+        // M_QUAL is additionally shown when the dedicated "data quality" toggle
+        // is on (GetQualityOfData), even with general meta off -- that draws the
+        // CATZOC zone-of-confidence overlay alone (wx's SetQualityOfData).
         // The query snapshot above is built first, so a meta object stays
         // queryable (right-click ZOC/CATZOC) even when not drawn. (Not a
         // `continue` -- the feature must still reach DestroyFeature below.)
-        const bool drawFeature =
-            plib->m_bShowMeta || className[0] != 'M' || className[1] != '_';
+        const bool isMeta = className[0] == 'M' && className[1] == '_';
+        const bool isMQual = strncmp(className, "M_QUAL", 6) == 0;
+        const bool drawFeature = !isMeta || plib->m_bShowMeta ||
+                                 (isMQual && plib->GetQualityOfData());
 
         if (drawFeature && (gt == wkbPolygon || gt == wkbMultiPolygon)) {
           auto emitOne = [&](OGRPolygon* poly) {
@@ -1296,9 +1301,14 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
     // (s52plib.cpp:10680) suppresses M_* meta objects (M_QUAL/M_COVR/M_NSYS/...)
     // when Show-Meta is off; skip the whole object so none of its
     // area/line/symbol/text emits. (Object-query snapshots, built in the
-    // separate pass below, are unaffected.)
-    if (plib && !plib->m_bShowMeta && obj->FeatureName[0] == 'M' &&
-        obj->FeatureName[1] == '_')
+    // separate pass below, are unaffected.) Exception: M_QUAL is also shown
+    // when the dedicated "data quality" toggle is on (GetQualityOfData), so the
+    // CATZOC zone-of-confidence overlay draws alone even with general meta off
+    // (wx's separate SetQualityOfData control).
+    if (plib && obj->FeatureName[0] == 'M' && obj->FeatureName[1] == '_' &&
+        !plib->m_bShowMeta &&
+        !(strncmp(obj->FeatureName, "M_QUAL", 6) == 0 &&
+          plib->GetQualityOfData()))
       continue;
     // P2.23b -- super-SCAMIN: synthesize a SCAMIN for un-SCAMIN'd objects from
     // the cell native scale so the per-frame cull thins over-zoomed-out detail.
@@ -1591,6 +1601,10 @@ void S52Engine::applyDisplaySettings(const ChartDisplaySettings& s) {
   // text strings are turned into geometry at decode time, so a re-decode
   // (reloadResidentCells) is what makes a change take effect.
   lib->m_bShowMeta = s.chartInfoObjects;
+  // CATZOC quality-of-data overlay (M_QUAL): wx's dedicated control, read back
+  // via GetQualityOfData() at the meta gates above. SetQualityOfData also pokes
+  // the legacy no-show list / OBJL nViz, which are inert on the SG emit path.
+  lib->SetQualityOfData(s.dataQuality);
   lib->SetShowAtonText(s.buoyLightLabels);
   lib->SetShowLdisText(s.lightDescriptions);
   lib->SetExtendLightSectors(s.extendedLightSectors);

@@ -27,6 +27,7 @@
 #include <QHash>
 #include <QSet>
 #include <QVarLengthArray>
+#include <QVector2D>
 #include <QQuickWindow>
 #include <QTimer>
 #include <QScreen>
@@ -39,6 +40,7 @@
 #include <QSGTransformNode>
 
 #include "aa_line.h"
+#include "area_pattern_material.h"
 #include "coast_shade.h"
 #include "sg_helpers.h"
 #include "sg_texture_cache.h"
@@ -468,6 +470,33 @@ void S52VectorChartProvider::setOverscaleThreshold(double t) {
   Q_EMIT changed();
 }
 
+void S52VectorChartProvider::setFinerCoverage(
+    const QList<QPolygonF>& finer_lonlat) {
+  // Transform each finer-cell coverage ring (lon/lat) to WORLD coords
+  // (x = lon, y = latToWorldY(lat)) so a billboard's worldPos can be tested
+  // directly in coveredByFiner -- no per-point Mercator inverse at cull time.
+  QList<QPolygonF> world;
+  world.reserve(finer_lonlat.size());
+  for (const QPolygonF& poly : finer_lonlat) {
+    QPolygonF w;
+    w.reserve(poly.size());
+    for (const QPointF& p : poly)
+      w << QPointF(p.x(), Viewport::latToWorldY(p.y()));
+    world << w;
+  }
+  if (world == m_finer_coverage_world) return;  // unchanged -> no relayout
+  m_finer_coverage_world = std::move(world);
+  // Changes which point annotations survive owner-cull -- owe a declutter pass.
+  m_relayout_pending = true;
+  Q_EMIT changed();
+}
+
+bool S52VectorChartProvider::coveredByFiner(const QPointF& world_pos) const {
+  for (const QPolygonF& poly : m_finer_coverage_world)
+    if (poly.containsPoint(world_pos, Qt::OddEvenFill)) return true;
+  return false;
+}
+
 void S52VectorChartProvider::setDetailScale(double n) {
   if (n <= 0.0 || n == m_unset_scamin_n) return;
   m_unset_scamin_n = n;
@@ -498,6 +527,16 @@ void S52VectorChartProvider::rebuildPatternUVs(double scale) {
   // screen, i.e. (tileW/scale) world units. UV = worldCoord / tileWorld =
   // worldCoord * scale / tilePx. The constant canvas-centre offset only
   // shifts the tile phase, which is irrelevant.
+  // Reference world coord subtracted from UVs to keep them near zero. With
+  // QSGTexture::Repeat the absolute UV phase is irrelevant, but the magnitude
+  // is critical: absolute world coords (Mercator Y ~ 59 at this latitude) times
+  // scale/tilePx give UVs in the tens of thousands, where float32 precision
+  // (ULP ~0.002) is coarser than a tile texel -- the sparse pattern marks then
+  // can't be resolved (they smear into a solid band or vanish). Anchoring to the
+  // cell corner keeps UVs O(cell-span * scale / tilePx), restoring sub-texel
+  // precision so the dots tile crisply.
+  const double refX = m_west;
+  const double refY = Viewport::latToWorldY(m_north);
   for (const PatternGeom& pg : m_patterns) {
     if (!pg.node) continue;
     QSGGeometry* geo = pg.node->geometry();
@@ -508,10 +547,16 @@ void S52VectorChartProvider::rebuildPatternUVs(double scale) {
     for (qsizetype i = 0; i < pg.tris.size(); ++i) {
       const double wx = pg.tris[i].x();
       const double wy = Viewport::latToWorldY(pg.tris[i].y());  // Mercator
+      // texcoord carries the world offset from the cell reference (small, so it
+      // interpolates precisely); AreaPatternMaterial scales it to tile coords in
+      // the fragment. This is zoom-invariant -- only kScale changes with zoom.
       v[i].set(static_cast<float>(wx), static_cast<float>(wy),
-               static_cast<float>(wx * ku), static_cast<float>(wy * kv));
+               static_cast<float>(wx - refX), static_cast<float>(wy - refY));
     }
+    if (auto* mat = static_cast<AreaPatternMaterial*>(pg.node->material()))
+      mat->kScale = QVector2D(static_cast<float>(ku), static_cast<float>(kv));
     pg.node->markDirty(QSGNode::DirtyGeometry);
+    pg.node->markDirty(QSGNode::DirtyMaterial);
   }
 }
 
@@ -719,8 +764,10 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   QHash<qint64, int> cellShallowest;  // sounding cell -> billboard index
   QSet<qint64> occupied;              // label-bbox-occupied cells
   QHash<int, bool> labelKeep;         // label billboard index -> keep?
+  QHash<QString, QList<QRectF>> placedByText;  // same-name dedup: text -> rects
   for (int i = 0; i < m_billboards.size(); ++i) {
     const Billboard& b = m_billboards[i];
+    if (coveredByFiner(b.worldPos)) continue;  // a finer quilt cell owns it
     if (chart_scale_n > effScamin(b)) continue;  // SCAMIN-culled anyway
     if (b.kind == BbKind::Sounding) {
       const qint64 key = soundKey(b.worldPos);
@@ -728,15 +775,38 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
       if (it == cellShallowest.end() || b.depth < m_billboards[it.value()].depth)
         cellShallowest[key] = i;
     } else if (b.kind == BbKind::Label) {
-      // De-clutter (P2.23a): only suppress overlapping labels when the toggle
-      // is on. Off (the wx default) keeps every label -- overlap allowed.
-      if (!m_declutter) { labelKeep[i] = true; continue; }
-      // Screen-pixel bbox of the label, in occupancy cells. The box is centred
-      // on the anchor PLUS the S-52 placement offset (screenCx/Cy), so overlap
-      // is tested where the text actually draws -- offset names/light text no
-      // longer collide on the symbol anchor.
+      // Screen-pixel bbox of the label, centred on the anchor PLUS the S-52
+      // placement offset (screenCx/Cy), so tests use where the text draws --
+      // offset names/light text don't collide on the symbol anchor.
       const double sx = b.worldPos.x() * s + b.screenCx;
       const double sy = b.worldPos.y() * s + b.screenCy;
+      // Same-name de-dup (ALWAYS on): one cell often repeats a place/feature
+      // name -- "River Yar" along the river, "Isle of Wight" on each land
+      // polygon. Drop a label whose TEXT matches one already placed in this cell
+      // AND whose (slightly grown) screen rect overlaps it: redundant stacked
+      // copies go, while distinct same-name labels far apart are kept. Unlike
+      // the m_declutter toggle below (which thins DIFFERENT overlapping names),
+      // this is unconditional -- a name drawn twice in the same spot is noise.
+      if (!b.text.isEmpty()) {
+        constexpr double kDupMarginPx = 4.0;
+        const QRectF probe(sx - b.screenW / 2.0 - kDupMarginPx,
+                           sy - b.screenH / 2.0 - kDupMarginPx,
+                           b.screenW + 2 * kDupMarginPx,
+                           b.screenH + 2 * kDupMarginPx);
+        bool dup = false;
+        const auto it2 = placedByText.constFind(b.text);
+        if (it2 != placedByText.constEnd())
+          for (const QRectF& r : it2.value())
+            if (r.intersects(probe)) { dup = true; break; }
+        if (dup) { labelKeep[i] = false; continue; }
+        placedByText[b.text].append(
+            QRectF(sx - b.screenW / 2.0, sy - b.screenH / 2.0, b.screenW,
+                   b.screenH));
+      }
+      // General de-clutter (P2.23a): only suppress overlapping (different)
+      // labels when the toggle is on. Off (the wx default) keeps every label.
+      if (!m_declutter) { labelKeep[i] = true; continue; }
+      // Occupancy-grid test for the label's screen bbox.
       const long c0x = std::lround((sx - b.screenW / 2.0) / kOccCellPx);
       const long c1x = std::lround((sx + b.screenW / 2.0) / kOccCellPx);
       const long c0y = std::lround((sy - b.screenH / 2.0) / kOccCellPx);
@@ -760,6 +830,7 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   for (int i = 0; i < m_billboards.size(); ++i) {
     Billboard& b = m_billboards[i];
     bool hidden = chart_scale_n > effScamin(b);  // SCAMIN hard floor
+    if (!hidden) hidden = coveredByFiner(b.worldPos);  // finer cell owns it
     if (!hidden && b.kind == BbKind::Sounding)
       hidden = (cellShallowest.value(soundKey(b.worldPos), -1) != i);
     else if (!hidden && b.kind == BbKind::Label)
@@ -842,15 +913,23 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   m_overscale_hatch = nullptr;  // recreated below; old node freed with subtree
   m_bb_scale = -1.0;  // force the counter-scale matrices to be set on this build
 
-  // Clip each chart to its own BOUNDING BOX -- a simple, reliable rectangle (the
-  // chart's extent). A chart's geometry already lies within its bbox, so this
-  // removes no real content; it only bounds a finer chart to its box so it can't
-  // bleed past it over the coarser chart beneath (the composite display rules,
-  // Docs/QT_QUILT_VS_WX.md). It replaces the earlier M_COVR-polygon clip, whose
-  // complex boundary tessellated incompletely -- deleting valid content (the
-  // offshore "hole") and cutting symbols at the irregular coverage edge. The
-  // bbox works uniformly for NOAA/OSENC/raster (all carry bounds; not all carry
+  // Clip the chart's AREA FILLS + LINES to its own BOUNDING BOX -- a simple,
+  // reliable rectangle (the chart's extent). A chart's geometry already lies
+  // within its bbox, so this removes no real content; it only bounds a finer
+  // chart to its box so it can't bleed past it over the coarser chart beneath
+  // (the composite display rules, Docs/QT_QUILT_VS_WX.md). It replaces the
+  // earlier M_COVR-polygon clip, whose complex boundary tessellated
+  // incompletely -- deleting valid content (the offshore "hole"). The bbox
+  // works uniformly for NOAA/OSENC/raster (all carry bounds; not all carry
   // M_COVR). World coords: x = lon, y = latToWorldY(lat) (north -> smaller y).
+  //
+  // POINT ANNOTATIONS (symbols, text labels, CARC light-sector arcs) are NOT
+  // put under this clip -- they are appended to `root` (unclipped) below. A
+  // point annotation represents a feature AT a point and must draw in full; the
+  // bbox clip would slice a light sector or a name that sweeps past the cell
+  // edge (the Yarmouth "cut-off arc"). Cross-cell duplication is instead handled
+  // by finest-owner suppression in recomputeDeclutter (see setFinerCoverage),
+  // the scene-graph analogue of wx's m_covered_region.Subtract (quilt.cpp).
   QSGNode* content = root;
   {
     const float xl = static_cast<float>(m_west);
@@ -913,13 +992,27 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   content->appendChildNode(fillUnderlay);
   auto* fillTiles = new QSGNode();
   content->appendChildNode(fillTiles);
+  // AP pattern fills get their OWN layer, appended after every solid (AC) fill so
+  // they reliably draw ON TOP of a coincident solid fill (the dredged-area
+  // DRGARE01 stipple sits over its own DEPMD fill, the CATZOC overlay over the
+  // depth shade, ...). In the scene graph an opaque solid fill writes depth and a
+  // blended pattern at the *same* geometry loses the depth test (z-fight) when
+  // it is only a sibling appended just after the fill; a separate later layer
+  // gives the pattern a clear render-order z in front. Drawn under the lines so
+  // the depth-contour / dredged-area boundary lines stay on top (wx order).
+  auto* patternUnderlay = new QSGNode();
+  content->appendChildNode(patternUnderlay);
+  auto* patternTiles = new QSGNode();
+  content->appendChildNode(patternTiles);
   auto* lineUnderlay = new QSGNode();
   content->appendChildNode(lineUnderlay);
   auto* lineTiles = new QSGNode();
   content->appendChildNode(lineTiles);
   QVarLengthArray<int, kPrimGrid * kPrimGrid> fillGrid(kPrimGrid * kPrimGrid);
+  QVarLengthArray<int, kPrimGrid * kPrimGrid> patternGrid(kPrimGrid * kPrimGrid);
   QVarLengthArray<int, kPrimGrid * kPrimGrid> lineGrid(kPrimGrid * kPrimGrid);
   std::fill(fillGrid.begin(), fillGrid.end(), -1);
+  std::fill(patternGrid.begin(), patternGrid.end(), -1);
   std::fill(lineGrid.begin(), lineGrid.end(), -1);
   // Parent for a prim with world bbox [minx,maxx]x[miny,maxy]: its grid tile
   // (recorded in m_prim_tiles, created on first use), or `underlay` if it spans
@@ -1037,13 +1130,11 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       continue;
     QSGTexture* tex = root->texture(pf.pattern);  // cache-owned, deduped
     if (!tex) continue;
-    tex->setHorizontalWrapMode(QSGTexture::Repeat);
-    tex->setVerticalWrapMode(QSGTexture::Repeat);
-    tex->setFiltering(QSGTexture::Linear);
-    // patterns have transparent gaps -> blending
-    auto* node = sg::makeTextureNode(tex, QSGGeometry::DrawTriangles,
-                                     static_cast<int>(pf.tris.size()),
-                                     /*blending=*/true);
+    // AreaPatternMaterial tiles the pattern per-fragment from a world offset
+    // (rebuildPatternUVs writes the offset into the texcoord and sets kScale),
+    // so the stipple survives finely-tessellated areas where per-vertex UV +
+    // QSGTexture::Repeat collapsed each sub-tile polygon to one flat texel.
+    auto* node = makeAreaPatternNode(tex, static_cast<int>(pf.tris.size()));
     // Pattern fills belong to the fill layer (after solid fills, before lines)
     // and are view-cullable like solid fills.
     double pminx = 1e18, pminy = 1e18, pmaxx = -1e18, pmaxy = -1e18;
@@ -1052,8 +1143,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       pminx = std::min(pminx, wx); pmaxx = std::max(pmaxx, wx);
       pminy = std::min(pminy, wy); pmaxy = std::max(pmaxy, wy);
     }
-    appendMaybeScamin(tileParent(fillTiles, fillUnderlay, fillGrid, pminx, pminy,
-                                 pmaxx, pmaxy),
+    appendMaybeScamin(tileParent(patternTiles, patternUnderlay, patternGrid,
+                                 pminx, pminy, pmaxx, pmaxy),
                       node, pf.scamin);  // SCAMIN-cull when it carries one (P2.14)
 
     const qreal dpr =
@@ -1061,8 +1152,11 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     PatternGeom pg;
     pg.node = node;
     pg.tris = pf.tris;
-    pg.tileW = pf.pattern.width() / dpr;
-    pg.tileH = pf.pattern.height() / dpr;
+    // Vector patterns carry their own tiling period (a staggered tile's image
+    // is baked double-height, so the image dimensions are NOT the period);
+    // raster patterns leave tileW/H 0 and fall back to the image size.
+    pg.tileW = pf.tileW > 0.0 ? pf.tileW : pf.pattern.width() / dpr;
+    pg.tileH = pf.tileH > 0.0 ? pf.tileH : pf.pattern.height() / dpr;
     m_patterns.append(pg);
   }
 
@@ -1106,7 +1200,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
                           QPointF pivotPx, int scamin, BbKind kind,
                           float depth, double rotationDeg = 0.0,
-                          int viewGroup = 0, bool upright = false) {
+                          int viewGroup = 0, bool upright = false,
+                          const QString& text = QString()) {
     if (image.isNull() || !window) return;
     QSGTexture* tex = root->texture(image);  // cache-owned, deduped by name
     if (!tex) return;
@@ -1143,7 +1238,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     }
     auto* opacity = new QSGOpacityNode();
     opacity->appendChildNode(xform);
-    content->appendChildNode(opacity);
+    root->appendChildNode(opacity);  // unclipped: never sliced by the cell bbox
     Billboard b;
     b.opacity = opacity;
     b.xform = xform;
@@ -1157,6 +1252,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     b.screenCx = static_cast<float>(centreOff.x());
     b.screenCy = static_cast<float>(centreOff.y());
     b.upright = upright;
+    b.text = text;
     m_billboards.append(b);
   };
 
@@ -1198,7 +1294,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     }
     auto* opacity = new QSGOpacityNode();
     opacity->appendChildNode(xform);
-    content->appendChildNode(opacity);
+    root->appendChildNode(opacity);  // unclipped: a CARC arc is never sliced
     Billboard b;
     b.opacity = opacity;
     b.xform = xform;
@@ -1238,7 +1334,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     addBillboard(img, QPointF(lab.pos.x(), Viewport::latToWorldY(lab.pos.y())),
                  pivot, lab.scamin,
                  lab.isSounding ? BbKind::Sounding : BbKind::Label, lab.depth,
-                 /*rotationDeg=*/0.0, lab.viewGroup, /*upright=*/true);
+                 /*rotationDeg=*/0.0, lab.viewGroup, /*upright=*/true,
+                 lab.isSounding ? QString() : lab.text);
   }
 
   // Initial layout: declutter (sets `kept` + counter-scale on every kept
