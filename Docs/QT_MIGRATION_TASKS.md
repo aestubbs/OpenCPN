@@ -1049,12 +1049,13 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       `s52_vector_chart_provider.cpp`; threshold = max(4, overzoom k) from
       Options), and the HUD shows "⚠ OVERSCALE ×N" via
       `ChartCanvas.overscaleFactor`.
-- [~] **P2.19** **CM93 / CM93COMP** vector chart support. **Step (a)
-      beachhead landed (2026-06-10):** `gui/qt/cm93_dictionary.{h,cpp}` —
-      the pure-Qt dictionary loader (classes + geometry kinds + attribute
-      value types), compiling in the opencpn-qt target. Next: the binary
-      cell reader (header + tables) and the CreateS57Obj transcoder
-      extraction.
+- [~] **P2.19** **CM93 / CM93COMP** vector chart support. **Step (a) in
+      progress (2026-06-10):** `cm93_dictionary.{h,cpp}` (pure-Qt
+      dictionary loader) AND `cm93_cell_reader.{h,cpp}` (descramble +
+      header/table readers + Ingest, verbatim extraction with mechanical
+      renames) both compile in opencpn-qt. Next: the **CreateS57Obj
+      transcoder + BuildGeom** extraction (the ~650-line semantic core),
+      then the extent scanner + worker decode case + scale tiering + UI.
       **Implementation plan (scoped 2026-06-10):** CM93 decode already
       produces s52plib-compatible `S57Obj`s (`cm93chart::CreateS57Obj`,
       `gui/src/cm93.cpp:3163` — ~650 lines of attribute/class transcoding,
