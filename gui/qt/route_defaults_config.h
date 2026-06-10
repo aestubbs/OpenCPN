@@ -61,6 +61,10 @@ class RouteDefaultsConfig : public QObject {
   // Ask before deleting a route / track / mark (wx g_bConfirmObjectDelete).
   Q_PROPERTY(bool confirmObjectDelete READ confirmObjectDelete WRITE
                  setConfirmObjectDelete NOTIFY changed)
+  // Only advance the active waypoint INSIDE the arrival circle -- never by
+  // passing abeam (wx g_bAdvanceRouteWaypointOnArrivalOnly).
+  Q_PROPERTY(bool advanceOnArrivalOnly READ advanceOnArrivalOnly WRITE
+                 setAdvanceOnArrivalOnly NOTIFY changed)
 
 public:
   static RouteDefaultsConfig& instance();
@@ -97,6 +101,8 @@ public:
   void setTrackingPrecision(int v);
   bool confirmObjectDelete() const { return m_confirm_delete; }
   void setConfirmObjectDelete(bool v);
+  bool advanceOnArrivalOnly() const { return m_advance_arrival_only; }
+  void setAdvanceOnArrivalOnly(bool v);
 
 Q_SIGNALS:
   void changed();
@@ -118,6 +124,7 @@ private:
   QColor m_track_color{120, 72, 40};  // brown (dashed breadcrumb default)
   int m_tracking_precision = 0;
   bool m_confirm_delete = true;  // wx default
+  bool m_advance_arrival_only = false;  // wx default
 };
 
 }  // namespace ocpn::qtui

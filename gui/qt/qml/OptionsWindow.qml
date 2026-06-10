@@ -2367,6 +2367,13 @@ Window {
                                     checked: RouteDefaultsConfig.confirmObjectDelete
                                     onToggled: RouteDefaultsConfig.confirmObjectDelete = checked
                                 }
+                                CheckBox {
+                                    text: qsTr("Advance the active waypoint only inside the arrival circle")
+                                    checked: RouteDefaultsConfig.advanceOnArrivalOnly
+                                    onToggled: RouteDefaultsConfig.advanceOnArrivalOnly = checked
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Off (default): passing abeam of the waypoint also advances the route")
+                                }
 
                                 MenuSeparator { Layout.fillWidth: true }
 

@@ -16,6 +16,7 @@
 #include "route_defaults_config.h"
 
 #include "config_store.h"
+#include "model/gui_vars.h"  // g_bAdvanceRouteWaypointOnArrivalOnly
 #include "model/config_vars.h"  // route/track model globals (see below)
 #include "model/wx_qt_string.h"  // QString_to_wxString (icon name globals)
 
@@ -49,6 +50,9 @@ RouteDefaultsConfig::RouteDefaultsConfig() {
   m_tracking_precision =
       c.getInt("routes/trackingPrecision", m_tracking_precision);
   m_confirm_delete = c.getBool("routes/confirmDelete", m_confirm_delete);
+  m_advance_arrival_only =
+      c.getBool("routes/advanceArrivalOnly", m_advance_arrival_only);
+  g_bAdvanceRouteWaypointOnArrivalOnly = m_advance_arrival_only;
 
   // Mirror the persisted defaults into the model globals the nav / track code
   // reads, so the dialog actually drives behaviour (not just persistence).
@@ -137,6 +141,14 @@ void RouteDefaultsConfig::setConfirmObjectDelete(bool v) {
   if (m_confirm_delete == v) return;
   m_confirm_delete = v;
   ConfigStore::instance().setBool("routes/confirmDelete", v);
+  Q_EMIT changed();
+}
+
+void RouteDefaultsConfig::setAdvanceOnArrivalOnly(bool v) {
+  if (m_advance_arrival_only == v) return;
+  m_advance_arrival_only = v;
+  g_bAdvanceRouteWaypointOnArrivalOnly = v;  // Routeman reads this per tick
+  ConfigStore::instance().setBool("routes/advanceArrivalOnly", v);
   Q_EMIT changed();
 }
 
