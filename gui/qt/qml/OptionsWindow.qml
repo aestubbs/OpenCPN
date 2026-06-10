@@ -2246,6 +2246,21 @@ Window {
                                 width: uiSoundScroll.availableWidth
                                 spacing: 10
 
+                                // Output device (P3.6): which audio output the
+                                // alert sounds play through.
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Label { text: qsTr("Output device:") }
+                                    ComboBox {
+                                        Layout.fillWidth: true
+                                        model: SoundPlayer.outputDevices()
+                                        currentIndex: SoundPlayer.outputDevice
+                                        onActivated: SoundPlayer.outputDevice = currentIndex
+                                    }
+                                }
+
+                                MenuSeparator { Layout.fillWidth: true }
+
                                 // Per-event sound row: enable + path + browse + test.
                                 component SoundRow: ColumnLayout {
                                     id: soundRow

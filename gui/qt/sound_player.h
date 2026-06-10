@@ -38,6 +38,10 @@ class SoundPlayer : public QObject {
   QML_ELEMENT
   QML_SINGLETON
   Q_PROPERTY(bool playing READ playing NOTIFY playingChanged)
+  // Output device: index into outputDevices() (0 = system default).
+  // Persisted by device id so a re-plug keeps the choice.
+  Q_PROPERTY(int outputDevice READ outputDevice WRITE setOutputDevice NOTIFY
+                 outputDeviceChanged)
 
 public:
   explicit SoundPlayer(QObject* parent = nullptr);
@@ -48,17 +52,24 @@ public:
   /** Play a sound file (absolute path or file:// URL). Empty path is a no-op;
    *  a new call interrupts any sound still playing. */
   Q_INVOKABLE void play(const QString& file);
+  /** Available audio outputs: display names; [0] is "System default". */
+  Q_INVOKABLE QStringList outputDevices() const;
+  int outputDevice() const { return m_device_index; }
+  void setOutputDevice(int index);
   /** Stop playback. */
   Q_INVOKABLE void stop();
 
 Q_SIGNALS:
+  void outputDeviceChanged();
   void playingChanged();
 
 private:
   void ensurePlayer();  // lazily build the QMediaPlayer on first use
+  void applyDevice();   // point m_output at the chosen audio device
 
   QMediaPlayer* m_player = nullptr;
   QAudioOutput* m_output = nullptr;
+  int m_device_index = 0;  // 0 = system default
 };
 
 }  // namespace ocpn::qtui
