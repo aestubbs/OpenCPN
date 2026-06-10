@@ -113,6 +113,13 @@ struct NavWaypoint {
   qint64 createTimeMs = 0;             // creation time, for reverse-chrono sort
   long scamin = 0;                     // SCAMIN: hide when display 1:N exceeds it
   QColor color = QColor(255, 140, 0);
+  // Per-mark range rings (P3.6, wx waypoint range rings): drawn by the
+  // waypoint layer when showRings && ringCount > 0 && ringStep > 0.
+  bool showRings = false;
+  int ringCount = 0;
+  double ringStep = 0.0;               // in ringUnits
+  int ringUnits = 0;                   // 0 = NM, 1 = km
+  QColor ringColor = QColor(200, 60, 60);
 };
 
 struct NavTrack {

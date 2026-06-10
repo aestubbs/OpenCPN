@@ -15,15 +15,19 @@ qt_add_executable(opencpn-qt
 # as Qt resources at :/shaders/aaline.{vert,frag}.qsb (see aa_line.cpp).
 find_package(Qt6 REQUIRED COMPONENTS ShaderTools SerialPort Multimedia Svg
                                       LinguistTools)
+# Shader FILES are absolute: qt_add_translations defers an IDE source-expose
+# step to the END of the TOP-LEVEL directory scope, where relative paths
+# would (wrongly) resolve against the top-level source dir.
 qt_add_shaders(opencpn-qt "opencpn_qt_shaders"
   PREFIX "/"
+  BASE "${CMAKE_CURRENT_SOURCE_DIR}"
   FILES
-    shaders/aaline.vert
-    shaders/aaline.frag
-    shaders/coastshade.vert
-    shaders/coastshade.frag
-    shaders/areapattern.vert
-    shaders/areapattern.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/aaline.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/aaline.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/coastshade.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/coastshade.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/areapattern.vert
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/areapattern.frag
 )
 
 qt_add_qml_module(opencpn-qt

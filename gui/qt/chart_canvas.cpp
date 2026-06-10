@@ -1574,6 +1574,19 @@ QVariantList ChartCanvas::aisTargetSnapshot() const {
   return out;
 }
 
+void ChartCanvas::setMarkRangeRings(const QString& guid, bool show,
+                                    int count, double step, int units) {
+  if (!m_nav_provider) return;
+  m_nav_provider->setWaypointRangeRings(guid, show, count, step, units);
+  update();
+}
+
+void ChartCanvas::setMarkScamin(const QString& guid, int scamin) {
+  if (!m_nav_provider) return;
+  m_nav_provider->setWaypointScamin(guid, scamin);
+  update();
+}
+
 void ChartCanvas::loadMmsiProperties() {
   const QString blob = ConfigStore::instance().getString("ais/mmsiProps");
   if (blob.isEmpty()) return;

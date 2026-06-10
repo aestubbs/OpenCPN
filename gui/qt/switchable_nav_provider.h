@@ -153,6 +153,11 @@ public:
   void dropMark(double lat, double lon, const QString& name,
                 const QString& comment, const QString& icon);
   void renameWaypoint(const QString& guid, const QString& name);
+  /** Per-mark range rings + SCAMIN override (P3.6), persisted. units:
+   *  0 = NM, 1 = km; scamin 0 = always show. */
+  void setWaypointRangeRings(const QString& guid, bool show, int count,
+                             double step, int units);
+  void setWaypointScamin(const QString& guid, int scamin);
   void setWaypointComment(const QString& guid, const QString& comment);
   void setWaypointIcon(const QString& guid, const QString& icon);
   void setWaypointVisible(const QString& guid, bool visible);

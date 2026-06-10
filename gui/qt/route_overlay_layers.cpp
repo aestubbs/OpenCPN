@@ -320,6 +320,32 @@ void WaypointLayer::draw(SgBuilder& b, double wpp) {
     const QPointF w = lonLatToWorld(QPointF(wp.lon, wp.lat));  // Mercator world
     const bool selected = !m_selected.isEmpty() && wp.guid == m_selected;
 
+    // Per-mark range rings (P3.6, wx waypoint range rings): geographic
+    // circles around the mark, like the own-ship rings (Mercator is locally
+    // conformal, so a world-space circle is correct to first order).
+    if (wp.showRings && wp.ringCount > 0 && wp.ringStep > 0.0) {
+      const double step_nm =
+          wp.ringUnits == 1 ? wp.ringStep * 0.539957 : wp.ringStep;  // km->NM
+      const double cos_lat =
+          std::max(0.05, std::cos(wp.lat * M_PI / 180.0));
+      const double world_per_nm = 1.0 / (60.0 * cos_lat);
+      b.setPencil(false);
+      b.noBrush();
+      b.setPen(wp.ringColor, 1.0f);
+      for (int k = 1; k <= wp.ringCount; ++k) {
+        const double r = k * step_nm * world_per_nm;
+        QList<QPointF> circle;
+        circle.reserve(72);
+        for (int i = 0; i < 72; ++i) {
+          const double a = (2.0 * M_PI * i) / 72;
+          circle.append(
+              QPointF(w.x() + std::cos(a) * r, w.y() + std::sin(a) * r));
+        }
+        circle.append(circle.first());  // close
+        b.drawPolyline(circle);
+      }
+    }
+
     // Draw the chosen icon (screen-fixed); fall back to a coloured dot if the
     // icon catalogue has no such key. The selected mark gets a cyan ring.
     const QImage* icon =

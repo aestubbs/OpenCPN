@@ -25,7 +25,7 @@ Window {
     flags: Qt.Dialog
     modality: Qt.ApplicationModal
     width: 420
-    height: 430
+    height: 560
     color: palette.window
 
     property bool editMode: false
@@ -45,6 +45,23 @@ Window {
         editMode = true; guid = g;
         markNameField.text = nm; markCommentField.text = cm;
         iconName = ic.length > 0 ? ic : "triangle";
+        // Per-mark rings + SCAMIN (P3.6): load the current values by guid.
+        ringsCheck.checked = false
+        ringsCount.value = 0
+        ringsStep.text = "1.0"
+        ringsUnits.currentIndex = 0
+        scaminField.text = "0"
+        const wps = chart.routeList.waypoints
+        for (let i = 0; i < wps.length; ++i) {
+            if (wps[i].guid === g) {
+                ringsCheck.checked = wps[i].showRings
+                ringsCount.value = wps[i].ringCount
+                ringsStep.text = Number(wps[i].ringStep).toFixed(1)
+                ringsUnits.currentIndex = wps[i].ringUnits
+                scaminField.text = String(wps[i].scamin)
+                break
+            }
+        }
         show(); raise(); requestActivate()
         markNameField.forceActiveFocus()
     }
@@ -53,6 +70,11 @@ Window {
             chart.renameMark(guid, markNameField.text)
             chart.setMarkComment(guid, markCommentField.text)
             chart.setMarkIcon(guid, iconName)
+            chart.setMarkRangeRings(guid, ringsCheck.checked,
+                                    ringsCount.value,
+                                    parseFloat(ringsStep.text) || 0,
+                                    ringsUnits.currentIndex)
+            chart.setMarkScamin(guid, parseInt(scaminField.text) || 0)
         } else {
             chart.dropMarkHere(markNameField.text, markCommentField.text,
                                iconName)
@@ -114,6 +136,43 @@ Window {
                     }
                 }
                 ScrollBar.vertical: ScrollBar {}
+            }
+        }
+        // Per-mark range rings + SCAMIN (P3.6) -- edit mode only (a new mark
+        // can be edited right after dropping it).
+        RowLayout {
+            visible: markEditor.editMode
+            spacing: 8
+            CheckBox { id: ringsCheck; text: qsTr("Range rings") }
+            SpinBox { id: ringsCount; from: 0; to: 10; enabled: ringsCheck.checked }
+            TextField {
+                id: ringsStep
+                Layout.preferredWidth: 60
+                enabled: ringsCheck.checked
+                validator: DoubleValidator { bottom: 0.1; top: 100 }
+                selectByMouse: true
+            }
+            ComboBox {
+                id: ringsUnits
+                Layout.preferredWidth: 80
+                enabled: ringsCheck.checked
+                model: [qsTr("NM"), qsTr("km")]
+            }
+        }
+        RowLayout {
+            visible: markEditor.editMode
+            spacing: 8
+            Label { text: qsTr("Hide beyond 1:") }
+            TextField {
+                id: scaminField
+                Layout.preferredWidth: 110
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator { bottom: 0; top: 100000000 }
+                selectByMouse: true
+            }
+            Label {
+                text: qsTr("(SCAMIN; 0 = always show)")
+                color: palette.placeholderText; font.pointSize: 10
             }
         }
         DialogButtonBox {

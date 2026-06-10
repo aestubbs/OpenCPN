@@ -423,6 +423,11 @@ public:
   Q_INVOKABLE void setMarkComment(const QString& guid, const QString& comment);
   Q_INVOKABLE void setMarkIcon(const QString& guid, const QString& icon);
   Q_INVOKABLE void deleteMark(const QString& guid);
+  // Per-mark range rings + SCAMIN override (P3.6, persisted). units:
+  // 0 = NM, 1 = km; scamin 0 = always show.
+  Q_INVOKABLE void setMarkRangeRings(const QString& guid, bool show, int count,
+                                     double step, int units);
+  Q_INVOKABLE void setMarkScamin(const QString& guid, int scamin);
   // All waypoint-icon keys (for the editor's icon picker; images come from the
   // wpicon image provider).
   Q_INVOKABLE QStringList markIconNames() const;

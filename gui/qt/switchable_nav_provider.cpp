@@ -272,6 +272,12 @@ QList<NavWaypoint> SwitchableNavDataProvider::waypoints() const {
     nw.lon = wp->m_lon;
     nw.visible = wp->IsVisible();
     nw.scamin = wp->GetUseSca() ? wp->GetScaMin() : 0;  // 0 = never cull
+    nw.showRings = wp->GetShowWaypointRangeRings();
+    nw.ringCount = wp->GetWaypointRangeRingsNumber();
+    nw.ringStep = wp->GetWaypointRangeRingsStep();
+    nw.ringUnits = wp->GetWaypointRangeRingsStepUnits();
+    if (wp->m_wxcWaypointRangeRingsColour.isValid())
+      nw.ringColor = wp->m_wxcWaypointRangeRingsColour;
     const QDateTime ct = wp->GetCreateTime();
     nw.createTimeMs = ct.isValid() ? ct.toMSecsSinceEpoch() : 0;
     out.append(nw);
@@ -619,6 +625,30 @@ void SwitchableNavDataProvider::dropMark(double lat, double lon,
     wp->SetUseSca(true);
   }
   NavObj_dB::GetInstance().InsertRoutePoint(wp);  // persist mark + position
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::setWaypointRangeRings(
+    const QString& guid, bool show, int count, double step, int units) {
+  RoutePoint* wp =
+      pWayPointMan ? pWayPointMan->FindRoutePointByGUID(guid) : nullptr;
+  if (!wp) return;
+  wp->SetShowWaypointRangeRings(show);
+  wp->SetWaypointRangeRingsNumber(count);
+  wp->SetWaypointRangeRingsStep(static_cast<float>(step));
+  wp->SetWaypointRangeRingsStepUnits(units);
+  NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
+  Q_EMIT staticChanged();
+}
+
+void SwitchableNavDataProvider::setWaypointScamin(const QString& guid,
+                                                  int scamin) {
+  RoutePoint* wp =
+      pWayPointMan ? pWayPointMan->FindRoutePointByGUID(guid) : nullptr;
+  if (!wp) return;
+  wp->SetScaMin(scamin > 0 ? scamin : 100000002);  // sentinel = unset
+  wp->SetUseSca(scamin > 0);
+  NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
   Q_EMIT staticChanged();
 }
 

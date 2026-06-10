@@ -96,6 +96,12 @@ void RouteListViewModel::refresh() {
     m["createTimeMs"] = wp.createTimeMs;
     m["rangeNm"] = own.valid ? haversineNm(own.lat, own.lon, wp.lat, wp.lon)
                              : -1.0;
+    // Per-mark range rings + SCAMIN override (P3.6) for the mark editor.
+    m["showRings"] = wp.showRings;
+    m["ringCount"] = wp.ringCount;
+    m["ringStep"] = wp.ringStep;
+    m["ringUnits"] = wp.ringUnits;
+    m["scamin"] = static_cast<qlonglong>(wp.scamin);
     m_waypoints.append(m);
   }
   // Sort: most-recent-first (createTimeMs desc) or nearest-first (rangeNm asc;
