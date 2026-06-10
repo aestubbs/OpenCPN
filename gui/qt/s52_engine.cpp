@@ -18,6 +18,8 @@
 
 #include "s52_engine.h"
 
+#include "cm93_loader.h"
+
 #include <algorithm>
 #include <cstring>
 #include <vector>
@@ -813,6 +815,17 @@ S57ClassRegistrar* makeRegistrar(const QString& s57data_dir) {
   return registrar;
 }
 }  // namespace
+
+s52sg::Buffer S52Engine::loadCm93Cell(const QString& path,
+                                      const Cm93Dictionary* dict,
+                                      double* north, double* south,
+                                      double* east, double* west) {
+  s52sg::Buffer buf;
+  if (!isOk() || !dict) return buf;
+  Cm93Loader::loadCell(m_impl->lib, path, dict, &buf, north, south, east,
+                       west);
+  return buf;
+}
 
 s52sg::Buffer S52Engine::loadEncCell(const QString& path_000,
                                      const QString& s57data_dir,

@@ -77,6 +77,7 @@
 #include "object_query_view_model.h"
 #include "raster_chart_provider.h"
 #include "route_list_view_model.h"
+#include "cm93_scanner.h"
 #include "grid_layer.h"
 #include "waypoint_icons.h"
 #include "s57_dictionary.h"
@@ -663,6 +664,12 @@ void ChartCanvas::reloadCharts() {
   for (const QString& path : m_chart_source->activeDirectories()) {
     QFileInfo fi(path);
     if (fi.isDir()) {
+      // A CM93 set root (P2.19): pass the DIRECTORY itself; the worker
+      // expands it via the CM93 scanner (cells are not .000-globbable).
+      if (Cm93Scanner::isCm93Root(path)) {
+        cells << path;
+        continue;
+      }
       // o-charts dirs carry a keyList *.XML; load it so the worker can
       // decrypt the cells it finds here.
       OChartsService::instance().loadKeyList(path);

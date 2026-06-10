@@ -15,6 +15,13 @@
 
 #include "chart_worker.h"
 
+#include <QDir>
+#include <QRegularExpression>
+
+#include "cm93_cell_reader.h"
+#include "cm93_dictionary.h"
+#include "cm93_scanner.h"
+
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -29,8 +36,13 @@ namespace ocpn::qtui {
 
 namespace {
 // Chart cell formats handled by the worker.
-enum class CellKind { Enc000, SencPlain, Ocharts };
+enum class CellKind { Enc000, SencPlain, Ocharts, Cm93 };
+// CM93 cell files are ?lllnnnn.X with X a scale letter (P2.19).
+const QRegularExpression kCm93CellRe(
+    QStringLiteral("^.\\d{7}\\.[ZABCDEFGzabcdefg]$"));
 CellKind kindOf(const QString& path) {
+  if (kCm93CellRe.match(QFileInfo(path).fileName()).hasMatch())
+    return CellKind::Cm93;
   const QString ext = QFileInfo(path).suffix().toLower();
   if (ext == QStringLiteral("oesu") || ext == QStringLiteral("oesenc"))
     return CellKind::Ocharts;  // encrypted -> oexserverd
@@ -78,6 +90,19 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
   // Persistent catalog cache: a hit skips the (expensive) per-cell scan.
   ChartCatalogCache cache;
   for (const QString& path : paths_000) {
+    // A directory entry is a CM93 set root (P2.19): expand it in place via
+    // the CM93 scanner (cheap header-only reads, no per-cell cache).
+    if (QFileInfo(path).isDir()) {
+      if (Cm93Scanner::isCm93Root(path)) {
+        const QList<CellExtent> cm93 = Cm93Scanner::scan(path);
+        cells.append(cm93);
+        Q_EMIT extentsScanned(cells);
+        qWarning("ChartWorker: CM93 set %s -> %lld cells",
+                 path.toUtf8().constData(), (long long)cm93.size());
+      }
+      QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+      continue;
+    }
     const qint64 mtime = QFileInfo(path).lastModified().toSecsSinceEpoch();
     CellExtent ce;
     if (cache.get(path, mtime, ce)) {
@@ -106,6 +131,20 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
       }
       case CellKind::Enc000:
         ce = m_engine->scanOneCellExtent(path, m_s57data_dir);
+        break;
+      case CellKind::Cm93:
+        // CM93 cells arrive pre-scanned (the root expansion below feeds
+        // ready extents); a stray single cell gets a header-only read.
+        if (Cm93CellReader::readHeaderExtent(path, &ce.south, &ce.north,
+                                             &ce.west, &ce.east)) {
+          if (ce.west > 180.0) ce.west -= 360.0;
+          if (ce.east > 180.0) ce.east -= 360.0;
+          ce.name = QStringLiteral("CM93-") + QFileInfo(path).fileName();
+          ce.path = path;
+          ce.nativeScale =
+              Cm93Scanner::scaleForChar(path.back());
+          ce.band = Cm93Scanner::bandForChar(path.back());
+        }
         break;
     }
     if (ce.valid()) {
@@ -159,6 +198,30 @@ void ChartWorker::loadCell(const CellExtent& cell) {
     case CellKind::Enc000:
       buf = m_engine->loadEncCell(cell.path, m_s57data_dir, &n, &s, &e, &w);
       break;
+    case CellKind::Cm93: {
+      // Per-root dictionary cache: walk up from the cell to the set root.
+      QString root = QFileInfo(cell.path).absolutePath();
+      for (int up = 0; up < 4 && !root.isEmpty(); ++up) {
+        if (m_cm93_dicts.contains(root) || Cm93Scanner::isCm93Root(root))
+          break;
+        root = QFileInfo(root).absolutePath();
+      }
+      if (!m_cm93_dicts.contains(root)) {
+        auto dict = std::make_shared<Cm93Dictionary>();
+        if (!dict->load(root)) {
+          // The dictionary may live in a subdir (CM93SYS etc.).
+          for (const QString& sub :
+               QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            if (dict->load(root + QDir::separator() + sub)) break;
+          }
+        }
+        m_cm93_dicts.insert(root, dict);
+      }
+      const auto dict = m_cm93_dicts.value(root);
+      if (dict && dict->isOk())
+        buf = m_engine->loadCm93Cell(cell.path, dict.get(), &n, &s, &e, &w);
+      break;
+    }
   }
   if (buf.empty()) {
     // A needed cell that decodes to nothing leaves its boundary rectangle on

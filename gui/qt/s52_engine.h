@@ -77,6 +77,8 @@ struct ChartDisplaySettings {
   bool superScamin = false;          // m_bUseSUPER_SCAMIN (extra-aggressive cull)
 };
 
+class Cm93Dictionary;
+
 class S52Engine : public QObject {
   Q_OBJECT
   Q_PROPERTY(bool ok READ isOk NOTIFY changed)
@@ -126,6 +128,13 @@ public:
    *  cell is written to *out_north/south/east/west when non-null. Returns
    *  an empty buffer on failure. Currently emits area fills; lines and
    *  point features follow. */
+  /** Decode one CM93 cell (P2.19) through the shared s52plib: ingest +
+   *  transcode (cm93_loader) and the standard SG emit. Empty buffer on
+   *  ingest failure. */
+  s52sg::Buffer loadCm93Cell(const QString& path,
+                             const Cm93Dictionary* dict, double* north,
+                             double* south, double* east, double* west);
+
   s52sg::Buffer loadEncCell(const QString& path_000,
                             const QString& s57data_dir,
                             double* out_north = nullptr,

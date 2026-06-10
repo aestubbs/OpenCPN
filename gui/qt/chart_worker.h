@@ -34,6 +34,7 @@
 
 #include <memory>
 
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -46,6 +47,8 @@ Q_DECLARE_METATYPE(s52sg::Buffer)
 Q_DECLARE_METATYPE(ocpn::qtui::ChartDisplaySettings)
 
 namespace ocpn::qtui {
+
+class Cm93Dictionary;
 
 class S52Engine;
 
@@ -93,6 +96,8 @@ private:
   // (o-charts decrypt) scan instead of waiting for it to finish; this guards
   // against a re-entrant scanExtents arriving on that pump.
   bool m_scanning = false;
+  // Per-CM93-root dictionary cache (P2.19): loaded once per set.
+  QHash<QString, std::shared_ptr<ocpn::qtui::Cm93Dictionary>> m_cm93_dicts;
 };
 
 }  // namespace ocpn::qtui
