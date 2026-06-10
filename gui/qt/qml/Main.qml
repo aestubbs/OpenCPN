@@ -193,6 +193,27 @@ ApplicationWindow {
 
     // --- Central: world-anchored + display-anchored scene-graph subtrees,
     //     both inside the ChartCanvas QQuickItem.
+    // P6.1 (experimental): an independent second chart pane sharing the
+    // chart library but with its own viewport, decode engine and worker.
+    // Inspection-only in v1 (no route editing UI on this pane).
+    ChartCanvas {
+        id: splitPane
+        visible: UIConfig.splitView && s52SplitPane !== null
+        width: visible ? parent.width * 0.4 : 0
+        anchors.top: parent.top
+        anchors.bottom: tideDrawer.top
+        anchors.right: hudPanel.left
+        clip: true
+        s52Engine: s52SplitPane
+        Rectangle {  // divider
+            width: 2
+            color: "#55202830"
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+        }
+    }
+
     ChartCanvas {
         id: chart
         focus: true  // canvas keyboard layer (P3.20): arrows pan, +/- zoom, …
@@ -202,8 +223,9 @@ ApplicationWindow {
         // Bottom follows the tide graph drawer (which sits on the time bar);
         // the chart shrinks for the bar, then further as the drawer opens.
         anchors.bottom: tideDrawer.top
-        // Right edge follows the HUD panel so opening it shrinks the chart.
-        anchors.right: hudPanel.left
+        // Right edge follows the HUD panel so opening it shrinks the chart
+        // -- or the experimental second pane (P6.1) when split view is on.
+        anchors.right: splitPane.visible ? splitPane.left : hudPanel.left
         // Hand the S-52 engine to the canvas so it scans the chart set's
         // boundaries and streams cell content on demand. `s52` is the
         // context property set in main.cpp.

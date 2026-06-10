@@ -2196,6 +2196,11 @@ Window {
                                     onToggled: UIConfig.touchInterface = checked
                                 }
                                 CheckBox {
+                                    text: qsTr("Split view — second chart pane (experimental; takes effect on restart)")
+                                    checked: UIConfig.splitView
+                                    onToggled: UIConfig.splitView = checked
+                                }
+                                CheckBox {
                                     text: qsTr("Use Inland ECDIS")
                                     checked: UIConfig.inlandEcdis
                                     onToggled: {

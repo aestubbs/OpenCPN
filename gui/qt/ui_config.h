@@ -61,6 +61,10 @@ class UIConfig : public QObject {
                  NOTIFY changed)
   Q_PROPERTY(bool playShipsBells READ playShipsBells WRITE setPlayShipsBells
                  NOTIFY changed)
+  // Experimental split view (P6.1): a second, independent chart pane.
+  // Takes effect on restart (the pane's decode engine is created at
+  // startup).
+  Q_PROPERTY(bool splitView READ splitView WRITE setSplitView NOTIFY changed)
   // Options-window position persistence (-1 = unset; size is fixed).
   Q_PROPERTY(int optionsX READ optionsX WRITE setOptionsX NOTIFY changed)
   Q_PROPERTY(int optionsY READ optionsY WRITE setOptionsY NOTIFY changed)
@@ -123,6 +127,8 @@ public:
   void setTouchInterface(bool v);
   bool playShipsBells() const { return m_ships_bells; }
   void setPlayShipsBells(bool v);
+  bool splitView() const { return m_split_view; }
+  void setSplitView(bool v);
   int optionsX() const { return m_options_x; }
   void setOptionsX(int v);
   int optionsY() const { return m_options_y; }
@@ -172,6 +178,7 @@ private:
   double m_toolbar_transparency = 0.0;
   bool m_touch = false;
   bool m_ships_bells = false;
+  bool m_split_view = false;
   int m_options_x = -1;
   int m_options_y = -1;
   bool m_inland_ecdis = false;

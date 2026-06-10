@@ -120,8 +120,15 @@ int main(int argc, char* argv[]) {
   // Initialise the S-52 engine before loading the QML so the status
   // binding is current the moment Main.qml's HUD reads it.
   ocpn::qtui::S52Engine s52;
+  // P6.1 (experimental split view): the second canvas needs its own
+  // engine -- one s52plib per decode thread. Constructed only when the
+  // persisted toggle is on, so single-canvas users pay nothing.
+  std::unique_ptr<ocpn::qtui::S52Engine> s52_b;
+  if (ocpn::qtui::ConfigStore::instance().getBool("ui/splitView", false))
+    s52_b = std::make_unique<ocpn::qtui::S52Engine>();
   const QString s57data = QString::fromUtf8(OCPN_QT_S57DATA_DIR);
   if (!s57data.isEmpty()) s52.init(s57data);
+  if (s52_b && !s57data.isEmpty()) s52_b->init(s57data);
 
   // Dev one-shot: decode an OSENC/.S57 file and log feature counts, to
   // validate the native OSENC reader. Set OCPN_QT_OSENC_TEST=/path/to/cell.S57
@@ -218,6 +225,7 @@ int main(int argc, char* argv[]) {
   engine.addImageProvider(QStringLiteral("wpicon"),
                           new ocpn::qtui::WaypointIconProvider);
   engine.rootContext()->setContextProperty("s52", &s52);
+  engine.rootContext()->setContextProperty("s52SplitPane", s52_b.get());
   engine.rootContext()->setContextProperty("app", &appController);
   engine.rootContext()->setContextProperty("tides", &tideModel);
   // The settings backends (DisplayConfig, OwnShipConfig, AisConfig,
