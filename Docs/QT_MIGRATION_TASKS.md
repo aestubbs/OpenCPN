@@ -1797,6 +1797,21 @@ where top-level):
 **Settings — genuine remaining gaps, prioritized:**
 1. Vector → **"User Standard Objects"** per-object viewing-group checklist
    (select-all / clear-all / reset-to-STANDARD) — core ECDIS filter; absent.
+   **Implementation plan (scoped 2026-06-10, machinery mapped):** the SG
+   emit path bypasses s52plib's `ObjectRenderCheckCat`/`nViz` entirely, and
+   the emitted primitives carry `dispCat`/`scamin`/`viewGroup` but **not the
+   S-57 class** — so the feature needs: (a) a per-buffer **class table**
+   (encountered FeatureName acronyms) + a per-primitive class index added to
+   all 6 `s52sg` primitive structs, filled at emit (`s52plib_sg.cpp`, where
+   `rzRules->obj->FeatureName` is in hand alongside the existing `dispRank`
+   derivation); (b) `S52VectorChartProvider::setHiddenClasses(QSet<QString>)`
+   culling post-decode like the existing dispCat/SCAMIN culls; (c) a 4th
+   display-category choice "Mariner's Standard" (wx `MARINERS_STANDARD`)
+   gating when the per-class filter applies; (d) the QML checklist (class
+   descriptions via `S57Dictionary::className`, persistence
+   `objfilter/viz<ACR>` in ConfigStore, reset-to-STANDARD = the classes
+   whose LUP category is STANDARD/DISPLAYBASE); pOBJLArray itself stays
+   unused (it is inert on the SG path).
 2. **MMSI Properties** editor (`[~]` placeholder) — per-vessel ignore / always-
    track / MOB / persist-track.
 3. ~~Own-ship **HDT predictor length** (separate from COG) + **range-ring
