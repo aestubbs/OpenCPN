@@ -2149,10 +2149,10 @@ existing `followOwnShip` property before adding).
       compiled as-is, file open + timeline scrub on the settings page, and
       the 10 m wind field as speed-coloured arrows via the FIRST
       plugin-contributed Layer (toolkit seam proven). **+ 2 hPa pressure isobars
-      (marching squares) landed 2026-06-10.** Remaining for parity:
-      precip/waves/current overlays, wind barbs + particle animation, the
-      GRIB request builder, cursor data readout, density tuning — verify
-      with a real GRIB file first.
+      (marching squares) landed 2026-06-10.** **+ meteorological wind barbs (2026-06-10).** Remaining for parity:
+      precip/waves/current overlays, particle animation, the GRIB request
+      builder, cursor data readout, density tuning — verify with a real
+      GRIB file first.
 - [~] **P4.6** Document the plugin API —
       [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
       (interface, contribution seams, wx-ABI mapping table, porting
