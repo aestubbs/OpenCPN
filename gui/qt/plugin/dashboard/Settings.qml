@@ -5,6 +5,28 @@ import QtQuick.Controls
 Column {
     property var pluginContext: null
     spacing: 2
+    Row {
+        spacing: 8
+        Label {
+            text: qsTr("Position:")
+            anchors.verticalCenter: parent.verticalCenter
+        }
+        ComboBox {
+            model: [qsTr("Top left"), qsTr("Top right"),
+                    qsTr("Bottom left"), qsTr("Bottom right")]
+            currentIndex: { switch (pluginContext ? pluginContext.corner : "tl") {
+                case "tr": return 1; case "bl": return 2
+                case "br": return 3; default: return 0 } }
+            onActivated: if (pluginContext)
+                pluginContext.corner = ["tl", "tr", "bl", "br"][currentIndex]
+        }
+        CheckBox {
+            text: qsTr("Stack vertically")
+            checked: pluginContext ? pluginContext.vertical : false
+            onToggled: if (pluginContext) pluginContext.vertical = checked
+            anchors.verticalCenter: parent.verticalCenter
+        }
+    }
     CheckBox {
         text: qsTr("Compass dials for COG / heading")
         checked: pluginContext ? pluginContext.gauges : false

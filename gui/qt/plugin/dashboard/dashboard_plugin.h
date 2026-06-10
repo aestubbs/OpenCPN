@@ -46,6 +46,10 @@ class DashboardContext : public QObject {
   Q_PROPERTY(double cogDeg READ cogDeg NOTIFY navChanged)
   Q_PROPERTY(double hdgDeg READ hdgDeg NOTIFY navChanged)
   Q_PROPERTY(bool gauges READ gauges WRITE setGauges NOTIFY enabledChanged)
+  // "tl" / "tr" / "bl" / "br" corner + vertical stacking.
+  Q_PROPERTY(QString corner READ corner WRITE setCorner NOTIFY enabledChanged)
+  Q_PROPERTY(bool vertical READ vertical WRITE setVertical NOTIFY
+                 enabledChanged)
   Q_PROPERTY(QString waterTemp READ waterTemp NOTIFY navChanged)
   // Which instruments show, by key (persisted plugin-side).
   Q_PROPERTY(QStringList enabled READ enabled NOTIFY enabledChanged)
@@ -66,6 +70,10 @@ public:
   double hdgDeg() const { return m_hdg_deg; }
   bool gauges() const { return m_gauges; }
   void setGauges(bool on);
+  QString corner() const { return m_corner; }
+  void setCorner(const QString& c);
+  bool vertical() const { return m_vertical; }
+  void setVertical(bool on);
   QString waterTemp() const { return m_wtemp; }
   QStringList enabled() const { return m_enabled; }
 
@@ -88,6 +96,8 @@ private:
   double m_cog_deg = -1;
   double m_hdg_deg = -1;
   bool m_gauges = false;
+  QString m_corner = QStringLiteral("tl");
+  bool m_vertical = false;
   QString m_wtemp = QStringLiteral("--");
   QStringList m_enabled;
 };

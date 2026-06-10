@@ -23,7 +23,9 @@
 #include <QVariantMap>
 #include <QXmlStreamReader>
 
-ChartDldrContext::ChartDldrContext(QObject* parent) : QObject(parent) {
+ChartDldrContext::ChartDldrContext(
+    std::function<void(const QString&)> addChartDir, QObject* parent)
+    : QObject(parent), m_add_chart_dir(std::move(addChartDir)) {
   m_nam = new QNetworkAccessManager(this);
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("chartdldr-plugin"));
   // The NOAA ENC product catalog is the classic default (the same one the
@@ -209,9 +211,14 @@ void ChartDldrContext::downloadChart(int index) {
     setStatus(tr("Extracting…"));
     const bool ok = extractZip(zip, dest);
     QFile::remove(zip);
-    setStatus(ok ? tr("Done — add the folder under Options > Charts > "
-                      "Chart Files if it's not there yet")
-                 : tr("Extract failed — the ZIP was removed"));
+    if (ok && m_add_chart_dir) {
+      m_add_chart_dir(dest);  // straight into the chart library + rescan
+      setStatus(tr("Done — added to the chart library"));
+    } else {
+      setStatus(ok ? tr("Done — add the folder under Options > Charts > "
+                        "Chart Files if it's not there yet")
+                   : tr("Extract failed — the ZIP was removed"));
+    }
     if (!m_queue.isEmpty()) {
       const int next = m_queue.takeFirst();
       setStatus(tr("Queue: %1 left…").arg(m_queue.size() + 1));
@@ -271,7 +278,7 @@ void ChartDldrContext::cancelAll() {
 }
 
 bool ChartDldrPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
-  m_ctx = new ChartDldrContext(this);
+  m_ctx = new ChartDldrContext(host.addChartDirectory, this);
   if (host.registerSettingsPage)
     host.registerSettingsPage(
         QStringLiteral("Chart downloader"),

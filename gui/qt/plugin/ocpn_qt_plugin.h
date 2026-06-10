@@ -58,6 +58,10 @@ struct OcpnQtPluginHost {
   /** Register a settings page shown under Options > Plugins. */
   std::function<void(const QString& title, const QUrl& component,
                      QObject* context)> registerSettingsPage;
+  /** Add a directory to the chart library (Options > Charts > Chart
+   *  Files) and rescan -- e.g. after a chart downloader installs cells.
+   *  Idempotent for already-listed directories. */
+  std::function<void(const QString& dir)> addChartDirectory;
   /** Live navigation snapshots (own ship, AIS, routes...). */
   NavDataProvider* navData = nullptr;
   /** The decoded message tap: a QObject emitting

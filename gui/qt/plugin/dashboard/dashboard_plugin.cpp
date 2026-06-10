@@ -52,6 +52,9 @@ DashboardContext::DashboardContext(NavDataProvider* nav, QObject* navMsgTap,
             SLOT(onNavMsg(QString, QString)));
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"));
   m_gauges = st.value(QStringLiteral("gauges"), false).toBool();
+  m_corner = st.value(QStringLiteral("corner"), QStringLiteral("tl"))
+                 .toString();
+  m_vertical = st.value(QStringLiteral("vertical"), false).toBool();
   m_enabled = st.value(QStringLiteral("enabled"),
                        QStringList{QStringLiteral("sog"), QStringLiteral("cog"),
                                    QStringLiteral("position")})
@@ -77,6 +80,22 @@ void DashboardContext::setGauges(bool on) {
   m_gauges = on;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"))
       .setValue(QStringLiteral("gauges"), on);
+  Q_EMIT enabledChanged();
+}
+
+void DashboardContext::setCorner(const QString& c) {
+  if (c == m_corner) return;
+  m_corner = c;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"))
+      .setValue(QStringLiteral("corner"), c);
+  Q_EMIT enabledChanged();
+}
+
+void DashboardContext::setVertical(bool on) {
+  if (on == m_vertical) return;
+  m_vertical = on;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"))
+      .setValue(QStringLiteral("vertical"), on);
   Q_EMIT enabledChanged();
 }
 

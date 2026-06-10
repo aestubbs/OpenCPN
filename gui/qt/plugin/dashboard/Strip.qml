@@ -2,11 +2,21 @@ import QtQuick
 
 // The dashboard instrument strip: one pill per enabled instrument,
 // top-left under the toolbar area. `pluginContext` is the DashboardContext.
-Row {
+Grid {
+    id: strip
     property var pluginContext: null
-    x: 90
-    y: 16
+    readonly property string corner: pluginContext ? pluginContext.corner : "tl"
+    columns: pluginContext && pluginContext.vertical ? 1 : 99
     spacing: 6
+    // Corner anchoring; top corners clear the toolbar / canvas buttons.
+    anchors.left: corner === "tl" || corner === "bl" ? parent.left : undefined
+    anchors.right: corner === "tr" || corner === "br" ? parent.right : undefined
+    anchors.top: corner === "tl" || corner === "tr" ? parent.top : undefined
+    anchors.bottom: corner === "bl" || corner === "br" ? parent.bottom : undefined
+    anchors.leftMargin: corner === "tl" ? 90 : 12
+    anchors.rightMargin: 12
+    anchors.topMargin: 16
+    anchors.bottomMargin: 40
 
     Repeater {
         model: pluginContext ? pluginContext.enabled : []

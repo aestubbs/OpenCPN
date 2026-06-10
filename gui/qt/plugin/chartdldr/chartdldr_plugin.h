@@ -20,6 +20,8 @@
 #ifndef OCPN_QT_CHARTDLDR_PLUGIN_H_
 #define OCPN_QT_CHARTDLDR_PLUGIN_H_
 
+#include <functional>
+
 #include <QObject>
 #include <QString>
 #include <QUrl>
@@ -45,7 +47,9 @@ class ChartDldrContext : public QObject {
                  statusChanged)
 
 public:
-  explicit ChartDldrContext(QObject* parent = nullptr);
+  explicit ChartDldrContext(
+      std::function<void(const QString&)> addChartDir = {},
+      QObject* parent = nullptr);
 
   QString catalogUrl() const { return m_catalog_url; }
   void setCatalogUrl(const QString& url);
@@ -87,6 +91,7 @@ private:
   QString m_status;
   QUrl m_target;
   QList<int> m_queue;  // pending catalog indices for downloadAll
+  std::function<void(const QString&)> m_add_chart_dir;
 };
 
 class ChartDldrPlugin : public QObject, public ocpn::qtui::OcpnQtPlugin {

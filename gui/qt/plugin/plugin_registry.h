@@ -55,6 +55,7 @@ public:
    *  canvas supplies it); `navData` is the snapshot provider. */
   PluginRegistry(std::function<void(Layer*)> registerLayer,
                  NavDataProvider* navData, QObject* navMsgTap = nullptr,
+                 std::function<void(const QString&)> addChartDir = {},
                  QObject* parent = nullptr);
   ~PluginRegistry() override;
 
@@ -82,6 +83,7 @@ private:
   std::function<void(Layer*)> m_register_layer;
   NavDataProvider* m_nav_data = nullptr;
   QObject* m_nav_msg_tap = nullptr;
+  std::function<void(const QString&)> m_add_chart_dir;
   QList<Loaded> m_loaded;
   QVariantList m_rows;
   QVariantList m_huds;
