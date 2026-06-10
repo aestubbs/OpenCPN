@@ -1783,10 +1783,12 @@ be split into a component module *before* this build-out — **P3.17**.
   they are genuinely chart-coupled.
 
 - [~] **P3.18** **Canvas context-menu parity. Tiers 1–4 effectively DONE
-  (2026-06-10)** — the only remaining items across all tiers are
-  **Send-to-GPS / Send-to-Peer** (need the upload/peer-discovery UI; the
-  model machinery exists) and minor tier-3 odds (per-mark anchor watch,
-  Chart Groups / CM93-offset menu entries).
+  (2026-06-10)** — **Send-to-Peer landed** (PeerSendController + native
+  SendToPeerDialog: mDNS discovery, manual host[:port], PIN pairing via a
+  QEventLoop-blocked prompt, activate-route option; on the route / mark /
+  track menus). The only remaining items are **Send-to-GPS** (serial
+  upload UI over comm_n0183_output) and minor tier-3 odds (per-mark
+  anchor watch, Chart Groups / CM93-offset menu entries).
   **Send-to-Peer plan (scoped 2026-06-10):** the model is ready —
   `FindAllOCPNServers(timeout)` (mdns_query.h) populates `MdnsCache`;
   `SendNavobjects(PeerData&)` (peer_client.h, QNAM-based since P1.13)
