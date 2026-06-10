@@ -34,6 +34,12 @@ qt_add_qml_module(opencpn-qt
     qml/MuiBar.qml
     qml/OptionsWindow.qml
     qml/VectorDetailList.qml
+    qml/ScaleDialog.qml
+    qml/MarkEditorDialog.qml
+    qml/RouteDetailsWindow.qml
+    qml/ObjectQueryWindow.qml
+    qml/AboutWindow.qml
+    qml/DataMonitorWindow.qml
   SOURCES
     app_controller.h
     chart_canvas.h
