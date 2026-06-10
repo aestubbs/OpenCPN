@@ -1078,9 +1078,11 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       RENDERING VERIFICATION against a real CM93 set (none in the repo —
       add the set's root folder under Options > Charts > Chart Files and
       look; coordinate-transform bugs would show as misplaced geometry),
-      then the offset/detail UI. v1 divergences tracked: base cells only
-      (no update-cell merging), user offsets 0, no queryable-feature
-      capture, .xz cells skipped.
+      **Detail slider live (step e, 2026-06-10):** Options > Vector's CM93
+      detail biases tier eligibility (3^(detail/2.5), wx
+      g_cm93_zoom_factor parity); offset UI still pends verification.
+      v1 divergences tracked: base cells only (no update-cell merging),
+      user offsets 0, no queryable-feature capture, .xz cells skipped.
       **Implementation plan (scoped 2026-06-10):** CM93 decode already
       produces s52plib-compatible `S57Obj`s (`cm93chart::CreateS57Obj`,
       `gui/src/cm93.cpp:3163` — ~650 lines of attribute/class transcoding,
@@ -1600,7 +1602,8 @@ toggles stay on `chart` (ChartCanvas).
       **graphics style (paper/simplified → `m_nSymbolStyle`), boundaries
       (plain/symbolised → `m_nBoundaryStyle`), 2-/4-colour (`S52_MAR_TWO_SHADES`),
       shallow/safety/deep depth contours (`S52_MAR_*_CONTOUR`)**.
-- [ ] Vector → CM93 detail-level slider + offset — still inert (needs the CM93
+- [~] Vector → CM93 detail-level slider — **live (2026-06-10)**; offset
+      entry still pends rendering verification (needs the CM93
       decode path, **P2.19**).
 - [x] ~~"User Standard Objects" checklist~~ — DONE 2026-06-10 (P3.6 gap 1,
       Mariner's Standard category). Still open here only: CM93 offset
