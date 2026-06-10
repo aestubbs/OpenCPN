@@ -1905,10 +1905,13 @@ where top-level):
    Options > Ships > Own ship.
 4. **Routes & Marks** toggles — **confirm route/track/mark deletion DONE
    (2026-06-10)**: `RouteDefaultsConfig.confirmObjectDelete` + the shared
-   `ConfirmDialog.qml`, wired into every drawer/menu delete path. Still open:
-   lock marks/waypoints (note: Qt's explicit Edit mode already prevents
-   accidental drags), advance-on-arrival-only, per-mark range rings /
-   override-SCAMIN. (A separate route-point icon default already exists —
+   `ConfirmDialog.qml`, wired into every drawer/menu delete path.
+   **advance-on-arrival-only + per-mark range rings / override-SCAMIN also
+   DONE (2026-06-10)** (`RouteDefaultsConfig.advanceOnArrivalOnly` → the
+   model global; rings/SCAMIN in the mark editor). Still open: lock
+   marks/waypoints — deliberately unported: Qt's explicit Edit mode
+   already prevents accidental drags (the wx lock guarded always-on
+   dragging). (A separate route-point icon default already exists —
    `RouteDefaultsConfig.routepointIcon`.)
 5. UI → **per-element Fonts** (font + colour + reset) — needs a FontMgr equivalent.
 6. ~~Display → **Show Grid** / **Show Chart Outlines**~~ — **DONE
