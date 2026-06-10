@@ -32,6 +32,8 @@
 #include <QTimer>
 #include <QScreen>
 #include <QSGClipNode>
+
+#include "tesselator.h"  // libtess2 -- M_COVR clip tessellation (P2.17)
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSGImageNode>
@@ -948,21 +950,66 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // the scene-graph analogue of wx's m_covered_region.Subtract (quilt.cpp).
   QSGNode* content = root;
   {
+    // P2.17: clip to the cell's M_COVR coverage union when the catalog
+    // carries it (concave rings tessellated NONZERO, holes honoured by
+    // winding); else the geographic bounding box, as before.
+    QList<QSGGeometry::Point2D> tris;
+    if (!m_coverage.isEmpty()) {
+      TESStesselator* tess = tessNewTess(nullptr);
+      for (const QPolygonF& ring : m_coverage) {
+        if (ring.size() < 3) continue;
+        QList<float> contour;
+        contour.reserve(ring.size() * 2);
+        for (const QPointF& p : ring) {  // (lon, lat) -> world
+          contour.append(static_cast<float>(p.x()));
+          contour.append(
+              static_cast<float>(Viewport::latToWorldY(p.y())));
+        }
+        tessAddContour(tess, 2, contour.constData(), sizeof(float) * 2,
+                       static_cast<int>(ring.size()));
+      }
+      if (tessTesselate(tess, TESS_WINDING_NONZERO, TESS_POLYGONS, 3, 2,
+                        nullptr)) {
+        const float* verts = tessGetVertices(tess);
+        const TESSindex* elems = tessGetElements(tess);
+        const int ne = tessGetElementCount(tess);
+        tris.reserve(ne * 3);
+        for (int i = 0; i < ne; ++i) {
+          bool degenerate = false;
+          QSGGeometry::Point2D tri[3];
+          for (int j = 0; j < 3; ++j) {
+            const TESSindex idx = elems[i * 3 + j];
+            if (idx == TESS_UNDEF) {
+              degenerate = true;
+              break;
+            }
+            tri[j].set(verts[idx * 2], verts[idx * 2 + 1]);
+          }
+          if (!degenerate) tris << tri[0] << tri[1] << tri[2];
+        }
+      }
+      tessDeleteTess(tess);
+    }
     const float xl = static_cast<float>(m_west);
     const float xr = static_cast<float>(m_east);
     const float yt = static_cast<float>(Viewport::latToWorldY(m_north));
     const float yb = static_cast<float>(Viewport::latToWorldY(m_south));
-    if (xr > xl && yb > yt) {
-      auto* clipGeom =
-          new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 6);
+    if (tris.isEmpty() && xr > xl && yb > yt) {
+      tris.reserve(6);
+      QSGGeometry::Point2D p0, p1, p2, p3;
+      p0.set(xl, yt); p1.set(xr, yt); p2.set(xr, yb); p3.set(xl, yb);
+      tris << p0 << p1 << p2 << p0 << p2 << p3;
+    }
+    if (!tris.isEmpty()) {
+      auto* clipGeom = new QSGGeometry(
+          QSGGeometry::defaultAttributes_Point2D(), tris.size());
       clipGeom->setDrawingMode(QSGGeometry::DrawTriangles);
       QSGGeometry::Point2D* cv = clipGeom->vertexDataAsPoint2D();
-      cv[0].set(xl, yt); cv[1].set(xr, yt); cv[2].set(xr, yb);
-      cv[3].set(xl, yt); cv[4].set(xr, yb); cv[5].set(xl, yb);
+      for (int i = 0; i < tris.size(); ++i) cv[i] = tris[i];
       auto* clip = new QSGClipNode();
       clip->setGeometry(clipGeom);
       clip->setFlag(QSGNode::OwnsGeometry, true);
-      clip->setIsRectangular(false);  // a rotated viewport makes it a quad
+      clip->setIsRectangular(false);
       root->appendChildNode(clip);
       content = clip;
     }

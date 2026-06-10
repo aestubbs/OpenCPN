@@ -834,6 +834,7 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   auto* provider = new S52VectorChartProvider(layerId, buffer, north, south,
                                               west, east, m_viewport.get());
   provider->setNativeScale(cat.nativeScale);  // drives the over-scale hatch (A)
+  provider->setCoverage(cat.coverage);  // M_COVR render clip (P2.17)
   applyDisplaySettings(provider);
   auto* layer = new ChartLayer(provider, m_viewport.get());
   layer->setZOrder(zOrderForScale(cat.nativeScale));

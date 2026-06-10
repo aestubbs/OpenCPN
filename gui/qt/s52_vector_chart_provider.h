@@ -83,6 +83,12 @@ public:
   void setDisplayCategory(int cat);
   int displayCategory() const { return m_displayCategory; }
 
+  /** The cell's own M_COVR coverage rings ((lon, lat) polygons, from the
+   *  catalog scan). When set, the render clip follows the coverage union
+   *  instead of the bounding box (P2.17 -- removes edge slivers and
+   *  honours coverage holes). */
+  void setCoverage(const QList<QPolygonF>& rings) { m_coverage = rings; }
+
   /** Per-class visibility filter (P3.6, wx MARINERS_STANDARD "User Standard
    *  Objects"): hide every primitive whose S-57 class acronym is in
    *  `hidden`. Applied only while displayCategory == 3 (Mariner's
@@ -280,6 +286,7 @@ private:
   // so zooming stays smooth and the CPU work happens once at the end.
   QTimer* m_zoom_timer = nullptr;
   int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All, 3 Mariner's Std
+  QList<QPolygonF> m_coverage;    // own M_COVR rings, (lon, lat) (P2.17)
   QSet<QString> m_hiddenClasses;  // acronyms hidden in Mariner's Standard
   QVector<bool> m_hiddenIdx;      // m_buffer.classes index -> hidden?
   void rebuildHiddenIdx();
