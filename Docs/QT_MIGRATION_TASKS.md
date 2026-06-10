@@ -2121,10 +2121,12 @@ existing `followOwnShip` property before adding).
       opt-in example plugin (`gui/qt/plugin/example/`,
       -DOCPN_QT_EXAMPLE_PLUGIN=ON): it loads from the app-data dir, its
       HUD clock contribution renders and its settings page stacks under
-      the catalogue. Recorded constraint: plugins contributing LAYERS
-      need the layer toolkit's symbols exported (a shared library split —
-      Phase-4 architecture follow-up); HUD/settings contributions are
-      header-only against the interface and work today.
+      the catalogue. ~~Recorded constraint~~ **RESOLVED (2026-06-10):** the
+      layer toolkit is now a SHARED library (`gui/qt/toolkit/`,
+      `libopencpn_qt_toolkit`) the executable links and plugins can link —
+      Layer contributions + NavDataProvider consumption work against real
+      symbols. Windows export macros land with the P0.5 CI gate. Nothing
+      architectural blocks the P4.3–P4.5 ports now.
 - [ ] **P4.3** Port `dashboard` as a built-in Qt module (display-anchored / HUD).
 - [ ] **P4.4** Port `chartdldr` (chart downloader) as a built-in Qt module.
 - [ ] **P4.5** Port `grib` as a built-in Qt module (world-anchored Layer).
