@@ -73,12 +73,12 @@ Pane {
         MuiTool {
             text: "+"; font.pointSize: 19; ToolTip.text: qsTr("Zoom in")
             visible: UIConfig.showZoomButtons  // Options > User Interface
-            onClicked: chart.zoomIn()
+            onClicked: (root.activeChart || chart).zoomIn()
         }
         MuiTool {
             text: "−"; font.pointSize: 19; ToolTip.text: qsTr("Zoom out")
             visible: UIConfig.showZoomButtons
-            onClicked: chart.zoomOut()
+            onClicked: (root.activeChart || chart).zoomOut()
         }
         // Follow / jump-to-ship split button. Tap = jump to the ship + toggle
         // follow (wx TogglebFollow->SetbFollow->JumpToPosition). Press-and-hold

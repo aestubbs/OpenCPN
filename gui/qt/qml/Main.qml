@@ -193,12 +193,18 @@ ApplicationWindow {
 
     // --- Central: world-anchored + display-anchored scene-graph subtrees,
     //     both inside the ChartCanvas QQuickItem.
+    // P6.1 focused-canvas: which pane toolbar/zoom actions act on. Follows
+    // keyboard focus (the canvases focus on click); defaults to the
+    // primary chart.
+    property var activeChart: chart
+
     // P6.1 (experimental): an independent second chart pane sharing the
     // chart library but with its own viewport, decode engine and worker.
     // Inspection-only in v1 (no route editing UI on this pane).
     ChartCanvas {
         id: splitPane
         visible: UIConfig.splitView && s52SplitPane !== null
+        onActiveFocusChanged: if (activeFocus) root.activeChart = splitPane
         width: visible ? parent.width * UIConfig.splitFraction : 0
         anchors.top: parent.top
         anchors.bottom: tideDrawer.top
@@ -230,6 +236,7 @@ ApplicationWindow {
     ChartCanvas {
         id: chart
         focus: true  // canvas keyboard layer (P3.20): arrows pan, +/- zoom, …
+        onActiveFocusChanged: if (activeFocus) root.activeChart = chart
         clip: true   // never rasterise chart geometry into the tide drawer below
         anchors.left: parent.left
         anchors.top: parent.top
