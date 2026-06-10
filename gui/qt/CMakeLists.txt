@@ -42,6 +42,9 @@ qt_add_qml_module(opencpn-qt
     qml/DataMonitorWindow.qml
     qml/CanvasOptionsDrawer.qml
     qml/RouteManagerDrawer.qml
+    qml/TideGraphPanel.qml
+    qml/TideTimeBar.qml
+    qml/VesselHud.qml
   SOURCES
     app_controller.h
     chart_canvas.h
