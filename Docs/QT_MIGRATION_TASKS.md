@@ -1266,7 +1266,7 @@ render anything onto the chart, only manages the plugin lifecycle.
       `slots` / `emit` keywords now that no wx/system headers remain to clash
       with. Touches the QObject classes added during Phase 1 (`observable_qt`,
       `comm_drv_*`). Introduced by P1.5a.
-- [~] **P3.13** **Route-creation interaction parity (pan/zoom while routing).**
+- [x] **P3.13** **Route-creation interaction parity (pan/zoom while routing).**
       **Drag-to-pan + line rendering done (2026-06-01); keyboard / edge-pan /
       snap pending.** Interaction model chosen: **drag = pan, click = place
       vertex, wheel = zoom** — reusing the canvas's existing 6 px click/drag
@@ -1285,10 +1285,13 @@ render anything onto the chart, only manages the plugin lifecycle.
       /rings/anchor/tide arrows/trails). Route line is now 2 px graphite. Builds
       clean (qsb regenerates all backends); runs with no shader/Metal errors.
       **Keyboard nav landed via P3.20 (2026-06-10):** arrows pan, +/- zoom,
-      Esc cancels the build, Enter finishes it -- all live during
-      route-building (the canvas key layer is not gated by route mode).
-      Still pending: edge auto-pan, nearby-waypoint snap, touch
-      affordances, and round caps/joins (square accepted for now).
+      Esc cancels the build, Enter finishes it. **Edge auto-pan +
+      nearby-waypoint snap landed (2026-06-10):** 5%-band / 2%-per-200ms
+      edge pan during build / measure / node-drag (wx CheckEdgePan), and
+      build clicks snap to an existing mark within pick range (positional
+      snap; wx's shared-RoutePoint reuse is a possible follow-up).
+      Still pending: touch affordances and round caps/joins (square
+      accepted for now) -- both cosmetic.
       Remaining detail (original analysis):
       Route *rendering* and the manager (P3.7) are good, but the *entry* UX is
       hard to use: **you cannot pan the chart while creating a route.** In
