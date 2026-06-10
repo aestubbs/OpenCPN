@@ -38,6 +38,7 @@ DisplayConfig& DisplayConfig::instance() {
 DisplayConfig::DisplayConfig() {
   ConfigStore& c = ConfigStore::instance();
   m_nav_mode = c.getInt("display/navMode", m_nav_mode);
+  m_show_grid = c.getBool("display/showGrid", m_show_grid);
   m_look_ahead = c.getBool("display/lookAhead", m_look_ahead);
   m_preserve_scale = c.getBool("display/preserveScale", m_preserve_scale);
   m_wheel_zoom = c.getDouble("display/wheelZoom", m_wheel_zoom);
@@ -79,6 +80,10 @@ DisplayConfig::DisplayConfig() {
 
 void DisplayConfig::setNavMode(int v) {
   OCPN_SET(m_nav_mode, v, ConfigStore::instance().setInt("display/navMode", v))
+}
+void DisplayConfig::setShowGrid(bool v) {
+  OCPN_SET(m_show_grid, v,
+           ConfigStore::instance().setBool("display/showGrid", v))
 }
 void DisplayConfig::setLookAhead(bool v) {
   OCPN_SET(m_look_ahead, v,

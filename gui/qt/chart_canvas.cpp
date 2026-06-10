@@ -77,6 +77,7 @@
 #include "object_query_view_model.h"
 #include "raster_chart_provider.h"
 #include "route_list_view_model.h"
+#include "grid_layer.h"
 #include "s57_dictionary.h"
 #include "model/ais_decoder.h"   // g_MMSI_Props_Array (MMSI properties, P3.6)
 #include "model/ais_defs.h"      // TRACKTYPE_*
@@ -335,6 +336,12 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_measure_layer->setZOrder(1800);
   m_compositor->addLayer(m_measure_layer);
   m_measure_layer->setVisible(true);
+  // Lat/lon graticule (P2.20, wx "Show Grid"): above the charts, below the
+  // nav overlays. Gated internally by DisplayConfig::showGrid.
+  auto* grid = new GridLayer(m_nav_provider.get(), m_viewport.get());
+  grid->setZOrder(1400);
+  m_compositor->addLayer(grid);
+  grid->setVisible(true);
 
   // Re-render the route/track overlays when the route/track style settings
   // change (Options > Routes: colour, line style, track colour) -- the layers

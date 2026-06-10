@@ -98,6 +98,8 @@ qt_add_qml_module(opencpn-qt
     own_ship_layer.cpp
     alert_engine.h
     alert_engine.cpp
+    grid_layer.h
+    grid_layer.cpp
     anchor_watch_layer.h
     anchor_watch_layer.cpp
     waypoint_icon_provider.h

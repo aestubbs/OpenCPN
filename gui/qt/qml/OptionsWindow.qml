@@ -233,6 +233,11 @@ Window {
                                     onToggled: DisplayConfig.showCompass = checked
                                 }
                                 CheckBox {
+                                    text: qsTr("Show grid (lat/lon graticule)")
+                                    checked: DisplayConfig.showGrid
+                                    onToggled: DisplayConfig.showGrid = checked
+                                }
+                                CheckBox {
                                     text: qsTr("Grey “no data” fill where no ENC coverage")
                                     checked: DisplayConfig.showNoData
                                     onToggled: DisplayConfig.showNoData = checked
