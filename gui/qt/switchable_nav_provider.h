@@ -162,8 +162,9 @@ public:
   QVariantMap pasteKml(const QString& kmlText);
 
   // --- Marks (free waypoints), all persisted via NavObj_dB ---
-  void dropMark(double lat, double lon, const QString& name,
-                const QString& comment, const QString& icon);
+  /** Create + persist a free mark; returns its GUID ("" on failure). */
+  QString dropMark(double lat, double lon, const QString& name,
+                   const QString& comment, const QString& icon);
   void renameWaypoint(const QString& guid, const QString& name);
   /** Per-mark range rings + SCAMIN override (P3.6), persisted. units:
    *  0 = NM, 1 = km; scamin 0 = always show. */

@@ -1451,6 +1451,66 @@ void ChartCanvas::splitRouteAtMenu() {
   update();
 }
 
+void ChartCanvas::pushUndo(const UndoOp& op) {
+  m_undo_stack.append(op);
+  while (m_undo_stack.size() > kMaxUndo) m_undo_stack.removeFirst();
+  m_redo_stack.clear();
+  Q_EMIT undoChanged();
+}
+
+QVariantMap ChartCanvas::snapshotMark(const QString& guid) const {
+  if (!m_nav_provider) return {};
+  for (const NavWaypoint& wp : m_nav_provider->waypoints()) {
+    if (wp.guid != guid) continue;
+    QVariantMap snap;
+    snap["name"] = wp.name;
+    snap["comment"] = wp.comment;
+    snap["icon"] = wp.iconName;
+    snap["lat"] = wp.lat;
+    snap["lon"] = wp.lon;
+    return snap;
+  }
+  return {};
+}
+
+QString ChartCanvas::recreateMark(const QVariantMap& snap) {
+  if (!m_nav_provider || snap.isEmpty()) return {};
+  return m_nav_provider->dropMark(
+      snap.value("lat").toDouble(), snap.value("lon").toDouble(),
+      snap.value("name").toString(), snap.value("comment").toString(),
+      snap.value("icon").toString());
+}
+
+void ChartCanvas::undo() {
+  if (m_undo_stack.isEmpty() || !m_nav_provider) return;
+  UndoOp op = m_undo_stack.takeLast();
+  if (op.created) {
+    // Undo a creation: delete the mark (still snap-ed for redo).
+    m_nav_provider->deleteWaypoint(op.guid);
+  } else {
+    // Undo a deletion: recreate (fresh GUID -- record it for redo).
+    op.guid = recreateMark(op.snap);
+  }
+  m_redo_stack.append(op);
+  Q_EMIT undoChanged();
+  update();
+}
+
+void ChartCanvas::redo() {
+  if (m_redo_stack.isEmpty() || !m_nav_provider) return;
+  UndoOp op = m_redo_stack.takeLast();
+  if (op.created) {
+    // Redo a creation: recreate it (fresh GUID).
+    op.guid = recreateMark(op.snap);
+  } else {
+    // Redo a deletion: delete again.
+    m_nav_provider->deleteWaypoint(op.guid);
+  }
+  m_undo_stack.append(op);
+  Q_EMIT undoChanged();
+  update();
+}
+
 void ChartCanvas::startMeasure() {
   if (m_measure_active) return;
   m_measure_active = true;
@@ -1805,8 +1865,16 @@ void ChartCanvas::setRouteVisible(int index, bool on) {
 
 void ChartCanvas::dropMarkHere(const QString& name, const QString& comment,
                                const QString& icon) {
-  if (m_nav_provider) m_nav_provider->dropMark(m_ctx_lat, m_ctx_lon, name,
-                                               comment, icon);
+  if (!m_nav_provider) return;
+  const QString guid =
+      m_nav_provider->dropMark(m_ctx_lat, m_ctx_lon, name, comment, icon);
+  if (!guid.isEmpty()) {
+    UndoOp op;
+    op.created = true;
+    op.guid = guid;
+    op.snap = snapshotMark(guid);
+    pushUndo(op);
+  }
   update();
 }
 
@@ -1855,7 +1923,13 @@ void ChartCanvas::setMarkIcon(const QString& guid, const QString& icon) {
 }
 
 void ChartCanvas::deleteMark(const QString& guid) {
-  if (m_nav_provider) m_nav_provider->deleteWaypoint(guid);
+  if (!m_nav_provider) return;
+  UndoOp op;
+  op.created = false;
+  op.guid = guid;
+  op.snap = snapshotMark(guid);
+  if (!op.snap.isEmpty()) pushUndo(op);
+  m_nav_provider->deleteWaypoint(guid);
   if (guid == m_selected_waypoint_guid) {
     m_selected_waypoint_guid.clear();
     if (m_waypoint_layer) m_waypoint_layer->setSelectedWaypointGuid(QString());
@@ -2459,6 +2533,14 @@ void ChartCanvas::keyPressEvent(QKeyEvent* event) {
     case Qt::Key_Underscore:
       zoomOut();
       break;
+    case Qt::Key_Z:
+      // Cmd/Ctrl-Z undo, Shift-Cmd/Ctrl-Z redo (P3.18 tier 4).
+      if (event->modifiers() & Qt::ControlModifier) {
+        (event->modifiers() & Qt::ShiftModifier) ? redo() : undo();
+        break;
+      }
+      QQuickItem::keyPressEvent(event);
+      return;
     case Qt::Key_M:  // wx: M / F4 toggles the measure tool
     case Qt::Key_F4:
       m_measure_active ? stopMeasure() : startMeasure();

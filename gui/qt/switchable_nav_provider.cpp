@@ -732,11 +732,11 @@ void SwitchableNavDataProvider::setRoutePointIcon(int route,
 
 // --- Marks (free / isolated waypoints) ---------------------------------------
 
-void SwitchableNavDataProvider::dropMark(double lat, double lon,
-                                         const QString& name,
-                                         const QString& comment,
-                                         const QString& icon) {
-  if (!pWayPointMan) return;
+QString SwitchableNavDataProvider::dropMark(double lat, double lon,
+                                            const QString& name,
+                                            const QString& comment,
+                                            const QString& icon) {
+  if (!pWayPointMan) return {};
   // Fall back to the configured default mark icon (g_default_wp_icon, set from
   // Options > User Interface > Routes & Marks) when none is supplied.
   const QString ic =
@@ -758,6 +758,7 @@ void SwitchableNavDataProvider::dropMark(double lat, double lon,
   }
   NavObj_dB::GetInstance().InsertRoutePoint(wp);  // persist mark + position
   Q_EMIT staticChanged();
+  return wp->m_GUID;
 }
 
 void SwitchableNavDataProvider::setWaypointRangeRings(

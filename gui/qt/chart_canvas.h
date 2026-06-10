@@ -219,6 +219,10 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(bool measureActive READ measureActive NOTIFY measureChanged)
   Q_PROPERTY(QString measureText READ measureText NOTIFY measureChanged)
 
+  // Undo/redo of mark create/delete (P3.18 tier 4, wx undo.cpp scope).
+  Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoChanged)
+  Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoChanged)
+
   // Own-ship track recording (#29). While on, each own-ship fix is appended
   // to the active track and drawn by the track overlay.
   Q_PROPERTY(bool trackRecording READ trackRecording WRITE setTrackRecording
@@ -395,6 +399,12 @@ public:
   // Leg"): "<name> A" + "<name> B" replace the original.
   Q_INVOKABLE void splitRouteAtMenu();
 
+  // --- Undo / redo (P3.18 tier 4) ---
+  Q_INVOKABLE void undo();
+  Q_INVOKABLE void redo();
+  bool canUndo() const { return !m_undo_stack.isEmpty(); }
+  bool canRedo() const { return !m_redo_stack.isEmpty(); }
+
   // --- Measure tool (P3.18) ---
   Q_INVOKABLE void startMeasure();
   Q_INVOKABLE void stopMeasure();
@@ -537,6 +547,7 @@ Q_SIGNALS:
                           const QString& name);
   // Measure tool state / readout changed (P3.18).
   void measureChanged();
+  void undoChanged();
   // The set of in-view / displayed ENC cells changed (chart bar refresh).
   void chartCoverageChanged();
 
@@ -794,6 +805,20 @@ private:
   // MMSI-properties persistence (P3.6): ConfigStore <-> g_MMSI_Props_Array.
   void loadMmsiProperties();
   void persistMmsiProperties() const;
+
+  // Undo machinery (P3.18 tier 4): one op per user mark action. Recreating
+  // a mark assigns a fresh GUID, so each apply records the live guid.
+  struct UndoOp {
+    bool created = false;  // true: op was "mark created" (undo deletes it)
+    QString guid;          // the mark's CURRENT guid
+    QVariantMap snap;      // name/comment/icon/lat/lon for recreation
+  };
+  QList<UndoOp> m_undo_stack;
+  QList<UndoOp> m_redo_stack;
+  static constexpr int kMaxUndo = 32;
+  void pushUndo(const UndoOp& op);            // clears the redo stack
+  QVariantMap snapshotMark(const QString& guid) const;
+  QString recreateMark(const QVariantMap& snap);
 
   // Hit-test a click against the visible free marks; fills guid/name of the
   // nearest within a small radius (P3.18).

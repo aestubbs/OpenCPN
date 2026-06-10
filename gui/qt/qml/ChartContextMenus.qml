@@ -33,6 +33,17 @@ Item {
     Menu {
         id: chartContextMenu
         MenuItem {
+            text: qsTr("Undo")
+            enabled: chart.canUndo
+            onTriggered: chart.undo()
+        }
+        MenuItem {
+            text: qsTr("Redo")
+            enabled: chart.canRedo
+            onTriggered: chart.redo()
+        }
+        MenuSeparator {}
+        MenuItem {
             // wx ID_DEF_MENU_GOTO_HERE: temp route from the fix to here,
             // activated at once, deleted on arrival.
             text: qsTr("Navigate to here")
