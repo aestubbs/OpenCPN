@@ -51,6 +51,7 @@ DashboardContext::DashboardContext(NavDataProvider* nav, QObject* navMsgTap,
     connect(navMsgTap, SIGNAL(lineReceived(QString, QString)), this,
             SLOT(onNavMsg(QString, QString)));
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"));
+  m_gauges = st.value(QStringLiteral("gauges"), false).toBool();
   m_enabled = st.value(QStringLiteral("enabled"),
                        QStringList{QStringLiteral("sog"), QStringLiteral("cog"),
                                    QStringLiteral("position")})
@@ -68,6 +69,14 @@ void DashboardContext::setInstrumentEnabled(const QString& key, bool on) {
   if (!on) m_enabled.removeAll(key);
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"));
   st.setValue(QStringLiteral("enabled"), m_enabled);
+  Q_EMIT enabledChanged();
+}
+
+void DashboardContext::setGauges(bool on) {
+  if (on == m_gauges) return;
+  m_gauges = on;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"))
+      .setValue(QStringLiteral("gauges"), on);
   Q_EMIT enabledChanged();
 }
 
@@ -96,6 +105,8 @@ void DashboardContext::refresh() {
   m_sog = s.valid ? kn(s.sog) : QStringLiteral("--");
   m_cog = s.valid ? deg(s.cog) : QStringLiteral("--");
   m_hdg = (s.hdg < 360.0) ? deg(s.hdg) : QStringLiteral("--");
+  m_cog_deg = s.valid ? s.cog : -1;
+  m_hdg_deg = (s.hdg < 360.0) ? s.hdg : -1;
   m_stw = (s.stw >= 0) ? kn(s.stw) : QStringLiteral("--");
   m_awa = (s.awa > -999 && s.aws >= 0)
               ? deg(s.awa) + QStringLiteral(" / ") + kn(s.aws)

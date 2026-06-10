@@ -12,13 +12,27 @@ Row {
         model: pluginContext ? pluginContext.enabled : []
         delegate: Rectangle {
             required property string modelData
-            width: col.implicitWidth + 16
-            height: col.implicitHeight + 10
+            readonly property bool asDial:
+                pluginContext && pluginContext.gauges &&
+                (modelData === "cog" || modelData === "hdg")
+            width: asDial ? 68 : col.implicitWidth + 16
+            height: asDial ? 68 : col.implicitHeight + 10
             radius: 6
             color: "#cc101418"
             border.color: "#3affffff"
+            Dial {
+                visible: parent.asDial
+                anchors.centerIn: parent
+                angle: !pluginContext ? -1 :
+                       (parent.modelData === "cog" ? pluginContext.cogDeg
+                                                   : pluginContext.hdgDeg)
+                label: parent.modelData === "cog"
+                       ? (pluginContext ? pluginContext.cog : "--")
+                       : (pluginContext ? pluginContext.hdg : "--")
+            }
             Column {
                 id: col
+                visible: !parent.asDial
                 anchors.centerIn: parent
                 spacing: 0
                 Text {

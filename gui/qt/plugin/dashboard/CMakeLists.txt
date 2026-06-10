@@ -7,7 +7,7 @@ qt_add_plugin(opencpn-qt-dashboard-plugin
 )
 qt_add_resources(opencpn-qt-dashboard-plugin "dashboard_plugin_qml"
   PREFIX "/dashboard_plugin"
-  FILES Strip.qml Settings.qml
+  FILES Strip.qml Settings.qml Dial.qml
 )
 target_include_directories(opencpn-qt-dashboard-plugin PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/..)

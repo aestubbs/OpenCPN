@@ -12,6 +12,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QNetworkAccessManager>
@@ -228,14 +229,27 @@ void ChartDldrContext::downloadAll() {
   m_queue.clear();
   int skipped = 0;
   for (int i = 0; i < m_charts.size(); ++i) {
-    const QUrl u(m_charts[i].toMap().value("url").toString());
-    // Skip when the ZIP's stem already exists as an extracted entry.
+    const QVariantMap chart = m_charts[i].toMap();
+    const QUrl u(chart.value("url").toString());
+    // Skip when the ZIP's stem already exists as an extracted entry AND
+    // is at least as new as the catalog's zipfile date (date-based
+    // update detection: an older local copy re-downloads).
     const QString stem = QFileInfo(u.path()).completeBaseName();
-    if (!stem.isEmpty() &&
-        (QDir(dest).exists(stem) ||
-         QFile::exists(dest + QDir::separator() + stem + ".000"))) {
-      ++skipped;
-      continue;
+    QString local;
+    if (!stem.isEmpty()) {
+      if (QDir(dest).exists(stem))
+        local = dest + QDir::separator() + stem;
+      else if (QFile::exists(dest + QDir::separator() + stem + ".000"))
+        local = dest + QDir::separator() + stem + ".000";
+    }
+    if (!local.isEmpty()) {
+      const QDateTime cat_dt = QDateTime::fromString(
+          chart.value("dateText").toString().left(19), Qt::ISODate);
+      const QDateTime local_dt = QFileInfo(local).lastModified();
+      if (!cat_dt.isValid() || local_dt >= cat_dt) {
+        ++skipped;
+        continue;
+      }
     }
     m_queue.append(i);
   }

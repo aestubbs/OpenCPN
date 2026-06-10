@@ -5,6 +5,11 @@ import QtQuick.Controls
 Column {
     property var pluginContext: null
     spacing: 2
+    CheckBox {
+        text: qsTr("Compass dials for COG / heading")
+        checked: pluginContext ? pluginContext.gauges : false
+        onToggled: if (pluginContext) pluginContext.gauges = checked
+    }
     Repeater {
         model: pluginContext ? pluginContext.allInstruments() : []
         delegate: CheckBox {

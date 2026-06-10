@@ -42,6 +42,10 @@ class DashboardContext : public QObject {
   Q_PROPERTY(QString twaTws READ twaTws NOTIFY navChanged)
   Q_PROPERTY(QString position READ position NOTIFY navChanged)
   Q_PROPERTY(QString depth READ depth NOTIFY navChanged)
+  // Numeric headings for the gauge dials (-1 = unavailable).
+  Q_PROPERTY(double cogDeg READ cogDeg NOTIFY navChanged)
+  Q_PROPERTY(double hdgDeg READ hdgDeg NOTIFY navChanged)
+  Q_PROPERTY(bool gauges READ gauges WRITE setGauges NOTIFY enabledChanged)
   Q_PROPERTY(QString waterTemp READ waterTemp NOTIFY navChanged)
   // Which instruments show, by key (persisted plugin-side).
   Q_PROPERTY(QStringList enabled READ enabled NOTIFY enabledChanged)
@@ -58,6 +62,10 @@ public:
   QString twaTws() const { return m_twa; }
   QString position() const { return m_pos; }
   QString depth() const { return m_depth; }
+  double cogDeg() const { return m_cog_deg; }
+  double hdgDeg() const { return m_hdg_deg; }
+  bool gauges() const { return m_gauges; }
+  void setGauges(bool on);
   QString waterTemp() const { return m_wtemp; }
   QStringList enabled() const { return m_enabled; }
 
@@ -77,6 +85,9 @@ private:
   ocpn::qtui::NavDataProvider* m_nav;
   QString m_sog, m_cog, m_hdg, m_stw, m_awa, m_twa, m_pos;
   QString m_depth = QStringLiteral("--");
+  double m_cog_deg = -1;
+  double m_hdg_deg = -1;
+  bool m_gauges = false;
   QString m_wtemp = QStringLiteral("--");
   QStringList m_enabled;
 };
