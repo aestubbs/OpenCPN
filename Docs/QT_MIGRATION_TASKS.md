@@ -2135,8 +2135,9 @@ existing `followOwnShip` property before adding).
       wind/position), per-instrument visibility on its settings page,
       plugin-side persistence. Verified loading + rendering. **+ comm tap
       (host.navMsgTap) live + depth/water-temp instruments (DPT/MTW)
-      landed 2026-06-10, + opt-in compass dials for COG/heading.**
-      Remaining for parity: instrument layout options.
+      landed 2026-06-10, + opt-in compass dials + corner/orientation layout
+      options. Parity complete for the wx dashboard's core instrument set;
+      exotic instruments (clock/moon/GPS-status) on demand.**
 - [~] **P4.4** Port `chartdldr` — **v1 landed (2026-06-10)**
       (`gui/qt/plugin/chartdldr/`, built by default): catalog-XML fetch +
       parse (NOAA schema, ENC product catalog default), per-chart download
@@ -2144,8 +2145,9 @@ existing `followOwnShip` property before adding).
       **+ catalog presets (NOAA ENC/RNC, US Inland ENC) and bulk download
       with skip-existing + cancel — 2026-06-10** (the practical core of
       update-checking). **+ per-chart date-based update detection
-      (catalog zipfile date vs local mtime) 2026-06-10.** Remaining for
-      parity: auto-add to Chart Files (needs a host seam).
+      and auto-add to the chart library (the new host.addChartDirectory
+      seam) — 2026-06-10. Parity complete for the wx feature set short of
+      its FTP-era niceties; exercise against the live NOAA catalog.**
 - [~] **P4.5** Port `grib` — **v1 landed (2026-06-10)**
       (`gui/qt/plugin/grib/`, built by default): the zyGrib decode core
       compiled as-is, file open + timeline scrub on the settings page, the
