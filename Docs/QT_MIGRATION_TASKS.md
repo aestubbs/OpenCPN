@@ -2127,7 +2127,13 @@ existing `followOwnShip` property before adding).
       Layer contributions + NavDataProvider consumption work against real
       symbols. Windows export macros land with the P0.5 CI gate. Nothing
       architectural blocks the P4.3–P4.5 ports now.
-- [ ] **P4.3** Port `dashboard` as a built-in Qt module (display-anchored / HUD).
+- [~] **P4.3** Port `dashboard` — **v1 landed (2026-06-10):** the first
+      real Phase-4 plugin (`gui/qt/plugin/dashboard/`, built by default):
+      NavDataProvider-fed instrument strip (SOG/COG/HDG/STW/apparent+true
+      wind/position), per-instrument visibility on its settings page,
+      plugin-side persistence. Verified loading + rendering. Remaining
+      for parity: gauge/dial visuals, depth/temperature instruments
+      (need the comm tap), instrument layout options.
 - [ ] **P4.4** Port `chartdldr` (chart downloader) as a built-in Qt module.
 - [ ] **P4.5** Port `grib` as a built-in Qt module (world-anchored Layer).
 - [~] **P4.6** Document the plugin API —
