@@ -1700,18 +1700,35 @@ be split into a component module *before* this build-out — **P3.17**.
   `mui_bar.cpp`:942) — Qt shows scale text only.
 - Follow-ship is 2-state; wx has a 3rd **look-ahead** state (`mui_bar.cpp`:1015).
 
-- [ ] **P3.17** **Restructure `Main.qml` into a QML component module.** The
+- [~] **P3.17** **Restructure `Main.qml` into a QML component module.** The
   single 4,765-line file is the app shell + both toolbars + drawers + context
   menus + popups + HUD + the whole 6-page Options dialog (~half the file). Split
-  into per-feature `.qml` components under `gui/qt/qml/{controls,toolbars,menus,
-  overlays,drawers,settings,dialogs}/`, each added to `QML_FILES` in
+  into per-feature `.qml` components, each added to `QML_FILES` in
   `gui/qt/CMakeLists.txt` (same module ⇒ types visible by name; `QML_SINGLETON`
   configs + root context properties stay in scope). **Pure refactor, no
   behaviour change** — extract one component at a time, rebuild + run between
   each; the only hazards are cross-boundary `id` refs and inline functions that
   touched sibling `id`s (→ become component `property`/`signal` interfaces). Do
-  this **first** so the P3.5/P3.18/P3.6 build-out lands in proper files. Start
-  with `OptionsWindow.qml`.
+  this **first** so the P3.5/P3.18/P3.6 build-out lands in proper files.
+  **Progress (2026-06-10):** done in five commits — `FloatToolbar.qml` +
+  `MuiBar.qml` (acf7e363d), `OptionsWindow.qml` + `VectorDetailList.qml`,
+  `ScaleDialog` / `MarkEditorDialog` / `RouteDetailsWindow` /
+  `ObjectQueryWindow` / `AboutWindow` / `DataMonitorWindow`,
+  `CanvasOptionsDrawer` + `RouteManagerDrawer`, and `VesselHud` +
+  `TideTimeBar` + `TideGraphPanel`. Main.qml: 4,681 → 953 lines.
+  **Layout decision:** files live flat in `gui/qt/qml/` (not the subdir
+  scheme first sketched) — same-directory implicit type resolution, matching
+  the toolbar extraction. **Conventions:** extracted components reference
+  `chart` + the config singletons via the QML context chain; sibling
+  windows/drawers are reached via signals wired in Main.qml; shell state /
+  window sizing passes as properties (`appWindow`); sibling-id anchors stay
+  at the instantiation site in Main.qml (the shell owns layout topology).
+  **Remaining (by design):** the two small canvas context menus extract as
+  part of the P3.18 rebuild (no point moving them twice); the display-
+  anchored canvas overlays (alert banner, compass, nav-HUD pills, chart bar,
+  scale bar, sim panel, AIS info + anchor popups) stay inside the
+  ChartCanvas subtree in Main.qml — the 953-line shell is manageable and
+  they are genuinely chart-coupled.
 
 - [ ] **P3.18** **Canvas context-menu parity.** Qt has only a general
   `chartContextMenu` (`Main.qml`:3997) + a route-node menu (4041, edit-mode
