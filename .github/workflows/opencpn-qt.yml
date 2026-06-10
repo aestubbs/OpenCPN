@@ -1,0 +1,105 @@
+name: opencpn-qt
+
+# P0.5: CI for the Qt target. Builds the opencpn-qt app (and the plugin
+# modules + toolkit library) on macOS -- the primary development platform
+# -- on every push/PR to the migration branch. A Linux job rides along
+# best-effort (continue-on-error) until the Linux port is actively
+# maintained; Windows lands when the toolkit grows export macros (noted
+# in gui/qt/toolkit/CMakeLists.txt).
+
+'on':
+  push:
+    branches:
+      - migrate_to_qt
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - 'Docs/**'
+      - 'manual/**'
+  pull_request:
+    branches:
+      - migrate_to_qt
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - 'Docs/**'
+      - 'manual/**'
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: RelWithDebInfo
+
+jobs:
+  build-macos:
+    name: macOS (arm64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        run: >
+          brew install qt wxwidgets@3.2 gdal libarchive cmake ninja
+          || true
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DwxWidgets_CONFIG_EXECUTABLE="$(brew --prefix wxwidgets@3.2)/bin/wx-config-3.2"
+          -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+          -DOCPN_QT_EXAMPLE_PLUGIN=ON
+
+      - name: Build opencpn-qt
+        run: cmake --build build --target opencpn-qt -j 3
+
+      - name: Build plugins + toolkit
+        run: >
+          cmake --build build --target
+          opencpn_qt_toolkit
+          opencpn-qt-dashboard-plugin
+          opencpn-qt-chartdldr-plugin
+          opencpn-qt-grib-plugin
+          opencpn-qt-example-plugin
+          -j 3
+
+      - name: Smoke-run (offscreen)
+        run: |
+          ./build/gui/qt/opencpn-qt.app/Contents/MacOS/opencpn-qt &
+          APP_PID=$!
+          sleep 20
+          if ! kill -0 $APP_PID 2>/dev/null; then
+            echo "::error::opencpn-qt exited during the smoke window"
+            exit 1
+          fi
+          kill $APP_PID
+
+  build-linux:
+    name: Linux (best effort)
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ \
+            qt6-base-dev qt6-declarative-dev qt6-svg-dev \
+            qt6-multimedia-dev qt6-tools-dev qt6-tools-dev-tools \
+            libqt6shadertools6-dev qml6-module-qtquick-controls \
+            libwxgtk3.2-dev libgdal-dev libarchive-dev \
+            libusb-1.0-0-dev libudev-dev gettext
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DOCPN_QT_EXAMPLE_PLUGIN=ON
+
+      - name: Build opencpn-qt
+        run: cmake --build build --target opencpn-qt -j 3
