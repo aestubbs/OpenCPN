@@ -1824,13 +1824,15 @@ Phase 6). New scope found untracked:
       buttons + a transient added-counts status line, and each route
       tile's ⋯ menu gets **Export GPX…**. Per-mark / per-track export
       can be added to their tiles the same way if wanted.
-- [ ] **P3.20** **App-wide keyboard shortcuts.** Qt has no `keyPressEvent` /
-      QML `Shortcut` surface outside the still-pending P3.13 route-build keys.
-      One canvas/shell keyboard layer: arrow-key pan, `+`/`-`/`=` zoom,
-      Esc/Enter cancel/confirm per mode, full-screen toggle; Ctrl-Z/Y once
-      undo exists (P3.18 tier 4). wx reference: `gui/src/chcanv.cpp::
-      OnKeyDown/OnKeyUp` + `hotkeys_dlg`. P3.13's route-build keys fold into
-      this surface when both land.
+- [~] **P3.20** **App-wide keyboard shortcuts. Core layer DONE (2026-06-10):**
+      `ChartCanvas::keyPressEvent` (wx `chcanv::OnKeyDown` parity) — arrow-key
+      pan, `+`/`=`/`-` zoom, **M / F4** measure toggle, **Esc** cancels the
+      transient mode (measure → route-build → selection), **Enter** finishes
+      a route being built; the canvas claims focus on click and starts
+      focused (the test-ship overlay borrows keys while simming). **F11**
+      full-screen via a window-level `Shortcut`. Remaining: Ctrl-Z/Y once
+      undo exists (P3.18 tier 4); any further wx hotkeys (`hotkeys_dlg`
+      audit) as needed; P3.13's route-build keys fold in when both land.
 - [ ] **P3.21** **wx-retirement acceptance checklist — gates P3.11.** P3.11
       ("remove the parallel wx build") executes only when all of these hold:
       1. P3.18 canvas context menus — tiers 1–2 minimum;
