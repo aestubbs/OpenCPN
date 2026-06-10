@@ -349,6 +349,17 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_waypoint_layer = new WaypointLayer(m_nav_provider.get(), m_viewport.get());
   m_waypoint_layer->setZOrder(1700);
   m_compositor->addLayer(m_waypoint_layer);
+  // Qt plugin host (P4.2): load OcpnQtPlugin modules from the app data
+  // plugins dir; registered Layers join this compositor like built-ins.
+  m_plugin_registry = std::make_unique<PluginRegistry>(
+      [this](Layer* l) {
+        if (l && m_compositor) m_compositor->addLayer(l);
+      },
+      m_nav_provider.get());
+  m_plugin_registry->loadFrom(
+      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
+      QStringLiteral("/plugins-qt"));
+
   // Measure-tool overlay (P3.18): above the nav overlays, below AIS.
   m_measure_layer = new MeasureLayer(m_nav_provider.get(), m_viewport.get());
   m_measure_layer->setZOrder(1800);

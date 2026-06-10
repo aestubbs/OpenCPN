@@ -909,6 +909,18 @@ ApplicationWindow {
                 sendToGpsDialog.openForMark(guid, name)
         }
 
+        // Plugin HUD contributions (P4.2): each registered component loads
+        // above the chart with its plugin context attached.
+        Repeater {
+            model: chart.pluginRegistry.hudComponents
+            delegate: Loader {
+                required property var modelData
+                source: modelData.component
+                onLoaded: if (item && modelData.context)
+                              item.pluginContext = modelData.context
+            }
+        }
+
         // Measure-tool readout (P3.18): the running leg bearing/distance +
         // total, pinned top-centre while measuring. Esc or the context menu
         // ("Measure off") ends the measurement.

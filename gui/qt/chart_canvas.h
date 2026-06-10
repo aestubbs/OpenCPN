@@ -57,6 +57,7 @@
 #include "sim_ship_controller.h"      // complete type needed for Q_PROPERTY
 #include "peer_send_controller.h"     // complete type needed for Q_PROPERTY
 #include "gps_upload_controller.h"    // complete type needed for Q_PROPERTY
+#include "plugin/plugin_registry.h"   // complete type needed for Q_PROPERTY
 #include "s52_engine.h"    // S52Engine -- complete type needed for Q_PROPERTY
 
 class OcpnConfig;
@@ -180,6 +181,9 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(ocpn::qtui::PeerSendController* peerSend READ peerSend CONSTANT)
   // Send-to-GPS (P3.18 tier 4): serial NMEA-0183 route/mark upload.
   Q_PROPERTY(ocpn::qtui::GpsUploadController* gpsUpload READ gpsUpload CONSTANT)
+  // Qt plugin host (P4.2): catalogue + contributions.
+  Q_PROPERTY(ocpn::qtui::PluginRegistry* pluginRegistry READ pluginRegistry
+                 CONSTANT)
 
   // Data-source connections for the Options > Connections tab (#34).
   Q_PROPERTY(ocpn::qtui::ConnectionsViewModel* connections READ connections
@@ -421,6 +425,7 @@ public:
   // it the live position source (P3.16).
   PeerSendController* peerSend() const { return m_peer_send.get(); }
   GpsUploadController* gpsUpload() const { return m_gps_upload.get(); }
+  PluginRegistry* pluginRegistry() const { return m_plugin_registry.get(); }
 
   Q_INVOKABLE void placeSimShipHere();
   // Select (highlight) the route and zoom the viewport to its extent -- the
@@ -648,6 +653,7 @@ private:
   std::unique_ptr<SimShipController> m_sim_ship;
   std::unique_ptr<PeerSendController> m_peer_send;  // Send-to-Peer (P3.18)
   std::unique_ptr<GpsUploadController> m_gps_upload;  // Send-to-GPS (P3.18)
+  std::unique_ptr<PluginRegistry> m_plugin_registry;   // Qt plugins (P4.2)
   // Data-source connections (Options > Connections, #34).
   std::unique_ptr<ConnectionsViewModel> m_connections;
   // Chart directories (Options > Charts > Chart Files); drives the scan.

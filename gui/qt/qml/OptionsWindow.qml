@@ -2482,7 +2482,7 @@ Window {
                 }
             }
 
-            // --- Plugins (placeholder) ---
+            // --- Plugins (P4.2): the Qt plugin catalogue. ---
             Item {
                 ColumnLayout {
                     anchors.fill: parent
@@ -2490,11 +2490,78 @@ Window {
                     spacing: 8
                     Label { text: qsTr("Plugins"); font.bold: true }
                     Label {
-                        text: qsTr("Plugin management is not yet available in the Qt build.")
+                        text: qsTr("Qt plugin modules found in the application plugins-qt folder. Enabling or disabling applies on restart. (The legacy wx plugins are not loadable here — they port to the Qt API in Phase 4.)")
                         wrapMode: Text.Wrap; Layout.fillWidth: true
+                        color: palette.placeholderText; font.pointSize: 11
+                    }
+                    Frame {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        padding: 2
+                        ListView {
+                            id: pluginList
+                            anchors.fill: parent
+                            clip: true
+                            model: chart.pluginRegistry.plugins
+                            delegate: ItemDelegate {
+                                required property var modelData
+                                width: pluginList.width
+                                contentItem: RowLayout {
+                                    spacing: 8
+                                    CheckBox {
+                                        checked: modelData.enabled
+                                        onToggled: chart.pluginRegistry
+                                            .setPluginEnabled(modelData.name, checked)
+                                    }
+                                    ColumnLayout {
+                                        spacing: 0
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: modelData.name +
+                                                  (modelData.version ? "  " + modelData.version : "")
+                                            font.bold: true
+                                        }
+                                        Label {
+                                            text: modelData.error && modelData.error.length
+                                                  ? qsTr("Error: ") + modelData.error
+                                                  : (modelData.description || "")
+                                            font.pointSize: 10
+                                            color: modelData.error && modelData.error.length
+                                                   ? "#e05060" : palette.placeholderText
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                    Label {
+                                        text: modelData.loaded ? qsTr("loaded") : qsTr("off")
+                                        color: palette.placeholderText
+                                        font.pointSize: 10
+                                    }
+                                }
+                            }
+                            ScrollBar.vertical: ScrollBar {}
+                        }
+                    }
+                    Label {
+                        visible: chart.pluginRegistry.plugins.length === 0
+                        text: qsTr("No Qt plugins installed.")
                         color: palette.placeholderText
                     }
-                    Item { Layout.fillHeight: true }
+                    // Plugin-contributed settings pages, stacked below.
+                    Repeater {
+                        model: chart.pluginRegistry.settingsPages
+                        delegate: ColumnLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Label { text: modelData.title; font.bold: true }
+                            Loader {
+                                Layout.fillWidth: true
+                                source: modelData.component
+                                onLoaded: if (item && modelData.context)
+                                              item.pluginContext = modelData.context
+                            }
+                        }
+                    }
                 }
             }
         }
