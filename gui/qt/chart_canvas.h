@@ -206,6 +206,10 @@ class ChartCanvas : public QQuickItem {
   // Cursor geographic position for the window status bar (formatted lat/lon),
   // updated on hover. Empty until the cursor enters the canvas.
   Q_PROPERTY(QString cursorText READ cursorText NOTIFY cursorMoved)
+  // Raw cursor position for overlays that sample fields at the cursor
+  // (e.g. the GRIB readout). NaN until the first move.
+  Q_PROPERTY(double cursorLat READ cursorLat NOTIFY cursorMoved)
+  Q_PROPERTY(double cursorLon READ cursorLon NOTIFY cursorMoved)
   // Bearing + range from own ship to the cursor (wx STAT_FIELD_CURSOR_BRGRNG),
   // formatted per the Display units. Empty when own-ship fix is invalid.
   Q_PROPERTY(QString cursorBrgRngText READ cursorBrgRngText NOTIFY cursorMoved)
@@ -311,6 +315,8 @@ public:
   QString scaleText() const;
   QString perfText() const { return m_perf_text; }
   QString cursorText() const { return m_cursor_text; }
+  double cursorLat() const { return m_cursor_pos_lat; }
+  double cursorLon() const { return m_cursor_pos_lon; }
   QString cursorBrgRngText() const { return m_cursor_brgrng_text; }
   bool routeBuildMode() const { return m_route_build_mode; }
   void setRouteBuildMode(bool on);
@@ -788,6 +794,8 @@ private:
 
   // Formatted cursor lat/lon for the status bar, updated on hover.
   QString m_cursor_text;
+  double m_cursor_pos_lat = qQNaN();
+  double m_cursor_pos_lon = qQNaN();
   QString m_cursor_brgrng_text;
   bool m_route_build_mode = false;
   bool m_route_edit_mode = false;  // selected route is editable (P3.7)

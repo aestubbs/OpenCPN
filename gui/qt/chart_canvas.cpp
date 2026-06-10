@@ -2652,6 +2652,8 @@ void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {
             dc.formatBearing(brg) + QStringLiteral("  ") + dc.formatDistance(rng);
       }
     }
+    m_cursor_pos_lat = lat;
+    m_cursor_pos_lon = lon;
     Q_EMIT cursorMoved();
     // Live rubber-band segment to the cursor while drawing a route.
     if (m_route_build_mode && m_nav_provider)

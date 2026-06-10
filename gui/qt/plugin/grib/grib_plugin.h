@@ -62,6 +62,11 @@ public:
 
   Q_INVOKABLE void openFile(const QUrl& url);
 
+  /** Wind/pressure at a position for the cursor readout: a formatted
+   *  one-liner ("12.4 kn @ 215°   1013 hPa"), empty when off-grid or no
+   *  file is loaded. Bilinear interpolation over the current timestep. */
+  Q_INVOKABLE QString readoutAt(double lat, double lon) const;
+
   /** The Layer (owned by the compositor once registered). */
   ocpn::qtui::GribWindLayer* layer() const { return m_layer; }
   void setLayer(ocpn::qtui::GribWindLayer* l) { m_layer = l; }

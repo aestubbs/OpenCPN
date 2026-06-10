@@ -19,7 +19,7 @@ qt_add_plugin(opencpn-qt-grib-plugin
 )
 qt_add_resources(opencpn-qt-grib-plugin "grib_plugin_qml"
   PREFIX "/grib_plugin"
-  FILES Settings.qml
+  FILES Settings.qml CursorReadout.qml
 )
 target_include_directories(opencpn-qt-grib-plugin PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/..

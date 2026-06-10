@@ -135,6 +135,34 @@ void GribContext::pushToLayer() {
   m_layer->setGrid(g);
 }
 
+QString GribContext::readoutAt(double lat, double lon) const {
+  if (!m_reader || m_step_times.isEmpty()) return {};
+  const time_t t = static_cast<time_t>(m_step_times[m_time_index]);
+  QStringList parts;
+  GribRecord* ru = m_reader->getGribRecord(GRB_WIND_VX, LV_ABOV_GND, 10, t);
+  GribRecord* rv = m_reader->getGribRecord(GRB_WIND_VY, LV_ABOV_GND, 10, t);
+  if (ru && rv && ru->isOk() && rv->isOk()) {
+    // getInterpolatedValue handles bilinear sampling + grid bounds.
+    const double u = ru->getInterpolatedValue(lon, lat, true);
+    const double v = rv->getInterpolatedValue(lon, lat, true);
+    if (u != GRIB_NOTDEF && v != GRIB_NOTDEF) {
+      const double kn = std::hypot(u, v) * 1.94384;
+      double dir = std::atan2(-u, -v) * 180.0 / M_PI;  // FROM direction
+      if (dir < 0) dir += 360.0;
+      parts << QStringLiteral("%1 kn @ %2°")
+                   .arg(kn, 0, 'f', 1)
+                   .arg(qRound(dir));
+    }
+  }
+  GribRecord* rp = m_reader->getGribRecord(GRB_PRESSURE, LV_MSL, 0, t);
+  if (rp && rp->isOk()) {
+    const double pa = rp->getInterpolatedValue(lon, lat, true);
+    if (pa != GRIB_NOTDEF)
+      parts << QStringLiteral("%1 hPa").arg(pa / 100.0, 0, 'f', 0);
+  }
+  return parts.join(QStringLiteral("   "));
+}
+
 bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
   m_ctx = new GribContext(this);
   if (host.registerLayer) {
@@ -143,6 +171,9 @@ bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
     m_ctx->setLayer(layer);
     host.registerLayer(layer);  // compositor takes ownership
   }
+  if (host.registerHud)
+    host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/CursorReadout.qml")),
+                     m_ctx);
   if (host.registerSettingsPage)
     host.registerSettingsPage(
         QStringLiteral("GRIB"),
