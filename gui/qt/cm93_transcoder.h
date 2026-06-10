@@ -25,10 +25,18 @@
 #ifndef OCPN_QT_CM93_TRANSCODER_H_
 #define OCPN_QT_CM93_TRANSCODER_H_
 
+#include <QDateTime>
+#include <QList>
+#include <QPolygonF>
+
 #include "cm93_cell_reader.h"
 #include "cm93_dictionary.h"
 
 class Extended_Geometry;  // libs/s52plib/src/mygeom.h
+class S57Obj;             // libs/s52plib/src/s52s57.h
+struct _S57attVal;
+typedef _S57attVal S57attVal;  // matches the s52s57.h typedef
+class wxString;
 
 namespace ocpn::qtui {
 
@@ -45,9 +53,23 @@ public:
   const Cm93Dictionary *m_pDict;
 };
 
+/** One M_COVR coverage record captured during transcoding: the exterior
+ *  ring (lon, lat), ids, publication year and WGS84 transform offsets.
+ *  User offsets stay 0 until the CM93 offset dialog is ported. */
+struct Cm93Covr {
+  int cell_index = 0;
+  int object_id = 0;
+  int subcell = 0;
+  int pub_year = 0;
+  double wgsox = 0, wgsoy = 0;
+  double user_xoff = 0, user_yoff = 0;
+  double lat_min = 1000, lat_max = -1000, lon_min = 1000, lon_max = -1000;
+  QPolygonF ring;  // (lon, lat)
+};
+
 class Cm93Transcoder {
 public:
-  Cm93Transcoder(const Cm93CellBlock *cib, const Cm93Dictionary *dict)
+  Cm93Transcoder(Cm93CellBlock *cib, const Cm93Dictionary *dict)
       : m_cib(cib), m_dict(dict) {
     m_ncontour_alloc = 100;
     m_pcontour_array = static_cast<int *>(malloc(m_ncontour_alloc *
@@ -64,10 +86,30 @@ public:
   void transformPoint(cm93_point *s, double trans_x, double trans_y,
                       double *lat, double *lon);
 
+  /** The semantic core (verbatim cm93chart::CreateS57Obj): one decoded
+   *  Cm93Object + its built geometry -> a renderable S57Obj (class/attribute
+   *  transcoding, ATON label fixups, WGS84 offsets, per-object transform
+   *  coefficients, deferred tessellation for areas). Caller owns the
+   *  returned object; xgeom ownership transfers (areas keep it, others are
+   *  freed). NULL when the class is unknown to the dictionary. */
+  S57Obj *createS57Obj(int cell_index, int iobject, int subcell,
+                       Cm93Object *pobject, Extended_Geometry *xgeom,
+                       double view_scale_ppm);
+
+  /** Coverage records captured from this cell's M_COVR objects. */
+  const QList<Cm93Covr> &coverage() const { return m_covrs; }
+  /** Cell edition date captured from M_COVR RECDAT/_dgdat. */
+  QDateTime editionDate() const { return m_ed_date; }
+
   const Cm93Dictionary *dict() const { return m_dict; }
 
 private:
-  const Cm93CellBlock *m_cib;
+  void translateColmar(const wxString &sclass, S57attVal *pattValTmp);
+  const Cm93Covr *findCovrAt(double lat, double lon) const;
+
+  QList<Cm93Covr> m_covrs;
+  QDateTime m_ed_date;
+  Cm93CellBlock *m_cib;  // non-const: offset bookkeeping writes
   const Cm93Dictionary *m_dict;
   // Scratch reused across buildGeom calls (was cm93chart member state).
   int *m_pcontour_array = nullptr;

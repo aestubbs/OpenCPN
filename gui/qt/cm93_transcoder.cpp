@@ -20,9 +20,14 @@
 
 #include <wx/wx.h>  // wxMax/wxMin/wxPrintf (verbatim body; wx links anyway)
 
+#include <QDateTime>
+
 #include "bbox.h"            // LLBBox (mygeom.h dependency)
-#include "mygeom.h"          // Extended_Geometry (libs/s52plib)
-#include "model/georef.h"    // DEGREE
+#include "mygeom.h"          // Extended_Geometry, PolyTessGeo (libs/s52plib)
+#include "s52s57.h"          // S57Obj, S57attVal, OGR_* value types
+#include "model/georef.h"    // DEGREE, mercator_k0, WGS84 axis
+#include "model/ocpn_types.h"    // CHART_TYPE_CM93 (auxParm3 tag)
+#include "model/wx_qt_string.h"  // QString_to_wxString
 #include "ogr_geometry.h"    // OGRMultiPoint (3-D sounding clusters)
 
 namespace ocpn::qtui {
@@ -491,6 +496,706 @@ unsigned char *Cm93AttrBlock::GetNextAttr() {
   }
 
   return ret_val;
+}
+
+void Cm93Transcoder::translateColmar(const wxString &sclass,
+                                 S57attVal *pattValTmp) {
+  int *pcur_attr = (int *)pattValTmp->value;
+  int cur_attr = *pcur_attr;
+
+  wxString lstring;
+
+  switch (cur_attr) {
+    case 1:
+      lstring = "4";
+      break;  // green
+    case 2:
+      lstring = "2";
+      break;  // black
+    case 3:
+      lstring = "3";
+      break;  // red
+    case 4:
+      lstring = "6";
+      break;  // yellow
+    case 5:
+      lstring = "1";
+      break;  // white
+    case 6:
+      lstring = "11";
+      break;  // orange
+    case 7:
+      lstring = "2,6";
+      break;  // black/yellow
+    case 8:
+      lstring = "2,6,2";
+      break;  // black/yellow/black
+    case 9:
+      lstring = "6,2";
+      break;  // yellow/black
+    case 10:
+      lstring = "6,2,6";
+      break;  // yellow/black/yellow
+    case 11:
+      lstring = "3,1";
+      break;  // red/white
+    case 12:
+      lstring = "4,3,4";
+      break;  // green/red/green
+    case 13:
+      lstring = "3,4,3";
+      break;  // red/green/red
+    case 14:
+      lstring = "2,3,2";
+      break;  // black/red/black
+    case 15:
+      lstring = "6,3,6";
+      break;  // yellow/red/yellow
+    case 16:
+      lstring = "4,3";
+      break;  // green/red
+    case 17:
+      lstring = "3,4";
+      break;  // red/green
+    case 18:
+      lstring = "4,1";
+      break;  // green/white
+    default:
+      break;
+  }
+
+  if (lstring.Len()) {
+    free(pattValTmp->value);  // free the old int pointer
+
+    pattValTmp->valType = OGR_STR;
+    pattValTmp->value = strdup(lstring.mb_str());
+  }
+}
+
+S57Obj *Cm93Transcoder::createS57Obj(int cell_index, int iobject, int subcell,
+                                     Cm93Object *pobject,
+                                     Extended_Geometry *xgeom,
+                                     double view_scale_ppm) {
+#define MAX_HDR_LINE 4000
+
+  // printf("%d\n", iobject);
+
+  int npub_year = 1993;  // silly default
+
+  int iclass = pobject->otype;
+  int geomtype = pobject->geotype & 0x0f;
+
+  double tmp_transform_x = 0.;
+  double tmp_transform_y = 0.;
+
+  //    Per object transfor offsets,
+  double trans_WGS84_offset_x = 0.;
+  double trans_WGS84_offset_y = 0.;
+
+  wxString sclass = QString_to_wxString(m_dict->className(iclass));
+  if (sclass == "Unknown") {
+    wxString msg;
+    msg.Printf("   CM93 Error...object type %d not found in CM93OBJ.DIC",
+               iclass);
+    wxLogMessage(msg);
+    delete xgeom;
+    return NULL;
+  }
+
+  wxString sclass_sub = sclass;
+
+  //  Going to make some substitutions here
+  if (sclass.IsSameAs("ITDARE")) sclass_sub = "DEPARE";
+
+  if (sclass.IsSameAs("_m_sor")) sclass_sub = "M_COVR";
+
+  if (sclass.IsSameAs("SPOGRD")) sclass_sub = "DMPGRD";
+
+  if (sclass.IsSameAs("FSHHAV")) sclass_sub = "FSHFAC";
+
+  if (sclass.IsSameAs("OFSPRD")) sclass_sub = "CTNARE";
+
+  //    Create the S57 Object
+  S57Obj *pobj = new S57Obj();
+
+  pobj->Index = iobject;
+
+  char u[201];
+  strncpy(u, sclass_sub.mb_str(), 199);
+  u[200] = '\0';
+  memcpy(pobj->FeatureName, u, 7);
+
+  pobj->attVal = new wxArrayOfS57attVal();
+
+  Cm93AttrBlock pab(pobject->attributes_block, m_dict);
+
+  for (int jattr = 0; jattr < pobject->n_attributes; jattr++) {
+    unsigned char *curr_attr = pab.GetNextAttr();
+
+    unsigned char iattr = *curr_attr;
+
+    wxString sattr = QString_to_wxString(m_dict->attrName(iattr));
+
+    char vtype = m_dict->attrValueType(iattr);
+
+    unsigned char *aval = curr_attr + 1;
+
+    char val[4000];
+    int *pi;
+    float *pf;
+    unsigned short *pw;
+    unsigned char *pb;
+    int *pAVI;
+    char *pAVS;
+    double *pAVR;
+    double dival;
+    int ival;
+
+    S57attVal *pattValTmp = new S57attVal;
+
+    switch (vtype) {
+      case 'I':  // never seen?
+        pi = (int *)aval;
+        pAVI = (int *)malloc(sizeof(int));  // new int;
+        *pAVI = *pi;
+        pattValTmp->valType = OGR_INT;
+        pattValTmp->value = pAVI;
+        break;
+      case 'B':
+        pb = (unsigned char *)aval;
+        pAVI = (int *)malloc(sizeof(int));  // new int;
+        *pAVI = (int)(*pb);
+        pattValTmp->valType = OGR_INT;
+        pattValTmp->value = pAVI;
+        break;
+      case 'W':  // aWORD10
+        pw = (unsigned short *)aval;
+        ival = (int)(*pw);
+        dival = ival;
+
+        pAVR = (double *)malloc(sizeof(double));  // new double;
+        *pAVR = dival / 10.;
+        pattValTmp->valType = OGR_REAL;
+        pattValTmp->value = pAVR;
+        break;
+      case 'G':
+        pi = (int *)aval;
+        pAVI = (int *)malloc(sizeof(int));  // new int;
+        *pAVI = (int)(*pi);
+        pattValTmp->valType = OGR_INT;
+        pattValTmp->value = pAVI;
+        break;
+
+      case 'S':
+        pAVS = strdup((char *)aval);
+        pattValTmp->valType = OGR_STR;
+        pattValTmp->value = pAVS;
+        break;
+
+      case 'C':
+        pAVS = strdup((const char *)&aval[3]);
+        pattValTmp->valType = OGR_STR;
+        pattValTmp->value = pAVS;
+        break;
+      case 'L': {
+        pb = (unsigned char *)aval;
+        unsigned char nl = *pb++;
+        char vi[20];
+        val[0] = 0;
+        for (int i = 0; i < nl; i++) {
+          sprintf(vi, "%d,", *pb++);
+          strcat(val, vi);
+        }
+        if (strlen(val)) val[strlen(val) - 1] = 0;  // strip last ","
+
+        pAVS = strdup(val);
+        pattValTmp->valType = OGR_STR;
+        pattValTmp->value = pAVS;
+        break;
+      }
+      case 'R': {
+        pAVR = (double *)malloc(sizeof(double));  // new double;
+        pf = (float *)aval;
+#ifdef __ARM_ARCH
+        {
+          float __attribute__((aligned(16))) tf1;
+          unsigned char *pucf = (unsigned char *)pf;
+
+          memcpy(&tf1, pucf, sizeof(float));
+          *pAVR = tf1;
+        }
+#else
+        *pAVR = *pf;
+#endif
+        pattValTmp->valType = OGR_REAL;
+        pattValTmp->value = pAVR;
+        break;
+      }
+      default:
+        sattr.Clear();  // Unknown, TODO track occasional case '?'
+        break;
+    }  // switch
+
+    if (sattr.IsSameAs("COLMAR")) {
+      translateColmar(sclass, pattValTmp);
+      sattr = "COLOUR";
+    }
+    // XXX should be done from s57 list ans cm93 list for any mismatch
+    // ie cm93 QUASOU is an enum s57 is a list
+    if (pattValTmp->valType == OGR_INT &&
+        (sattr.IsSameAs("QUASOU") || sattr.IsSameAs("CATLIT"))) {
+      int v = *(int *)pattValTmp->value;
+      free(pattValTmp->value);
+      sprintf(val, "%d", v);
+      pAVS = strdup(val);
+      pattValTmp->valType = OGR_STR;
+      pattValTmp->value = pAVS;
+    }
+
+    //    Do CM93 $SCODE attribute substitutions
+    if (sclass.IsSameAs("$AREAS") && (vtype == 'S') &&
+        sattr.IsSameAs("$SCODE")) {
+      if (!strcmp((char *)pattValTmp->value, "II25")) {
+        free(pattValTmp->value);
+        pattValTmp->value = strdup("BACKGROUND");
+      }
+    }
+
+    //    Capture some attributes on the fly as needed
+    if (sattr.IsSameAs("RECDAT") || sattr.IsSameAs("_dgdat")) {
+      if (sclass_sub.IsSameAs("M_COVR") && (vtype == 'S')) {
+        wxString pub_date((char *)pattValTmp->value, wxConvUTF8);
+
+        QDateTime upd = QDateTime::fromString(
+            wxString_to_QString(pub_date), "yyyyMMdd");
+        if (!upd.isValid())
+          upd = QDateTime::fromString("20000101", "yyyyMMdd");
+        m_ed_date = upd;
+
+        pub_date.Truncate(4);
+
+        long nyear = 0;
+        pub_date.ToLong(&nyear);
+        npub_year = nyear;
+      }
+    }
+
+    //    Capture the potential WGS84 transform offset for later use
+    if (sclass_sub.IsSameAs("M_COVR") && (vtype == 'R')) {
+      if (sattr.IsSameAs("_wgsox")) {
+        tmp_transform_x = *(double *)pattValTmp->value;
+        if (fabs(tmp_transform_x) > 1.0)  // metres
+          m_cib->b_have_offsets = true;
+      } else if (sattr.IsSameAs("_wgsoy")) {
+        tmp_transform_y = *(double *)pattValTmp->value;
+        if (fabs(tmp_transform_y) > 1.0) m_cib->b_have_offsets = true;
+      }
+    }
+
+    if (sattr.Len()) {
+      wxASSERT(sattr.Len() == 6);
+      wxCharBuffer dbuffer = sattr.ToUTF8();
+      if (dbuffer.data()) {
+        pobj->att_array =
+            (char *)realloc(pobj->att_array, 6 * (pobj->n_attr + 1));
+
+        strncpy(pobj->att_array + (6 * sizeof(char) * pobj->n_attr),
+                dbuffer.data(), 6);
+        pobj->n_attr++;
+
+        pobj->attVal->Add(pattValTmp);
+      } else
+        delete pattValTmp;
+    } else
+      delete pattValTmp;
+
+  }  // for
+
+  //    ATON label optimization:
+  //    Some CM93 ATON objects do not contain OBJNAM attribute, which means that
+  //    no label is shown for these objects when ATON labals are requested Look
+  //    for these cases, and change the INFORM attribute label to OBJNAM, if
+  //    present.
+
+  if (1 == geomtype) {
+    if ((!strncmp(pobj->FeatureName, "LIT", 3)) ||
+        (!strncmp(pobj->FeatureName, "LIGHTS", 6)) ||
+        (!strncmp(pobj->FeatureName, "BCN", 3)) ||
+        (!strncmp(pobj->FeatureName, "_slgto", 6)) ||
+        (!strncmp(pobj->FeatureName, "_boygn", 6)) ||
+        (!strncmp(pobj->FeatureName, "_bcngn", 6)) ||
+        (!strncmp(pobj->FeatureName, "_extgn", 6)) ||
+        (!strncmp(pobj->FeatureName, "TOWERS", 6)) ||
+        (!strncmp(pobj->FeatureName, "BOY", 3))) {
+      bool bfound_OBJNAM = (pobj->GetAttributeIndex("OBJNAM") != -1);
+      bool bfound_INFORM = (pobj->GetAttributeIndex("INFORM") != -1);
+
+      if ((!bfound_OBJNAM) && (bfound_INFORM))  // can make substitution
+      {
+        char *patl = pobj->att_array;
+        for (int i = 0; i < pobj->n_attr; i++) {  // find "INFORM"
+          if (!strncmp(patl, "INFORM", 6)) {
+            memcpy(patl, "OBJNAM", 6);  // change to "OBJNAM"
+            break;
+          }
+
+          patl += 6;
+        }
+      }
+    }
+  }
+
+  switch (geomtype) {
+    case 4: {
+      pobj->Primitive_type = GEO_AREA;
+
+      //    Capture M_COVR coverage + offsets (lightweight Qt port of the
+      //    wx covr_set machinery): record the exterior ring in lat/lon, the
+      //    cell/object ids, the publication year and the _wgsox/_wgsoy
+      //    transform offsets onto the transcoder's coverage list. User
+      //    offsets (the CM93 offset dialog) are 0 until that UI is ported.
+      if (sclass_sub.IsSameAs("M_COVR")) {
+        Cm93Covr covr;
+        covr.cell_index = cell_index;
+        covr.object_id = iobject;
+        covr.subcell = subcell;
+        covr.pub_year = npub_year;
+        covr.wgsox = tmp_transform_x;
+        covr.wgsoy = tmp_transform_y;
+        const int npta = xgeom->contour_array[0];
+        covr.ring.reserve(npta);
+        double lat, lon;
+        for (int ip = 0; ip < npta; ip++) {
+          cm93_point p;
+          p.x = (int)xgeom->vertex_array[ip + 1].m_x;
+          p.y = (int)xgeom->vertex_array[ip + 1].m_y;
+          transformPoint(&p, 0, 0, &lat, &lon);
+          covr.lon_max = wxMax(covr.lon_max, lon);
+          covr.lon_min = wxMin(covr.lon_min, lon);
+          covr.lat_max = wxMax(covr.lat_max, lat);
+          covr.lat_min = wxMin(covr.lat_min, lat);
+          covr.ring.append(QPointF(lon, lat));
+        }
+        m_covrs.append(covr);
+      }
+
+      //  Declare x/y of the object to be average of all cm93points
+      pobj->x = (xgeom->xmin + xgeom->xmax) / 2.;
+      pobj->y = (xgeom->ymin + xgeom->ymax) / 2.;
+
+      //    associate the vector(edge) index table
+      pobj->m_n_lsindex = xgeom->n_vector_indices;
+      pobj->m_lsindex_array =
+          xgeom->pvector_index;       // object now owns the array
+      pobj->m_n_edge_max_points = 0;  // xgeom->n_max_edge_points;
+
+      //    Find the proper WGS offset for this object
+      if (m_cib->b_have_offsets || m_cib->b_have_user_offsets) {
+        double latc, lonc;
+        cm93_point pc;
+        pc.x = (short unsigned int)pobj->x;
+        pc.y = (short unsigned int)pobj->y;
+        transformPoint(&pc, 0., 0., &latc, &lonc);
+
+        const Cm93Covr *pmcd = findCovrAt(latc, lonc);
+        if (pmcd) {
+          trans_WGS84_offset_x = pmcd->user_xoff;
+          trans_WGS84_offset_y = pmcd->user_yoff;
+        }
+      }
+
+      //  Set the s57obj bounding box as lat/lon
+      double lat1, lon1, lat2, lon2;
+      cm93_point p;
+
+      p.x = (int)xgeom->xmin;
+      p.y = (int)xgeom->ymin;
+      transformPoint(&p, trans_WGS84_offset_x, trans_WGS84_offset_y, &lat1, &lon1);
+      xgeom->ref_lat = lat1;
+      xgeom->ref_lon = lon1;
+
+      p.x = (int)xgeom->xmax;
+      p.y = (int)xgeom->ymax;
+      transformPoint(&p, trans_WGS84_offset_x, trans_WGS84_offset_y, &lat2, &lon2);
+      pobj->BBObj.Set(lat1, lon1, lat2, lon2);
+
+      //  Set the object base point
+      p.x = (int)pobj->x;
+      p.y = (int)pobj->y;
+      transformPoint(&p, trans_WGS84_offset_x, trans_WGS84_offset_y, &lat1, &lon1);
+      pobj->m_lon = lon1;
+      pobj->m_lat = lat1;
+
+      if (1) {
+        //    This will be a deferred tesselation.....
+
+        // Set up the conversion factors for use in the tesselator
+        xgeom->x_rate = m_cib->transform_x_rate;
+        xgeom->x_offset = m_cib->transform_x_origin - trans_WGS84_offset_x;
+        xgeom->y_rate = m_cib->transform_y_rate;
+        xgeom->y_offset = m_cib->transform_y_origin - trans_WGS84_offset_y;
+
+        pobj->pPolyTessGeo = new PolyTessGeo(xgeom);
+      }
+
+      break;
+    }
+
+    case 1: {
+      pobj->Primitive_type = GEO_POINT;
+      pobj->npt = 1;
+
+      pobj->x = xgeom->pointx;
+      pobj->y = xgeom->pointy;
+
+      double lat, lon;
+      cm93_point p;
+      p.x = xgeom->pointx;
+      p.y = xgeom->pointy;
+      transformPoint(&p, 0., 0., &lat, &lon);
+
+      //    Find the proper WGS offset for this object
+      if (m_cib->b_have_offsets || m_cib->b_have_user_offsets) {
+        const Cm93Covr *pmcd = findCovrAt(lat, lon);
+        if (pmcd) {
+          trans_WGS84_offset_x = pmcd->user_xoff;
+          trans_WGS84_offset_y = pmcd->user_yoff;
+        }
+      }
+
+      //    Transform again to pick up offsets
+      transformPoint(&p, trans_WGS84_offset_x, trans_WGS84_offset_y, &lat, &lon);
+
+      pobj->m_lat = lat;
+      pobj->m_lon = lon;
+
+      // make initial bounding box large enough for worst possible case
+      // it's not possible to know unless we knew the font, but this works
+      // except for huge font sizes
+      // this is not very good or accurate or efficient and hopefully we can
+      // replace the current bounding box logic with calculating logic
+      double llsize = 1e-3 / view_scale_ppm;
+
+      pobj->BBObj.Set(lat, lon, lat, lon);
+      pobj->BBObj.EnLarge(llsize);
+
+      break;
+    }
+
+    case 8:  // wkbMultiPoint25D:
+    {
+      pobj->Primitive_type = GEO_POINT;
+
+      //  Set the s57obj bounding box as lat/lon
+      double lat1, lon1, lat2, lon2;
+      cm93_point p;
+
+      p.x = (int)xgeom->xmin;
+      p.y = (int)xgeom->ymin;
+      transformPoint(&p, 0., 0., &lat1, &lon1);
+
+      p.x = (int)xgeom->xmax;
+      p.y = (int)xgeom->ymax;
+      transformPoint(&p, 0., 0., &lat2, &lon2);
+      pobj->BBObj.Set(lat1, lon1, lat2, lon2);
+
+      //  and declare x/y of the object to be average of all cm93points
+      pobj->x = (xgeom->xmin + xgeom->xmax) / 2.;
+      pobj->y = (xgeom->ymin + xgeom->ymax) / 2.;
+
+      OGRMultiPoint *pGeo = (OGRMultiPoint *)xgeom->pogrGeom;
+      pobj->npt = pGeo->getNumGeometries();
+
+      pobj->geoPtz = (double *)malloc(pobj->npt * 3 * sizeof(double));
+      pobj->geoPtMulti = (double *)malloc(pobj->npt * 2 * sizeof(double));
+
+      double *pdd = pobj->geoPtz;
+      double *pdl = pobj->geoPtMulti;
+
+      for (int ip = 0; ip < pobj->npt; ip++) {
+        OGRPoint *ppt = (OGRPoint *)(pGeo->getGeometryRef(ip));
+
+        cm93_point p;
+        p.x = (int)ppt->getX();
+        p.y = (int)ppt->getY();
+        double depth = ppt->getZ();
+
+        double east = p.x;
+        double north = p.y;
+
+        double snd_trans_x = 0.;
+        double snd_trans_y = 0.;
+
+        //    Find the proper offset for this individual sounding
+        if (m_cib->b_have_user_offsets) {
+          double lats, lons;
+          transformPoint(&p, 0., 0., &lats, &lons);
+
+          const Cm93Covr *pmcd = findCovrAt(lats, lons);
+          if (pmcd) {
+            // For lat/lon calculation below
+            snd_trans_x = pmcd->user_xoff;
+            snd_trans_y = pmcd->user_yoff;
+
+            // Actual cm93 point of this sounding, back-converted from metres
+            // e/n
+            east -= pmcd->user_xoff / m_cib->transform_x_rate;
+            north -= pmcd->user_yoff / m_cib->transform_y_rate;
+          }
+        }
+
+        *pdd++ = east;
+        *pdd++ = north;
+        *pdd++ = depth;
+
+        //  Save offset lat/lon of point in obj->geoPtMulti for later use in
+        //  decomposed bboxes
+        transformPoint(&p, snd_trans_x, snd_trans_y, &lat1, &lon1);
+        *pdl++ = lon1;
+        *pdl++ = lat1;
+      }
+
+      //  Set the object base point
+      p.x = (int)pobj->x;
+      p.y = (int)pobj->y;
+      transformPoint(&p, trans_WGS84_offset_x, trans_WGS84_offset_y, &lat1, &lon1);
+      pobj->m_lon = lon1;
+      pobj->m_lat = lat1;
+
+      delete pGeo;
+
+      break;
+    }  // case 8
+
+    case 2: {
+      pobj->Primitive_type = GEO_LINE;
+
+      pobj->npt = xgeom->n_max_vertex;
+      pobj->geoPt = (pt *)xgeom->vertex_array;
+      xgeom->vertex_array = NULL;  // object now owns the array
+
+      //  Declare x/y of the object to be average of all cm93points
+      pobj->x = (xgeom->xmin + xgeom->xmax) / 2.;
+      pobj->y = (xgeom->ymin + xgeom->ymax) / 2.;
+
+      //    associate the vector(edge) index table
+      pobj->m_n_lsindex = xgeom->n_vector_indices;
+      pobj->m_lsindex_array =
+          xgeom->pvector_index;       // object now owns the array
+      pobj->m_n_edge_max_points = 0;  // xgeom->n_max_edge_points;
+
+      //    Find the proper WGS offset for this object
+      if (m_cib->b_have_offsets || m_cib->b_have_user_offsets) {
+        double latc, lonc;
+        cm93_point pc;
+        pc.x = (short unsigned int)pobj->x;
+        pc.y = (short unsigned int)pobj->y;
+        transformPoint(&pc, 0., 0., &latc, &lonc);
+
+        const Cm93Covr *pmcd = findCovrAt(latc, lonc);
+        if (pmcd) {
+          trans_WGS84_offset_x = pmcd->user_xoff;
+          trans_WGS84_offset_y = pmcd->user_yoff;
+        }
+      }
+
+      //  Set the s57obj bounding box as lat/lon
+      double lat1, lon1, lat2, lon2;
+      cm93_point p;
+
+      p.x = (int)xgeom->xmin;
+      p.y = (int)xgeom->ymin;
+      transformPoint(&p, trans_WGS84_offset_x, trans_WGS84_offset_y, &lat1, &lon1);
+
+      p.x = (int)xgeom->xmax;
+      p.y = (int)xgeom->ymax;
+      transformPoint(&p, trans_WGS84_offset_x, trans_WGS84_offset_y, &lat2, &lon2);
+      pobj->BBObj.Set(lat1, lon1, lat2, lon2);
+
+      //  Set the object base point
+      p.x = (int)pobj->x;
+      p.y = (int)pobj->y;
+      transformPoint(&p, trans_WGS84_offset_x, trans_WGS84_offset_y, &lat1, &lon1);
+      pobj->m_lon = lon1;
+      pobj->m_lat = lat1;
+
+      break;
+
+    }  // case 2
+    default: {
+      // TODO GEO_PRIM here is a placeholder.  Trace this code....
+      pobj->Primitive_type = GEO_PRIM;
+      break;
+    }
+
+  }  // geomtype switch
+
+  //  Is this a catagory-movable object?
+  if (!strncmp(pobj->FeatureName, "OBSTRN", 6) ||
+      !strncmp(pobj->FeatureName, "WRECKS", 6) ||
+      !strncmp(pobj->FeatureName, "DEPCNT", 6) ||
+      !strncmp(pobj->FeatureName, "UWTROC", 6)) {
+    pobj->m_bcategory_mutable = true;
+  } else {
+    pobj->m_bcategory_mutable = false;
+  }
+
+  //      Build/Maintain a list of found OBJL types for later use
+  //      And back-reference the appropriate list index in S57Obj for Display
+  //      Filtering
+
+  pobj->iOBJL = -1;  // deferred, done by OBJL filtering in the PLIB as needed
+
+  // Everything in Xgeom that is needed later has been given to the object
+  // So, the xgeom object can be deleted
+  // Except for area features, which will get deferred tesselation, and so need
+  // the Extended geometry point Those features will own the xgeom...
+  if (geomtype != 4) delete xgeom;
+
+  //    Set the per-object transform coefficients
+  pobj->x_rate =
+      m_cib->transform_x_rate *
+      (mercator_k0 * WGS84_semimajor_axis_meters / CM93_semimajor_axis_meters);
+  pobj->y_rate =
+      m_cib->transform_y_rate *
+      (mercator_k0 * WGS84_semimajor_axis_meters / CM93_semimajor_axis_meters);
+  pobj->x_origin =
+      m_cib->transform_x_origin *
+      (mercator_k0 * WGS84_semimajor_axis_meters / CM93_semimajor_axis_meters);
+  pobj->y_origin =
+      m_cib->transform_y_origin *
+      (mercator_k0 * WGS84_semimajor_axis_meters / CM93_semimajor_axis_meters);
+
+  //    Add in the possible offsets to WGS84 which come from the proper M_COVR
+  //    containing this feature
+  pobj->x_origin -= trans_WGS84_offset_x;
+  pobj->y_origin -= trans_WGS84_offset_y;
+
+  // Mark the object chart type, for the convenience of S52PLIB
+  pobj->auxParm3 = CHART_TYPE_CM93;
+
+  return pobj;
+}
+
+const Cm93Covr *Cm93Transcoder::findCovrAt(double lat, double lon) const {
+  if (m_covrs.isEmpty()) return nullptr;
+  if (m_covrs.size() == 1) return &m_covrs[0];  // the usual case (wx parity)
+  for (const Cm93Covr &c : m_covrs) {
+    if (lat < c.lat_min || lat > c.lat_max || lon < c.lon_min ||
+        lon > c.lon_max)
+      continue;
+    // Ray-cast point-in-ring ((lon, lat) vertices).
+    bool in = false;
+    const int n = c.ring.size();
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+      const QPointF &a = c.ring[i], &b = c.ring[j];
+      if (((a.y() > lat) != (b.y() > lat)) &&
+          (lon < (b.x() - a.x()) * (lat - a.y()) / (b.y() - a.y()) + a.x()))
+        in = !in;
+    }
+    if (in) return &c;
+  }
+  return nullptr;
 }
 
 }  // namespace ocpn::qtui

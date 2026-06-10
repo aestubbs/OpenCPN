@@ -118,8 +118,10 @@ struct Cm93CellBlock {
   int m_n_point3d_records = 0;
   int m_n_point2d_records = 0;
 
-  // (the wx Cell_Info_Block also carries the per-cell M_COVR list + user
-  // offsets here; coverage extraction is ported with the object decoder)
+  // WGS84 / user offset bookkeeping (set during object transcoding; the
+  // per-cell M_COVR records live on the transcoder's coverage list).
+  bool b_have_offsets = false;
+  bool b_have_user_offsets = false;
   double user_xoff = 0;
   double user_yoff = 0;
 
