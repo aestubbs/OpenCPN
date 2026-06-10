@@ -54,7 +54,8 @@ public:
   /** `registerLayer` forwards a plugin's Layer to the compositor (the
    *  canvas supplies it); `navData` is the snapshot provider. */
   PluginRegistry(std::function<void(Layer*)> registerLayer,
-                 NavDataProvider* navData, QObject* parent = nullptr);
+                 NavDataProvider* navData, QObject* navMsgTap = nullptr,
+                 QObject* parent = nullptr);
   ~PluginRegistry() override;
 
   /** Scan `dir` for plugin modules and load the enabled ones. Safe to call
@@ -80,6 +81,7 @@ private:
   };
   std::function<void(Layer*)> m_register_layer;
   NavDataProvider* m_nav_data = nullptr;
+  QObject* m_nav_msg_tap = nullptr;
   QList<Loaded> m_loaded;
   QVariantList m_rows;
   QVariantList m_huds;

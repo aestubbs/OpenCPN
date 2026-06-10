@@ -2133,9 +2133,10 @@ existing `followOwnShip` property before adding).
       real Phase-4 plugin (`gui/qt/plugin/dashboard/`, built by default):
       NavDataProvider-fed instrument strip (SOG/COG/HDG/STW/apparent+true
       wind/position), per-instrument visibility on its settings page,
-      plugin-side persistence. Verified loading + rendering. Remaining
-      for parity: gauge/dial visuals, depth/temperature instruments
-      (need the comm tap), instrument layout options.
+      plugin-side persistence. Verified loading + rendering. **+ comm tap
+      (host.navMsgTap) live + depth/water-temp instruments (DPT/MTW)
+      landed 2026-06-10.** Remaining for parity: gauge/dial visuals,
+      instrument layout options.
 - [~] **P4.4** Port `chartdldr` — **v1 landed (2026-06-10)**
       (`gui/qt/plugin/chartdldr/`, built by default): catalog-XML fetch +
       parse (NOAA schema, ENC product catalog default), per-chart download

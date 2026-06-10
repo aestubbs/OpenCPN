@@ -355,7 +355,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
       [this](Layer* l) {
         if (l && m_compositor) m_compositor->addLayer(l);
       },
-      m_nav_provider.get());
+      m_nav_provider.get(),
+      m_nmea_monitor.get());  // navMsgTap: lineReceived(line, source)
   m_plugin_registry->loadFrom(
       QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
       QStringLiteral("/plugins-qt"));

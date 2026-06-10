@@ -29,6 +29,8 @@ Row {
                         case "stw": return qsTr("STW")
                         case "awa": return qsTr("AWA/AWS")
                         case "twa": return qsTr("TWA/TWS")
+                        case "dpt": return qsTr("DEPTH")
+                        case "mtw": return qsTr("WATER")
                         default: return qsTr("POS") } }
                     color: "#8a98a8"; font.pointSize: 8
                 }
@@ -41,6 +43,8 @@ Row {
                         case "stw": return pluginContext.stw
                         case "awa": return pluginContext.awaAws
                         case "twa": return pluginContext.twaTws
+                        case "dpt": return pluginContext.depth
+                        case "mtw": return pluginContext.waterTemp
                         default: return pluginContext.position } }
                     color: "#e8f0ff"; font.pointSize: 11; font.bold: true
                 }

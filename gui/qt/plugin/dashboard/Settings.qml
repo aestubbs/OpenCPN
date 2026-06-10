@@ -16,6 +16,8 @@ Column {
                 case "stw": return qsTr("Speed through water")
                 case "awa": return qsTr("Apparent wind")
                 case "twa": return qsTr("True wind")
+                case "dpt": return qsTr("Depth")
+                case "mtw": return qsTr("Water temperature")
                 default: return qsTr("Position") } }
             checked: pluginContext &&
                      pluginContext.enabled.indexOf(modelData) >= 0

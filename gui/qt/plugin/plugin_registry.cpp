@@ -18,10 +18,12 @@
 namespace ocpn::qtui {
 
 PluginRegistry::PluginRegistry(std::function<void(Layer*)> registerLayer,
-                               NavDataProvider* navData, QObject* parent)
+                               NavDataProvider* navData, QObject* navMsgTap,
+                               QObject* parent)
     : QObject(parent),
       m_register_layer(std::move(registerLayer)),
-      m_nav_data(navData) {}
+      m_nav_data(navData),
+      m_nav_msg_tap(navMsgTap) {}
 
 PluginRegistry::~PluginRegistry() {
   for (const Loaded& l : m_loaded) {
@@ -92,6 +94,7 @@ void PluginRegistry::loadFrom(const QString& dir) {
       m_pages.append(p);
     };
     host.navData = m_nav_data;
+    host.navMsgTap = m_nav_msg_tap;
 
     if (!iface->init(host)) {
       row["error"] = tr("init() failed");

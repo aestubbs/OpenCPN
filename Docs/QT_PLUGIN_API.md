@@ -62,9 +62,12 @@ unload.
 - **`host.navData`** — the `NavDataProvider` snapshot interface (own
   ship, AIS targets, routes/tracks/waypoints + the dynamic/static change
   signals). Read-only by design.
-- **`host.navMsgTap`** — reserved (nullptr today): the decoded
-  NMEA-0183/2000 message stream lands here when the comm tap is exposed
-  to plugins.
+- **`host.navMsgTap`** — **live**: a QObject emitting
+  `lineReceived(QString line, QString source)` per decoded NMEA-0183
+  sentence / N2K PGN / SignalK message (`"HH:mm:ss  <payload>"` + the
+  connection tag). Connect with the string-based `SIGNAL()` form — the
+  emitter's concrete type is not part of the API. The Dashboard plugin's
+  depth/water-temp instruments are the reference consumer.
 
 ## What the wx ABI surface maps to
 

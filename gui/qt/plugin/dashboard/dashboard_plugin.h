@@ -41,12 +41,14 @@ class DashboardContext : public QObject {
   Q_PROPERTY(QString awaAws READ awaAws NOTIFY navChanged)
   Q_PROPERTY(QString twaTws READ twaTws NOTIFY navChanged)
   Q_PROPERTY(QString position READ position NOTIFY navChanged)
+  Q_PROPERTY(QString depth READ depth NOTIFY navChanged)
+  Q_PROPERTY(QString waterTemp READ waterTemp NOTIFY navChanged)
   // Which instruments show, by key (persisted plugin-side).
   Q_PROPERTY(QStringList enabled READ enabled NOTIFY enabledChanged)
 
 public:
   explicit DashboardContext(ocpn::qtui::NavDataProvider* nav,
-                            QObject* parent = nullptr);
+                            QObject* navMsgTap, QObject* parent = nullptr);
 
   QString sog() const { return m_sog; }
   QString cog() const { return m_cog; }
@@ -55,6 +57,8 @@ public:
   QString awaAws() const { return m_awa; }
   QString twaTws() const { return m_twa; }
   QString position() const { return m_pos; }
+  QString depth() const { return m_depth; }
+  QString waterTemp() const { return m_wtemp; }
   QStringList enabled() const { return m_enabled; }
 
   /** All instrument keys, in display order. */
@@ -65,10 +69,15 @@ Q_SIGNALS:
   void navChanged();
   void enabledChanged();
 
+private Q_SLOTS:
+  void onNavMsg(const QString& line, const QString& source);
+
 private:
   void refresh();
   ocpn::qtui::NavDataProvider* m_nav;
   QString m_sog, m_cog, m_hdg, m_stw, m_awa, m_twa, m_pos;
+  QString m_depth = QStringLiteral("--");
+  QString m_wtemp = QStringLiteral("--");
   QStringList m_enabled;
 };
 

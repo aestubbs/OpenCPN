@@ -60,8 +60,11 @@ struct OcpnQtPluginHost {
                      QObject* context)> registerSettingsPage;
   /** Live navigation snapshots (own ship, AIS, routes...). */
   NavDataProvider* navData = nullptr;
-  /** The decoded NMEA-0183/2000 message tap (signal source compatible with
-   *  NmeaMonitorModel's feed); nullptr until the comm tap is exposed. */
+  /** The decoded message tap: a QObject emitting
+   *  `lineReceived(QString line, QString source)` per decoded NMEA-0183
+   *  sentence / N2K PGN / SignalK message ("HH:mm:ss  <payload>" + the
+   *  connection tag). Connect with the string-based SIGNAL() form -- the
+   *  emitter's concrete type is not part of the plugin API. */
   QObject* navMsgTap = nullptr;
 };
 

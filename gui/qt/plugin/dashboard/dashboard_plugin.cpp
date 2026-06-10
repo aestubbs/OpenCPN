@@ -11,6 +11,7 @@
 
 #include <cmath>
 
+#include <QRegularExpression>
 #include <QSettings>
 #include <QUrl>
 
@@ -37,11 +38,18 @@ QString ddm(double v, bool is_lat) {
 const QStringList kAll{QStringLiteral("position"), QStringLiteral("sog"),
                        QStringLiteral("cog"),      QStringLiteral("hdg"),
                        QStringLiteral("stw"),      QStringLiteral("awa"),
-                       QStringLiteral("twa")};
+                       QStringLiteral("twa"),      QStringLiteral("dpt"),
+                       QStringLiteral("mtw")};
 }  // namespace
 
-DashboardContext::DashboardContext(NavDataProvider* nav, QObject* parent)
+DashboardContext::DashboardContext(NavDataProvider* nav, QObject* navMsgTap,
+                                   QObject* parent)
     : QObject(parent), m_nav(nav) {
+  // Depth/water-temp ride the raw message tap (DPT/MTW sentences); the
+  // emitter's type is not part of the API, so use the string-based form.
+  if (navMsgTap)
+    connect(navMsgTap, SIGNAL(lineReceived(QString, QString)), this,
+            SLOT(onNavMsg(QString, QString)));
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"));
   m_enabled = st.value(QStringLiteral("enabled"),
                        QStringList{QStringLiteral("sog"), QStringLiteral("cog"),
@@ -63,6 +71,26 @@ void DashboardContext::setInstrumentEnabled(const QString& key, bool on) {
   Q_EMIT enabledChanged();
 }
 
+void DashboardContext::onNavMsg(const QString& line,
+                                const QString& /*source*/) {
+  // $--DPT,<depth m>,<offset>  /  $--MTW,<temp>,C  (anywhere in the line --
+  // the tap prefixes a timestamp).
+  static const QRegularExpression dpt(
+      QStringLiteral("[A-Z]{2}DPT,([0-9.+-]+)"));
+  static const QRegularExpression mtw(
+      QStringLiteral("[A-Z]{2}MTW,([0-9.+-]+)"));
+  bool changed = false;
+  if (const auto m = dpt.match(line); m.hasMatch()) {
+    m_depth = m.captured(1) + QStringLiteral(" m");
+    changed = true;
+  }
+  if (const auto m = mtw.match(line); m.hasMatch()) {
+    m_wtemp = m.captured(1) + QStringLiteral(" °C");
+    changed = true;
+  }
+  if (changed) Q_EMIT navChanged();
+}
+
 void DashboardContext::refresh() {
   const OwnShipState s = m_nav ? m_nav->ownShip() : OwnShipState{};
   m_sog = s.valid ? kn(s.sog) : QStringLiteral("--");
@@ -81,7 +109,7 @@ void DashboardContext::refresh() {
 }
 
 bool DashboardPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
-  m_ctx = new DashboardContext(host.navData, this);
+  m_ctx = new DashboardContext(host.navData, host.navMsgTap, this);
   if (host.registerHud)
     host.registerHud(QUrl(QStringLiteral("qrc:/dashboard_plugin/Strip.qml")),
                      m_ctx);
