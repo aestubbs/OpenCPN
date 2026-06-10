@@ -1254,7 +1254,13 @@ render anything onto the chart, only manages the plugin lifecycle.
       stepper), and the alert surface (banner + sounds via AlertEngine /
       P3.15, anchor-watch card). All follow the native-dialog convention
       where they are dialogs.
-- [ ] **P3.10** i18n via Qt Linguist (`.ts`/`tr()`); migrate translatable strings.
+- [~] **P3.10** i18n via Qt Linguist — **infrastructure DONE (2026-06-10):**
+      `qt_add_translations` with de/fr/es/nl/it seed catalogs (~556 messages
+      from the existing `tr()`/`qsTr()` surface), `update_translations`
+      lupdate target, `.qm` embedded at `:/i18n`, `QTranslator` installed at
+      startup from the persisted Options language choice (restart applies).
+      Remaining: actual translations (community/lupdate workflow) and any
+      hard-coded strings still missing `qsTr()`.
 - [ ] **P3.11** Remove the parallel wx build path; fork is now Qt-only.
 - [ ] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
       `slots` / `emit` keywords now that no wx/system headers remain to clash
@@ -1669,7 +1675,8 @@ QML-singleton (persisted). Several controls are wired live to the shell.
 - [p] Touchscreen interface, Inland ECDIS, play ship's bells, and the chart-
       object / ship / ENC-text / ENC-sounding scale factors — present and
       persisted; await the touch layout / renderer scaling / sound + bells.
-- [p] Language choice — persisted; pending Qt Linguist i18n (P3.10).
+- [x] Language choice — persisted AND honoured at startup via QTranslator
+      (P3.10, 2026-06-10); applies on restart.
 - [ ] Per-element fonts (font + colour chooser, reset), toolbar/window style,
       menu bar (the frameless Qt shell has no menu bar to toggle).
 - [—] Scaled-graphics interface — folded into Display → Advanced
