@@ -541,7 +541,9 @@ ApplicationWindow {
                 { key: "hdg", label: qsTr("HDG") },
                 { key: "stw", label: qsTr("STW") },
                 { key: "awa", label: qsTr("AWA") },
+                { key: "aws", label: qsTr("AWS") },
                 { key: "twa", label: qsTr("TWA") },
+                { key: "tws", label: qsTr("TWS") },
                 { key: "dpt", label: qsTr("DPT") },
                 { key: "mtw", label: qsTr("SEA") },
                 { key: "pos", label: qsTr("POS") },
@@ -556,9 +558,13 @@ ApplicationWindow {
                 case "stw": return n && n.stw >= 0
                     ? n.stw.toFixed(1) + " kn" : "--"
                 case "awa": return n && n.awaValid
-                    ? Math.round(n.awa) + "° " + n.aws.toFixed(1) + " kn" : "--"
+                    ? Math.round(n.awa) + "°" : "--"
+                case "aws": return n && n.aws >= 0
+                    ? n.aws.toFixed(1) + " kn" : "--"
                 case "twa": return n && n.twaValid
-                    ? Math.round(n.twa) + "° " + n.tws.toFixed(1) + " kn" : "--"
+                    ? Math.round(n.twa) + "°" : "--"
+                case "tws": return n && n.tws >= 0
+                    ? n.tws.toFixed(1) + " kn" : "--"
                 case "dpt": return chart.depthText
                 case "mtw": return chart.waterTempText
                 default: return ""
