@@ -193,6 +193,8 @@ qt_add_qml_module(opencpn-qt
     cm93_cell_reader.cpp
     cm93_transcoder.h
     cm93_transcoder.cpp
+    cm93_scanner.h
+    cm93_scanner.cpp
     wind_decoder.h
     wind_decoder.cpp
 )

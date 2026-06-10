@@ -143,6 +143,13 @@ public:
    *  the decoded tables). False on open failure or integrity mismatch. */
   static bool ingest(const QString &cell_file_name, Cm93CellBlock *block);
 
+  /** Read ONLY the prolog + header bbox of a cell (cheap, for extent
+   *  scanning): fills the geographic bounds; false on open/integrity
+   *  failure. */
+  static bool readHeaderExtent(const QString &cell_file_name, double *lat_min,
+                               double *lat_max, double *lon_min,
+                               double *lon_max);
+
   /** The CM93 cell-grid index for a position at a native scale (1:N). */
   static int cellIndex(double lat, double lon, int scale);
   /** Lower-left corner of a cell given its index + scale. */

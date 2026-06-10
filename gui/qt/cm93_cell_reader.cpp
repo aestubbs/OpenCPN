@@ -725,6 +725,35 @@ bool Ingest_CM93_Cell(const char *cell_file_name, Cm93CellBlock *pCIB) {
 }
 
 
+bool Cm93CellReader::readHeaderExtent(const QString& cell_file_name,
+                                      double* lat_min, double* lat_max,
+                                      double* lon_min, double* lon_max) {
+  CreateDecodeTable();
+  FILE* stream = fopen(cell_file_name.toLocal8Bit().constData(), "rb");
+  if (!stream) return false;
+  // Prolog: total length words (integrity check skipped -- header only).
+  unsigned short word0 = 0;
+  int int0 = 0, int1 = 0;
+  if (!read_and_decode_ushort(stream, &word0) ||
+      !read_and_decode_int(stream, &int0) ||
+      !read_and_decode_int(stream, &int1)) {
+    fclose(stream);
+    return false;
+  }
+  double lon_mn = 0, lat_mn = 0, lon_mx = 0, lat_mx = 0;
+  const bool ok = read_and_decode_double(stream, &lon_mn) &&
+                  read_and_decode_double(stream, &lat_mn) &&
+                  read_and_decode_double(stream, &lon_mx) &&
+                  read_and_decode_double(stream, &lat_mx);
+  fclose(stream);
+  if (!ok) return false;
+  if (lat_min) *lat_min = lat_mn;
+  if (lat_max) *lat_max = lat_mx;
+  if (lon_min) *lon_min = lon_mn;
+  if (lon_max) *lon_max = lon_mx;
+  return true;
+}
+
 bool Cm93CellReader::ingest(const QString& cell_file_name,
                             Cm93CellBlock* block) {
   CreateDecodeTable();  // idempotent; cheap
