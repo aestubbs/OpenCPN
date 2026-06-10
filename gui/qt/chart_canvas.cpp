@@ -1957,6 +1957,9 @@ QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,
 }
 
 void ChartCanvas::mousePressEvent(QMouseEvent* event) {
+  // Clicking the chart claims keyboard focus for the canvas key layer
+  // (P3.20) -- e.g. back from a settings text field.
+  forceActiveFocus();
   // Route-building mode (Create Route). Left-press begins a gesture that is a
   // PAN if the cursor moves, or places a vertex if it stays put -- decided on
   // release (reusing the click/drag threshold) so the chart stays fully
@@ -2169,6 +2172,67 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
   } else {
     QQuickItem::mouseReleaseEvent(event);
   }
+}
+
+void ChartCanvas::keyPressEvent(QKeyEvent* event) {
+  // Arrow-pan step (logical px), matching a comfortable wx scroll notch.
+  constexpr double kPanStep = 80.0;
+  if (!m_viewport) {
+    QQuickItem::keyPressEvent(event);
+    return;
+  }
+  switch (event->key()) {
+    // panBy takes a mouse-drag delta: dragging right reveals west, dragging
+    // down reveals north -- so an arrow pans the VIEW toward its direction.
+    case Qt::Key_Left:
+      m_viewport->panBy(kPanStep, 0);
+      break;
+    case Qt::Key_Right:
+      m_viewport->panBy(-kPanStep, 0);
+      break;
+    case Qt::Key_Up:
+      m_viewport->panBy(0, kPanStep);
+      break;
+    case Qt::Key_Down:
+      m_viewport->panBy(0, -kPanStep);
+      break;
+    case Qt::Key_Plus:
+    case Qt::Key_Equal:
+      zoomIn();
+      break;
+    case Qt::Key_Minus:
+    case Qt::Key_Underscore:
+      zoomOut();
+      break;
+    case Qt::Key_M:  // wx: M / F4 toggles the measure tool
+    case Qt::Key_F4:
+      m_measure_active ? stopMeasure() : startMeasure();
+      break;
+    case Qt::Key_Escape:
+      // Cancel the transient mode, most specific first (wx parity).
+      if (m_measure_active) {
+        stopMeasure();
+      } else if (m_route_build_mode) {
+        setRouteBuildMode(false);  // discards the draft
+      } else {
+        clearRouteSelection();
+      }
+      break;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+      // Finish the route being built (same as the right-click finish).
+      if (m_route_build_mode && m_nav_provider) {
+        m_nav_provider->finishRoute();
+        m_route_build_mode = false;
+        Q_EMIT routeBuildModeChanged();
+        update();
+      }
+      break;
+    default:
+      QQuickItem::keyPressEvent(event);
+      return;
+  }
+  event->accept();
 }
 
 void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {

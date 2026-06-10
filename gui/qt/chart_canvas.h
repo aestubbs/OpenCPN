@@ -514,6 +514,10 @@ protected:
   void mouseReleaseEvent(QMouseEvent* event) override;
   void hoverMoveEvent(QHoverEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
+  // Canvas keyboard layer (P3.20, wx chcanv::OnKeyDown): arrow-key pan,
+  // +/-/= zoom, M measure toggle, Esc/Enter per mode. The canvas takes
+  // focus on click; the QML test-ship overlay borrows it while simming.
+  void keyPressEvent(QKeyEvent* event) override;
 
 private:
   // Spin up the worker thread + ChartWorker and kick off the catalog scan

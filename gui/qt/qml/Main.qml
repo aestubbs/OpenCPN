@@ -187,6 +187,7 @@ ApplicationWindow {
     //     both inside the ChartCanvas QQuickItem.
     ChartCanvas {
         id: chart
+        focus: true  // canvas keyboard layer (P3.20): arrows pan, +/- zoom, …
         clip: true   // never rasterise chart geometry into the tide drawer below
         anchors.left: parent.left
         anchors.top: parent.top
@@ -938,6 +939,14 @@ ApplicationWindow {
                                                      : routeDrawer.open()
         onAboutRequested: { aboutWindow.show(); aboutWindow.raise() }
         onAnchorWatchRequested: anchorPopup.open()
+    }
+
+    // Full-screen toggle (P3.20, wx F11). A window-level Shortcut: function
+    // keys can't collide with text entry, unlike the canvas letter keys.
+    Shortcut {
+        sequences: ["F11"]
+        onActivated: root.visibility === Window.FullScreen
+                     ? root.showNormal() : root.showFullScreen()
     }
 
     // Colour-scheme dim overlay (#30): tints the whole window for dusk/night,
