@@ -1773,10 +1773,13 @@ be split into a component module *before* this build-out — **P3.17**.
     (AIS query *content* is reachable today via a left-click `aisInfo` popup.
     Note the **Target List window itself doesn't exist** in Qt either — the
     menu entry needs the window, not just the gesture.)
-  - *Tier 3 (objects/charts):* **waypoint / mark / track** right-click menus
-    (Properties / Delete / Copy-as-KML / Send-to-GPS / Peer / Anchor-Watch,
-    :838-961); chart controls (Scale In/Out, orientation modes, full-screen,
-    Chart Groups, CM93 offset, :441-611).
+  - *Tier 3 (objects/charts):* **largely DONE (2026-06-10)** — mark menu
+    (tier 1), **track menu** (Hide / Zoom-to / Delete, new polyline
+    hit-test) and **chart controls** (Scale In/Out, orientation submenu,
+    full-screen) all landed on the canvas menus. Remaining tier-3 odds:
+    Copy-as-KML / Send-to-GPS / Send-to-Peer interop, per-mark
+    Anchor-Watch, Chart Groups + CM93 offset entries (CM93 itself is
+    P2.19).
   - *Tier 4:* **Undo / Redo** (:334/342); Paste WP/Route/Track from KML
     (:539-552); Send-to-GPS / Send-to-Peer / Copy-as-KML interop generally.
   Several Tier-1/3 actions exist in the **left drawer** (activate / reverse /
