@@ -1816,13 +1816,14 @@ P0.1 + P3.1–P3.4 marked done, P3.16 retro-added, the image-diff tasks
 **multi-canvas/split-screen out of scope** for the migration (parked in
 Phase 6). New scope found untracked:
 
-- [ ] **P3.19** **GPX import & export UI.** The model's GPX read/write already
-      exists (`model/src/nav_object_database.cpp`, swept Qt-native in P1.6c);
-      missing is the user surface: QML `FileDialog` import (merge into
-      `NavObj_dB`, report what was added) and export of selected routes /
-      tracks / marks (or all) from the P3.7 manager drawer. wx reference:
-      `gui/src/routemanagerdialog.cpp` Import/Export GPX. Core nav-data
-      interchange — a P3.21 retirement gate.
+- [x] **P3.19** **GPX import & export UI. DONE (2026-06-10).** Provider
+      `importGpx` (LoadAllGPXObjects merge + persist + duplicate-skip,
+      returns added counts) + `exportGpxAll/Route/Track/Waypoint`
+      (`SetRootGPXNode` + `AddGPX*` + atomic `SaveFile`); ChartCanvas
+      QUrl invokables; manager drawer gets **Import GPX… / Export all…**
+      buttons + a transient added-counts status line, and each route
+      tile's ⋯ menu gets **Export GPX…**. Per-mark / per-track export
+      can be added to their tiles the same way if wanted.
 - [ ] **P3.20** **App-wide keyboard shortcuts.** Qt has no `keyPressEvent` /
       QML `Shortcut` surface outside the still-pending P3.13 route-build keys.
       One canvas/shell keyboard layer: arrow-key pan, `+`/`-`/`=` zoom,
