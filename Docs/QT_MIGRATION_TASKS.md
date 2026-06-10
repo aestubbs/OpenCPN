@@ -1765,7 +1765,9 @@ QML-singleton (persisted). Several controls are wired live to the shell.
       persisted; await the touch layout / renderer scaling / sound + bells.
 - [x] Language choice — persisted AND honoured at startup via QTranslator
       (P3.10, 2026-06-10); applies on restart.
-- [ ] Per-element fonts (font + colour chooser, reset), toolbar/window style,
+- [x] Per-element fonts — **DECIDED 2026-06-10: dropped** (user
+      confirmed: platform system fonts throughout; chart text sizing
+      stays on the S-52 controls). Toolbar/window style,
       menu bar (the frameless Qt shell has no menu bar to toggle).
 - [—] Scaled-graphics interface — folded into Display → Advanced
       "Responsive / touch sizing" (`DisplayConfig.responsiveSizing`); not
@@ -2069,8 +2071,11 @@ Phase 6). New scope found untracked:
          best-effort iterating**;
       7. a macOS user-acceptance pass on home waters (visual verification —
          no image-diff, per P0.7).
-      **Status: items 1–4 AND 6 complete; 5 awaits sign-off with the
-      evidence in place; 7 is the user's pass.**
+      **Status: items 1–4 AND 6 complete. Item 5 (Phase-4 day-1 set)
+      decided in substance (2026-06-10): o-charts shop = REQUIRED
+      day-1 (new P4.7); dashboard = built-in HUD; chart downloader +
+      GRIB at v1. Item 7 (acceptance pass) remains; the user has
+      directed wx-deprecation work to begin.**
 - [x] **P3.22** **Data Monitor launcher → Connections page. DONE
       (2026-06-10).** The 📡 toolbar slot is removed; a "Data monitor…"
       button on Options > Connections opens the window
@@ -2158,7 +2163,11 @@ existing `followOwnShip` property before adding).
       Layer contributions + NavDataProvider consumption work against real
       symbols. Windows export macros land with the P0.5 CI gate. Nothing
       architectural blocks the P4.3–P4.5 ports now.
-- [x] **P4.3** Port `dashboard` — **v1 landed (2026-06-10):** the first
+- [x] **P4.3** Dashboard — **superseded by the built-in HUD (user
+      decision 2026-06-10):** the nav pill's rows are picker-driven
+      (right-click menu), bus stats (DPT/MTW) parse on the canvas, and
+      the compass drags the HUD group. The plugin remains as an API
+      reference, OFF by default. Original port notes: — **v1 landed (2026-06-10):** the first
       real Phase-4 plugin (`gui/qt/plugin/dashboard/`, built by default):
       NavDataProvider-fed instrument strip (SOG/COG/HDG/STW/apparent+true
       wind/position), per-instrument visibility on its settings page,
@@ -2188,6 +2197,14 @@ existing `followOwnShip` property before adding).
       builder (viewport-bounds GFS request via mailto) 2026-06-10.**
       Remaining for parity: precip/waves/current overlays, particle
       animation, density tuning — verify with a real GRIB file first.
+- [ ] **P4.7** **o-charts SHOP plugin (day-1 REQUIRED, user decision
+      2026-06-10):** the chart-purchase/installation flows the wx
+      o-charts_pi provides — o-charts.org account login, system
+      identification (fpr via oexserverd), listing purchased chart
+      sets, download + install (zip → chart dir + keyList placement,
+      then host.addChartDirectory). Rendering/decryption already
+      native (P2). Build against the live shop API; needs the user's
+      o-charts account for end-to-end verification.
 - [~] **P4.6** Document the plugin API —
       [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
       (interface, contribution seams, wx-ABI mapping table, porting
