@@ -97,7 +97,10 @@ QImage renderSvg(const QString& path, int px) {
   img.setDevicePixelRatio(kDpr);
   img.fill(Qt::transparent);
   QPainter p(&img);
-  r.render(&p);
+  // Explicit logical-coordinate bounds: parameterless render() maps the SVG
+  // to the device-PIXEL rect, which the painter's 2x DPR transform then
+  // doubles -- only the top-left quadrant of the glyph landed in the image.
+  r.render(&p, QRectF(0, 0, sz.width() * s, sz.height() * s));
   p.end();
   return img;
 }

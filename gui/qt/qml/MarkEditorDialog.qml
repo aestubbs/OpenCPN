@@ -31,9 +31,14 @@ Window {
     property bool editMode: false
     property string guid: ""
     property string iconName: "triangle"
+    // Set when the dialog opens (markDropLat/Lon are plain methods -- a
+    // binding would evaluate once at startup and stick at 0,0).
+    property string positionText: ""
 
     function openNew() {
         editMode = false; guid = "";
+        positionText = qsTr("At ") + DisplayConfig.formatLatLon(
+            chart.markDropLat(), chart.markDropLon())
         markNameField.text = ""; markCommentField.text = "";
         // Default to the configured mark icon (Options > User Interface >
         // Routes & Marks).
@@ -88,8 +93,7 @@ Window {
 
         Label {
             visible: !markEditor.editMode
-            text: qsTr("At ") + chart.markDropLat().toFixed(4) + ", " +
-                  chart.markDropLon().toFixed(4)
+            text: markEditor.positionText
             color: palette.placeholderText; font.pointSize: 10
         }
         TextField {
