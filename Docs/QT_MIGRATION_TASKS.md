@@ -2129,7 +2129,7 @@ existing `followOwnShip` property before adding).
       Layer contributions + NavDataProvider consumption work against real
       symbols. Windows export macros land with the P0.5 CI gate. Nothing
       architectural blocks the P4.3–P4.5 ports now.
-- [~] **P4.3** Port `dashboard` — **v1 landed (2026-06-10):** the first
+- [x] **P4.3** Port `dashboard` — **v1 landed (2026-06-10):** the first
       real Phase-4 plugin (`gui/qt/plugin/dashboard/`, built by default):
       NavDataProvider-fed instrument strip (SOG/COG/HDG/STW/apparent+true
       wind/position), per-instrument visibility on its settings page,
@@ -2138,7 +2138,7 @@ existing `followOwnShip` property before adding).
       landed 2026-06-10, + opt-in compass dials + corner/orientation layout
       options. Parity complete for the wx dashboard's core instrument set;
       exotic instruments (clock/moon/GPS-status) on demand.**
-- [~] **P4.4** Port `chartdldr` — **v1 landed (2026-06-10)**
+- [x] **P4.4** Port `chartdldr` — **v1 landed (2026-06-10)**
       (`gui/qt/plugin/chartdldr/`, built by default): catalog-XML fetch +
       parse (NOAA schema, ENC product catalog default), per-chart download
       with progress, libarchive ZIP extract into a chosen folder.
@@ -2160,8 +2160,10 @@ existing `followOwnShip` property before adding).
 - [~] **P4.6** Document the plugin API —
       [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
       (interface, contribution seams, wx-ABI mapping table, porting
-      guidance). Freezes once the API survives the P4.3–P4.5 first-party
-      ports unchanged.
+      guidance). The API survived all three first-party ports with only
+      additive changes (navMsgTap activation, addChartDirectory) — every
+      seam now has a reference consumer. Freeze is a one-line decision
+      once the user's Phase-4 review signs off.
 
 ## Phase 5 — Embedded / device targets  (est. 4–8 wks)
 
