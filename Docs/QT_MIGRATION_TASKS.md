@@ -1261,6 +1261,56 @@ The **plugin-management GUI** (catalog browser, install / uninstall /
 update flows, settings dialogs) is in scope for Phase 3 — it doesn't
 render anything onto the chart, only manages the plugin lifecycle.
 
+### P2.27 Rendering performance programme (added 2026-06-10)
+
+From the end-to-end pipeline investigation (full report in the session
+log). The pipeline's fundamentals are sound — pure pan is transform-only
+for all NavLayer overlays, per-cell content uses opacity-based culling —
+and these six items are the funded improvement ladder, in order. **User
+direction: all six are wanted eventually.**
+
+- [x] **PERF-1** Stop per-pan-frame layer rebuilds — **DONE 2026-06-10.**
+      Investigation found NavLayer overlays already scale-only-dirty; the
+      one real offender was GridLayer, whose cost was QPainter label
+      rasterization per frame. Labels now cache by text (bounded), pan
+      rebuild collapses to line quads + cached textures
+      (`grid_layer.{h,cpp}`).
+- [x] **PERF-2** Zoom-settle declutter tuning — **DONE 2026-06-10.** The
+      S-52 declutter debounce (pattern UVs, complex-line glyph walk,
+      label/sounding grids) drops 110 ms → 60 ms
+      (`s52_vector_chart_provider.cpp` m_zoom_timer). If large cells
+      stutter at 60 ms, consider the preview-declutter variant (SCAMIN
+      only during gesture, full pass on settle).
+- [ ] **PERF-3** Merge same-colour chart prims into one geometry node.
+      Today each fill/line prim is its own QSGGeometryNode (1000+ nodes,
+      one flat-colour material each → batch breaks per colour). Group by
+      (colour, scamin, dispCat) at build time and emit merged nodes.
+      Gain 5–15 ms on dense cells; ~1 week; MEDIUM risk (draw order must
+      respect S-52 priority — group within priority bands).
+      `s52_vector_chart_provider.cpp` build path (~line 1122).
+- [ ] **PERF-4** Label/sounding texture atlas. Each unique label is one
+      GPU texture (TextureCacheNode dedups identical text only). Pack a
+      cell's labels/soundings into 1–2 atlas textures with UV rects.
+      Gain 2–8 ms/cell + large VRAM cut; ~1 week; MEDIUM risk (atlas
+      size limits, declutter-driven re-atlas). `sg_texture_cache.h` +
+      provider billboard build.
+- [ ] **PERF-5** Dirty-flag split (geometry vs visibility) so pure pan
+      touches no layer code at all: Layer::DirtyFlag {Geometry,
+      Visibility}; the compositor skips structure reconciliation for
+      visibility-only changes. Gain: pan frame 15 ms → 3–5 ms total;
+      2–3 weeks; MED-HIGH risk (missed-dirty staleness).
+      `layer_compositor.cpp:140–198`.
+- [ ] **PERF-6** Chunked cell builds: spread the 50–150 ms main-thread
+      scene-graph construction of a big cell over 3–4 frames (state
+      machine in the provider: clip+fills → lines → billboards), so
+      panning into a new area renders progressively instead of hitching.
+      2–3 weeks; MEDIUM risk (partial subtrees must stay coherent).
+      `s52_vector_chart_provider.cpp` renderChart.
+- [ ] **PERF-0** (cross-cutting) Instrumentation before each step:
+      per-layer updateSubtree timing, declutter phase timing,
+      QSG_RENDER_TIMING, texture-cache hit rate — measure, don't assume.
+
+
 ## Phase 3 — QtQuick UI shell  (est. 16–24 wks)
 
 - [x] **P3.1** App shell in QML — main window, chart view embedding the Phase 2
