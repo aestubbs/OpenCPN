@@ -193,6 +193,48 @@ QVariantList TideGraphViewModel::events(double startMs, double endMs) const {
   return out;
 }
 
+QVariantList TideGraphViewModel::slacks(double startMs, double endMs) const {
+  QVariantList out;
+  if (m_idx < 0 || !ptcmgr || !m_is_current || endMs <= startMs) return out;
+  const time_t start = static_cast<time_t>(startMs / 1000.0);
+  const time_t end = static_cast<time_t>(endMs / 1000.0);
+  constexpr time_t kStep = 6 * 60;  // 6-min scan, then bisect the crossing
+  float prev_v = 0.0f;
+  bool have_prev = sampleRaw(m_idx, m_is_current, start, prev_v);
+  int found = 0;
+  for (time_t t = start + kStep; t <= end && found < 64; t += kStep) {
+    float v = 0.0f;
+    if (!sampleRaw(m_idx, m_is_current, t, v)) {
+      have_prev = false;
+      continue;
+    }
+    if (have_prev && ((prev_v < 0.0f) != (v < 0.0f))) {
+      // Bisect the sign change down to ~half a minute.
+      time_t lo = t - kStep, hi = t;
+      float lo_v = prev_v;
+      for (int i = 0; i < 4; ++i) {
+        const time_t mid = lo + (hi - lo) / 2;
+        float mv = 0.0f;
+        if (!sampleRaw(m_idx, m_is_current, mid, mv)) break;
+        if ((lo_v < 0.0f) != (mv < 0.0f))
+          hi = mid;
+        else {
+          lo = mid;
+          lo_v = mv;
+        }
+      }
+      QVariantMap ev;
+      ev[QStringLiteral("t")] =
+          static_cast<double>(lo + (hi - lo) / 2) * 1000.0;
+      out.append(ev);
+      ++found;
+    }
+    prev_v = v;
+    have_prev = true;
+  }
+  return out;
+}
+
 QVariantList TideGraphViewModel::currentArrows(double startMs, double endMs,
                                                double stepMins) const {
   QVariantList out;

@@ -129,6 +129,26 @@ Item {
                 var tw = ctx.measureText(lbl).width
                 ctx.fillText(lbl, Math.max(pl, Math.min(pl + pw - tw, ex - tw / 2)), ey - 6)
             }
+            // Slack-water markers (current stations, P3.14): the flood/ebb
+            // turn -- a small ring on the zero line + "Slack hh:mm".
+            if (tg.isCurrent) {
+                var zy = yOf(0)
+                var sls = tg.slacks(timeBar.winStartMs, timeBar.winEndMs)
+                for (var q = 0; q < sls.length; q++) {
+                    var sx = pl + pw * (sls[q].t - timeBar.winStartMs) /
+                             (timeBar.winEndMs - timeBar.winStartMs)
+                    ctx.strokeStyle = "#9fe0a8"; ctx.lineWidth = 1.5
+                    ctx.beginPath(); ctx.arc(sx, zy, 3.5, 0, 2 * Math.PI); ctx.stroke()
+                    var sd = new Date(sls[q].t)
+                    var slbl = "Slack " + ("0" + sd.getHours()).slice(-2) + ":" +
+                               ("0" + sd.getMinutes()).slice(-2)
+                    var stw = ctx.measureText(slbl).width
+                    ctx.fillStyle = "#9fe0a8"
+                    ctx.fillText(slbl,
+                                 Math.max(pl, Math.min(pl + pw - stw, sx - stw / 2)),
+                                 zy + 14)
+                }
+            }
             // y-axis: a vertical line at t=0 (the left edge of the plot)
             // rising from the x-axis, with right-aligned figures + ticks.
             ctx.strokeStyle = "#6b7a8d"; ctx.lineWidth = 1

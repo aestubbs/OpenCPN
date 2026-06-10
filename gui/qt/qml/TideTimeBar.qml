@@ -70,15 +70,24 @@ Item {
                 function xOf(ms) { return width * (ms - s) / span }
                 var d = new Date(s)
                 d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1)
+                var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
                 for (var t = d.getTime(); t < e; t += 3600000) {
                     var x = xOf(t)
-                    var hr = new Date(t).getHours()
+                    var dt = new Date(t)   // local time -- DST-correct labels
+                    var hr = dt.getHours()
                     var major = (hr % 3 === 0)
                     // ticks hang from the top edge (the graph baseline)
                     ctx.strokeStyle = major ? "#80ffffff" : "#38ffffff"; ctx.lineWidth = 1
                     ctx.beginPath()
                     ctx.moveTo(x, 0); ctx.lineTo(x, major ? 9 : 5); ctx.stroke()
-                    if (major) {
+                    if (hr === 0) {
+                        // Midnight: a full-height divider + the new day's name,
+                        // so a multi-day pan keeps its bearings.
+                        ctx.strokeStyle = "#60ffffff"
+                        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke()
+                        ctx.fillStyle = "#d8e4f0"; ctx.font = "bold 9px sans-serif"
+                        ctx.fillText(days[dt.getDay()] + " " + dt.getDate(), x + 3, height - 3)
+                    } else if (major) {
                         ctx.fillStyle = "#b0c0d0"; ctx.font = "9px sans-serif"
                         ctx.fillText((hr < 10 ? "0" : "") + hr, x - 6, height - 3)
                     }
