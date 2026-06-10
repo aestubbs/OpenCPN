@@ -1708,7 +1708,8 @@ QML-singleton (persisted). Several controls are wired live to the shell.
       (2026-06-01, **P3.15**): the `AlertEngine` fires AIS CPA/TCPA, SART/DSC
       distress, anchor-watch and ship's-bells, each gated on its `UIConfig`
       enable + file and routed to `SoundPlayer.play` via `soundRequested`.
-- [ ] Sound-output device selection / custom play command (not surfaced).
+- [x] Sound-output device selection — DONE (2026-06-10); custom play
+      command deliberately unported (Qt Multimedia covers the formats).
 
 **Plugins page**
 - [~] Qt shows a placeholder. To build: plugin list/enable, catalog
@@ -1917,7 +1918,10 @@ where top-level):
    sliders + **extended chart-bar info** toggle (wx-specific zoom-weighting
    may be moot under the Qt quilt — assess before porting).
 7. **Configuration Templates** (Display → Templates) — whole feature; deferred.
-8. Sound-output **device selection** / custom play command.
+8. ~~Sound-output **device selection**~~ — **DONE (2026-06-10)**:
+   `SoundPlayer.outputDevice` (persisted by device id) on UI > Sounds.
+   The custom play *command* stays unported (a shell-out; Qt Multimedia
+   covers the formats the command path existed for).
 
 Full per-control matrices live in the session audit; the above is the
 actionable distillation.
