@@ -58,6 +58,8 @@ Window {
         y = UIConfig.optionsY
     }
 
+    PrioritiesDialog { id: prioritiesDialog }
+
     flags: Qt.Dialog
     // macOS shows a wider window (sidebar + pane), like System Settings.
     // Other platforms get the compact top-tab layout.
@@ -1193,6 +1195,12 @@ Window {
                         Layout.fillWidth: true
                         Label { text: qsTr("Data connections"); font.bold: true }
                         Item { Layout.fillWidth: true }
+                        Button {
+                            // Which source wins per data category when
+                            // several connections deliver the same data.
+                            text: qsTr("Priorities…")
+                            onClicked: prioritiesDialog.show()
+                        }
                         Button {
                             // What a connection is actually delivering, live
                             // (decoded NMEA/N2K stream) -- the debug window.

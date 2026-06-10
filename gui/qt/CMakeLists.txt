@@ -58,6 +58,7 @@ qt_add_qml_module(opencpn-qt
     qml/ConfirmDialog.qml
     qml/SendToPeerDialog.qml
     qml/SendToGpsDialog.qml
+        qml/PrioritiesDialog.qml
   SOURCES
     app_controller.h
     chart_canvas.h
@@ -186,6 +187,8 @@ qt_add_qml_module(opencpn-qt
     cm93_transcoder.cpp
     cm93_scanner.h
     cm93_scanner.cpp
+    comm_priorities_model.h
+    comm_priorities_model.cpp
     cm93_loader.h
     cm93_loader.cpp
     plugin/ocpn_qt_plugin.h
