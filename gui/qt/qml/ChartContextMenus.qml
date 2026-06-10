@@ -31,6 +31,8 @@ Item {
     signal sendRouteToPeerRequested(int routeIndex)
     signal sendMarkToPeerRequested(string guid, string name)
     signal sendTrackToPeerRequested(string guid, string name)
+    signal sendRouteToGpsRequested(int routeIndex)
+    signal sendMarkToGpsRequested(string guid, string name)
 
     // --- General canvas menu (right-click on open water / chart). ---------
     Menu {
@@ -187,6 +189,10 @@ Item {
             text: qsTr("Send to peer…")
             onTriggered: menus.sendRouteToPeerRequested(routeMenu.routeIndex)
         }
+        MenuItem {
+            text: qsTr("Send to GPS…")
+            onTriggered: menus.sendRouteToGpsRequested(routeMenu.routeIndex)
+        }
         MenuSeparator {}
         MenuItem {
             text: qsTr("Delete route")
@@ -222,6 +228,11 @@ Item {
             text: qsTr("Send to peer…")
             onTriggered: menus.sendMarkToPeerRequested(markMenu.guid,
                                                        markMenu.markName)
+        }
+        MenuItem {
+            text: qsTr("Send to GPS…")
+            onTriggered: menus.sendMarkToGpsRequested(markMenu.guid,
+                                                      markMenu.markName)
         }
         MenuSeparator {}
         MenuItem {

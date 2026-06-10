@@ -176,6 +176,10 @@ ApplicationWindow {
     //     OpenCPN instances + route/mark/track transfer with PIN pairing.
     SendToPeerDialog { id: sendToPeerDialog }
 
+    // --- Send to GPS (SendToGpsDialog.qml, P3.18 tier 4): serial NMEA-0183
+    //     route/mark upload to a plotter or handheld.
+    SendToGpsDialog { id: sendToGpsDialog }
+
     // --- AIS target list (AisTargetListWindow.qml, P3.18): live targets
     //     nearest-first; opened from the AIS right-click menu.
     AisTargetListWindow { id: aisTargetListWindow }
@@ -896,6 +900,13 @@ ApplicationWindow {
                 sendToPeerDialog.openForMark(guid, name)
             onSendTrackToPeerRequested: (guid, name) =>
                 sendToPeerDialog.openForTrack(guid, name)
+            onSendRouteToGpsRequested: (idx) => {
+                const rts = chart.routeList.routes
+                sendToGpsDialog.openForRoute(
+                    idx, idx >= 0 && idx < rts.length ? rts[idx].name : "")
+            }
+            onSendMarkToGpsRequested: (guid, name) =>
+                sendToGpsDialog.openForMark(guid, name)
         }
 
         // Measure-tool readout (P3.18): the running leg bearing/distance +
