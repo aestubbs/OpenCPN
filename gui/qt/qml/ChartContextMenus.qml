@@ -114,6 +114,15 @@ Item {
             onTriggered: chart.insertRoutePointAtMenu()
         }
         MenuItem {
+            text: qsTr("Append waypoints")
+            onTriggered: chart.appendToRoute(routeMenu.routeIndex)
+        }
+        MenuItem {
+            text: qsTr("Split at this leg")
+            enabled: routeMenu.canInsert && !routeMenu.isActive
+            onTriggered: chart.splitRouteAtMenu()
+        }
+        MenuItem {
             text: qsTr("Edit route points")
             onTriggered: chart.editRoute(routeMenu.routeIndex)
         }

@@ -350,6 +350,12 @@ public:
   Q_INVOKABLE void zeroXte();
   // Insert a waypoint into the segment the route context menu opened on.
   Q_INVOKABLE void insertRoutePointAtMenu();
+  // Extend a route by clicking points (wx "Append waypoint"): enters the
+  // normal route-build mouse flow, appending to the existing route.
+  Q_INVOKABLE void appendToRoute(int index);
+  // Split the route around the leg the menu opened on (wx "Split around
+  // Leg"): "<name> A" + "<name> B" replace the original.
+  Q_INVOKABLE void splitRouteAtMenu();
 
   // --- Measure tool (P3.18) ---
   Q_INVOKABLE void startMeasure();

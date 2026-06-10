@@ -1374,6 +1374,26 @@ void ChartCanvas::insertRoutePointAtMenu() {
   update();
 }
 
+void ChartCanvas::appendToRoute(int index) {
+  if (!m_nav_provider || m_route_build_mode) return;
+  if (!m_nav_provider->beginAppendRoute(index)) return;
+  // Reuse the route-build mouse flow: click adds a point (addRoutePoint
+  // appends to the model route in append mode), right-click finishes.
+  m_route_build_mode = true;
+  Q_EMIT routeBuildModeChanged();
+  update();
+}
+
+void ChartCanvas::splitRouteAtMenu() {
+  if (!m_nav_provider || m_menu_route < 0 || m_menu_seg < 0) return;
+  // A followed route can't be split under the follower's feet.
+  if (m_nav_provider->userRoutes().value(m_menu_route).active)
+    deactivateRoute();
+  clearRouteSelection();  // indices shift: original deleted, A + B appended
+  m_nav_provider->splitRoute(m_menu_route, m_menu_seg);
+  update();
+}
+
 void ChartCanvas::startMeasure() {
   if (m_measure_active) return;
   m_measure_active = true;

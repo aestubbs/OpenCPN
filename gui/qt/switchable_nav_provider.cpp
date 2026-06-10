@@ -102,12 +102,68 @@ QList<NavRoute> SwitchableNavDataProvider::userRoutes() const {
 
 QList<NavRoute> SwitchableNavDataProvider::routes() const {
   QList<NavRoute> r = readModelRoutes();
-  if (m_building && !m_draft.points.isEmpty()) {
+  if (m_building && m_append_route >= 0) {
+    // Append mode: the live rubber-band extends the model route itself.
+    if (m_has_rubber && m_append_route < r.size())
+      r[m_append_route].points.append(m_rubber);
+  } else if (m_building && !m_draft.points.isEmpty()) {
     NavRoute d = m_draft;
     if (m_has_rubber) d.points.append(m_rubber);  // live segment to cursor
     r.append(d);
   }
   return r;
+}
+
+void SwitchableNavDataProvider::addRoutePoint(double lat, double lon) {
+  if (!m_building) return;
+  if (m_append_route >= 0) {
+    // Append mode: extend the model route directly (persisted on finish).
+    if (!pRouteList || m_append_route >= static_cast<int>(pRouteList->size()))
+      return;
+    Route* r = (*pRouteList)[m_append_route];
+    if (!r) return;
+    r->AddPoint(new RoutePoint(lat, lon, QString(), QString()));
+    Q_EMIT staticChanged();
+    return;
+  }
+  m_draft.points.append(QPointF(lon, lat));
+  Q_EMIT editChanged();
+}
+
+bool SwitchableNavDataProvider::beginAppendRoute(int route) {
+  if (m_building || !pRouteList || route < 0 ||
+      route >= static_cast<int>(pRouteList->size()))
+    return false;
+  m_building = true;
+  m_has_rubber = false;
+  m_append_route = route;
+  m_draft = NavRoute{};  // unused in append mode
+  Q_EMIT editChanged();
+  return true;
+}
+
+void SwitchableNavDataProvider::splitRoute(int route, int seg) {
+  if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
+    return;
+  Route* r = (*pRouteList)[route];
+  if (!r) return;
+  const int n = r->GetnPoints();
+  // Split around leg `seg` (points[seg] -> points[seg+1]): head keeps
+  // points[0..seg], tail keeps points[seg+1..n-1]; both need >= 2 points.
+  if (seg < 1 || seg > n - 3) return;
+  QList<QPointF> head, tail;
+  for (int i = 1; i <= n; ++i) {  // GetPoint is 1-based
+    RoutePoint* p = r->GetPoint(i);
+    if (!p) return;
+    const QPointF ll(p->m_lon, p->m_lat);
+    if (i - 1 <= seg) head.append(ll);
+    if (i - 1 >= seg + 1) tail.append(ll);
+  }
+  QString base = r->GetName();
+  if (base.isEmpty()) base = QStringLiteral("Route");
+  createRoute(base + QStringLiteral(" A"), head);
+  createRoute(base + QStringLiteral(" B"), tail);
+  deleteRoute(route);  // emits staticChanged
 }
 
 QList<NavWaypoint> SwitchableNavDataProvider::waypoints() const {
@@ -279,6 +335,19 @@ void SwitchableNavDataProvider::deleteTrack(const QString& guid) {
 
 bool SwitchableNavDataProvider::finishRoute() {
   if (!m_building) return false;
+  if (m_append_route >= 0) {
+    // Append mode: the points were applied to the model route as they were
+    // clicked; persist the extended route and exit build mode.
+    if (pRouteList && m_append_route < static_cast<int>(pRouteList->size())) {
+      if (Route* r = (*pRouteList)[m_append_route])
+        NavObj_dB::GetInstance().UpdateRoute(r);
+    }
+    m_building = false;
+    m_has_rubber = false;
+    m_append_route = -1;
+    Q_EMIT staticChanged();
+    return true;
+  }
   const bool ok = m_draft.points.size() >= 2 && pRouteList;
   if (ok) {
     Route* rte = new Route();

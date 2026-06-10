@@ -80,12 +80,9 @@ public:
     m_draft.name = QStringLiteral("Route %1").arg(++m_route_seq);
     Q_EMIT editChanged();
   }
-  /** Append a vertex (degrees) to the draft route. */
-  void addRoutePoint(double lat, double lon) {
-    if (!m_building) return;
-    m_draft.points.append(QPointF(lon, lat));
-    Q_EMIT editChanged();
-  }
+  /** Append a vertex (degrees) to the draft route (or, in append mode, to
+   *  the model route being extended). */
+  void addRoutePoint(double lat, double lon);
   /** Live "rubber band" segment from the last vertex to the cursor. */
   void setRouteRubberband(double lat, double lon) {
     if (!m_building) return;
@@ -99,9 +96,24 @@ public:
    *  `name` -- the programmatic path behind "Navigate to here" (P3.18).
    *  Returns its index in userRoutes() order, or -1 if not created. */
   int createRoute(const QString& name, const QList<QPointF>& points);
-  /** Discard the draft without committing. */
+  /** Enter build mode extending an existing route (wx "Append waypoint",
+   *  P3.18): subsequent addRoutePoint calls append to the model route
+   *  directly and finishRoute persists + exits. False if already building
+   *  or the index is bad. */
+  bool beginAppendRoute(int route);
+  /** Split `route` around leg `seg` (0-based: points[seg] -> points[seg+1])
+   *  into "<name> A" + "<name> B"; the original is deleted (wx "Split Route
+   *  around Leg"). Both halves must keep >= 2 points. */
+  void splitRoute(int route, int seg);
+  /** Discard the draft without committing. In append mode the points already
+   *  added are kept (each was applied to the model route directly), so
+   *  cancel == finish there: the extended route is persisted. */
   void cancelRoute() {
     if (!m_building) return;
+    if (m_append_route >= 0) {
+      finishRoute();
+      return;
+    }
     m_building = false;
     m_has_rubber = false;
     m_draft = NavRoute{};
@@ -175,6 +187,7 @@ private:
   bool m_building = false;
   bool m_has_rubber = false;
   int m_route_seq = 0;
+  int m_append_route = -1;  // model route being extended (append mode), or -1
 
   bool m_recording = false;
 
