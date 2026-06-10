@@ -94,23 +94,26 @@ chase (Yarmouth tiling, Poole missing areas).
 See [`QT_MIGRATION_MATERIALS.md`](./QT_MIGRATION_MATERIALS.md) and
 [`QT_MIGRATION_PERF.md`](./QT_MIGRATION_PERF.md).
 
-**Phase 3 status (2026-06-10):** Phase 3 is the active front. Landed since
-2026-05-31: **P3.1–P3.4** (shell, view-models, core layers, HUD — delivered
-incrementally across the Phase-2/3 work, now marked done), **P3.7**
-route/mark/track manager drawer, **P3.14** tides & currents (phases A–F;
-slack markers / DST tick labels / active-tides sounding adjustment remain),
-**P3.15** alert engine, **P3.16** route activate/follow + `RouteFollower` HUD
-console, **P3.13** route-creation drag-to-pan (keyboard / edge-pan / snap
-pending), and the 2026-06-09 UI parity audit (→ **P3.17** Main.qml component
-split + **P3.18** context-menu parity + the agreed toolbar spec; P3.17/P3.5
-implementation in progress). A 2026-06-10 full-migration scoping review added
-**P3.19** (GPX import/export UI), **P3.20** (app-wide keyboard shortcuts),
-**P3.21** (wx-retirement acceptance checklist gating P3.11), **P3.22** (Data
-Monitor launcher → Connections page), and **Phase 6** (post-migration
-follow-ups — multi-canvas parked there). Platform bar decided **macOS-first**;
-Linux/Windows CI (P0.5) is a pre-P3.11 gate. The image-diff harness tasks
-(P0.7 / P2.0 / X.3) are closed as dropped-by-decision (visual verification).
-**Last updated:** 2026-06-10.
+**Phase 3 status (2026-06-10, evening):** Phase 3 is the active front.
+Landed since 2026-05-31: **P3.1–P3.4** (shell, view-models, core layers,
+HUD), **P3.7** route/mark/track manager drawer, **P3.14** tides & currents
+(phases A–F), **P3.15** alert engine, **P3.16** route activate/follow,
+**P3.13** route-creation drag-to-pan (keyboard / edge-pan / snap pending).
+**Landed 2026-06-10:** **P3.17** Main.qml component split (4,681 → ~950
+lines, 16 component files); **P3.18 tiers 1+2** — full route / mark / AIS
+context menus with hit-testing, Navigate-to-here/mark (temp GOTO route),
+Zero XTE, Insert/Append/Split, the Measure tool (`MeasureLayer`), and the
+AIS Target List window; **P3.19** GPX import/export UI; **P3.20** canvas
+keyboard layer (arrows/zoom/M/Esc/Enter + F11); **P3.22** Data-Monitor
+launcher → Connections page; P3.6 gaps: HDT predictor + ring colour,
+confirm-before-delete. Remaining before wx retirement (P3.21 gates):
+P3.6 gaps 1–2 (User Standard Objects checklist, MMSI Properties editor) +
+the rest of gap 4, P3.18 tiers 3–4 (extended object/chart menus, undo/redo,
+KML interop), the Phase-4 plugin decision, P0.5 Linux/Windows CI, and the
+macOS user-acceptance pass. Platform bar decided **macOS-first**. The
+image-diff harness tasks (P0.7 / P2.0 / X.3) are closed as
+dropped-by-decision (visual verification).
+**Last updated:** 2026-06-10 (evening).
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked
 · `[—]` not applicable / dropped by decision (rationale given).
@@ -1800,9 +1803,13 @@ where top-level):
    colour**~~ — **DONE (2026-06-10):** `OwnShipConfig.hdtPredictorNm` +
    `ringColor`, drawn by the own-ship layer (dashed HDT vector), set on
    Options > Ships > Own ship.
-4. **Routes & Marks** toggles: lock marks/waypoints, confirm route/track
-   deletion, advance-on-arrival-only, separate route-point icon, per-mark range
-   rings / override-SCAMIN.
+4. **Routes & Marks** toggles — **confirm route/track/mark deletion DONE
+   (2026-06-10)**: `RouteDefaultsConfig.confirmObjectDelete` + the shared
+   `ConfirmDialog.qml`, wired into every drawer/menu delete path. Still open:
+   lock marks/waypoints (note: Qt's explicit Edit mode already prevents
+   accidental drags), advance-on-arrival-only, per-mark range rings /
+   override-SCAMIN. (A separate route-point icon default already exists —
+   `RouteDefaultsConfig.routepointIcon`.)
 5. UI → **per-element Fonts** (font + colour + reset) — needs a FontMgr equivalent.
 6. Display → **Show Grid** / **Show Chart Outlines**; Advanced → vector/raster
    **chart-zoom weighting** sliders + **extended chart-bar info** toggle.
