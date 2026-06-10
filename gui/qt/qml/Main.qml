@@ -981,6 +981,9 @@ ApplicationWindow {
                 sendToGpsDialog.openForMark(guid, name)
         }
 
+        // The built-in HUD stats panel (draggable; ⚙ picks the stats).
+        HudStatsPanel { }
+
         // Plugin HUD contributions (P4.2): each registered component loads
         // above the chart with its plugin context attached.
         Repeater {

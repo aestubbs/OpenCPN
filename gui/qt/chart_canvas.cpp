@@ -24,6 +24,7 @@
 #include "chart_canvas.h"
 
 #include <QPointer>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <cmath>
@@ -289,6 +290,24 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
 
   // Decoded-message stream for the Data Monitor (taps all comm messages).
   m_nmea_monitor = std::make_unique<NmeaMonitorModel>();
+  // HUD bus stats: depth (DPT) + water temp (MTW) off the decoded stream.
+  connect(m_nmea_monitor.get(), &NmeaMonitorModel::lineReceived, this,
+          [this](const QString& line, const QString&) {
+            static const QRegularExpression dpt(
+                QStringLiteral("[A-Z]{2}DPT,([0-9.+-]+)"));
+            static const QRegularExpression mtw(
+                QStringLiteral("[A-Z]{2}MTW,([0-9.+-]+)"));
+            bool changed = false;
+            if (const auto m = dpt.match(line); m.hasMatch()) {
+              m_depth_text = m.captured(1) + QStringLiteral(" m");
+              changed = true;
+            }
+            if (const auto m = mtw.match(line); m.hasMatch()) {
+              m_wtemp_text = m.captured(1) + QStringLiteral(" °C");
+              changed = true;
+            }
+            if (changed) Q_EMIT busStatsChanged();
+          });
 
   // Edge auto-pan tick (P3.13, wx pPanTimer 200 ms / 2%-per-tick).
   m_edge_pan_timer = new QTimer(this);

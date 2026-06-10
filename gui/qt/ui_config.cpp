@@ -38,6 +38,12 @@ UIConfig::UIConfig() {
   m_ships_bells = c.getBool("ui/playShipsBells", m_ships_bells);
   m_inland_ecdis = c.getBool("ui/inlandEcdis", m_inland_ecdis);
   m_split_view = c.getBool("ui/splitView", m_split_view);
+  {
+    const QString hs = c.getString("ui/hudStats");
+    if (!hs.isEmpty()) m_hud_stats = hs.split(',', Qt::SkipEmptyParts);
+  }
+  m_hud_stats_x = c.getDouble("ui/hudStatsX", m_hud_stats_x);
+  m_hud_stats_y = c.getDouble("ui/hudStatsY", m_hud_stats_y);
   m_split_fraction = c.getDouble("ui/splitFraction", m_split_fraction);
   m_options_x = c.getInt("ui/optionsX", m_options_x);
   m_options_y = c.getInt("ui/optionsY", m_options_y);
@@ -94,6 +100,18 @@ void UIConfig::setPlayShipsBells(bool v) {
 }
 void UIConfig::setInlandEcdis(bool v) {
   OCPN_UI_SET(m_inland_ecdis, v, "ui/inlandEcdis", setBool)
+}
+void UIConfig::setHudStats(const QStringList& v) {
+  if (m_hud_stats == v) return;
+  m_hud_stats = v;
+  ConfigStore::instance().setString("ui/hudStats", v.join(','));
+  Q_EMIT changed();
+}
+void UIConfig::setHudStatsX(double v) {
+  OCPN_UI_SET(m_hud_stats_x, v, "ui/hudStatsX", setDouble)
+}
+void UIConfig::setHudStatsY(double v) {
+  OCPN_UI_SET(m_hud_stats_y, v, "ui/hudStatsY", setDouble)
 }
 void UIConfig::setSplitView(bool v) {
   OCPN_UI_SET(m_split_view, v, "ui/splitView", setBool)

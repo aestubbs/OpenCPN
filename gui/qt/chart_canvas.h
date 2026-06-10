@@ -206,6 +206,10 @@ class ChartCanvas : public QQuickItem {
   // Cursor geographic position for the window status bar (formatted lat/lon),
   // updated on hover. Empty until the cursor enters the canvas.
   Q_PROPERTY(QString cursorText READ cursorText NOTIFY cursorMoved)
+  // Bus-derived stats for the HUD stats panel (DPT depth / MTW water
+  // temperature parsed from the decoded NMEA stream; "--" until seen).
+  Q_PROPERTY(QString depthText READ depthText NOTIFY busStatsChanged)
+  Q_PROPERTY(QString waterTempText READ waterTempText NOTIFY busStatsChanged)
   // Raw cursor position for overlays that sample fields at the cursor
   // (e.g. the GRIB readout). NaN until the first move.
   Q_PROPERTY(double cursorLat READ cursorLat NOTIFY cursorMoved)
@@ -315,6 +319,8 @@ public:
   QString scaleText() const;
   QString perfText() const { return m_perf_text; }
   QString cursorText() const { return m_cursor_text; }
+  QString depthText() const { return m_depth_text; }
+  QString waterTempText() const { return m_wtemp_text; }
   double cursorLat() const { return m_cursor_pos_lat; }
   double cursorLon() const { return m_cursor_pos_lon; }
   QString cursorBrgRngText() const { return m_cursor_brgrng_text; }
@@ -549,6 +555,7 @@ Q_SIGNALS:
   void followOwnShipChanged();
   void perfTextChanged();
   void cursorMoved();
+  void busStatsChanged();
   void routeBuildModeChanged();
   void routeEditModeChanged();
   void routeVisibilityChanged();
@@ -800,6 +807,8 @@ private:
 
   // Formatted cursor lat/lon for the status bar, updated on hover.
   QString m_cursor_text;
+  QString m_depth_text = QStringLiteral("--");
+  QString m_wtemp_text = QStringLiteral("--");
   double m_cursor_pos_lat = qQNaN();
   double m_cursor_pos_lon = qQNaN();
   QString m_cursor_brgrng_text;

@@ -59,6 +59,7 @@ qt_add_qml_module(opencpn-qt
     qml/SendToPeerDialog.qml
     qml/SendToGpsDialog.qml
         qml/PrioritiesDialog.qml
+        qml/HudStatsPanel.qml
   SOURCES
     app_controller.h
     chart_canvas.h

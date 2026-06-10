@@ -31,6 +31,7 @@
 #define OCPN_QT_UI_CONFIG_H_
 
 #include <QObject>
+#include <QStringList>
 #include <QQmlEngine>
 #include <QString>
 
@@ -68,6 +69,13 @@ class UIConfig : public QObject {
   // Second-pane width fraction (0.2..0.8), divider-draggable.
   Q_PROPERTY(double splitFraction READ splitFraction WRITE setSplitFraction
                  NOTIFY changed)
+  // HUD stats panel (built-in dashboard): which stats show, and the
+  // draggable panel's persisted position (fractions of the canvas;
+  // -1 = default top-right).
+  Q_PROPERTY(QStringList hudStats READ hudStats WRITE setHudStats NOTIFY
+                 changed)
+  Q_PROPERTY(double hudStatsX READ hudStatsX WRITE setHudStatsX NOTIFY changed)
+  Q_PROPERTY(double hudStatsY READ hudStatsY WRITE setHudStatsY NOTIFY changed)
   // Options-window position persistence (-1 = unset; size is fixed).
   Q_PROPERTY(int optionsX READ optionsX WRITE setOptionsX NOTIFY changed)
   Q_PROPERTY(int optionsY READ optionsY WRITE setOptionsY NOTIFY changed)
@@ -130,6 +138,12 @@ public:
   void setTouchInterface(bool v);
   bool playShipsBells() const { return m_ships_bells; }
   void setPlayShipsBells(bool v);
+  QStringList hudStats() const { return m_hud_stats; }
+  void setHudStats(const QStringList& v);
+  double hudStatsX() const { return m_hud_stats_x; }
+  void setHudStatsX(double v);
+  double hudStatsY() const { return m_hud_stats_y; }
+  void setHudStatsY(double v);
   bool splitView() const { return m_split_view; }
   void setSplitView(bool v);
   double splitFraction() const { return m_split_fraction; }
@@ -183,6 +197,10 @@ private:
   double m_toolbar_transparency = 0.0;
   bool m_touch = false;
   bool m_ships_bells = false;
+  QStringList m_hud_stats{QStringLiteral("pos"), QStringLiteral("sog"),
+                          QStringLiteral("cog"), QStringLiteral("dpt")};
+  double m_hud_stats_x = -1;
+  double m_hud_stats_y = -1;
   bool m_split_view = false;
   double m_split_fraction = 0.4;
   int m_options_x = -1;
