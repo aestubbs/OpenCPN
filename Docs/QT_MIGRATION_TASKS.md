@@ -1034,20 +1034,24 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       `M_COVR − union(finer coverage)` removes coastline **slivers** at cell
       edges and honours coverage holes. **Low priority** — the composite
       underlay already prevents holes, so this is polish. *(severity: low)*
-- [ ] **P2.18** **Overscale / overzoom indication.** Draw the S-52 overscale
-      hatch/text when a cell is shown beyond its compilation scale (wx draws an
-      overscale marker; QT_QUILT_VS_WX §8 rule 5 lists it deferred).
-      *(severity: low)*
+- [x] **P2.18** **Overscale / overzoom indication.** Was already implemented
+      but left unmarked (audit 2026-06-10): the provider draws a per-cell
+      vertical overscale hatch when the display is zoomed finer than the
+      cell's native scale × threshold (`rebuildOverscaleHatch`,
+      `s52_vector_chart_provider.cpp`; threshold = max(4, overzoom k) from
+      Options), and the HUD shows "⚠ OVERSCALE ×N" via
+      `ChartCanvas.overscaleFactor`.
 - [ ] **P2.19** **CM93 / CM93COMP** vector chart support. Qt's `S52Engine`
       loads only `.000` / `.S57` / `.oesu` / `.oesenc`; wx renders CM93
       worldwide vector (`cm93chart` / `cm93compchart`, incl. next-smaller-cell
       dashed outlines). The Qt CM93 detail / offset controls already exist but
       drive nothing. Add a CM93 decode path feeding the s52plib SG emit.
       *(severity: low — large effort)*
-- [ ] **P2.20** **Show Grid + Show Depth Units** display controls (split from
-      P2.16). Both are wx options Qt lacks, but each needs a new *render path*,
-      not just dialog wiring: Show Grid is a lat/lon graticule overlay (a
-      display- or world-anchored Layer with labelled meridians/parallels);
+- [~] **P2.20** **Show Grid + Show Depth Units** display controls (split from
+      P2.16). **Show Grid DONE (2026-06-10):** `GridLayer` — labelled
+      meridians/parallels at a scale-picked interval, world-anchored,
+      rebuilt per view change, gated by `DisplayConfig.showGrid`
+      (Options > Display). Show Depth Units still TODO:
       Show Depth Units is an on-chart legend showing the sounding unit
       (m / ft / fm) the active cell uses. Add the `DisplayConfig`/`ChartConfig`
       property + QML control alongside the render path. **Smooth Pan/Zoom is
