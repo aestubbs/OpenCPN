@@ -1061,10 +1061,15 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       fixups, ATON label optimization, per-geometry S57Obj assembly with
       deferred tessellation, WGS84 offsets via a lightweight `Cm93Covr`
       capture replacing the wx covr_set; user offsets 0 until the offset
-      dialog ports). Every stage compiles in opencpn-qt. **Next (step b+):**
-      the extent scanner (cell grid walk → `CellExtent`), the worker decode
-      case wiring object chains through `RenderAreaToSG`, scale tiering
-      onto the quilt, and the offset/detail UI.
+      dialog ports). Every stage compiles in opencpn-qt. **Step (b) extent
+      scanner DONE (2026-06-10):** `cm93_scanner.{h,cpp}` walks a set into
+      the same `CellExtent` records the S-57 scan emits (header-only bbox
+      read, per-tier native scale + band; isCm93Root detection). **Next:**
+      the worker decode case — build the object chain per cell
+      (loadcell_in_sequence equivalent + update-cell merging), run the
+      S57Objs through s52plib's SG emit exactly like the .000 path, wire
+      ChartSourceModel/ChartWorker to route CM93 roots, then scale tiering
+      + the offset/detail UI.
       **Implementation plan (scoped 2026-06-10):** CM93 decode already
       produces s52plib-compatible `S57Obj`s (`cm93chart::CreateS57Obj`,
       `gui/src/cm93.cpp:3163` — ~650 lines of attribute/class transcoding,
