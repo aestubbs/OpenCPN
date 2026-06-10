@@ -238,6 +238,12 @@ if (OCPN_QT_EXAMPLE_PLUGIN)
   add_subdirectory(plugin/example)
 endif ()
 
+# The Dashboard plugin (P4.3) -- the first real Phase-4 module.
+option(OCPN_QT_DASHBOARD_PLUGIN "Build the Dashboard Qt plugin" ON)
+if (OCPN_QT_DASHBOARD_PLUGIN)
+  add_subdirectory(plugin/dashboard)
+endif ()
+
 # libtess2: the basemap provider tessellates the land polygons.
 target_include_directories(opencpn-qt PRIVATE
   ${CMAKE_SOURCE_DIR}/libs/libtess2/Include
