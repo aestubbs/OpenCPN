@@ -1068,15 +1068,19 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       cell→buffer loader DONE (2026-06-10):** `cm93_loader.{h,cpp}` —
       ingest → transcode → the same LUP/rules/RenderToSG emit per
       primitive (areas via deferred PolyTessGeo, lines via the cell
-      transform, points, sounding clusters as depth labels). **Remaining
-      integration:** wire `ChartSourceModel`/`ChartWorker` to detect CM93
-      roots (`Cm93Scanner::isCm93Root`) and route their cells through
-      `Cm93Loader` on the decode thread (the buffer then flows into the
-      existing `S52VectorChartProvider`/quilt unchanged); then per-tier
-      quilt behaviour checks, the offset/detail UI, and **verification
-      against a real CM93 set** (none in the repo — needs the user's
-      charts). v1 divergences tracked: base cells only (no update-cell
-      merging), user offsets 0, no queryable-feature capture.
+      transform, points, sounding clusters as depth labels). **Step (d)
+      pipeline wiring DONE (2026-06-10):** a configured chart directory
+      that is a CM93 root routes straight through — reloadCharts passes
+      the root, the worker's scan expands it via `Cm93Scanner`,
+      `kindOf()` recognises cell filenames, and `loadCell` decodes via a
+      per-root dictionary cache + `S52Engine::loadCm93Cell`; the buffer
+      flows into the existing provider/quilt unchanged. **Remaining:**
+      RENDERING VERIFICATION against a real CM93 set (none in the repo —
+      add the set's root folder under Options > Charts > Chart Files and
+      look; coordinate-transform bugs would show as misplaced geometry),
+      then the offset/detail UI. v1 divergences tracked: base cells only
+      (no update-cell merging), user offsets 0, no queryable-feature
+      capture, .xz cells skipped.
       **Implementation plan (scoped 2026-06-10):** CM93 decode already
       produces s52plib-compatible `S57Obj`s (`cm93chart::CreateS57Obj`,
       `gui/src/cm93.cpp:3163` — ~650 lines of attribute/class transcoding,
