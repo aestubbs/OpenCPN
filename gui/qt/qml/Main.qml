@@ -167,6 +167,9 @@ ApplicationWindow {
     OptionsWindow {
         id: optionsWindow
         appWindow: root
+        onDataMonitorRequested: {
+            dataMonitorWindow.show(); dataMonitorWindow.raise()
+        }
     }
 
     // --- AIS target list (AisTargetListWindow.qml, P3.18): live targets
@@ -933,7 +936,6 @@ ApplicationWindow {
         onOptionsRequested: { optionsWindow.show(); optionsWindow.raise() }
         onRouteManagerRequested: routeDrawer.opened ? routeDrawer.close()
                                                      : routeDrawer.open()
-        onDataMonitorRequested: { dataMonitorWindow.show(); dataMonitorWindow.raise() }
         onAboutRequested: { aboutWindow.show(); aboutWindow.raise() }
         onAnchorWatchRequested: anchorPopup.open()
     }

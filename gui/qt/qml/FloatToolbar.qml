@@ -44,7 +44,6 @@ Pane {
 
     signal optionsRequested()
     signal routeManagerRequested()
-    signal dataMonitorRequested()
     signal aboutRequested()
     signal anchorWatchRequested()
 
@@ -157,12 +156,8 @@ Pane {
             visible: !floatToolbar.collapsed
             text: "🖨️"; ToolTip.text: qsTr("Print chart (not yet implemented)")
         }
-        // Data Monitor (Qt addition).
-        Tool {
-            visible: !floatToolbar.collapsed
-            text: "📡"; ToolTip.text: qsTr("Data monitor")
-            onClicked: floatToolbar.dataMonitorRequested()
-        }
+        // (Data Monitor moved to Options > Connections, P3.22 -- it is a
+        // connections-debugging tool, not a primary nav control.)
         // wx ID_ABOUT.
         Tool {
             visible: !floatToolbar.collapsed

@@ -28,6 +28,11 @@ Window {
     // lives on the ApplicationWindow (the on-chart debug overlay toggle).
     required property var appWindow
 
+    // Open the Data Monitor window (a sibling of this window, wired in
+    // Main.qml). It is a connections-debugging tool, so its launcher lives
+    // on the Connections page (P3.22).
+    signal dataMonitorRequested()
+
     flags: Qt.Dialog
     // macOS shows a wider window (sidebar + pane), like System Settings.
     // Other platforms get the compact top-tab layout.
@@ -1080,7 +1085,17 @@ Window {
                         commentField.text = ""
                     }
 
-                    Label { text: qsTr("Data connections"); font.bold: true }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label { text: qsTr("Data connections"); font.bold: true }
+                        Item { Layout.fillWidth: true }
+                        Button {
+                            // What a connection is actually delivering, live
+                            // (decoded NMEA/N2K stream) -- the debug window.
+                            text: qsTr("Data monitor…")
+                            onClicked: optionsWindow.dataMonitorRequested()
+                        }
+                    }
 
                     ListView {
                         Layout.fillWidth: true
