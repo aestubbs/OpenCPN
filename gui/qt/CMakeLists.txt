@@ -40,6 +40,8 @@ qt_add_qml_module(opencpn-qt
     qml/ObjectQueryWindow.qml
     qml/AboutWindow.qml
     qml/DataMonitorWindow.qml
+    qml/CanvasOptionsDrawer.qml
+    qml/RouteManagerDrawer.qml
   SOURCES
     app_controller.h
     chart_canvas.h
