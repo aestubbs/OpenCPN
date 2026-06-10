@@ -860,12 +860,15 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
       Phase 4 alongside the new plugin host).
       Non-GL path → `QPainter` (now HW-accelerated via the RHI backend).
       GL path → `QSGGeometryNode` with built-in materials.
-- [ ] **P2.7** Raster chart (KAP/BSB) Layer — `QSGImageNode` (built-in
-      textured quad), one per chart-cell tile. No shader code.
-      *(dep: P2.5; 2026-05-30 audit: `RasterChartProvider` is still a
-      placeholder with no file-format decoder — Qt renders no raster charts
-      yet. Extend scope to MBTiles + raster de-skew; see "Renderer parity
-      gaps vs wx" below. severity: high)*
+- [~] **P2.7** Raster chart (KAP/BSB) — **v1 landed (2026-06-10),
+      un-parked:** pure-Qt KAP reader (header parse, BSB RLE decode,
+      least-squares linear-Mercator georeferencing with residual-based
+      rejection of skewed/other projections), RasterChartLayer textured
+      quad, full pipeline routing (scan extents → off-thread decode →
+      quilt with tier z-ordering under same-tier vectors). Remaining:
+      rendering verification with a real KAP file (none in the repo),
+      then skew/polyconic support + day/dusk/night palette switching if
+      wanted.
 - [x] **P2.8** Vector-chart pipeline through `libs/s52plib`. **DONE** for
       the major S-52 feature classes (areas, lines, text, symbols)
       rendering from a real NOAA ENC cell through a scene-graph emit path.
