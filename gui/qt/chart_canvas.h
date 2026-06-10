@@ -610,6 +610,9 @@ private:
   void reloadResidentCells();
   // Worker results (delivered to the main thread via queued connections).
   void onExtentsScanned(const QList<CellExtent>& cells);
+  void onRasterCellLoaded(const QString& id, const QImage& image,
+                          double north, double south, double east, double west,
+                          double worldYTop, double worldYBottom);
   void onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
                     double north, double south, double east, double west);
   // Reconcile the set of loaded cells with the current view: request

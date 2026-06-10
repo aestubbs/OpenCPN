@@ -35,6 +35,7 @@
 #include <memory>
 
 #include <QHash>
+#include <QImage>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -70,6 +71,18 @@ public Q_SLOTS:
   /** Decode one cell's full symbology into a world-coordinate buffer and
    *  emit it. Serialised against other loadCell calls on this thread. */
   void loadCell(const ocpn::qtui::CellExtent& cell);
+
+Q_SIGNALS:
+  /** A decoded raster (KAP) chart: image + linear world rectangle
+   *  (P2.7). Emitted alongside cellLoaded for vector cells. */
+  void rasterCellLoaded(const QString& id, const QImage& image, double north,
+                        double south, double east, double west,
+                        double worldYTop, double worldYBottom);
+
+private:
+  void loadRasterCell_(const ocpn::qtui::CellExtent& cell);
+
+public:
 
   /** Switch the S-52 colour scheme (0=day,1=dusk,2=night) on the decode
    *  thread, serialised against loadCell so it never races a decode. The

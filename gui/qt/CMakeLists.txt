@@ -191,6 +191,10 @@ qt_add_qml_module(opencpn-qt
     comm_priorities_model.cpp
     config_templates.h
     config_templates.cpp
+    raster_chart.h
+    raster_chart.cpp
+    raster_chart_layer.h
+    raster_chart_layer.cpp
     cm93_loader.h
     cm93_loader.cpp
     plugin/ocpn_qt_plugin.h

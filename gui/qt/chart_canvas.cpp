@@ -79,6 +79,7 @@
 #include "route_list_view_model.h"
 #include "cm93_scanner.h"
 #include "grid_layer.h"
+#include "raster_chart_layer.h"
 #include "waypoint_icons.h"
 #include "s57_dictionary.h"
 #include "model/ais_decoder.h"   // g_MMSI_Props_Array (MMSI properties, P3.6)
@@ -632,6 +633,8 @@ void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
           &ChartCanvas::onExtentsScanned);
   connect(m_worker, &ChartWorker::cellLoaded, this,
           &ChartCanvas::onCellLoaded);
+  connect(m_worker, &ChartWorker::rasterCellLoaded, this,
+          &ChartCanvas::onRasterCellLoaded);
 
   m_worker_thread->start();
 
@@ -678,7 +681,8 @@ void ChartCanvas::reloadCharts() {
   // plaintext SENC (.S57), and o-charts (.oesu/.oesenc, decrypted on load).
   static const QStringList kCellGlobs = {
       QStringLiteral("*.000"), QStringLiteral("*.oesu"),
-      QStringLiteral("*.oesenc"), QStringLiteral("*.S57")};
+      QStringLiteral("*.oesenc"), QStringLiteral("*.S57"),
+      QStringLiteral("*.kap"), QStringLiteral("*.KAP")};
   QStringList cells;
   // Reset the key map once, then accumulate each o-charts dir's keyList below
   // (loadKeyList merges; a keyList-less dir must not wipe another dir's keys).
@@ -815,6 +819,37 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
 
   // Pull in whatever's already big enough on screen.
   updateVisibleCells();
+}
+
+void ChartCanvas::onRasterCellLoaded(const QString& id, const QImage& image,
+                                     double north, double south, double east,
+                                     double west, double worldYTop,
+                                     double worldYBottom) {
+  CellExtent c;
+  c.north = north; c.south = south; c.east = east; c.west = west;
+  c.name = id;
+  CellExtent cat = m_catalog.value(id, c);
+  if (image.isNull() || !m_needed.contains(id)) {
+    m_requested.remove(id);
+    return;
+  }
+  const QString layerId = "raster." + id;
+  const QRectF rect(QPointF(west, qMin(worldYTop, worldYBottom)),
+                    QPointF(east, qMax(worldYTop, worldYBottom)));
+  auto* layer = new RasterChartLayer(layerId, image, rect);
+  // Rasters underlay vector charts of the same tier (wx quilt behaviour).
+  layer->setZOrder(zOrderForScale(cat.nativeScale) - 1);
+  m_compositor->addLayer(layer);
+  LoadedCell lc;
+  lc.extent = cat;
+  lc.layerId = layerId;
+  lc.provider = nullptr;  // image layer -- no S-52 provider
+  m_loaded.insert(id, lc);
+  qWarning("onRasterCellLoaded: ADD %s scale=%d %dx%d", qPrintable(id),
+           cat.nativeScale, image.width(), image.height());
+  updateFinerCoverage();
+  Q_EMIT chartCoverageChanged();
+  update();
 }
 
 void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
@@ -1102,7 +1137,7 @@ void ChartCanvas::updateFinerCoverage() {
         finer << bb;
       }
     }
-    lc.provider->setFinerCoverage(finer);
+    if (lc.provider) lc.provider->setFinerCoverage(finer);
   }
 }
 

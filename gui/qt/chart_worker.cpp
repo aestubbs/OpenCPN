@@ -21,6 +21,7 @@
 #include "cm93_cell_reader.h"
 #include "cm93_dictionary.h"
 #include "cm93_scanner.h"
+#include "raster_chart.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -36,11 +37,13 @@ namespace ocpn::qtui {
 
 namespace {
 // Chart cell formats handled by the worker.
-enum class CellKind { Enc000, SencPlain, Ocharts, Cm93 };
+enum class CellKind { Enc000, SencPlain, Ocharts, Cm93, Raster };
 // CM93 cell files are ?lllnnnn.X with X a scale letter (P2.19).
 const QRegularExpression kCm93CellRe(
     QStringLiteral("^.\\d{7}\\.[ZABCDEFGzabcdefg]$"));
 CellKind kindOf(const QString& path) {
+  if (path.endsWith(QStringLiteral(".kap"), Qt::CaseInsensitive))
+    return CellKind::Raster;
   if (kCm93CellRe.match(QFileInfo(path).fileName()).hasMatch())
     return CellKind::Cm93;
   const QString ext = QFileInfo(path).suffix().toLower();
@@ -132,6 +135,29 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
       case CellKind::Enc000:
         ce = m_engine->scanOneCellExtent(path, m_s57data_dir);
         break;
+      case CellKind::Raster: {
+        const RasterChart rc = RasterChartReader::scanHeader(path);
+        if (rc.ok) {
+          ce.name = QStringLiteral("KAP-") + QFileInfo(path).completeBaseName();
+          ce.path = path;
+          ce.north = rc.north;
+          ce.south = rc.south;
+          ce.east = rc.east;
+          ce.west = rc.west;
+          ce.nativeScale = rc.nativeScale;
+          ce.navFeatures = 1;  // raster content is always "chart surface"
+          ce.band = rc.nativeScale > 1000000   ? 1
+                    : rc.nativeScale > 300000  ? 2
+                    : rc.nativeScale > 90000   ? 3
+                    : rc.nativeScale > 30000   ? 4
+                    : rc.nativeScale > 10000   ? 5
+                                               : 6;
+        } else {
+          qWarning("scan: KAP rejected %s: %s", qPrintable(path),
+                   qPrintable(rc.error));
+        }
+        break;
+      }
       case CellKind::Cm93:
         // CM93 cells arrive pre-scanned (the root expansion below feeds
         // ready extents); a stray single cell gets a header-only read.
@@ -171,8 +197,25 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
   m_scanning = false;
 }
 
+void ChartWorker::loadRasterCell_(const CellExtent& cell) {
+  const RasterChart rc = RasterChartReader::load(cell.path);
+  if (!rc.ok) {
+    qWarning("loadCell: KAP decode failed %s: %s", qPrintable(cell.path),
+             qPrintable(rc.error));
+    return;
+  }
+  qWarning("loadCell: KAP %s %dx%d scale=%d", qPrintable(cell.name),
+           rc.image.width(), rc.image.height(), rc.nativeScale);
+  Q_EMIT rasterCellLoaded(cell.name, rc.image, rc.north, rc.south, rc.east,
+                          rc.west, rc.worldYTop, rc.worldYBottom);
+}
+
 void ChartWorker::loadCell(const CellExtent& cell) {
   if (!m_engine) return;
+  if (kindOf(cell.path) == CellKind::Raster) {
+    loadRasterCell_(cell);
+    return;
+  }
   double n = 0, s = 0, e = 0, w = 0;
   s52sg::Buffer buf;
   switch (kindOf(cell.path)) {
