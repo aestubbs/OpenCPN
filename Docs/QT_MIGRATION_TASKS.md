@@ -1757,7 +1757,9 @@ QML-singleton (persisted). Several controls are wired live to the shell.
       duplicated here.
 - [x] Mouse-wheel zoom sensitivity — lives on Display → General
       (`DisplayConfig.wheelZoomFactor`), consumed live.
-- [ ] Inland ECDIS manual button.
+- [x] Inland ECDIS mode — **landed 2026-06-10** as a settings preset
+      toggle on Charts > Vector (km + km/h units, Standard category, AIS
+      real-size off; wx SwitchInlandEcdisMode parity).
 - [—] Show compass window / mouse-wheel sensitivity are not duplicated as
       separate UIConfig keys: the UI page binds the existing DisplayConfig
       properties so the two pages stay in sync.
