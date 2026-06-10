@@ -146,7 +146,12 @@ Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
       with `Main.qml` and a `ChartCanvas` `QQuickItem`. Sibling target to the
       legacy wx `OpenCPN`; both build clean. (`gui/qt/main.cpp`,
       `gui/qt/qml/Main.qml`, `gui/qt/CMakeLists.txt`.)
-- [ ] **P0.5** Get `opencpn-qt` building in CI for desktop (Win/macOS/Linux).
+- [~] **P0.5** CI for `opencpn-qt` — **workflow authored 2026-06-10**
+      (`.github/workflows/opencpn-qt.yml`): macOS-14/arm64 build of the
+      app + toolkit + all four plugins with a smoke-run, mirroring the
+      local toolchain; Linux rides best-effort (continue-on-error);
+      Windows pends the toolkit export macros. **Needs a push to GitHub
+      for its first run** — flip to [x] when green.
       **Deferred by decision 2026-06-10 (macOS-first):** all development and
       verification is on macOS for now; a Linux + Windows build/CI pass is a
       **hard pre-P3.11 gate** (see P3.21), not near-term work.
