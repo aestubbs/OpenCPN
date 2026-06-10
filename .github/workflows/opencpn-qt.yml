@@ -97,6 +97,9 @@ jobs:
             qt6-serialport-dev qt6-shadertools-dev \
             qml6-module-qtquick-controls \
             libwxgtk3.2-dev libgdal-dev libarchive-dev \
+            libgtk-3-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libcurl4-openssl-dev libssl-dev liblz4-dev libzstd-dev \
+            libmpg123-dev libmp3lame-dev libsndfile1-dev libexif-dev \
             libusb-1.0-0-dev libudev-dev gettext
 
       - name: Configure
