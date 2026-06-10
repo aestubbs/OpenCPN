@@ -1212,12 +1212,15 @@ render anything onto the chart, only manages the plugin lifecycle.
       bar (position / SOG / COG / cursor / range-bearing / scale), alert
       banner, time bar, route-follow console (P3.16). Depth/wind readouts
       follow when their feeds are surfaced (`wind_decoder` exists).
-- [~] **P3.5** Toolbar / main controls in QML (touch-friendly). **Aligned
-      layout agreed 2026-06-09 — see "Toolbar layout — agreed spec" below.**
-      Implementing in the P3.17 components (`FloatToolbar.qml` + `MuiBar.qml`):
-      move Tides + Anchor to the main toolbar, fix the MOB icon (⚓→🛟) + wire it,
-      wire Print, Follow becomes a jump+follow split button with a look-ahead
-      flyout, and the status-bar scale becomes a clickable free-form entry.
+- [x] **P3.5** Toolbar / main controls in QML (touch-friendly). **DONE
+      (2026-06-10)** per the agreed 2026-06-09 spec, in the P3.17 components
+      (`FloatToolbar.qml` + `MuiBar.qml`): Tides + Anchor moved to the main
+      toolbar, MOB icon fixed (⚓→🛟) + wired to `dropMob()`, Follow is a
+      jump+follow split button with the look-ahead flyout, the status-bar
+      scale is a clickable free-form entry (`ScaleDialog`), and the Data
+      Monitor slot moved to Connections (P3.22). **Print stays a stub**
+      (inert button + "not yet implemented" tooltip) — explicitly acceptable
+      per the P3.21 gate; full chart printing is a separate feature.
 - [ ] **P3.6** Settings / preferences UI in QML — the Options dialog
       (see the breakdown below).
 - [x] **P3.7** **Route / mark / track manager UI in QML. DONE (2026-06-02).**
@@ -1264,8 +1267,11 @@ render anything onto the chart, only manages the plugin lifecycle.
       pinch). Benefits every AA-line consumer (routes/tracks/AIS vectors/own-ship
       /rings/anchor/tide arrows/trails). Route line is now 2 px graphite. Builds
       clean (qsb regenerates all backends); runs with no shader/Metal errors.
-      Still pending below: keyboard nav, edge auto-pan, nearby-waypoint snap,
-      touch affordances, and round caps/joins (square accepted for now).
+      **Keyboard nav landed via P3.20 (2026-06-10):** arrows pan, +/- zoom,
+      Esc cancels the build, Enter finishes it -- all live during
+      route-building (the canvas key layer is not gated by route mode).
+      Still pending: edge auto-pan, nearby-waypoint snap, touch
+      affordances, and round caps/joins (square accepted for now).
       Remaining detail (original analysis):
       Route *rendering* and the manager (P3.7) are good, but the *entry* UX is
       hard to use: **you cannot pan the chart while creating a route.** In
