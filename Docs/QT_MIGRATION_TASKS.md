@@ -1064,12 +1064,19 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       dialog ports). Every stage compiles in opencpn-qt. **Step (b) extent
       scanner DONE (2026-06-10):** `cm93_scanner.{h,cpp}` walks a set into
       the same `CellExtent` records the S-57 scan emits (header-only bbox
-      read, per-tier native scale + band; isCm93Root detection). **Next:**
-      the worker decode case — build the object chain per cell
-      (loadcell_in_sequence equivalent + update-cell merging), run the
-      S57Objs through s52plib's SG emit exactly like the .000 path, wire
-      ChartSourceModel/ChartWorker to route CM93 roots, then scale tiering
-      + the offset/detail UI.
+      read, per-tier native scale + band; isCm93Root detection). **Step (c)
+      cell→buffer loader DONE (2026-06-10):** `cm93_loader.{h,cpp}` —
+      ingest → transcode → the same LUP/rules/RenderToSG emit per
+      primitive (areas via deferred PolyTessGeo, lines via the cell
+      transform, points, sounding clusters as depth labels). **Remaining
+      integration:** wire `ChartSourceModel`/`ChartWorker` to detect CM93
+      roots (`Cm93Scanner::isCm93Root`) and route their cells through
+      `Cm93Loader` on the decode thread (the buffer then flows into the
+      existing `S52VectorChartProvider`/quilt unchanged); then per-tier
+      quilt behaviour checks, the offset/detail UI, and **verification
+      against a real CM93 set** (none in the repo — needs the user's
+      charts). v1 divergences tracked: base cells only (no update-cell
+      merging), user offsets 0, no queryable-feature capture.
       **Implementation plan (scoped 2026-06-10):** CM93 decode already
       produces s52plib-compatible `S57Obj`s (`cm93chart::CreateS57Obj`,
       `gui/src/cm93.cpp:3163` — ~650 lines of attribute/class transcoding,
