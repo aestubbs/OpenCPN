@@ -1054,13 +1054,17 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       dictionary loader) AND `cm93_cell_reader.{h,cpp}` (descramble +
       header/table readers + Ingest, verbatim extraction with mechanical
       renames) compile in opencpn-qt, and **`cm93_transcoder.{h,cpp}`** now carries
-      the geometry layer: `buildGeom` (verbatim cm93chart::BuildGeom —
-      ring/segment reconstruction, 3-D sounding clusters), `transformPoint`
-      (cell-local → lat/lon) and the packed-attribute walker. Next: the
-      **CreateS57Obj** extraction (the ~650-line class/attribute semantic
-      transcoding, cm93.cpp:3163+) producing S57Objs for the existing SG
-      emit, then the extent scanner + worker decode case + scale tiering +
-      offset/detail UI.
+      the FULL decode chain — **step (a) COMPLETE (2026-06-10)**:
+      `buildGeom` (geometry reconstruction), `transformPoint`, the
+      packed-attribute walker, and `createS57Obj` (the ~650-line semantic
+      core: class substitutions, attribute transcoding incl. COLMAR/QUASOU
+      fixups, ATON label optimization, per-geometry S57Obj assembly with
+      deferred tessellation, WGS84 offsets via a lightweight `Cm93Covr`
+      capture replacing the wx covr_set; user offsets 0 until the offset
+      dialog ports). Every stage compiles in opencpn-qt. **Next (step b+):**
+      the extent scanner (cell grid walk → `CellExtent`), the worker decode
+      case wiring object chains through `RenderAreaToSG`, scale tiering
+      onto the quilt, and the offset/detail UI.
       **Implementation plan (scoped 2026-06-10):** CM93 decode already
       produces s52plib-compatible `S57Obj`s (`cm93chart::CreateS57Obj`,
       `gui/src/cm93.cpp:3163` — ~650 lines of attribute/class transcoding,
