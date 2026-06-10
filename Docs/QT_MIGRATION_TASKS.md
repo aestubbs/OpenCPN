@@ -2111,7 +2111,14 @@ existing `followOwnShip` property before adding).
       ("org.opencpn.qt.plugin/1.0"). Awaiting the Phase-4 day-1-plugins
       decision before the loader (P4.2) lands; the draft exists to inform
       that decision.
-- [ ] **P4.2** Expose `registerLayer()` and QML HUD contribution points to plugins.
+- [x] **P4.2** Expose `registerLayer()` and QML HUD contribution points —
+      **DONE (2026-06-10):** `PluginRegistry` (QPluginLoader over the
+      app-data `plugins-qt` dir, init/deinit lifecycle, per-plugin enable
+      persisted, errors surfaced on the new Options > Plugins catalogue
+      page); registered Layers join the compositor like built-ins, HUD
+      components load above the chart, settings pages stack under
+      Options > Plugins. Exercised end-to-end once the first Phase-4
+      module (P4.3+) exists.
 - [ ] **P4.3** Port `dashboard` as a built-in Qt module (display-anchored / HUD).
 - [ ] **P4.4** Port `chartdldr` (chart downloader) as a built-in Qt module.
 - [ ] **P4.5** Port `grib` as a built-in Qt module (world-anchored Layer).
