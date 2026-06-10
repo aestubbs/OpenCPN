@@ -128,7 +128,10 @@ Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
       OpenCPN/OpenCPN (pull); work on branch `migrate_to_qt`. *(Marked done
       2026-06-10 — had been left unchecked.)*
 - [x] **P0.2** Install/pin Qt 6. Installed Qt **6.11.0** via Homebrew at
-      `/opt/homebrew/opt/qt` (keg-only). Toolchain doc per target still TODO.
+      `/opt/homebrew/opt/qt` (keg-only). Toolchain doc per target:
+      [`QT_TOOLCHAIN.md`](./QT_TOOLCHAIN.md) (2026-06-10 — incl. the
+      stale-AOT-cache gotcha and the expected Linux/Windows package sets
+      for the P0.5 CI gate).
 - [x] **P0.3** Qt discovery centralised in top-level `CMakeLists.txt`
       (`find_package(Qt6 Core)` + Homebrew keg-only hint, guarded `NOT QT_ANDROID`).
       Added `OCPN_USE_QT_GUI` option (OFF — placeholder for the Phase 3 GUI switch).
