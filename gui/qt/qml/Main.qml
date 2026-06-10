@@ -728,7 +728,14 @@ ApplicationWindow {
                     Button {
                         text: qsTr("Drop anchor")
                         enabled: !chart.alerts.anchorSet
-                        onClicked: chart.alerts.dropAnchor()
+                        onClicked: {
+                            chart.alerts.dropAnchor()
+                            // wx parity: optionally pin an anchor mark too.
+                            if (RouteDefaultsConfig.autoAnchorMark &&
+                                    chart.alerts.anchorSet)
+                                chart.dropAnchorMark(chart.alerts.anchorLat,
+                                                     chart.alerts.anchorLon)
+                        }
                     }
                     Button {
                         text: qsTr("Raise anchor")

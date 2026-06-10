@@ -448,6 +448,9 @@ public:
   // the dialog can show it.
   Q_INVOKABLE void dropMarkHere(const QString& name, const QString& comment,
                                 const QString& icon);
+  /** Auto-anchor mark (wx parity): drop an anchor-icon mark at the given
+   *  position, named by drop time. Used when the anchor watch is set. */
+  Q_INVOKABLE void dropAnchorMark(double lat, double lon);
   Q_INVOKABLE double markDropLat() const { return m_ctx_lat; }
   Q_INVOKABLE double markDropLon() const { return m_ctx_lon; }
   Q_INVOKABLE void showMark(const QString& guid);   // select + centre

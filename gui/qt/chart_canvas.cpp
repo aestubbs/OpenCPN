@@ -1911,6 +1911,23 @@ void ChartCanvas::setRouteVisible(int index, bool on) {
 
 // --- Marks (free waypoints) -------------------------------------------------
 
+void ChartCanvas::dropAnchorMark(double lat, double lon) {
+  if (!m_nav_provider) return;
+  const QString name =
+      QStringLiteral("Anchor ") +
+      QDateTime::currentDateTime().toString(QStringLiteral("dd MMM hh:mm"));
+  const QString guid = m_nav_provider->dropMark(
+      lat, lon, name, tr("Set by anchor watch"), QStringLiteral("anchor"));
+  if (!guid.isEmpty()) {
+    UndoOp op;
+    op.created = true;
+    op.guid = guid;
+    op.snap = snapshotMark(guid);
+    pushUndo(op);
+  }
+  update();
+}
+
 void ChartCanvas::dropMarkHere(const QString& name, const QString& comment,
                                const QString& icon) {
   if (!m_nav_provider) return;

@@ -45,6 +45,8 @@ class RouteDefaultsConfig : public QObject {
                  NOTIFY changed)
   Q_PROPERTY(double arrivalCircleNm READ arrivalCircleNm WRITE
                  setArrivalCircleNm NOTIFY changed)
+  Q_PROPERTY(bool autoAnchorMark READ autoAnchorMark WRITE setAutoAnchorMark
+                 NOTIFY changed)
   Q_PROPERTY(int scaminMin READ scaminMin WRITE setScaminMin NOTIFY changed)
   Q_PROPERTY(int scaminMax READ scaminMax WRITE setScaminMax NOTIFY changed)
 
@@ -80,6 +82,8 @@ public:
   void setRouteStyle(int v);
   bool persistActiveRoute() const { return m_persist_active; }
   void setPersistActiveRoute(bool v);
+  bool autoAnchorMark() const { return m_auto_anchor_mark; }
+  void setAutoAnchorMark(bool v);
   QString waypointIcon() const { return m_waypoint_icon; }
   void setWaypointIcon(const QString& v);
   QString routepointIcon() const { return m_routepoint_icon; }
@@ -112,6 +116,7 @@ private:
 
   QColor m_route_color{58, 64, 70};  // graphite (pencil-on-chart default)
   int m_route_style = 0;
+  bool m_auto_anchor_mark = false;
   bool m_persist_active = true;
   QString m_waypoint_icon{QStringLiteral("diamond")};
   QString m_routepoint_icon{QStringLiteral("xmblue")};

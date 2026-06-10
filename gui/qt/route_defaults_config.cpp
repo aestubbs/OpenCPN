@@ -33,6 +33,7 @@ RouteDefaultsConfig::RouteDefaultsConfig() {
   if (!rc.isEmpty()) m_route_color = QColor(rc);
   m_route_style = c.getInt("routes/routeStyle", m_route_style);
   m_persist_active = c.getBool("routes/persistActive", m_persist_active);
+  m_auto_anchor_mark = c.getBool("routes/autoAnchorMark", m_auto_anchor_mark);
   m_waypoint_icon = c.getString("routes/waypointIcon", m_waypoint_icon);
   m_routepoint_icon = c.getString("routes/routepointIcon", m_routepoint_icon);
   m_arrival_nm = c.getDouble("routes/arrivalNm", m_arrival_nm);
@@ -84,6 +85,12 @@ void RouteDefaultsConfig::setPersistActiveRoute(bool v) {
   m_persist_active = v;
   g_persist_active_route = v;
   ConfigStore::instance().setBool("routes/persistActive", v);
+  Q_EMIT changed();
+}
+void RouteDefaultsConfig::setAutoAnchorMark(bool v) {
+  if (m_auto_anchor_mark == v) return;
+  m_auto_anchor_mark = v;
+  ConfigStore::instance().setBool("routes/autoAnchorMark", v);
   Q_EMIT changed();
 }
 void RouteDefaultsConfig::setWaypointIcon(const QString& v) {

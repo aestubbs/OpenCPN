@@ -2361,6 +2361,11 @@ Window {
                                     onToggled: RouteDefaultsConfig.persistActiveRoute = checked
                                 }
                                 CheckBox {
+                                    text: qsTr("Drop an anchor mark when the anchor watch is set")
+                                    checked: RouteDefaultsConfig.autoAnchorMark
+                                    onToggled: RouteDefaultsConfig.autoAnchorMark = checked
+                                }
+                                CheckBox {
                                     text: qsTr("Confirm before deleting routes, tracks and marks")
                                     checked: RouteDefaultsConfig.confirmObjectDelete
                                     onToggled: RouteDefaultsConfig.confirmObjectDelete = checked
