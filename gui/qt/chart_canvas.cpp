@@ -226,6 +226,19 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
             if (m_alert_engine)
               m_alert_engine->noteRouteEvent(tr("Route complete: %1").arg(route));
           });
+  // A "Navigate to here" GOTO route is temporary (wx m_bDeleteOnArrival):
+  // delete it once the follower reports arrival at its end (P3.18).
+  connect(m_route_follower.get(), &RouteFollower::ended, this, [this]() {
+    if (m_goto_guid.isEmpty() || !m_nav_provider) return;
+    const QList<NavRoute> routes = m_nav_provider->userRoutes();
+    for (int i = 0; i < routes.size(); ++i) {
+      if (routes[i].guid == m_goto_guid) {
+        m_nav_provider->deleteRoute(i);
+        break;
+      }
+    }
+    m_goto_guid.clear();
+  });
 
   // Demo (Hakefjord replay) is opt-in: read the persisted choice (default
   // off). The app otherwise boots into the live setup.
@@ -304,6 +317,11 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_waypoint_layer = new WaypointLayer(m_nav_provider.get(), m_viewport.get());
   m_waypoint_layer->setZOrder(1700);
   m_compositor->addLayer(m_waypoint_layer);
+  // Measure-tool overlay (P3.18): above the nav overlays, below AIS.
+  m_measure_layer = new MeasureLayer(m_nav_provider.get(), m_viewport.get());
+  m_measure_layer->setZOrder(1800);
+  m_compositor->addLayer(m_measure_layer);
+  m_measure_layer->setVisible(true);
 
   // Re-render the route/track overlays when the route/track style settings
   // change (Options > Routes: colour, line style, track colour) -- the layers
@@ -1299,6 +1317,137 @@ void ChartCanvas::skipWaypoint() {
   update();
 }
 
+void ChartCanvas::startGotoRoute(double lat, double lon, const QString& name) {
+  if (!m_nav_provider || !m_route_follower) return;
+  const OwnShipState own = m_nav_provider->ownShip();
+  if (!own.valid) return;
+  // Only one outstanding GOTO at a time: drop a previous, unfinished one.
+  if (!m_goto_guid.isEmpty()) {
+    const QList<NavRoute> routes = m_nav_provider->userRoutes();
+    for (int i = 0; i < routes.size(); ++i) {
+      if (routes[i].guid == m_goto_guid) {
+        m_nav_provider->deleteRoute(i);
+        break;
+      }
+    }
+    m_goto_guid.clear();
+  }
+  const int idx = m_nav_provider->createRoute(
+      name, {QPointF(own.lon, own.lat), QPointF(lon, lat)});
+  if (idx < 0) return;
+  m_goto_guid = m_nav_provider->userRoutes().value(idx).guid;
+  // Activate directly (no zoom-to-extent: the boat and the target are both
+  // already in or near the view the user is working in).
+  m_route_follower->activate(idx);
+  update();
+}
+
+void ChartCanvas::navigateToHere() {
+  // wx ID_DEF_MENU_GOTO_HERE: a temporary 2-point route from the fix to the
+  // right-click point, activated immediately, deleted on arrival.
+  startGotoRoute(m_ctx_lat, m_ctx_lon, tr("Go to here"));
+}
+
+void ChartCanvas::navigateToWaypoint(const QString& guid) {
+  // wx ID_WP_MENU_GOTO: a temporary route from the fix to the mark.
+  if (!m_nav_provider) return;
+  for (const NavWaypoint& wp : m_nav_provider->waypoints()) {
+    if (wp.guid == guid) {
+      startGotoRoute(wp.lat, wp.lon,
+                     wp.name.isEmpty() ? tr("Go to mark")
+                                       : tr("Go to %1").arg(wp.name));
+      return;
+    }
+  }
+}
+
+void ChartCanvas::zeroXte() {
+  if (m_route_follower) m_route_follower->zeroXte();
+}
+
+void ChartCanvas::insertRoutePointAtMenu() {
+  if (!m_nav_provider || m_menu_route < 0 || m_menu_seg < 0) return;
+  m_nav_provider->insertRoutePoint(m_menu_route, m_menu_seg, m_menu_ins_lat,
+                                   m_menu_ins_lon);
+  update();
+}
+
+void ChartCanvas::startMeasure() {
+  if (m_measure_active) return;
+  m_measure_active = true;
+  m_measure_pts.clear();
+  m_measure_text = tr("Click to start measuring");
+  if (m_measure_layer) m_measure_layer->setState({}, QPointF(), false);
+  Q_EMIT measureChanged();
+  update();
+}
+
+void ChartCanvas::stopMeasure() {
+  if (!m_measure_active) return;
+  m_measure_active = false;
+  m_measure_pts.clear();
+  m_measure_text.clear();
+  if (m_measure_layer) m_measure_layer->setState({}, QPointF(), false);
+  Q_EMIT measureChanged();
+  update();
+}
+
+void ChartCanvas::updateMeasure(double cur_lat, double cur_lon,
+                                bool has_cursor) {
+  if (!m_measure_active) return;
+  // Total over the fixed legs, plus the live rubber-band leg to the cursor.
+  double total = 0.0;
+  for (int i = 1; i < m_measure_pts.size(); ++i) {
+    double brg = 0.0, dist = 0.0;
+    DistanceBearingMercator(m_measure_pts[i].y(), m_measure_pts[i].x(),
+                            m_measure_pts[i - 1].y(), m_measure_pts[i - 1].x(),
+                            &brg, &dist);
+    total += dist;
+  }
+  DisplayConfig& dc = DisplayConfig::instance();
+  if (has_cursor && !m_measure_pts.isEmpty()) {
+    const QPointF& last = m_measure_pts.last();
+    double brg = 0.0, dist = 0.0;
+    DistanceBearingMercator(cur_lat, cur_lon, last.y(), last.x(), &brg, &dist);
+    m_measure_text = tr("Leg %1: %2  %3   ·   Total %4")
+                         .arg(m_measure_pts.size())
+                         .arg(dc.formatBearing(brg), dc.formatDistance(dist),
+                              dc.formatDistance(total + dist));
+  } else if (m_measure_pts.size() >= 2) {
+    m_measure_text = tr("Total %1").arg(dc.formatDistance(total));
+  } else {
+    m_measure_text = tr("Click the next point");
+  }
+  if (m_measure_layer)
+    m_measure_layer->setState(m_measure_pts, QPointF(cur_lon, cur_lat),
+                              has_cursor);
+  Q_EMIT measureChanged();
+  update();
+}
+
+bool ChartCanvas::hitWaypointAt(const QPointF& sp, QString* guid,
+                                QString* name) const {
+  if (!m_nav_provider || !m_viewport) return false;
+  constexpr double kPickRadiusPx = 12.0;
+  const QMatrix4x4 m = m_viewport->transformMatrix(
+      static_cast<int>(width()), static_cast<int>(height()));
+  double best = kPickRadiusPx * kPickRadiusPx;
+  bool found = false;
+  for (const NavWaypoint& wp : m_nav_provider->waypoints()) {
+    if (!wp.visible) continue;
+    const QPointF s = m.map(QPointF(wp.lon, Viewport::latToWorldY(wp.lat)));
+    const double dx = s.x() - sp.x(), dy = s.y() - sp.y();
+    const double d2 = dx * dx + dy * dy;
+    if (d2 < best) {
+      best = d2;
+      if (guid) *guid = wp.guid;
+      if (name) *name = wp.name;
+      found = true;
+    }
+  }
+  return found;
+}
+
 void ChartCanvas::placeSimShipHere() {
   if (!m_sim_ship) return;
   // The test ship IS the live position source, so leave demo mode and make
@@ -1711,7 +1860,17 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
     m_press_pos = event->position();
     event->accept();
   } else if (event->button() == Qt::RightButton) {
-    // Right-click on a route node -> the node menu (delete point/route).
+    // Record the world point under the cursor first -- every menu's actions
+    // (drop mark / navigate-to / insert point / center here) consume it.
+    m_ctx_pos = event->position();
+    if (m_viewport)
+      m_viewport->screenToLatLon(m_ctx_pos.x(), m_ctx_pos.y(),
+                                 static_cast<int>(width()),
+                                 static_cast<int>(height()), m_ctx_lat,
+                                 m_ctx_lon);
+
+    // Right-click on a route node in edit mode -> the node menu (delete
+    // point/route) takes precedence over the object menus.
     int rt = -1, nd = -1;
     if (m_route_edit_mode && hitRouteNode(event->position(), rt, nd)) {
       selectRoute(rt);
@@ -1722,14 +1881,43 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
       event->accept();
       return;
     }
-    // Record the world point under the cursor for the context-menu actions
-    // (Center here / Object query here) and ask QML to pop the menu there.
-    m_ctx_pos = event->position();
-    if (m_viewport)
-      m_viewport->screenToLatLon(m_ctx_pos.x(), m_ctx_pos.y(),
-                                 static_cast<int>(width()),
-                                 static_cast<int>(height()), m_ctx_lat,
-                                 m_ctx_lon);
+
+    // Object-focused menus (P3.18, wx CanvasMenuHandler): a mark, then a
+    // route node / segment, else the general canvas menu.
+    QString wp_guid, wp_name;
+    if (hitWaypointAt(event->position(), &wp_guid, &wp_name)) {
+      Q_EMIT markMenuRequested(event->position().x(), event->position().y(),
+                               wp_guid, wp_name);
+      event->accept();
+      return;
+    }
+    int seg = -1;
+    double ilat = 0, ilon = 0;
+    if (hitRouteNode(event->position(), rt, nd)) {
+      selectRoute(rt);
+      m_menu_route = rt;
+      m_menu_seg = -1;
+      const bool act = m_nav_provider &&
+                       m_nav_provider->userRoutes().value(rt).active;
+      Q_EMIT routeMenuRequested(event->position().x(), event->position().y(),
+                                rt, act, false);
+      event->accept();
+      return;
+    }
+    if (hitRouteSegment(event->position(), rt, seg, ilat, ilon)) {
+      selectRoute(rt);
+      m_menu_route = rt;
+      m_menu_seg = seg;
+      m_menu_ins_lat = ilat;
+      m_menu_ins_lon = ilon;
+      const bool act = m_nav_provider &&
+                       m_nav_provider->userRoutes().value(rt).active;
+      Q_EMIT routeMenuRequested(event->position().x(), event->position().y(),
+                                rt, act, true);
+      event->accept();
+      return;
+    }
+
     Q_EMIT contextMenuRequested(m_ctx_pos.x(), m_ctx_pos.y());
     event->accept();
   } else {
@@ -1811,6 +1999,19 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
     // click another route's line to select it, else AIS pick / deselect.
     const QPointF d = event->position() - m_press_pos;
     if (d.manhattanLength() <= 6) {
+      // Measure mode (P3.18): a click drops a measure point; everything else
+      // (selection, AIS pick) is suspended while measuring.
+      if (m_measure_active && m_viewport) {
+        double mlat = 0, mlon = 0;
+        m_viewport->screenToLatLon(event->position().x(),
+                                   event->position().y(),
+                                   static_cast<int>(width()),
+                                   static_cast<int>(height()), mlat, mlon);
+        m_measure_pts.append(QPointF(mlon, mlat));
+        updateMeasure(mlat, mlon, false);
+        event->accept();
+        return;
+      }
       int rt = -1, seg = -1;
       double ilat = 0, ilon = 0;
       if (hitRouteSegment(event->position(), rt, seg, ilat, ilon)) {
@@ -1854,6 +2055,9 @@ void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {
     // Live rubber-band segment to the cursor while drawing a route.
     if (m_route_build_mode && m_nav_provider)
       m_nav_provider->setRouteRubberband(lat, lon);
+    // Measure tool (P3.18): trail the dashed rubber-band + live readout.
+    if (m_measure_active && !m_measure_pts.isEmpty())
+      updateMeasure(lat, lon, true);
   }
   QQuickItem::hoverMoveEvent(event);
 }

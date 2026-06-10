@@ -95,6 +95,10 @@ public:
   }
   /** Commit the draft (>=2 points) as a model Route + persist. True if kept. */
   bool finishRoute();
+  /** Create + persist a route from `points` ((lon, lat) pairs, >=2), named
+   *  `name` -- the programmatic path behind "Navigate to here" (P3.18).
+   *  Returns its index in userRoutes() order, or -1 if not created. */
+  int createRoute(const QString& name, const QList<QPointF>& points);
   /** Discard the draft without committing. */
   void cancelRoute() {
     if (!m_building) return;

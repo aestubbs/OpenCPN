@@ -85,6 +85,7 @@ class RouteLayer;
 class RouteFollowLayer;
 class WaypointLayer;
 class TrackLayer;
+class MeasureLayer;
 class TideLayer;
 class RouteFollower;
 class SimShipController;
@@ -207,6 +208,12 @@ class ChartCanvas : public QQuickItem {
   Q_PROPERTY(int routeVisibilityRevision READ routeVisibilityRevision NOTIFY
                  routeVisibilityChanged)
 
+  // Measure tool (P3.18, wx F4/"Measure"). While active a left click drops a
+  // measure point, the cursor trails a dashed rubber-band, and measureText
+  // carries the running leg bearing/distance + total for the QML readout.
+  Q_PROPERTY(bool measureActive READ measureActive NOTIFY measureChanged)
+  Q_PROPERTY(QString measureText READ measureText NOTIFY measureChanged)
+
   // Own-ship track recording (#29). While on, each own-ship fix is appended
   // to the active track and drawn by the track overlay.
   Q_PROPERTY(bool trackRecording READ trackRecording WRITE setTrackRecording
@@ -320,6 +327,23 @@ public:
   Q_INVOKABLE void activateRoute(int index);
   Q_INVOKABLE void deactivateRoute();
   Q_INVOKABLE void skipWaypoint();      // advance past the current waypoint
+
+  // --- Canvas context-menu actions (P3.18) ---
+  // Build + activate a temporary GOTO route from the own-ship fix to the
+  // right-click point / to a mark (wx "Navigate To Here" / "Navigate To
+  // This"). The route is deleted automatically on arrival at its end.
+  Q_INVOKABLE void navigateToHere();
+  Q_INVOKABLE void navigateToWaypoint(const QString& guid);
+  // Reset the XTE origin for the active leg (wx "Zero XTE").
+  Q_INVOKABLE void zeroXte();
+  // Insert a waypoint into the segment the route context menu opened on.
+  Q_INVOKABLE void insertRoutePointAtMenu();
+
+  // --- Measure tool (P3.18) ---
+  Q_INVOKABLE void startMeasure();
+  Q_INVOKABLE void stopMeasure();
+  bool measureActive() const { return m_measure_active; }
+  QString measureText() const { return m_measure_text; }
   // Drop the test ship at the last right-click point (m_ctx_lat/lon) and make
   // it the live position source (P3.16).
   Q_INVOKABLE void placeSimShipHere();
@@ -436,6 +460,16 @@ Q_SIGNALS:
   void contextMenuRequested(qreal x, qreal y);
   // Right-click on a route node; QML pops the node menu (delete point/route).
   void routeNodeMenuRequested(qreal x, qreal y);
+  // Right-click on a route's line or node outside edit mode; QML pops the
+  // route menu (P3.18). canInsert: the click hit a segment (not a node), so
+  // "Insert waypoint here" is meaningful.
+  void routeMenuRequested(qreal x, qreal y, int routeIndex, bool isActive,
+                          bool canInsert);
+  // Right-click on a free mark; QML pops the mark menu (P3.18).
+  void markMenuRequested(qreal x, qreal y, const QString& guid,
+                         const QString& name);
+  // Measure tool state / readout changed (P3.18).
+  void measureChanged();
   // The set of in-view / displayed ENC cells changed (chart bar refresh).
   void chartCoverageChanged();
 
@@ -659,6 +693,29 @@ private:
   int m_drag_node = -1;          // node index being dragged
   int m_menu_route = -1;         // route/node a right-click node menu targets
   int m_menu_node = -1;
+  // Segment + insertion point the route context menu opened on (P3.18);
+  // m_menu_seg is -1 when the menu opened on a node rather than a segment.
+  int m_menu_seg = -1;
+  double m_menu_ins_lat = 0.0;
+  double m_menu_ins_lon = 0.0;
+  // GUID of the temporary GOTO route ("Navigate to here"), deleted when the
+  // follower reports arrival at its end. Empty = none outstanding.
+  QString m_goto_guid;
+  // Build + persist + activate a 2-point GOTO route from the own-ship fix to
+  // (lat, lon). Shared by navigateToHere / navigateToWaypoint.
+  void startGotoRoute(double lat, double lon, const QString& name);
+
+  // Measure tool (P3.18). Points are (lon, lat); the layer renders them, the
+  // text summarises the rubber-band leg + running total.
+  bool m_measure_active = false;
+  QList<QPointF> m_measure_pts;
+  QString m_measure_text;
+  MeasureLayer* m_measure_layer = nullptr;  // owned by the compositor
+  void updateMeasure(double cur_lat, double cur_lon, bool has_cursor);
+
+  // Hit-test a click against the visible free marks; fills guid/name of the
+  // nearest within a small radius (P3.18).
+  bool hitWaypointAt(const QPointF& sp, QString* guid, QString* name) const;
   // Hit-test the user routes (screen px). Return the route + node within a
   // small radius, or the nearest segment + the cursor's lat/lon for insert.
   bool hitRouteNode(const QPointF& sp, int& route, int& node) const;

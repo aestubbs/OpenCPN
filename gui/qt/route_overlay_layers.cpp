@@ -358,4 +358,35 @@ void WaypointLayer::draw(SgBuilder& b, double wpp) {
   }
 }
 
+void MeasureLayer::draw(SgBuilder& b, double wpp) {
+  if (m_pts.isEmpty()) return;
+  // Amber, distinct from the magenta routes and the orange-red active leg
+  // (wx draws the measure readout in YELO1; the line itself was a route).
+  const QColor amber(255, 200, 60);
+
+  QList<QPointF> pts;
+  pts.reserve(m_pts.size());
+  for (const QPointF& ll : m_pts) pts.append(lonLatToWorld(ll));
+
+  b.setPencil(false);
+  if (pts.size() >= 2) {
+    b.noBrush();
+    b.setPen(amber, 2.0f);
+    b.drawPolyline(pts);
+  }
+  // Dashed rubber-band from the last clicked point to the cursor.
+  if (m_has_rubber) {
+    b.noBrush();
+    b.setPen(amber, 1.5f);
+    b.setDash(8.0f, 6.0f);
+    b.drawLine(pts.last(), lonLatToWorld(m_rubber));
+    b.noDash();
+  }
+  // Vertex dots.
+  b.setBrush(amber);
+  b.setPen(QColor(40, 30, 0), 1.0f);
+  for (const QPointF& w : pts)
+    b.drawCircle(w, static_cast<float>(3.5 * wpp));
+}
+
 }  // namespace ocpn::qtui

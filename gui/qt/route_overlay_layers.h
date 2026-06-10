@@ -158,6 +158,39 @@ private:
   QString m_selected;
 };
 
+/** Measure-tool overlay (P3.18, wx F4/"Measure"): the clicked measure legs
+ *  plus a dashed rubber-band to the cursor. Pure presentation -- ChartCanvas
+ *  owns the measure state and pushes it in via setState(); the running
+ *  distance/bearing readout is a QML pill bound to ChartCanvas.measureText. */
+class MeasureLayer : public StaticNavLayer {
+  Q_OBJECT
+public:
+  MeasureLayer(NavDataProvider* p, const Viewport* v, QObject* parent = nullptr)
+      : StaticNavLayer(p, v, parent) {
+    setOwner(QStringLiteral("core.measure"));
+  }
+  QString id() const override { return QStringLiteral("core.measure"); }
+  QString name() const override { return QStringLiteral("Measure"); }
+
+  /** Replace the measure geometry: clicked points ((lon, lat)) and the
+   *  current cursor end-point for the live segment. */
+  void setState(const QList<QPointF>& points, const QPointF& rubber,
+                bool has_rubber) {
+    m_pts = points;
+    m_rubber = rubber;
+    m_has_rubber = has_rubber;
+    Q_EMIT dirty();
+  }
+
+protected:
+  void draw(SgBuilder& b, double world_per_px) override;
+
+private:
+  QList<QPointF> m_pts;  // clicked measure points, (lon, lat)
+  QPointF m_rubber;      // cursor end-point, (lon, lat)
+  bool m_has_rubber = false;
+};
+
 }  // namespace ocpn::qtui
 
 #endif  // OCPN_QT_ROUTE_OVERLAY_LAYERS_H_

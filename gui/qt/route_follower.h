@@ -88,6 +88,11 @@ public:
   /** Manually advance to the next waypoint (skip the current one). */
   void skip();
 
+  /** Reset the cross-track-error origin to the current position (the wx
+   *  "Zero XTE" action): the active leg is re-based so XTE measures from
+   *  here instead of from the original leg line. No-op when not active. */
+  Q_INVOKABLE void zeroXte();
+
   /** Re-activate the route persisted last session, if "Persist active route"
    *  is on and the route still exists. Call once at startup after routes load. */
   void restorePersisted();

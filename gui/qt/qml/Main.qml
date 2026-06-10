@@ -826,73 +826,65 @@ ApplicationWindow {
             }
         }
 
-        // Right-click context menu (wx canvas-menu equivalent). Opened at the
-        // click point via the ChartCanvas.contextMenuRequested signal.
-        Menu {
-            id: chartContextMenu
-            MenuItem {
-                text: qsTr("Object query here")
-                onTriggered: {
-                    chart.queryObjectsHere()
-                    objectQueryWindow.show(); objectQueryWindow.raise()
+        // Canvas right-click menus (ChartContextMenus.qml, P3.18): the general
+        // chart menu + focused route / mark / route-node menus, popped by the
+        // ChartCanvas hit-test signals. Sibling dialogs are wired here.
+        ChartContextMenus {
+            onObjectQueryRequested: {
+                objectQueryWindow.show(); objectQueryWindow.raise()
+            }
+            onNewMarkRequested: markEditor.openNew()
+            onEditMarkRequested: (guid) => {
+                const wps = chart.routeList.waypoints
+                for (let i = 0; i < wps.length; ++i) {
+                    if (wps[i].guid === guid) {
+                        markEditor.openForEdit(wps[i].guid, wps[i].name,
+                                               wps[i].comment, wps[i].icon)
+                        return
+                    }
                 }
             }
-            MenuItem {
-                text: qsTr("Center view here")
-                onTriggered: chart.centerViewHere()
-            }
-            MenuSeparator {}
-            MenuItem {
-                text: qsTr("Create route")
-                onTriggered: chart.routeBuildMode = true
-            }
-            // wx canvas-menu items not yet wired (kept for layout parity).
-            MenuItem {
-                text: qsTr("Drop mark here")
-                onTriggered: markEditor.openNew()  // dialog uses the ctx point
-            }
-            MenuSeparator {}
-            MenuItem {
-                // Test ship (P3.16): drop a synthetic GPS here and grab the
-                // keyboard so the cursor keys steer it straight away.
-                text: chart.simShip.active ? qsTr("Move test ship here")
-                                           : qsTr("Place test ship here")
-                onTriggered: {
-                    chart.placeSimShipHere()
-                    simKeyHandler.forceActiveFocus()
-                }
-            }
-            MenuItem { text: qsTr("Measure"); enabled: false }
-        }
-        Connections {
-            target: chart
-            function onContextMenuRequested(x, y) {
-                chartContextMenu.popup(x, y)
+            onRouteDetailsRequested: (idx) => {
+                const rts = chart.routeList.routes
+                if (idx >= 0 && idx < rts.length)
+                    routeDetailsDialog.openFor(idx, rts[idx].name)
             }
         }
 
-        // Route-node context menu (right-click a node of the selected route).
-        Menu {
-            id: routeNodeMenu
-            MenuItem {
-                text: qsTr("Delete point")
-                onTriggered: chart.deleteRoutePointAtMenu()
-            }
-            MenuItem {
-                text: qsTr("Delete route")
-                onTriggered: chart.deleteSelectedRoute()
-            }
-            MenuSeparator {}
-            MenuItem {
-                text: qsTr("Finish editing")
-                onTriggered: chart.clearRouteSelection()
+        // Measure-tool readout (P3.18): the running leg bearing/distance +
+        // total, pinned top-centre while measuring. Esc or the context menu
+        // ("Measure off") ends the measurement.
+        Rectangle {
+            visible: chart.measureActive
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 10
+            width: measureRow.implicitWidth + 24
+            height: measureRow.implicitHeight + 12
+            radius: height / 2
+            color: "#cc0b1118"
+            border.color: "#ffc83c"
+            Row {
+                id: measureRow
+                anchors.centerIn: parent
+                spacing: 10
+                Label {
+                    text: "📐 " + chart.measureText
+                    color: "#ffe9a8"
+                    font.pointSize: 12
+                }
+                Label {
+                    text: qsTr("Esc to end")
+                    color: "#8a8f98"
+                    font.pointSize: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
         }
-        Connections {
-            target: chart
-            function onRouteNodeMenuRequested(x, y) {
-                routeNodeMenu.popup(x, y)
-            }
+        Shortcut {
+            sequence: "Escape"
+            enabled: chart.measureActive
+            onActivated: chart.stopMeasure()
         }
 
         // (The old selection-bound "Editing route…" hint was removed: selection

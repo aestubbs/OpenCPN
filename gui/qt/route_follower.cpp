@@ -112,6 +112,12 @@ void RouteFollower::skip() {
   Q_EMIT changed();
 }
 
+void RouteFollower::zeroXte() {
+  if (!g_pRouteMan || !g_pRouteMan->IsAnyRouteActive()) return;
+  g_pRouteMan->ZeroCurrentXTEToActivePoint();
+  update();  // re-snapshot so the nav strip's XTE reads zero immediately
+}
+
 void RouteFollower::update() {
   if (!g_pRouteMan) return;
 

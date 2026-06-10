@@ -302,6 +302,21 @@ bool SwitchableNavDataProvider::finishRoute() {
   return ok;
 }
 
+int SwitchableNavDataProvider::createRoute(const QString& name,
+                                           const QList<QPointF>& points) {
+  if (!pRouteList || points.size() < 2) return -1;
+  Route* rte = new Route();
+  rte->m_RouteNameString = name;
+  for (const QPointF& ll : points) {  // ll = (lon, lat)
+    RoutePoint* p = new RoutePoint(ll.y(), ll.x(), QString(), QString());
+    rte->AddPoint(p);
+  }
+  pRouteList->push_back(rte);
+  NavObj_dB::GetInstance().InsertRoute(rte);  // persists route + its points
+  Q_EMIT staticChanged();
+  return static_cast<int>(pRouteList->size()) - 1;
+}
+
 void SwitchableNavDataProvider::moveRoutePoint(int route, int pt, double lat,
                                                double lon) {
   if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
