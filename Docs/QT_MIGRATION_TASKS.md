@@ -1448,7 +1448,8 @@ remain.
       pan/zoom is GPU scene-graph and inherently smooth, the wheel already
       zooms about the cursor, and redraw is driven by the scene-graph vsync
       (no fixed-Hz repaint timer to expose).
-- [ ] Auto-anchor mark; HDT (separate from COG) predictor length.
+- [ ] Auto-anchor mark. *(HDT predictor length landed 2026-06-10 — it
+      lives on Ships > Own ship.)*
 
 **Display page → Units** (wx sub-panel: Units) — **[x] built**
 - [x] Distance, speed, wind-speed, depth, height, temperature unit choices
@@ -1572,7 +1573,9 @@ stuck; singletons are compile-time resolved and always available.)
       (`OwnShipConfig.showWaypointDirection`); pending an active-waypoint
       accessor on the NavDataProvider. (COG predictor length lives on Display →
       General, consumed live.)
-- [ ] Range-ring colour, HDT (separate from COG) predictor length.
+- [x] Range-ring colour + HDT (separate from COG) predictor length
+      (2026-06-10): `OwnShipConfig.ringColor` / `hdtPredictorNm`, consumed
+      live by the own-ship layer.
 
 **Ships → AIS Targets** (wx sub-panel: AIS Targets) — controls built;
 all persisted (`AisConfig.*`); the **CPA/TCPA engine is now implemented**
@@ -1793,7 +1796,10 @@ where top-level):
    (select-all / clear-all / reset-to-STANDARD) — core ECDIS filter; absent.
 2. **MMSI Properties** editor (`[~]` placeholder) — per-vessel ignore / always-
    track / MOB / persist-track.
-3. Own-ship **HDT predictor length** (separate from COG) + **range-ring colour**.
+3. ~~Own-ship **HDT predictor length** (separate from COG) + **range-ring
+   colour**~~ — **DONE (2026-06-10):** `OwnShipConfig.hdtPredictorNm` +
+   `ringColor`, drawn by the own-ship layer (dashed HDT vector), set on
+   Options > Ships > Own ship.
 4. **Routes & Marks** toggles: lock marks/waypoints, confirm route/track
    deletion, advance-on-arrival-only, separate route-point icon, per-mark range
    rings / override-SCAMIN.
