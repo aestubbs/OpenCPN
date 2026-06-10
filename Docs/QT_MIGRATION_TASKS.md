@@ -1795,9 +1795,15 @@ where top-level):
 - **Routes/Points** live under **UI → "Routes & Marks"** in Qt, not under Ships.
 
 **Settings — genuine remaining gaps, prioritized:**
-1. Vector → **"User Standard Objects"** per-object viewing-group checklist
-   (select-all / clear-all / reset-to-STANDARD) — core ECDIS filter; absent.
-   **Implementation plan (scoped 2026-06-10, machinery mapped):** the SG
+1. ~~Vector → **"User Standard Objects"** per-object viewing-group
+   checklist~~ — **DONE (2026-06-10):** per-buffer class table + per-primitive
+   `classIdx` in the `s52sg` schema (filled at every emit site), provider
+   `setHiddenClasses` post-decode cull, a 4th display category **"Mariner's
+   standard"** (wx `MARINERS_STANDARD`; DISPLAYBASE always shows), and the
+   checklist UI (show/hide-all + per-class checkboxes, descriptions via
+   `S57Dictionary`, persisted as `display/hiddenClasses`). wx's
+   "reset to STANDARD" preset is approximated by **Show all** for now.
+   **The original implementation plan (kept for reference):** the SG
    emit path bypasses s52plib's `ObjectRenderCheckCat`/`nViz` entirely, and
    the emitted primitives carry `dispCat`/`scamin`/`viewGroup` but **not the
    S-57 class** — so the feature needs: (a) a per-buffer **class table**
