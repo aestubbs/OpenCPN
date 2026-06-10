@@ -1044,7 +1044,22 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       `s52_vector_chart_provider.cpp`; threshold = max(4, overzoom k) from
       Options), and the HUD shows "⚠ OVERSCALE ×N" via
       `ChartCanvas.overscaleFactor`.
-- [ ] **P2.19** **CM93 / CM93COMP** vector chart support. Qt's `S52Engine`
+- [ ] **P2.19** **CM93 / CM93COMP** vector chart support.
+      **Implementation plan (scoped 2026-06-10):** CM93 decode already
+      produces s52plib-compatible `S57Obj`s (`cm93chart::CreateS57Obj`,
+      `gui/src/cm93.cpp:3163` — ~650 lines of attribute/class transcoding,
+      the genuinely hard part to extract; geometry via `BuildGeom`,
+      :2526). So the SG emit needs NOTHING new — the port is: (a) extract
+      the binary reader + transcoder into a wx-light layer (drop the
+      `wxFileOutputStream` staging + ViewPort-typed signatures);
+      (b) a `Cm93ExtentScanner` (cell-header + M_COVR read → `CellExtent`,
+      easy); (c) a worker decode case piping the S57Objs through
+      `RenderAreaToSG` etc. exactly like the .000 path; (d) per-scale
+      selection (A–G tiers, `GetCMScaleFromVP` logic) mapped onto the Qt
+      quilt's tiering; (e) the offset dialog + detail slider QML
+      (`ChartConfig` already has the properties). Effort: decode
+      extraction HIGH, everything else LOW/MEDIUM. Original note:
+      Qt's `S52Engine`
       loads only `.000` / `.S57` / `.oesu` / `.oesenc`; wx renders CM93
       worldwide vector (`cm93chart` / `cm93compchart`, incl. next-smaller-cell
       dashed outlines). The Qt CM93 detail / offset controls already exist but
@@ -1718,7 +1733,11 @@ QML-singleton (persisted). Several controls are wired live to the shell.
       Qt plugin host. *(Tracked jointly with Phase 4.)*
 
 **Dialog framework / cross-cutting**
-- [ ] OK / Cancel / Apply semantics and the wx change-bitmask
+- [—] OK / Cancel / Apply semantics and the wx change-bitmask — **covered
+      by design (2026-06-10):** the Qt Options window is modeless and
+      live-apply (macOS System Settings convention); every control commits
+      immediately and persists, so there is no pending-changes bitmask to
+      flush or roll back. ~~Original:~~ OK / Cancel / Apply semantics and the wx change-bitmask
       (`S52_CHANGED`, `GROUPS_CHANGED`, `TIDES_CHANGED`, `GL_CHANGED`,
       `LOCALE_CHANGED`, `REBUILD_RASTER_CACHE`, …) — the Qt port needs an
       equivalent "what changed → what to refresh" dispatch. The current
@@ -1913,7 +1932,14 @@ where top-level):
    already prevents accidental drags (the wx lock guarded always-on
    dragging). (A separate route-point icon default already exists —
    `RouteDefaultsConfig.routepointIcon`.)
-5. UI → **per-element Fonts** (font + colour + reset) — needs a FontMgr equivalent.
+5. UI → **per-element Fonts** (font + colour + reset) — needs a FontMgr
+   equivalent. **Recommendation (2026-06-10, needs user confirmation):**
+   drop as deliberately-divergent — the Qt app's typography is system-wide
+   by design (system fonts + the UI scale factor), matching the
+   modernize-appearance principle; a per-element font manager re-imports
+   wx-era complexity. If specific elements need sizing control (e.g.
+   sounding figures), add targeted sliders like the existing ENC
+   sounding-size one instead.
 6. ~~Display → **Show Grid** / **Show Chart Outlines**~~ — **DONE
    (2026-06-10)**: `GridLayer` graticule + the cell-grid toggle
    (`DisplayConfig.showGrid` / `showChartOutlines`), both on Options >
