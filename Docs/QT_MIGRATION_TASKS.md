@@ -2101,7 +2101,16 @@ existing `followOwnShip` property before adding).
 
 ## Phase 4 — Qt plugin host  (est. 6–8 wks)
 
-- [ ] **P4.1** Define the Qt plugin interface (`QPluginLoader` + Layer/HUD contribution API).
+- [~] **P4.1** Define the Qt plugin interface — **DRAFT landed 2026-06-10**
+      (`gui/qt/plugin/ocpn_qt_plugin.h`): QPluginLoader modules implement
+      `OcpnQtPlugin` (name/version/init/deinit) against an
+      `OcpnQtPluginHost` seam — registerLayer (the built-ins' Layer
+      contract + compositor persistence), registerHud / registerSettingsPage
+      (QML component URLs with a plugin context object), NavDataProvider
+      snapshots and a future NavMsg tap. IID-versioned
+      ("org.opencpn.qt.plugin/1.0"). Awaiting the Phase-4 day-1-plugins
+      decision before the loader (P4.2) lands; the draft exists to inform
+      that decision.
 - [ ] **P4.2** Expose `registerLayer()` and QML HUD contribution points to plugins.
 - [ ] **P4.3** Port `dashboard` as a built-in Qt module (display-anchored / HUD).
 - [ ] **P4.4** Port `chartdldr` (chart downloader) as a built-in Qt module.
