@@ -860,6 +860,8 @@ ApplicationWindow {
             onAisTargetListRequested: {
                 aisTargetListWindow.show(); aisTargetListWindow.raise()
             }
+            onFullScreenRequested: root.visibility === Window.FullScreen
+                                   ? root.showNormal() : root.showFullScreen()
         }
 
         // Measure-tool readout (P3.18): the running leg bearing/distance +

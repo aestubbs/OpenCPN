@@ -27,6 +27,7 @@ Item {
     signal editMarkRequested(string guid)
     signal routeDetailsRequested(int routeIndex)
     signal aisTargetListRequested()
+    signal fullScreenRequested()
 
     // --- General canvas menu (right-click on open water / chart). ---------
     Menu {
@@ -54,6 +55,32 @@ Item {
         MenuItem {
             text: qsTr("Center view here")
             onTriggered: chart.centerViewHere()
+        }
+        MenuSeparator {}
+        // Chart controls (P3.18 tier 3, wx canvas_menu.cpp:441-611).
+        MenuItem { text: qsTr("Scale in");  onTriggered: chart.zoomIn() }
+        MenuItem { text: qsTr("Scale out"); onTriggered: chart.zoomOut() }
+        Menu {
+            title: qsTr("Chart orientation")
+            MenuItem {
+                text: qsTr("North-Up"); checkable: true
+                checked: DisplayConfig.navMode === 0
+                onTriggered: DisplayConfig.navMode = 0
+            }
+            MenuItem {
+                text: qsTr("Course-Up"); checkable: true
+                checked: DisplayConfig.navMode === 1
+                onTriggered: DisplayConfig.navMode = 1
+            }
+            MenuItem {
+                text: qsTr("Head-Up"); checkable: true
+                checked: DisplayConfig.navMode === 2
+                onTriggered: DisplayConfig.navMode = 2
+            }
+        }
+        MenuItem {
+            text: qsTr("Toggle full screen")
+            onTriggered: menus.fullScreenRequested()
         }
         MenuSeparator {}
         MenuItem {
