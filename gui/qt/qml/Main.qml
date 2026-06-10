@@ -205,6 +205,8 @@ ApplicationWindow {
         id: splitPane
         visible: UIConfig.splitView && s52SplitPane !== null
         onActiveFocusChanged: if (activeFocus) root.activeChart = splitPane
+        // App-wide colour scheme: the second pane mirrors the primary.
+        colorScheme: chart.colorScheme
         width: visible ? parent.width * UIConfig.splitFraction : 0
         anchors.top: parent.top
         anchors.bottom: tideDrawer.top
