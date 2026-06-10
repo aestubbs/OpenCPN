@@ -2230,7 +2230,10 @@ symbols, chart-colour editor — stays where it is in Phase 2.)
       Inspection-only v1; **+ draggable divider with persisted
       fraction + SHARED DECODE SERVICE (one worker/engine for both panes,
       duplicate-arrival guard; live-tested dual-pane) — 2026-06-10.**
-      Remaining for wx parity: per-pane toolbar + scale linkage, per-pane
+      **+ focused-canvas routing started (2026-06-10): root.activeChart
+      follows focus; MUI zoom acts on the focused pane.** Remaining for wx
+      parity: route the remaining toolbar actions + context menus through
+      activeChart (mechanical, per the established pattern), per-pane
       editing.
 
 ---
