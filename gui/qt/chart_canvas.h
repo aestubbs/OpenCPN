@@ -40,6 +40,7 @@
 #include <QPointF>
 #include <QQuickItem>
 #include <QSet>
+#include <QUrl>
 #include <QVariantMap>
 
 #include "ais_selection_view_model.h"  // complete type needed for Q_PROPERTY
@@ -327,6 +328,17 @@ public:
   Q_INVOKABLE void activateRoute(int index);
   Q_INVOKABLE void deactivateRoute();
   Q_INVOKABLE void skipWaypoint();      // advance past the current waypoint
+
+  // --- GPX import / export (P3.19, wx Route Manager Import/Export) ---
+  // QML FileDialogs hand over file:// URLs; converted here. importGpx
+  // returns {routes, tracks, waypoints, duplicates} counts (empty = parse
+  // failure); the export calls return success.
+  Q_INVOKABLE QVariantMap importGpx(const QUrl& url);
+  Q_INVOKABLE bool exportGpxAll(const QUrl& url) const;
+  Q_INVOKABLE bool exportGpxRoute(int index, const QUrl& url) const;
+  Q_INVOKABLE bool exportGpxTrack(const QString& guid, const QUrl& url) const;
+  Q_INVOKABLE bool exportGpxWaypoint(const QString& guid,
+                                     const QUrl& url) const;
 
   // --- AIS context-menu / target-list actions (P3.18 tier 2) ---
   // Select the target by MMSI (opens the AIS info popup, as a click would).

@@ -27,6 +27,7 @@
 
 #include "route_defaults_config.h"  // trackAutoDaily mode
 #include "model/config_vars.h"  // g_default_wp_icon
+#include "model/nav_object_database.h"  // GPX import/export (P3.19)
 #include "model/navobj_db.h"
 #include "model/own_ship.h"   // gLon (LMT day)
 #include "model/route.h"
@@ -140,6 +141,95 @@ bool SwitchableNavDataProvider::beginAppendRoute(int route) {
   m_draft = NavRoute{};  // unused in append mode
   Q_EMIT editChanged();
   return true;
+}
+
+QVariantMap SwitchableNavDataProvider::importGpx(const QString& path) {
+  QVariantMap out;
+  NavObjectCollection1 doc;
+  if (!doc.load_file(path.toUtf8().constData())) return out;
+
+  const int routes_before = pRouteList ? static_cast<int>(pRouteList->size()) : 0;
+  const int tracks_before = static_cast<int>(g_TrackList.size());
+  int wpts_before = 0;
+  if (pWayPointMan && pWayPointMan->GetWaypointList())
+    wpts_before = static_cast<int>(pWayPointMan->GetWaypointList()->size());
+
+  int duplicates = 0;
+  // Full-viz import + model insert + NavObj_dB persistence happen inside
+  // (waypoint duplicates by name+position are skipped and counted).
+  doc.LoadAllGPXObjects(true, duplicates, false);
+
+  const int routes_after = pRouteList ? static_cast<int>(pRouteList->size()) : 0;
+  const int tracks_after = static_cast<int>(g_TrackList.size());
+  int wpts_after = wpts_before;
+  if (pWayPointMan && pWayPointMan->GetWaypointList())
+    wpts_after = static_cast<int>(pWayPointMan->GetWaypointList()->size());
+
+  out["routes"] = routes_after - routes_before;
+  out["tracks"] = tracks_after - tracks_before;
+  // Route points are added to the waypoint list too; report only the
+  // isolated-mark delta net of the routes' own points.
+  int route_pts = 0;
+  if (pRouteList)
+    for (int i = routes_before; i < routes_after; ++i)
+      route_pts += (*pRouteList)[i] ? (*pRouteList)[i]->GetnPoints() : 0;
+  out["waypoints"] = std::max(0, wpts_after - wpts_before - route_pts);
+  out["duplicates"] = duplicates;
+  Q_EMIT staticChanged();
+  return out;
+}
+
+bool SwitchableNavDataProvider::exportGpxAll(const QString& path) const {
+  NavObjectCollection1 doc;
+  doc.SetRootGPXNode();
+  if (pWayPointMan && pWayPointMan->GetWaypointList())
+    for (RoutePoint* wp : *pWayPointMan->GetWaypointList())
+      if (wp && wp->m_bIsolatedMark) doc.AddGPXWaypoint(wp);
+  if (pRouteList)
+    for (Route* r : *pRouteList)
+      if (r) doc.AddGPXRoute(r);
+  for (Track* t : g_TrackList)
+    if (t && t->GetnPoints() >= 2) doc.AddGPXTrack(t);
+  return doc.SaveFile(path);
+}
+
+bool SwitchableNavDataProvider::exportGpxRoute(int route,
+                                               const QString& path) const {
+  if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
+    return false;
+  Route* r = (*pRouteList)[route];
+  if (!r) return false;
+  NavObjectCollection1 doc;
+  doc.SetRootGPXNode();
+  doc.AddGPXRoute(r);
+  return doc.SaveFile(path);
+}
+
+bool SwitchableNavDataProvider::exportGpxTrack(const QString& guid,
+                                               const QString& path) const {
+  for (Track* t : g_TrackList) {
+    if (t && t->m_GUID == guid) {
+      NavObjectCollection1 doc;
+      doc.SetRootGPXNode();
+      doc.AddGPXTrack(t);
+      return doc.SaveFile(path);
+    }
+  }
+  return false;
+}
+
+bool SwitchableNavDataProvider::exportGpxWaypoint(const QString& guid,
+                                                  const QString& path) const {
+  if (!pWayPointMan || !pWayPointMan->GetWaypointList()) return false;
+  for (RoutePoint* wp : *pWayPointMan->GetWaypointList()) {
+    if (wp && wp->m_GUID == guid) {
+      NavObjectCollection1 doc;
+      doc.SetRootGPXNode();
+      doc.AddGPXWaypoint(wp);
+      return doc.SaveFile(path);
+    }
+  }
+  return false;
 }
 
 void SwitchableNavDataProvider::splitRoute(int route, int seg) {

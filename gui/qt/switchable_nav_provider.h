@@ -29,6 +29,8 @@
 #ifndef OCPN_QT_SWITCHABLE_NAV_PROVIDER_H_
 #define OCPN_QT_SWITCHABLE_NAV_PROVIDER_H_
 
+#include <QVariantMap>
+
 #include "nav_data_provider.h"
 
 QT_BEGIN_NAMESPACE
@@ -133,6 +135,19 @@ public:
   void duplicateRoute(int route);                     // clone -> "<name> copy"
   void renameRoute(int route, const QString& name);   // set + persist name
   void setRoutePointIcon(int route, const QString& icon);  // all points' icon
+
+  // --- GPX interchange (P3.19, wx Route Manager Import/Export) ----------
+  /** Import a GPX file: merge its routes / tracks / isolated marks into the
+   *  model + navobj DB (duplicates by name+position are skipped). Returns
+   *  counts: routes, tracks, waypoints (added), duplicates (skipped);
+   *  empty map if the file could not be parsed. */
+  QVariantMap importGpx(const QString& path);
+  /** Export everything (all routes, tracks and isolated marks) as GPX. */
+  bool exportGpxAll(const QString& path) const;
+  /** Export a single route / track / mark as GPX. */
+  bool exportGpxRoute(int route, const QString& path) const;
+  bool exportGpxTrack(const QString& guid, const QString& path) const;
+  bool exportGpxWaypoint(const QString& guid, const QString& path) const;
 
   // --- Marks (free waypoints), all persisted via NavObj_dB ---
   void dropMark(double lat, double lon, const QString& name,

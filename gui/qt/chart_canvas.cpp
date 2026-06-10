@@ -1374,6 +1374,33 @@ void ChartCanvas::insertRoutePointAtMenu() {
   update();
 }
 
+QVariantMap ChartCanvas::importGpx(const QUrl& url) {
+  if (!m_nav_provider) return {};
+  const QVariantMap counts = m_nav_provider->importGpx(url.toLocalFile());
+  update();
+  return counts;
+}
+
+bool ChartCanvas::exportGpxAll(const QUrl& url) const {
+  return m_nav_provider && m_nav_provider->exportGpxAll(url.toLocalFile());
+}
+
+bool ChartCanvas::exportGpxRoute(int index, const QUrl& url) const {
+  return m_nav_provider &&
+         m_nav_provider->exportGpxRoute(index, url.toLocalFile());
+}
+
+bool ChartCanvas::exportGpxTrack(const QString& guid, const QUrl& url) const {
+  return m_nav_provider &&
+         m_nav_provider->exportGpxTrack(guid, url.toLocalFile());
+}
+
+bool ChartCanvas::exportGpxWaypoint(const QString& guid,
+                                    const QUrl& url) const {
+  return m_nav_provider &&
+         m_nav_provider->exportGpxWaypoint(guid, url.toLocalFile());
+}
+
 void ChartCanvas::appendToRoute(int index) {
   if (!m_nav_provider || m_route_build_mode) return;
   if (!m_nav_provider->beginAppendRoute(index)) return;

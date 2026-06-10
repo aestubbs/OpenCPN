@@ -9,6 +9,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import opencpn.qt
 
@@ -36,6 +37,58 @@ Drawer {
 
     readonly property var rl: chart.routeList
 
+    // Transient GPX import/export feedback ("" = hidden).
+    property string gpxStatus: ""
+    Timer {
+        id: gpxStatusTimer
+        interval: 6000
+        onTriggered: routeDrawer.gpxStatus = ""
+    }
+    function showGpxStatus(msg) {
+        gpxStatus = msg
+        gpxStatusTimer.restart()
+    }
+
+    // --- GPX interchange (P3.19, wx Route Manager Import/Export) ----------
+    FileDialog {
+        id: gpxImportDialog
+        title: qsTr("Import GPX")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("GPX files (*.gpx)"), qsTr("All files (*)")]
+        onAccepted: {
+            const counts = chart.importGpx(selectedFile)
+            if (counts.routes === undefined) {
+                routeDrawer.showGpxStatus(qsTr("Import failed — not a GPX file?"))
+                return
+            }
+            routeDrawer.showGpxStatus(
+                qsTr("Imported %1 routes, %2 tracks, %3 marks (%4 duplicates skipped)")
+                    .arg(counts.routes).arg(counts.tracks)
+                    .arg(counts.waypoints).arg(counts.duplicates))
+        }
+    }
+    FileDialog {
+        id: gpxExportAllDialog
+        title: qsTr("Export all as GPX")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "gpx"
+        nameFilters: [qsTr("GPX files (*.gpx)")]
+        onAccepted: routeDrawer.showGpxStatus(
+            chart.exportGpxAll(selectedFile) ? qsTr("Exported all objects")
+                                             : qsTr("Export failed"))
+    }
+    FileDialog {
+        id: gpxExportRouteDialog
+        title: qsTr("Export route as GPX")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "gpx"
+        nameFilters: [qsTr("GPX files (*.gpx)")]
+        property int routeIndex: -1
+        onAccepted: routeDrawer.showGpxStatus(
+            chart.exportGpxRoute(routeIndex, selectedFile)
+                ? qsTr("Route exported") : qsTr("Export failed"))
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 12
@@ -57,6 +110,29 @@ Drawer {
             TabButton { text: qsTr("Routes") }
             TabButton { text: qsTr("Marks") }
             TabButton { text: qsTr("Tracks") }
+        }
+
+        // GPX interchange (P3.19): file-based import / export of nav objects.
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+            Button {
+                text: qsTr("Import GPX…")
+                onClicked: gpxImportDialog.open()
+            }
+            Button {
+                text: qsTr("Export all…")
+                onClicked: gpxExportAllDialog.open()
+            }
+            Item { Layout.fillWidth: true }
+        }
+        Label {
+            visible: routeDrawer.gpxStatus.length > 0
+            text: routeDrawer.gpxStatus
+            wrapMode: Text.Wrap
+            Layout.fillWidth: true
+            font.pointSize: 10
+            color: "#3b82f6"
         }
 
         StackLayout {
@@ -178,6 +254,13 @@ Drawer {
                                         MenuItem {
                                             text: qsTr("Reverse")
                                             onTriggered: chart.reverseRoute(index)
+                                        }
+                                        MenuItem {
+                                            text: qsTr("Export GPX…")
+                                            onTriggered: {
+                                                gpxExportRouteDialog.routeIndex = index
+                                                gpxExportRouteDialog.open()
+                                            }
                                         }
                                         MenuSeparator {}
                                         MenuItem {
