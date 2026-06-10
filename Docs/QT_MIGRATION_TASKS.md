@@ -146,12 +146,12 @@ Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
       with `Main.qml` and a `ChartCanvas` `QQuickItem`. Sibling target to the
       legacy wx `OpenCPN`; both build clean. (`gui/qt/main.cpp`,
       `gui/qt/qml/Main.qml`, `gui/qt/CMakeLists.txt`.)
-- [~] **P0.5** CI for `opencpn-qt` — **workflow authored 2026-06-10**
-      (`.github/workflows/opencpn-qt.yml`): macOS-14/arm64 build of the
-      app + toolkit + all four plugins with a smoke-run, mirroring the
-      local toolchain; Linux rides best-effort (continue-on-error);
-      Windows pends the toolkit export macros. **Needs a push to GitHub
-      for its first run** — flip to [x] when green.
+- [x] **P0.5** CI for `opencpn-qt` — **GREEN on macOS (2026-06-10, run
+      27304414174):** clean-runner build of the app + toolkit + all four
+      plugins + a 20 s smoke-run, after a dependency-fix iteration
+      (MPG123 et al.). Linux rides best-effort (gtk3/media dev packages
+      being iterated; continue-on-error); Windows pends the toolkit
+      export macros.
       **Deferred by decision 2026-06-10 (macOS-first):** all development and
       verification is on macOS for now; a Linux + Windows build/CI pass is a
       **hard pre-P3.11 gate** (see P3.21), not near-term work.
@@ -2064,12 +2064,13 @@ Phase 6). New scope found untracked:
          plugin platform is live with dashboard / chart-downloader / GRIB
          at v1 (P4.1–P4.5) — what remains is the user's sign-off on
          whether that set suffices for day-1;
-      6. P0.5 CI green (workflow authored 2026-06-10; needs the first
-         push-triggered run — macOS required, Linux best-effort);
+      6. ~~P0.5 CI green~~ **DONE (2026-06-10): macOS green on the
+         clean-runner build + smoke-run (run 27304414174); Linux
+         best-effort iterating**;
       7. a macOS user-acceptance pass on home waters (visual verification —
          no image-diff, per P0.7).
-      **Status: items 1–4 complete; 5 awaits sign-off with the evidence in
-      place; 6 awaits a push; 7 is the user's pass.**
+      **Status: items 1–4 AND 6 complete; 5 awaits sign-off with the
+      evidence in place; 7 is the user's pass.**
 - [x] **P3.22** **Data Monitor launcher → Connections page. DONE
       (2026-06-10).** The 📡 toolbar slot is removed; a "Data monitor…"
       button on Options > Connections opens the window
