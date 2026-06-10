@@ -1748,7 +1748,12 @@ be split into a component module *before* this build-out — **P3.17**.
   Tier-1 remainder: route **Append waypoint** (needs an append-to-existing
   route-build mode) and **Split at leg**; wx's reverse "Rename waypoints?"
   prompt and delete confirmations are skipped by design (Qt convention so
-  far). Missing, by tier:
+  far). **Tier 2 (AIS) DONE (2026-06-10):** right-click a target →
+  Target query / Center view on target / Show-Hide target track /
+  Target list… / Copy MMSI; the new `AisTargetListWindow.qml` (wx
+  `AISTargetListDialog`) lists live targets nearest-first
+  (range/brg/SOG/COG/CPA/TCPA, danger/SART accents, click = select,
+  double-click = center). Missing, by tier:
   - *Tier 1 (core nav):* **Navigate To Here / To This mark**
     (`canvas_menu.cpp`:490/923); a **route** right-click menu (Activate /
     Deactivate / Activate-Next / Insert / Append / Split / Reverse / Properties,
