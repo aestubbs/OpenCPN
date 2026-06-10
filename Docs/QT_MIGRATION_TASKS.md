@@ -2228,9 +2228,10 @@ symbols, chart-colour editor — stays where it is in Phase 2.)
       persisted toggle is on), sharing the chart library / nav data /
       settings. Verified live with both engines decoding concurrently.
       Inspection-only v1; **+ draggable divider with persisted
-      fraction (2026-06-10).** Remaining for wx parity: a shared decode
-      service (single worker pool), per-pane toolbar + scale linkage,
-      per-pane editing.
+      fraction + SHARED DECODE SERVICE (one worker/engine for both panes,
+      duplicate-arrival guard; live-tested dual-pane) — 2026-06-10.**
+      Remaining for wx parity: per-pane toolbar + scale linkage, per-pane
+      editing.
 
 ---
 
