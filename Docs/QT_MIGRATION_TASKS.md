@@ -1745,8 +1745,11 @@ be split into a component module *before* this build-out — **P3.17**.
   `Routeman::ZeroCurrentXTEToActivePoint`); and the **Measure tool**
   (click legs + dashed rubber-band via the new `MeasureLayer`, live
   leg brg/dist + running total readout pill, Esc/menu to end).
-  Tier-1 remainder: route **Append waypoint** (needs an append-to-existing
-  route-build mode) and **Split at leg**; wx's reverse "Rename waypoints?"
+  **Tier 1 now fully DONE** — **Append waypoints** (provider
+  `beginAppendRoute` reuses the route-build mouse flow on an existing model
+  route; finish/cancel both persist) and **Split at this leg** (provider
+  `splitRoute` → "<name> A"/"<name> B", original deleted, followed route
+  deactivated first) landed 2026-06-10; wx's reverse "Rename waypoints?"
   prompt and delete confirmations are skipped by design (Qt convention so
   far). **Tier 2 (AIS) DONE (2026-06-10):** right-click a target →
   Target query / Center view on target / Show-Hide target track /
