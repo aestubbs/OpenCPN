@@ -2141,18 +2141,19 @@ existing `followOwnShip` property before adding).
       (`gui/qt/plugin/chartdldr/`, built by default): catalog-XML fetch +
       parse (NOAA schema, ENC product catalog default), per-chart download
       with progress, libarchive ZIP extract into a chosen folder.
-      Remaining for parity: catalog presets list, update-checking against
-      installed charts, bulk download, auto-add to Chart Files (needs a
-      host seam).
+      **+ catalog presets (NOAA ENC/RNC, US Inland ENC) and bulk download
+      with skip-existing + cancel — 2026-06-10** (the practical core of
+      update-checking). Remaining for parity: per-chart date-based update
+      detection, auto-add to Chart Files (needs a host seam).
 - [~] **P4.5** Port `grib` — **v1 landed (2026-06-10)**
       (`gui/qt/plugin/grib/`, built by default): the zyGrib decode core
-      compiled as-is, file open + timeline scrub on the settings page, and
-      the 10 m wind field as speed-coloured arrows via the FIRST
-      plugin-contributed Layer (toolkit seam proven). **+ 2 hPa pressure isobars
-      (marching squares) landed 2026-06-10.** **+ meteorological wind barbs (2026-06-10).** Remaining for parity:
-      precip/waves/current overlays, particle animation, the GRIB request
-      builder, cursor data readout, density tuning — verify with a real
-      GRIB file first.
+      compiled as-is, file open + timeline scrub on the settings page, the
+      10 m wind field as meteorological barbs (5/10/50 kn, clockwise side,
+      speed-coloured) and 2 hPa pressure isobars (marching squares) via
+      the FIRST plugin-contributed Layer (toolkit seam proven). Remaining
+      for parity: precip/waves/current overlays, particle animation, the
+      GRIB request builder, cursor data readout, density tuning — verify
+      with a real GRIB file first.
 - [~] **P4.6** Document the plugin API —
       [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
       (interface, contribution seams, wx-ABI mapping table, porting
