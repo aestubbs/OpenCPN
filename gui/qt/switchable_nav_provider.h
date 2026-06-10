@@ -155,6 +155,11 @@ public:
   QString routeAsKml(int route) const;
   QString trackAsKml(const QString& guid) const;
   QString waypointAsKml(const QString& guid) const;
+  /** Parse a KML document and merge its content: each Point Placemark
+   *  becomes a mark, each LineString (>= 2 points) a route (wx pastes
+   *  tracks as routes too unless asked; we default to routes). Returns
+   *  {routes, waypoints} added; empty map if no KML was found. */
+  QVariantMap pasteKml(const QString& kmlText);
 
   // --- Marks (free waypoints), all persisted via NavObj_dB ---
   void dropMark(double lat, double lon, const QString& name,

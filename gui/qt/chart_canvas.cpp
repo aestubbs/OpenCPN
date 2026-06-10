@@ -1568,6 +1568,14 @@ bool ChartCanvas::copyTrackAsKml(const QString& guid) const {
   return true;
 }
 
+QVariantMap ChartCanvas::pasteKmlFromClipboard() {
+  QClipboard* cb = QGuiApplication::clipboard();
+  if (!cb || !m_nav_provider) return {};
+  const QVariantMap counts = m_nav_provider->pasteKml(cb->text());
+  if (!counts.isEmpty()) update();
+  return counts;
+}
+
 bool ChartCanvas::copyMarkAsKml(const QString& guid) const {
   if (!m_nav_provider) return false;
   const QString kml = m_nav_provider->waypointAsKml(guid);

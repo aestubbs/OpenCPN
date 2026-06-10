@@ -370,6 +370,9 @@ public:
   Q_INVOKABLE bool copyRouteAsKml(int index) const;
   Q_INVOKABLE bool copyTrackAsKml(const QString& guid) const;
   Q_INVOKABLE bool copyMarkAsKml(const QString& guid) const;
+  // Paste KML from the clipboard: Point Placemarks become marks,
+  // LineStrings become routes. Returns {routes, waypoints} added.
+  Q_INVOKABLE QVariantMap pasteKmlFromClipboard();
   // Snapshot of the live AIS targets for the Target List window, sorted by
   // range (unknown-range targets last). Each entry: mmsi, name, rangeText,
   // bearingText, sogText, cogText, cpaText, tcpaText, dangerous, isSart.

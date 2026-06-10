@@ -96,6 +96,10 @@ Item {
             onTriggered: chart.measureActive ? chart.stopMeasure()
                                              : chart.startMeasure()
         }
+        MenuItem {
+            text: qsTr("Paste KML")
+            onTriggered: chart.pasteKmlFromClipboard()
+        }
         MenuSeparator {}
         MenuItem {
             // Test ship (P3.16): drop a synthetic GPS here and grab the

@@ -257,6 +257,60 @@ QString SwitchableNavDataProvider::waypointAsKml(const QString& guid) const {
   return kmlDocument(name, kmlPointPlacemark(name, wp->m_lat, wp->m_lon));
 }
 
+QVariantMap SwitchableNavDataProvider::pasteKml(const QString& kmlText) {
+  QVariantMap out;
+  if (!kmlText.contains(QStringLiteral("<kml"))) return out;
+  pugi::xml_document doc;
+  if (!doc.load_string(kmlText.toUtf8().constData())) return out;
+
+  int routes_added = 0, marks_added = 0;
+  // Walk every Placemark anywhere in the tree (KML nests Document/Folder).
+  const auto placemarks =
+      doc.select_nodes("//*[local-name()='Placemark']");
+  auto parseCoords = [](const char* text) {
+    QList<QPointF> pts;  // (lon, lat)
+    for (const QString& tok :
+         QString::fromUtf8(text).simplified().split(' ', Qt::SkipEmptyParts)) {
+      const QStringList c = tok.split(',');
+      if (c.size() >= 2) {
+        bool ok1 = false, ok2 = false;
+        const double lon = c[0].toDouble(&ok1), lat = c[1].toDouble(&ok2);
+        if (ok1 && ok2) pts.append(QPointF(lon, lat));
+      }
+    }
+    return pts;
+  };
+  for (const auto& pm : placemarks) {
+    const pugi::xml_node node = pm.node();
+    const QString name =
+        QString::fromUtf8(node.child_value("name")).trimmed();
+    if (const pugi::xml_node ls =
+            node.select_node(".//*[local-name()='LineString']").node()) {
+      const QList<QPointF> pts = parseCoords(ls.child_value("coordinates"));
+      if (pts.size() >= 2) {
+        createRoute(name.isEmpty() ? QStringLiteral("Pasted route") : name,
+                    pts);
+        ++routes_added;
+      }
+    } else if (const pugi::xml_node pt =
+                   node.select_node(".//*[local-name()='Point']").node()) {
+      const QList<QPointF> pts = parseCoords(pt.child_value("coordinates"));
+      if (!pts.isEmpty()) {
+        dropMark(pts[0].y(), pts[0].x(),
+                 name.isEmpty() ? QStringLiteral("Pasted mark") : name,
+                 QString(), QString());
+        ++marks_added;
+      }
+    }
+  }
+  if (routes_added || marks_added) {
+    out["routes"] = routes_added;
+    out["waypoints"] = marks_added;
+    Q_EMIT staticChanged();
+  }
+  return out;
+}
+
 bool SwitchableNavDataProvider::exportGpxAll(const QString& path) const {
   NavObjectCollection1 doc;
   doc.SetRootGPXNode();
