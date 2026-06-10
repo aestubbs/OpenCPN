@@ -1786,7 +1786,19 @@ be split into a component module *before* this build-out — **P3.17**.
   (2026-06-10)** — the only remaining items across all tiers are
   **Send-to-GPS / Send-to-Peer** (need the upload/peer-discovery UI; the
   model machinery exists) and minor tier-3 odds (per-mark anchor watch,
-  Chart Groups / CM93-offset menu entries). Original audit: Qt had only a general
+  Chart Groups / CM93-offset menu entries).
+  **Send-to-Peer plan (scoped 2026-06-10):** the model is ready —
+  `FindAllOCPNServers(timeout)` (mdns_query.h) populates `MdnsCache`;
+  `SendNavobjects(PeerData&)` (peer_client.h, QNAM-based since P1.13)
+  takes routes/routepoints/tracks + `dest_ip_address` and drives two
+  *synchronous* callbacks: `run_pincode_dlg` (must block for the user's
+  PIN — needs a QEventLoop-pumped modal dialog window) and
+  `run_status_dlg`, plus an `EventVar` progress. Qt shape: a
+  `PeerSendController` QObject (`peers()` snapshot + `sendRoute(idx, ip,
+  activate)` run on a worker with queued dialog requests), a native
+  dialog window listing discovered peers + PIN entry, menu items on the
+  route/mark/track menus. Send-to-GPS similarly wraps the
+  `comm_n0183_output` route-upload path (wx SendToGpsDlg). Original audit: Qt had only a general
   `chartContextMenu` + a route-node menu (edit-mode only); wx builds a focused
   popup per object via `CanvasMenuHandler` (`canvas_menu.cpp`).
   **Progress (2026-06-10): Tier 1 largely DONE** — ChartCanvas now hit-tests
