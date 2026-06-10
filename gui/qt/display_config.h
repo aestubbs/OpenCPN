@@ -55,6 +55,9 @@ class DisplayConfig : public QObject {
   Q_PROPERTY(bool lookAhead READ lookAhead WRITE setLookAhead NOTIFY changed)
   // Lat/lon graticule overlay (wx "Show Grid", P2.20).
   Q_PROPERTY(bool showGrid READ showGrid WRITE setShowGrid NOTIFY changed)
+  // On-chart sounding-unit legend (wx "Show depth units", P2.20).
+  Q_PROPERTY(bool showDepthUnits READ showDepthUnits WRITE setShowDepthUnits
+                 NOTIFY changed)
   // Keep the current zoom when the reference chart changes, rather than
   // snapping to the new chart's native scale.
   Q_PROPERTY(bool preserveScaleOnSwitch READ preserveScaleOnSwitch WRITE
@@ -144,6 +147,8 @@ public:
   int navMode() const { return m_nav_mode; }
   bool showGrid() const { return m_show_grid; }
   void setShowGrid(bool v);
+  bool showDepthUnits() const { return m_show_depth_units; }
+  void setShowDepthUnits(bool v);
   void setNavMode(int v);
   bool lookAhead() const { return m_look_ahead; }
   void setLookAhead(bool v);
@@ -225,6 +230,7 @@ private:
 
   int m_nav_mode = 0;
   bool m_show_grid = false;
+  bool m_show_depth_units = true;  // wx default on
   bool m_look_ahead = false;
   bool m_preserve_scale = false;
   double m_wheel_zoom = 1.3;

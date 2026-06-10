@@ -238,6 +238,11 @@ Window {
                                     onToggled: DisplayConfig.showGrid = checked
                                 }
                                 CheckBox {
+                                    text: qsTr("Show depth units legend")
+                                    checked: DisplayConfig.showDepthUnits
+                                    onToggled: DisplayConfig.showDepthUnits = checked
+                                }
+                                CheckBox {
                                     text: qsTr("Grey “no data” fill where no ENC coverage")
                                     checked: DisplayConfig.showNoData
                                     onToggled: DisplayConfig.showNoData = checked

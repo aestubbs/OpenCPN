@@ -652,6 +652,27 @@ ApplicationWindow {
             }
         }
 
+        // --- Depth-units legend (P2.20, wx "Show depth units"): the sounding
+        //     unit every figure on screen is in, beside the scale bar.
+        Rectangle {
+            visible: DisplayConfig.showDepthUnits && scaleBar.visible
+            anchors.left: scaleBar.right
+            anchors.bottom: scaleBar.bottom
+            anchors.leftMargin: 6
+            width: depthUnitText.implicitWidth + 14
+            height: depthUnitText.implicitHeight + 10
+            radius: 4
+            color: "#cc101418"
+            border.color: "#3affffff"
+            Text {
+                id: depthUnitText
+                anchors.centerIn: parent
+                text: qsTr("Depths: ") + [qsTr("m"), qsTr("ft"),
+                                          qsTr("fm")][DisplayConfig.depthUnit]
+                color: "#e8f0ff"; font.pointSize: 10
+            }
+        }
+
         // --- MUIBar: per-canvas view controls bottom-right (MuiBar.qml, P3.17).
         //     Zoom / fit, the Follow / jump-to-ship split button, and the
         //     canvas-options menu. Tides + anchor now live on the master toolbar.
