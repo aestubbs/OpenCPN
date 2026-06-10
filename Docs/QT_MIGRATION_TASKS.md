@@ -93,16 +93,37 @@ New investigation task **P2.25** captures specific chart-rendering defects to
 chase (Yarmouth tiling, Poole missing areas).
 See [`QT_MIGRATION_MATERIALS.md`](./QT_MIGRATION_MATERIALS.md) and
 [`QT_MIGRATION_PERF.md`](./QT_MIGRATION_PERF.md).
-**Last updated:** 2026-05-31.
 
-Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked.
+**Phase 3 status (2026-06-10):** Phase 3 is the active front. Landed since
+2026-05-31: **P3.1–P3.4** (shell, view-models, core layers, HUD — delivered
+incrementally across the Phase-2/3 work, now marked done), **P3.7**
+route/mark/track manager drawer, **P3.14** tides & currents (phases A–F;
+slack markers / DST tick labels / active-tides sounding adjustment remain),
+**P3.15** alert engine, **P3.16** route activate/follow + `RouteFollower` HUD
+console, **P3.13** route-creation drag-to-pan (keyboard / edge-pan / snap
+pending), and the 2026-06-09 UI parity audit (→ **P3.17** Main.qml component
+split + **P3.18** context-menu parity + the agreed toolbar spec; P3.17/P3.5
+implementation in progress). A 2026-06-10 full-migration scoping review added
+**P3.19** (GPX import/export UI), **P3.20** (app-wide keyboard shortcuts),
+**P3.21** (wx-retirement acceptance checklist gating P3.11), **P3.22** (Data
+Monitor launcher → Connections page), and **Phase 6** (post-migration
+follow-ups — multi-canvas parked there). Platform bar decided **macOS-first**;
+Linux/Windows CI (P0.5) is a pre-P3.11 gate. The image-diff harness tasks
+(P0.7 / P2.0 / X.3) are closed as dropped-by-decision (visual verification).
+**Last updated:** 2026-06-10.
+
+Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked
+· `[—]` not applicable / dropped by decision (rationale given).
 Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
 
 ---
 
 ## Phase 0 — Fork & scaffold  (est. 2–3 wks)
 
-- [ ] **P0.1** Create the fork repo; record upstream remote for future cherry-picks.
+- [x] **P0.1** Create the fork repo; record upstream remote for future
+      cherry-picks. Done: `origin` = aestubbs/OpenCPN (push), `upstream` =
+      OpenCPN/OpenCPN (pull); work on branch `migrate_to_qt`. *(Marked done
+      2026-06-10 — had been left unchecked.)*
 - [x] **P0.2** Install/pin Qt 6. Installed Qt **6.11.0** via Homebrew at
       `/opt/homebrew/opt/qt` (keg-only). Toolchain doc per target still TODO.
 - [x] **P0.3** Qt discovery centralised in top-level `CMakeLists.txt`
@@ -114,12 +135,18 @@ Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
       with `Main.qml` and a `ChartCanvas` `QQuickItem`. Sibling target to the
       legacy wx `OpenCPN`; both build clean. (`gui/qt/main.cpp`,
       `gui/qt/qml/Main.qml`, `gui/qt/CMakeLists.txt`.)
-- [ ] **P0.5** Get the empty Qt app building in CI for desktop (Win/macOS/Linux).
+- [ ] **P0.5** Get `opencpn-qt` building in CI for desktop (Win/macOS/Linux).
+      **Deferred by decision 2026-06-10 (macOS-first):** all development and
+      verification is on macOS for now; a Linux + Windows build/CI pass is a
+      **hard pre-P3.11 gate** (see P3.21), not near-term work.
 - [x] **P0.6** Repo layout decided: new Qt-Quick code lives in `gui/qt/`
       (subdir of the existing `gui/` tree — closest to what it'll
       eventually replace; the legacy `gui/src/` retires in Phase 3).
-- [ ] **P0.7** Stand up an image-diff test harness skeleton (needed later for
-      `s52plib` regression testing — set up early).
+- [—] **P0.7** Image-diff test harness — **dropped by decision**. The Qt
+      renderer intentionally diverges in style from wx (system fonts, quilt
+      model, line rendering), so pixel-diffing against the wx renderer is all
+      false positives. Chart rendering is verified visually/manually instead.
+      Closes P2.0 and reframes X.3 the same way.
 
 ## Phase 1 — De-wx the core  (est. 7–9 wks)
 
@@ -768,11 +795,11 @@ and `QQuickFramebufferObject` are *not* used as the chart-canvas type.
 
 ### Revised task list
 
-- [ ] **P2.0** Image-diff regression harness — **prerequisite**, blocks every
-      visual port. Capture reference frames from the current GL renderer
-      across a fixture chart set (raster + vector + AIS overlays); each port
-      step compares against the captured baseline. *(dep: P0.7; original
-      P2.11 promoted to a prerequisite.)*
+- [—] **P2.0** Image-diff regression harness — **dropped by decision** (see
+      P0.7): intentional style divergence from the wx renderer makes pixel
+      diffs all false positives; visual/manual verification is the method.
+      In practice the Phase-2 ports shipped without it (the 2026-05-30 parity
+      audit was code-reading + visual checks).
 - [x] **P2.1** Chart canvas `QQuickItem` subclass with the two top
       `QSGTransformNode`s — `m_world_anchored_root` (viewport transform —
       pan/zoom mutates one matrix, whole subtree follows) and
@@ -1161,11 +1188,27 @@ render anything onto the chart, only manages the plugin lifecycle.
 
 ## Phase 3 — QtQuick UI shell  (est. 16–24 wks)
 
-- [ ] **P3.1** App shell in QML — main window, chart view embedding the Phase 2 `QQuickItem`.
-- [ ] **P3.2** `QObject` view-models exposing core data via `Q_PROPERTY` to QML.
-- [ ] **P3.3** Core world-anchored Layers — own-ship, routes, tracks, AIS targets.
-- [ ] **P3.4** QML HUD tier — depth, SOG/COG, wind readouts bound to view-models.
-- [ ] **P3.5** Toolbar / main controls in QML (touch-friendly).
+- [x] **P3.1** App shell in QML — main window, chart view embedding the Phase 2
+      `QQuickItem`. Delivered incrementally (frameless `Main.qml` shell +
+      `ChartCanvas` + `macos_titlebar.mm`); marked done 2026-06-10.
+- [x] **P3.2** `QObject` view-models exposing core data via `Q_PROPERTY` to
+      QML. Delivered: `nav_state_view_model`, `route_list_view_model`,
+      `ais_selection_view_model`, `connections_view_model`,
+      `object_query_view_model`, `tide_graph_view_model`,
+      `nmea_monitor_model`, `route_follower` + the `*Config` QML singletons.
+- [x] **P3.3** Core world-anchored Layers — own-ship, routes, tracks, AIS
+      targets. Delivered via P2.11 + `ais_layer`, `own_ship_layer`,
+      `route_overlay_layers`, `tide_layer`, `anchor_watch_layer`.
+- [x] **P3.4** QML HUD tier — readouts bound to view-models. Delivered: status
+      bar (position / SOG / COG / cursor / range-bearing / scale), alert
+      banner, time bar, route-follow console (P3.16). Depth/wind readouts
+      follow when their feeds are surfaced (`wind_decoder` exists).
+- [~] **P3.5** Toolbar / main controls in QML (touch-friendly). **Aligned
+      layout agreed 2026-06-09 — see "Toolbar layout — agreed spec" below.**
+      Implementing in the P3.17 components (`FloatToolbar.qml` + `MuiBar.qml`):
+      move Tides + Anchor to the main toolbar, fix the MOB icon (⚓→🛟) + wire it,
+      wire Print, Follow becomes a jump+follow split button with a look-ahead
+      flyout, and the status-bar scale becomes a clickable free-form entry.
 - [ ] **P3.6** Settings / preferences UI in QML — the Options dialog
       (see the breakdown below).
 - [x] **P3.7** **Route / mark / track manager UI in QML. DONE (2026-06-02).**
@@ -1346,6 +1389,14 @@ render anything onto the chart, only manages the plugin lifecycle.
       distinctive SART/DSC chart rendering (they currently draw as normal
       targets — only the banner/sound flags them), and an anchor-watch
       panel in Options (today it's the MUIBar popup only).
+- [x] **P3.16** **Activate & follow a route + test ship. DONE** (commit
+      `48cfdf234`; entry retro-added 2026-06-10 — the ID was used in the
+      commit but never written here). Route activate/deactivate;
+      `RouteFollower` (`gui/qt/route_follower.{h,cpp}`) exposes BTW / DTW /
+      XTE-with-steer-side / VMG / ETA as `Q_PROPERTY`s bound into the HUD —
+      the wx `concanv` active-route console parity — advances waypoints on
+      arrival and emits the autopilot NMEA via `g_pRouteMan`;
+      `SimShipController` provides the test ship to exercise it.
 
 ### P3.6 — Options / Settings dialog breakdown
 
@@ -1434,11 +1485,13 @@ remain.
 Groups, Tides & Currents) — now four sub-tabs in `optionsWindow`. The extended
 vector options bind a new `ChartConfig` QML-singleton (persisted); the live
 toggles stay on `chart` (ChartCanvas).
-- [ ] **Chart Files** — chart directory list (add / remove / compress /
+- [~] **Chart Files** — chart directory list (add / remove / compress /
       migrate), scan-and-update DB, force full rebuild, "Prepare all ENC
-      charts" (PARSE_ENC), rebuild chart database. Placeholder pane: the Qt
-      build loads its chart set from a build-time path, so this awaits a
-      runtime chart-directory manager (which Groups + Files both need).
+      charts" (PARSE_ENC), rebuild chart database. **Updated 2026-06-09:** the
+      runtime chart-directory manager is now **live** (`chart.chartSource`
+      add / remove / rescan with status + busy indicator, `Main.qml`:1462-1528,
+      `chart_source_model.*`); still missing: compress, "Prepare all ENC",
+      explicit force-rebuild.
 - [x] **Vector Chart Display** → Display Category (Base / Standard / All;
       wx also has Mariner's Standard). Qt has Base/Standard/All wired.
 - [x] Vector → detail toggles (live): soundings, text, lights, buoys/beacons.
@@ -1465,10 +1518,10 @@ toggles stay on `chart` (ChartCanvas).
       list), which `ChartCanvas::reloadCharts` now iterates; changing the
       active group triggers a reload. (`chart_source_model.*`, `Main.qml`
       Groups tab.)
-- [~] **Tides & Currents** — the data-set list + on-chart tide/current
-      stations need the **tide-prediction engine** (`gui/src/tcmgr.cpp`,
-      ~7,451 lines of wx code) ported to the de-wx'd Qt core first. Pane states
-      this. Tracked as **P3.14**.
+- [x] **Tides & Currents** — **Updated 2026-06-09:** the data-set list is now
+      **live** (add / remove data sets via `tides.addSource`, `Main.qml`:1839-1893);
+      on-chart tide/current stations are predicted by the built-in engine
+      (**P3.14**, the `gui/src/tcmgr.cpp` port).
 
 **Connections page** (wx sub-panel: NMEA / data connections)
 - [x] Connection list (enable/disable, summary, remove) backed by
@@ -1489,7 +1542,8 @@ toggles stay on `chart` (ChartCanvas).
       (see `comm_drv_factory.cpp`).
 - [ ] Remaining: per-connection **priorities** (the comm-priority registry is a
       separate subsystem), and a "show NMEA debug window" launcher from this
-      page (the data-monitor itself exists — `nmea_monitor_model`).
+      page (the data-monitor itself exists — `nmea_monitor_model`; the
+      launcher move from the toolbar is **P3.22**).
 
 **Ships page** (wx sub-panels: Own ship, AIS Targets, MMSI Properties,
 Routes/Points) — now built as four sub-tabs in `optionsWindow`, backed by the
@@ -1626,6 +1680,190 @@ QML-singleton (persisted). Several controls are wired live to the shell.
 - [ ] Initial-page / sub-page deep-linking (`SetInitialPage`), colour
       scheme, persisted window position/size.
 
+### UI parity audit — toolbars / context-menus / settings (2026-06-09)
+
+A three-part parity audit (Qt `gui/qt` vs the wx app `gui/src`) over the
+toolbars, the canvas right-click menus, and the Options dialog, taken before
+building out the rest of the UI. Findings are cited to wx + Qt source.
+**Headline:** the toolbars and the settings dialog are close to parity; the
+**canvas context menus are the biggest gap**. `Main.qml` (4,765 lines) should
+be split into a component module *before* this build-out — **P3.17**.
+
+**Toolbar gaps** (most tools ported — see P3.5). Remaining:
+- **MOB marker** (`floatToolbar`, `Main.qml`:4738) and **Print** (4721) are
+  present but **inert** (no `onClicked`) — wire to MOB-drop / a print path
+  (wx `ActivateMOB()` / `DoPrint()`, `ocpn_frame.cpp`:2651/2580).
+- **iENC toolbar absent**: Range +/− steppers + range annunciator
+  (`ienc_toolbar.cpp`:79-80) have no Qt equivalent; Density exists as the
+  Base/Standard/All radios but lacks the 4th **Mariner's Standard** level.
+- MUI **Set-Scale** (click the scale annunciator to type a scale,
+  `mui_bar.cpp`:942) — Qt shows scale text only.
+- Follow-ship is 2-state; wx has a 3rd **look-ahead** state (`mui_bar.cpp`:1015).
+
+- [ ] **P3.17** **Restructure `Main.qml` into a QML component module.** The
+  single 4,765-line file is the app shell + both toolbars + drawers + context
+  menus + popups + HUD + the whole 6-page Options dialog (~half the file). Split
+  into per-feature `.qml` components under `gui/qt/qml/{controls,toolbars,menus,
+  overlays,drawers,settings,dialogs}/`, each added to `QML_FILES` in
+  `gui/qt/CMakeLists.txt` (same module ⇒ types visible by name; `QML_SINGLETON`
+  configs + root context properties stay in scope). **Pure refactor, no
+  behaviour change** — extract one component at a time, rebuild + run between
+  each; the only hazards are cross-boundary `id` refs and inline functions that
+  touched sibling `id`s (→ become component `property`/`signal` interfaces). Do
+  this **first** so the P3.5/P3.18/P3.6 build-out lands in proper files. Start
+  with `OptionsWindow.qml`.
+
+- [ ] **P3.18** **Canvas context-menu parity.** Qt has only a general
+  `chartContextMenu` (`Main.qml`:3997) + a route-node menu (4041, edit-mode
+  only); wx builds a focused popup per object via `CanvasMenuHandler`
+  (`canvas_menu.cpp`). Missing, by tier:
+  - *Tier 1 (core nav):* **Navigate To Here / To This mark**
+    (`canvas_menu.cpp`:490/923); a **route** right-click menu (Activate /
+    Deactivate / Activate-Next / Insert / Append / Split / Reverse / Properties,
+    :719-790); **Zero XTE** (:532); **Measure** (Qt item exists but
+    `enabled:false`, `Main.qml`:4031 — no measure tool).
+  - *Tier 2 (AIS):* AIS right-click → Target Query / **Target List** / per-target
+    CPA toggle / **Copy MMSI** (:634-654); general **Show/Hide CPA alarm** (:694).
+    (AIS query *content* is reachable today via a left-click `aisInfo` popup.
+    Note the **Target List window itself doesn't exist** in Qt either — the
+    menu entry needs the window, not just the gesture.)
+  - *Tier 3 (objects/charts):* **waypoint / mark / track** right-click menus
+    (Properties / Delete / Copy-as-KML / Send-to-GPS / Peer / Anchor-Watch,
+    :838-961); chart controls (Scale In/Out, orientation modes, full-screen,
+    Chart Groups, CM93 offset, :441-611).
+  - *Tier 4:* **Undo / Redo** (:334/342); Paste WP/Route/Track from KML
+    (:539-552); Send-to-GPS / Send-to-Peer / Copy-as-KML interop generally.
+  Several Tier-1/3 actions exist in the **left drawer** (activate / reverse /
+  delete) but not as a canvas right-click — parity needs the on-chart gesture.
+
+**Settings (P3.6) — stale statuses corrected 2026-06-09** (flipped inline above
+where top-level):
+- **Charts → Chart Files `[ ]`→`[~]`** — runtime dir manager now live (see above).
+- **Charts → Tides & Currents `[~]`→`[x]`** (data-set list) — see above.
+- **Ships → AIS Targets** — the "still pending" controls (target-track length,
+  suppress-anchored, attenuation, area notices, real size, WPL, rollover
+  toggles) are all **present controls** now (`Main.qml`:2569-2651); CPA/TCPA is
+  computed **live** (`ais_cpa.cpp`). The in-QML note at `Main.qml`:2688
+  ("CPA/TCPA … not wired in yet") is stale and should be removed; the AIS-page
+  **Test** button is still `enabled:false` (2670) while the Sounds-page Test works.
+- **Routes/Points** live under **UI → "Routes & Marks"** in Qt, not under Ships.
+
+**Settings — genuine remaining gaps, prioritized:**
+1. Vector → **"User Standard Objects"** per-object viewing-group checklist
+   (select-all / clear-all / reset-to-STANDARD) — core ECDIS filter; absent.
+2. **MMSI Properties** editor (`[~]` placeholder) — per-vessel ignore / always-
+   track / MOB / persist-track.
+3. Own-ship **HDT predictor length** (separate from COG) + **range-ring colour**.
+4. **Routes & Marks** toggles: lock marks/waypoints, confirm route/track
+   deletion, advance-on-arrival-only, separate route-point icon, per-mark range
+   rings / override-SCAMIN.
+5. UI → **per-element Fonts** (font + colour + reset) — needs a FontMgr equivalent.
+6. Display → **Show Grid** / **Show Chart Outlines**; Advanced → vector/raster
+   **chart-zoom weighting** sliders + **extended chart-bar info** toggle.
+7. **Configuration Templates** (Display → Templates) — whole feature; deferred.
+8. Sound-output **device selection** / custom play command.
+
+Full per-control matrices live in the session audit; the above is the
+actionable distillation.
+
+### Full-migration scoping review (2026-06-10)
+
+A docs-vs-code review checking this tracker against `gui/qt` and the wx
+feature surface ahead of the wx-build retirement. Tracker realignments made:
+P0.1 + P3.1–P3.4 marked done, P3.16 retro-added, the image-diff tasks
+(P0.7 / P2.0 / X.3) closed as dropped-by-decision. Decisions recorded:
+**macOS-first** (Linux/Windows CI = P0.5 becomes a pre-P3.11 gate);
+**multi-canvas/split-screen out of scope** for the migration (parked in
+Phase 6). New scope found untracked:
+
+- [ ] **P3.19** **GPX import & export UI.** The model's GPX read/write already
+      exists (`model/src/nav_object_database.cpp`, swept Qt-native in P1.6c);
+      missing is the user surface: QML `FileDialog` import (merge into
+      `NavObj_dB`, report what was added) and export of selected routes /
+      tracks / marks (or all) from the P3.7 manager drawer. wx reference:
+      `gui/src/routemanagerdialog.cpp` Import/Export GPX. Core nav-data
+      interchange — a P3.21 retirement gate.
+- [ ] **P3.20** **App-wide keyboard shortcuts.** Qt has no `keyPressEvent` /
+      QML `Shortcut` surface outside the still-pending P3.13 route-build keys.
+      One canvas/shell keyboard layer: arrow-key pan, `+`/`-`/`=` zoom,
+      Esc/Enter cancel/confirm per mode, full-screen toggle; Ctrl-Z/Y once
+      undo exists (P3.18 tier 4). wx reference: `gui/src/chcanv.cpp::
+      OnKeyDown/OnKeyUp` + `hotkeys_dlg`. P3.13's route-build keys fold into
+      this surface when both land.
+- [ ] **P3.21** **wx-retirement acceptance checklist — gates P3.11.** P3.11
+      ("remove the parallel wx build") executes only when all of these hold:
+      1. P3.18 canvas context menus — tiers 1–2 minimum;
+      2. P3.19 GPX import/export;
+      3. the P3.6 "genuine remaining gaps" items 1–4 (User Standard Objects
+         checklist, MMSI Properties editor, HDT predictor + ring colour,
+         Routes & Marks behaviour toggles);
+      4. MOB + Print wired (P3.5 toolbar spec; Print stub acceptable);
+      5. a recorded Phase-4 decision — which plugins must work day-1 vs
+         post-retirement (the wx build is the only plugin host today);
+      6. P0.5 CI green on Linux + Windows (macOS-first decision 2026-06-10);
+      7. a macOS user-acceptance pass on home waters (visual verification —
+         no image-diff, per P0.7).
+- [ ] **P3.22** **Data Monitor launcher → Connections page.** The monitor
+      window itself is **done** (`Main.qml` `dataMonitorWindow` — live decoded
+      NMEA/N2K stream, pause, per-source filter, fed by `nmea_monitor_model`)
+      and currently opens from the main-toolbar 📡 button. Decision
+      (user, 2026-06-10): the entry point should move to the Connections
+      page (it is a connections-debugging tool), replacing the toolbar slot;
+      this also satisfies the "show NMEA debug window launcher" item under
+      the Connections page above. Update the P3.5 toolbar spec when done.
+
+Agreed wx↔Qt aligned toolbar layout (the implementation target for P3.5; build
+in the P3.17 components `FloatToolbar.qml` + `MuiBar.qml`). wx behaviour traced
+to source and cited. The wx app has three toolbar surfaces (master / MUI / iENC)
++ a compass-rose widget; Qt consolidates as below.
+
+**Main toolbar — left vertical** (`FloatToolbar.qml`), in order:
+1. ☰ Collapse / expand (wx `ID_MASTERTOGGLE`)
+2. ⚙ Options
+3. ✚ Create route (toggle)
+4. ▤ Route & mark manager
+5. ⊚ Track record (toggle)
+6. ≈ Tides (toggle, `DisplayConfig.showTides`) — **moved from the MUI bar**
+7. ◑ Colour scheme (day / dusk / night cycle)
+8. ⎙ Print — wire to a print path (wx `DoPrint`); a stub/"not yet" is acceptable
+   as a first cut (full chart printing is a separate feature)
+9. ≣ Data monitor (Qt addition) — **slated to move to the Connections page
+   (P3.22, 2026-06-10)**; drop this toolbar slot when that lands
+10. ⓘ Help / about
+11. ⚓ Anchor watch (drop / raise + radius) — **moved from the MUI bar**
+12. 🛟 MOB — drop MOB marker; icon **fixed ⚓→🛟** (`U+1F6DF` RING BUOY, matches
+    wx's red life-buoy); wire to a MOB-drop action
+- Plugin tools: deferred (Phase 4).
+
+**MUI bar — bottom-right** (`MuiBar.qml`): Zoom in (+) · Zoom out (−) ·
+Fit-to-world (⤢) · **Follow / jump-to-ship (◉)** · Canvas-options menu (☰).
+Tides + Anchor removed (→ main toolbar); scale removed (→ status bar).
+- **Follow = split button.** Tap = jump-to-ship (centre on own-ship) + toggle
+  follow — matches wx `TogglebFollow`→`SetbFollow`→`JumpToPosition`
+  (chcanv.cpp:4921/4940/4959). Long-press → a flyout extending from the bar:
+  **{Follow centred · Follow + look-ahead}**; the chosen variant runs *and*
+  becomes the sticky one-click default. Icon reflects 3 states (off / follow /
+  follow-ahead), mirroring wx `UpdateFollowButtonState` (chcanv.cpp:4972).
+  Look-ahead = own-ship offset toward the stern so more chart shows ahead (wx
+  `m_bLookAhead` / `ToggleLookahead`, chcanv.cpp:3425) — orthogonal to orientation.
+  Reusable split-button pattern (colour-scheme is a future candidate).
+
+**Compass rose — top-right:** click cycles orientation North-up / Course-up /
+Head-up (wx `SetUpMode`). Look-ahead lives on the Follow flyout, not here.
+
+**Status bar — bottom:** the scale `1:N` readout becomes **clickable → type a
+scale**. Free-form like wx (`OnScaleSelected`, mui_bar.cpp:942: strip a `1:`
+prefix, **clamp 1:1,000–1:3,000,000**, set exactly — *no* snapping to standard
+scales; `SetVPScale`→`SetViewPoint` sets `view_scale_ppm` directly,
+chcanv.cpp:5470). Needs a new `chart.setScaleDenominator(n)` invokable.
+
+**Deferred:** iENC inland bar (no inland charts at present); plugin toolbar
+tools (Phase 4).
+
+**New C++ surface required** (`ChartCanvas`): `setScaleDenominator(double)`;
+a MOB-drop action; and the Follow jump + look-ahead state (verify against the
+existing `followOwnShip` property before adding).
+
 ## Phase 4 — Qt plugin host  (est. 6–8 wks)
 
 - [ ] **P4.1** Define the Qt plugin interface (`QPluginLoader` + Layer/HUD contribution API).
@@ -1642,6 +1880,36 @@ QML-singleton (persisted). Several controls are wired live to the shell.
 - [ ] **P5.3** Validate RHI backend selection (Vulkan/GLES) on the target.
 - [ ] **P5.4** Touch / input tuning for embedded hardware.
 - [ ] **P5.5** Qt for Device Creation packaging / image build.
+- [ ] **P5.6** **Get wxWidgets out of the `opencpn-qt` link graph** (prerequisite
+      for any iOS/embedded build — wxWidgets has no UIKit port). Audited
+      2026-06-09: `opencpn-qt` drives only `s52plib`'s **scene-graph emit** path
+      (`RenderAreaToSG`/`LineToSG`/`PointSymbolToSG`/`TextToSG` + `S52_LUPLookup`
+      + `S52_setMarinerParam` + the colour/font resolver hooks); the wx-heavy
+      DC/GL render paths (`RenderObjectToDC`/`GL`, `TexFont`/`DepthFont`,
+      `s52shaders`/`Cs52_shaders`/`s52plibGL.h`, ~375 `glXxx()` calls in
+      `s52plib.cpp`) are **dead for the Qt build and deletable**. Steps: delete
+      dead DC/GL/font files → strip the GL/DC render methods from `s52plib.cpp` →
+      convert the public API (`s52plib.h` resolvers `wxColour`→`QColor`,
+      value types `wxString`/`wxPoint`/`wxRect`→`QString`/`QPointF`/`QRectF`) →
+      de-wx `s52plib_sg.cpp` + `s52_engine.cpp` (its only wx use is the `wxImage`
+      symbol-atlas load → `QImage`, + `wxInitialize`). Necessary-but-not-
+      sufficient: `opencpn-qt` also links all of `libmodel.a` (104 wx files), so
+      the reachable `model` subset is the larger follow-on (split-lib vs. carve).
+      **Deferred** — pure plumbing, no user/functional parity payoff; do it when
+      iOS/embedded is the active goal, not during the Qt parity push.
+
+## Phase 6 — Post-migration follow-ups (parked)
+
+Deliberately out of scope for the migration; revisit after the wx build
+retires. (The "Future / post-Phase-2 follow-ups" capture list — vector S-52
+symbols, chart-colour editor — stays where it is in Phase 2.)
+
+- [ ] **P6.1** **Multi-canvas / split-screen** (wx supports two chart panes
+      with independent pan/zoom — `canvas_config`, `RenderOverlayMultiCanvas`).
+      **Decision (user, 2026-06-10): out of scope for the migration** — the Qt
+      shell is single-canvas by design; revisit on demand post-retirement.
+      The Templates sub-panel's multi-canvas screen-config selector (P3.6)
+      waits on this too.
 
 ---
 
@@ -1649,7 +1917,9 @@ QML-singleton (persisted). Several controls are wired live to the shell.
 
 - [ ] **X.1** Keep Phase 1 changes mechanical (not redesign) to preserve upstream cherry-pick ability.
 - [ ] **X.2** Update [`QT_MIGRATION.md`](./QT_MIGRATION.md) when design decisions change.
-- [ ] **X.3** Maintain the image-diff regression suite as the chart renderer evolves.
+- [—] **X.3** ~~Maintain the image-diff regression suite~~ — replaced
+      (2026-06-10, see P0.7): verify chart rendering visually/manually as the
+      renderer evolves; no image-diff suite exists or is planned.
 - [ ] **X.4** As each area is migrated, **remove** its Android / wxQt-specific
       code (`__OCPN__ANDROID__`, `QT_ANDROID`, `wxQt` paths, `*_android_*`
       files) rather than porting it. Android is dropped for the migration
@@ -2205,3 +2475,13 @@ QML-singleton (persisted). Several controls are wired live to the shell.
   All build + run clean (no QML errors). **Deferred:** the trk_points schema
   convergence (add cog/sog/hdg + integer-epoch time) — a model-DB change +
   migration to do as a focused, separately-verified step.
+- 2026-06-10 — Full-migration scoping review (docs vs code vs wx feature
+  surface). Tracker realigned: P0.1 + P3.1–P3.4 marked done, P3.16 retro-added
+  (RouteFollower console etc. shipped in 48cfdf234 without a tracker entry),
+  image-diff tasks P0.7/P2.0/X.3 closed as dropped-by-decision (visual
+  verification — intentional style divergence makes pixel diffs all false
+  positives). New tasks: P3.19 GPX import/export UI, P3.20 app-wide keyboard
+  shortcuts, P3.21 wx-retirement acceptance checklist (gates P3.11), P3.22
+  Data Monitor launcher → Connections page. Decisions: macOS-first (P0.5
+  Linux/Windows CI is a pre-P3.11 gate); multi-canvas out of scope → new
+  Phase 6 "post-migration follow-ups" (P6.1).

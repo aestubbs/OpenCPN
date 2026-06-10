@@ -1349,6 +1349,18 @@ void ChartCanvas::dropMarkHere(const QString& name, const QString& comment,
   update();
 }
 
+void ChartCanvas::dropMob() {
+  if (!m_nav_provider) return;
+  // Drop the MOB mark at the live own-ship fix; fall back to the view centre
+  // when there's no fix (wx ActivateMOB drops at gLat/gLon).
+  const OwnShipState s = m_nav_provider->ownShip();
+  const double lat = s.valid ? s.lat : (m_viewport ? m_viewport->centerLat() : 0);
+  const double lon = s.valid ? s.lon : (m_viewport ? m_viewport->centerLon() : 0);
+  m_nav_provider->dropMark(lat, lon, tr("MOB"), QString(),
+                           QStringLiteral("mob"));
+  update();
+}
+
 void ChartCanvas::showMark(const QString& guid) {
   if (!m_nav_provider || !m_viewport) return;
   for (const NavWaypoint& wp : m_nav_provider->waypoints()) {
@@ -1476,6 +1488,18 @@ void ChartCanvas::fitWorld() {
   const double cw = width() > 0 ? width() : 1024.0;
   const double ch = height() > 0 ? height() : 720.0;
   m_viewport->setScale(std::min(cw / (e - w), ch / (n - s)) * 0.9);
+}
+
+void ChartCanvas::setScaleDenominator(double n) {
+  if (!m_viewport) return;
+  // Free-form like wx (mui_bar.cpp OnScaleSelected): clamp to a sane range.
+  n = std::clamp(n, 1000.0, 3.0e6);
+  // displayScaleN(scale, lat) = K / scale, so invert: scale = K / N, using the
+  // same cos(centre-lat) factor so the entered 1:N matches the readout.
+  const double clat =
+      std::max(0.05, std::cos(m_viewport->centerLat() * M_PI / 180.0));
+  const double scale = 111320.0 * clat * 3.78 * 1000.0 / n;
+  m_viewport->setScale(scale);  // Viewport::changed -> update + viewChanged
 }
 
 void ChartCanvas::applyDisplaySettings(

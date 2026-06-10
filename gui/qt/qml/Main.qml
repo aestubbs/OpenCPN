@@ -23,7 +23,7 @@ ApplicationWindow {
     visible: true
     width: 1024
     height: 720
-    title: qsTr("OpenCPN (Qt prototype)")
+    title: qsTr("OpenCPN-NG")
 
     // Minimum touch target (logical px) for the on-chart controls. Scaled by
     // the UI scale factor (Options > User Interface): -5..+5 -> ~0.4x..~1.6x.
@@ -111,11 +111,48 @@ ApplicationWindow {
                 text: chart.cursorBrgRngText
             }
             Sep {}
-            // 4: Chart scale.
+            // 4: Chart scale -- click to type a scale. Free-form like wx's
+            //    Set-Scale (ChartCanvas clamps to 1:1,000 .. 1:3,000,000).
             Field {
+                id: scaleField
                 Layout.preferredWidth: 4
                 horizontalAlignment: Text.AlignRight
                 text: chart.scaleText
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    onTapped: {
+                        scaleEntry.text = chart.scaleText.replace(/^.*:/, "")
+                        scaleDialog.open()
+                        scaleEntry.forceActiveFocus()
+                        scaleEntry.selectAll()
+                    }
+                }
+            }
+        }
+    }
+
+    // Scale entry: clicking the status-bar scale opens this to type a 1:N
+    // value. Free-form like wx (mui_bar.cpp OnScaleSelected); ChartCanvas
+    // clamps to 1:1,000 .. 1:3,000,000 (no snapping to standard scales).
+    Dialog {
+        id: scaleDialog
+        title: qsTr("Set chart scale")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: {
+            const n = parseInt(scaleEntry.text, 10)
+            if (!isNaN(n) && n > 0) chart.setScaleDenominator(n)
+        }
+        RowLayout {
+            Label { text: "1:" }
+            TextField {
+                id: scaleEntry
+                Layout.preferredWidth: 140
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator { bottom: 1000; top: 3000000 }
+                selectByMouse: true
+                onAccepted: scaleDialog.accept()
             }
         }
     }
@@ -3167,42 +3204,74 @@ ApplicationWindow {
         }
     }
 
-    // --- About: a small native dialog window (wx ID_ABOUT). --------------
+    // --- About: mirrors the wx About dialog's content, branded OpenCPN-NG. --
     Window {
         id: aboutWindow
-        title: qsTr("About OpenCPN")
+        title: qsTr("About OpenCPN-NG")
         flags: Qt.Dialog
-        width: 420
-        height: 260
+        width: 480
+        height: 380
         color: palette.window
+
+        // Hyperlink-style label (mirrors the wx About's hyperlinks).
+        component Link: Label {
+            property string url
+            color: "#3478f6"
+            font.underline: true
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: Qt.openUrlExternally(parent.url) }
+        }
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 20
-            spacing: 10
+            anchors.margins: 22
+            spacing: 6
 
             Label {
-                text: qsTr("OpenCPN")
-                font.pointSize: 22; font.bold: true
+                text: "OpenCPN-NG"
+                font.pointSize: 24; font.bold: true
                 Layout.alignment: Qt.AlignHCenter
             }
             Label {
-                text: qsTr("Qt / QtQuick prototype")
+                text: qsTr("The Open Source Chart Plotter")
                 opacity: 0.8
                 Layout.alignment: Qt.AlignHCenter
             }
             Label {
-                text: qsTr("A chart plotter and marine GPS navigation DisplayConfig.\n" +
-                           "This build renders S-57/S-52 vector charts through a " +
+                text: qsTr("Version %1  ·  Qt edition").arg(appVersion)
+                opacity: 0.9
+                Layout.alignment: Qt.AlignHCenter
+            }
+            Label {
+                text: "© 2000–2026 David S. Register and the OpenCPN Authors"
+                opacity: 0.7; font.pointSize: 10
+                Layout.alignment: Qt.AlignHCenter
+            }
+            Label {
+                text: qsTr("OpenCPN is a Free Software project, built by sailors.\n" +
+                           "This edition renders S-57 / S-52 vector charts through a " +
                            "Qt Quick scene graph.")
                 wrapMode: Text.Wrap
                 horizontalAlignment: Text.AlignHCenter
                 Layout.fillWidth: true
+                Layout.topMargin: 6
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 8
+                spacing: 20
+                Link { text: qsTr("Website"); url: "https://opencpn.org" }
+                Link { text: qsTr("GitHub"); url: "https://github.com/OpenCPN/OpenCPN" }
+                Link { text: qsTr("Donate")
+                       url: "https://sourceforge.net/donate/index.php?group_id=180842" }
+                Link { text: qsTr("License")
+                       url: "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html" }
             }
             Label {
                 text: qsTr("Running on Qt ") + qtRuntimeVersion
-                opacity: 0.7; font.pointSize: 10
+                opacity: 0.6; font.pointSize: 9
                 Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 6
             }
             Item { Layout.fillHeight: true }
             DialogButtonBox {
@@ -3763,62 +3832,15 @@ ApplicationWindow {
             }
         }
 
-        // --- MUIBar: per-canvas controls bottom-right, mirroring OpenCPN's
-        //     MUIBar -- zoom in/out, follow own ship, and a menu opening the
-        //     canvas display options. (Distinct from the master toolbar.)
-        Pane {
-            id: muiBar
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.margins: 12
-            padding: 3
-            RowLayout {
-                spacing: 2
-                component MuiTool: ToolButton {
-                    font.pointSize: 16
-                    implicitWidth: 36; implicitHeight: 32
-                    ToolTip.visible: hovered && ToolTip.text.length > 0
-                    ToolTip.delay: 400
-                }
-                MuiTool {
-                    text: "+"; font.pointSize: 19; ToolTip.text: qsTr("Zoom in")
-                    visible: UIConfig.showZoomButtons  // Options > User Interface
-                    onClicked: chart.zoomIn()
-                }
-                MuiTool {
-                    text: "−"; font.pointSize: 19; ToolTip.text: qsTr("Zoom out")
-                    visible: UIConfig.showZoomButtons
-                    onClicked: chart.zoomOut()
-                }
-                MuiTool {
-                    text: "⤢"; font.pointSize: 14; ToolTip.text: qsTr("Fit / zoom to world")
-                    onClicked: chart.fitWorld()
-                }
-                MuiTool {
-                    text: "⊙"; ToolTip.text: qsTr("Auto-follow own ship")
-                    checkable: true
-                    checked: chart.followOwnShip
-                    onClicked: chart.followOwnShip = checked
-                }
-                MuiTool {
-                    text: "≋"; ToolTip.text: qsTr("Show tides")
-                    checkable: true
-                    checked: DisplayConfig.showTides
-                    onClicked: DisplayConfig.showTides = checked
-                }
-                MuiTool {
-                    id: anchorBtn
-                    text: "⚓"
-                    ToolTip.text: qsTr("Anchor watch")
-                    // Highlight when armed; the banner + red circle show a drag.
-                    highlighted: chart.alerts.anchorSet
-                    onClicked: anchorPopup.open()
-                }
-                MuiTool {
-                    text: "☰"; ToolTip.text: qsTr("Canvas display options")
-                    onClicked: canvasOptions.open()
-                }
-            }
+        // --- MUIBar: per-canvas view controls bottom-right (MuiBar.qml, P3.17).
+        //     Zoom / fit, the Follow / jump-to-ship split button, and the
+        //     canvas-options menu. Tides + anchor now live on the master toolbar.
+        MuiBar {
+            // Initial position bottom-right; the binding holds until the user
+            // drags it (a drag breaks the binding), then it stays where put.
+            x: parent.width - width - 12
+            y: parent.height - height - 12
+            onCanvasOptionsRequested: canvasOptions.open()
         }
 
         // Anchor-watch control (P3.15): drop the watch at the current fix, set
@@ -4629,126 +4651,20 @@ ApplicationWindow {
         }
     }
 
-    // --- Floating master toolbar (mirrors OpenCPN's single vertical wx
-    //     floating toolbar) ----------------------------------------------
-    // One frameless native Pane floating over the full-bleed chart, oriented
-    // vertically on the left edge and draggable anywhere within the window.
-    // Carries the full wx master-toolbar tool set in wx order; tools we have
-    // not wired up yet are present but inert (tooltip only, no action) so the
-    // layout matches wx and the actions can be connected incrementally.
-    Pane {
-        id: floatToolbar
+    // --- Floating master toolbar (FloatToolbar.qml, P3.17). The persistent
+    //     vertical control column; tools that open a window/drawer are wired
+    //     via signals. Layout per the agreed toolbar spec: Tides + Anchor
+    //     relocated here from the MUI bar, MOB icon fixed to the life-buoy.
+    FloatToolbar {
         x: 16
         y: 16
-        padding: 4
-        // Toolbar transparency (Options > User Interface).
-        opacity: 1.0 - UIConfig.toolbarTransparency
-
-        // Auto-hide (Options > User Interface): collapse to the toggle after a
-        // period of no hover; pointing at it expands it again.
-        HoverHandler {
-            id: tbHover
-            onHoveredChanged: if (hovered && UIConfig.autoHideToolbar)
-                                  root.toolbarCollapsed = false
-        }
-        Timer {
-            interval: Math.max(1, UIConfig.autoHideTimeout) * 1000
-            running: UIConfig.autoHideToolbar && !tbHover.hovered
-            onTriggered: root.toolbarCollapsed = true
-        }
-
-        // Reusable vertical tool factory so every button is sized / tooltipped
-        // identically. Inert tools just omit an onClicked handler.
-        component Tool: ToolButton {
-            font.pointSize: 16
-            implicitWidth: root.touchSize
-            implicitHeight: root.touchSize
-            Layout.alignment: Qt.AlignHCenter
-            ToolTip.visible: hovered && ToolTip.text.length > 0
-            ToolTip.delay: 400
-        }
-
-        ColumnLayout {
-            spacing: 2
-
-            // wx ID_MASTERTOGGLE: collapse/expand the master toolbar. The
-            // rest of the tools hide when collapsed, leaving just this button.
-            Tool {
-                text: "☰"
-                ToolTip.text: root.toolbarCollapsed ? qsTr("Show toolbar")
-                                                    : qsTr("Hide toolbar")
-                onClicked: root.toolbarCollapsed = !root.toolbarCollapsed
-            }
-            // wx ID_SETTINGS.
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "⚙"; ToolTip.text: qsTr("Options")
-                onClicked: { optionsWindow.show(); optionsWindow.raise() }
-            }
-            // wx ID_MENU_ROUTE_NEW.
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "✚"; checkable: true
-                checked: chart.routeBuildMode
-                ToolTip.text: qsTr("Create route  (left-click adds points, right-click finishes)")
-                onClicked: chart.routeBuildMode = checked
-            }
-            // wx ID_ROUTEMANAGER.
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "▤"; ToolTip.text: qsTr("Route && mark manager")
-                onClicked: routeDrawer.opened ? routeDrawer.close()
-                                              : routeDrawer.open()
-            }
-            // wx ID_TRACK.
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "⊚"; checkable: true
-                checked: chart.trackRecording
-                ToolTip.text: qsTr("Record own-ship track")
-                onClicked: chart.trackRecording = checked
-            }
-            // wx ID_COLSCHEME: cycle day/dusk/night.
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "◑"
-                ToolTip.text: [qsTr("Color scheme: Day"),
-                               qsTr("Color scheme: Dusk"),
-                               qsTr("Color scheme: Night")][chart.colorScheme]
-                onClicked: chart.colorScheme = (chart.colorScheme + 1) % 3
-            }
-            // wx ID_PRINT -- not wired yet.
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "⎙"; ToolTip.text: qsTr("Print chart (not yet implemented)")
-            }
-            // Data Monitor (Qt addition).
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "≣"; ToolTip.text: qsTr("Data monitor")
-                onClicked: { dataMonitorWindow.show(); dataMonitorWindow.raise() }
-            }
-            // wx ID_ABOUT.
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "ⓘ"; ToolTip.text: qsTr("About OpenCPN")
-                onClicked: { aboutWindow.show(); aboutWindow.raise() }
-            }
-            // wx ID_MOB -- not wired yet.
-            Tool {
-                visible: !root.toolbarCollapsed
-                text: "⚓"; ToolTip.text: qsTr("Drop MOB marker (not yet implemented)")
-            }
-        }
-
-        // Drag the whole toolbar; clamp within the window.
-        DragHandler {
-            target: floatToolbar
-            xAxis.minimum: 0
-            xAxis.maximum: root.width - floatToolbar.width
-            yAxis.minimum: 0
-            yAxis.maximum: root.height - floatToolbar.height
-        }
+        touchSize: root.touchSize
+        onOptionsRequested: { optionsWindow.show(); optionsWindow.raise() }
+        onRouteManagerRequested: routeDrawer.opened ? routeDrawer.close()
+                                                     : routeDrawer.open()
+        onDataMonitorRequested: { dataMonitorWindow.show(); dataMonitorWindow.raise() }
+        onAboutRequested: { aboutWindow.show(); aboutWindow.raise() }
+        onAnchorWatchRequested: anchorPopup.open()
     }
 
     // Colour-scheme dim overlay (#30): tints the whole window for dusk/night,

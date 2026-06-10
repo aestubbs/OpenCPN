@@ -30,6 +30,8 @@ qt_add_qml_module(opencpn-qt
   VERSION 1.0
   QML_FILES
     qml/Main.qml
+    qml/FloatToolbar.qml
+    qml/MuiBar.qml
   SOURCES
     app_controller.h
     chart_canvas.h
@@ -164,7 +166,11 @@ qt_add_qml_module(opencpn-qt
 # presentation library (S52RAZDS.RLE / chartsymbols.xml / raster
 # symbol sheets) without a separate install step during prototyping.
 # Production installs will discover via QStandardPaths::AppDataLocation.
+# App version string for the About dialog (from VERSION.cmake, like the wx
+# PACKAGE_VERSION). Re-included here so VERSION_* are in this directory's scope.
+include(${CMAKE_SOURCE_DIR}/VERSION.cmake)
 target_compile_definitions(opencpn-qt PRIVATE
+  OCPN_VERSION_STR="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
   OCPN_QT_S57DATA_DIR="${CMAKE_SOURCE_DIR}/data/s57data"
   # Bundled tide/current harmonic data set, seeded on first run (P3.14 B).
   OCPN_QT_TCDATA="${CMAKE_SOURCE_DIR}/data/tcdata/harmonics-dwf-20210110-free.tcd"

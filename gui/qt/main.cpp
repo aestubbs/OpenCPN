@@ -204,9 +204,11 @@ int main(int argc, char* argv[]) {
   // type name in QML, so they need no context property. Singletons are
   // compile-time resolved and always available, unlike context properties,
   // which can read undefined in bindings on early-constructed objects.
-  // Runtime Qt version string for the About dialog.
+  // Runtime Qt version + the app version (from VERSION.cmake) for the About dialog.
   engine.rootContext()->setContextProperty(
       "qtRuntimeVersion", QString::fromLatin1(qVersion()));
+  engine.rootContext()->setContextProperty(
+      "appVersion", QStringLiteral(OCPN_VERSION_STR));
   // QML module URI declared in CMakeLists qt_add_qml_module(URI opencpn.qt).
   engine.loadFromModule("opencpn.qt", "Main");
   if (engine.rootObjects().isEmpty()) return -1;

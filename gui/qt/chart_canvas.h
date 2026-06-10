@@ -354,6 +354,10 @@ public:
   // All waypoint-icon keys (for the editor's icon picker; images come from the
   // wpicon image provider).
   Q_INVOKABLE QStringList markIconNames() const;
+  // Drop a man-overboard mark at the live own-ship fix (or the view centre if
+  // there's no fix). Mirrors wx ActivateMOB's marker drop; wired to the MOB
+  // toolbar button.
+  Q_INVOKABLE void dropMob();
   bool followOwnShip() const { return m_follow_own_ship; }
   void setFollowOwnShip(bool on);
   double chartRotationDeg() const;
@@ -368,6 +372,10 @@ public:
   Q_INVOKABLE void zoomIn();
   Q_INVOKABLE void zoomOut();
   Q_INVOKABLE void fitWorld();
+  // Set the chart scale to a 1:N denominator directly (the clickable status-bar
+  // scale entry). Free-form like wx (mui_bar.cpp OnScaleSelected): the value is
+  // clamped to 1:1,000 .. 1:3,000,000, not snapped to standard scales.
+  Q_INVOKABLE void setScaleDenominator(double n);
 
   // Right-click context-menu actions (operate on the world point recorded at
   // the last right-click). centerViewHere recentres; queryObjectsHere fills
