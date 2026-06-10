@@ -187,6 +187,8 @@ qt_add_qml_module(opencpn-qt
     peer_send_controller.cpp
     gps_upload_controller.h
     gps_upload_controller.cpp
+    cm93_dictionary.h
+    cm93_dictionary.cpp
     wind_decoder.h
     wind_decoder.cpp
 )
