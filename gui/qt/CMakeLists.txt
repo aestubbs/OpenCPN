@@ -244,6 +244,12 @@ if (OCPN_QT_DASHBOARD_PLUGIN)
   add_subdirectory(plugin/dashboard)
 endif ()
 
+# The Chart Downloader plugin (P4.4 v1).
+option(OCPN_QT_CHARTDLDR_PLUGIN "Build the Chart Downloader Qt plugin" ON)
+if (OCPN_QT_CHARTDLDR_PLUGIN)
+  add_subdirectory(plugin/chartdldr)
+endif ()
+
 # libtess2: the basemap provider tessellates the land polygons.
 target_include_directories(opencpn-qt PRIVATE
   ${CMAKE_SOURCE_DIR}/libs/libtess2/Include

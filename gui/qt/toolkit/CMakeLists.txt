@@ -31,3 +31,8 @@ target_link_libraries(opencpn_qt_toolkit PUBLIC
   Qt6::Core Qt6::Gui Qt6::Quick
 )
 target_link_libraries(opencpn_qt_toolkit PRIVATE TESS2)
+
+# Qt 6 file-I/O headers need the 10.15 libc++ attributes (see P1.10).
+if (APPLE)
+  target_compile_options(opencpn_qt_toolkit PRIVATE -mmacosx-version-min=10.15)
+endif ()
