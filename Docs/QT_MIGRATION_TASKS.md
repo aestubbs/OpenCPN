@@ -1827,8 +1827,10 @@ be split into a component module *before* this build-out — **P3.17**.
     mark / track menus copy a wx-parser-compatible KML document; the
     general canvas menu pastes one (Points → marks, LineStrings →
     routes; namespace-agnostic, so Google Earth exports paste).
-    Still open: **Undo / Redo** (:334/342) and Send-to-GPS /
-    Send-to-Peer (need the upload/peer machinery).
+    **Undo/Redo DONE (2026-06-10)** for the wx undo.cpp scope (mark
+    create/delete; Cmd-Z / Shift-Cmd-Z + menu items, 32-deep stack;
+    recreation assigns a fresh GUID — noted divergence). Still open:
+    Send-to-GPS / Send-to-Peer (need the upload/peer machinery).
   Several Tier-1/3 actions exist in the **left drawer** (activate / reverse /
   delete) but not as a canvas right-click — parity needs the on-chart gesture.
 
