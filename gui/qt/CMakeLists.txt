@@ -13,7 +13,8 @@ qt_add_executable(opencpn-qt
 
 # Custom AA-line shaders (P2.4 #5 / P2.13): baked to .qsb via qsb and exposed
 # as Qt resources at :/shaders/aaline.{vert,frag}.qsb (see aa_line.cpp).
-find_package(Qt6 REQUIRED COMPONENTS ShaderTools SerialPort Multimedia Svg)
+find_package(Qt6 REQUIRED COMPONENTS ShaderTools SerialPort Multimedia Svg
+                                      LinguistTools)
 qt_add_shaders(opencpn-qt "opencpn_qt_shaders"
   PREFIX "/"
   FILES
@@ -200,6 +201,21 @@ target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_SOUNDS_DIR="${CMAKE_SOURCE_DIR}/data/sounds"
   # Default mark-icon SVGs (rendered into the WayPointman catalogue at startup).
   OCPN_QT_MARKICONS_DIR="${CMAKE_SOURCE_DIR}/data/svg/markicons"
+)
+
+# i18n (P3.10): Qt Linguist translations. `cmake --build build --target
+# update_translations` re-scans the target's C++/QML sources into the .ts
+# files (translate with Qt Linguist); lrelease-compiled .qm files embed at
+# :/i18n and main.cpp installs the QTranslator for the configured language.
+qt_add_translations(opencpn-qt
+  TS_FILES
+    translations/opencpn-qt_de.ts
+    translations/opencpn-qt_fr.ts
+    translations/opencpn-qt_es.ts
+    translations/opencpn-qt_nl.ts
+    translations/opencpn-qt_it.ts
+  RESOURCE_PREFIX "/i18n"
+  LUPDATE_OPTIONS -no-obsolete
 )
 
 # libtess2: the basemap provider tessellates the land polygons.

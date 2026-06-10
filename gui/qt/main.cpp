@@ -31,14 +31,17 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QLocale>
 #include <QString>
 #include <QSurfaceFormat>
+#include <QTranslator>
 #include <QTimer>
 #include <QWindow>
 
 #include <wx/init.h>
 
 #include "app_controller.h"
+#include "config_store.h"
 #include "nav_core.h"
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -179,6 +182,24 @@ int main(int argc, char* argv[]) {
       }
     }
     if (!shown) qWarning("TIDE_TEST: no tide station produced a value");
+  }
+
+  // i18n (P3.10): the Qt Linguist translations are compiled into :/i18n.
+  // Language follows Options > User Interface (0 = system locale,
+  // 1 = English, 2.. = a fixed language); a change applies on restart.
+  QTranslator translator;
+  {
+    static const char* kLangCodes[] = {"", "en", "de", "fr", "es", "nl", "it"};
+    const int lang =
+        ocpn::qtui::ConfigStore::instance().getInt("ui/language", 0);
+    QString code;
+    if (lang <= 0)
+      code = QLocale::system().name().section('_', 0, 0);
+    else if (lang < static_cast<int>(sizeof(kLangCodes) / sizeof(*kLangCodes)))
+      code = QString::fromLatin1(kLangCodes[lang]);
+    if (!code.isEmpty() && code != QStringLiteral("en") &&
+        translator.load(QStringLiteral(":/i18n/opencpn-qt_") + code))
+      QGuiApplication::installTranslator(&translator);
   }
 
   // Shared QML<->native state (vessel-data drawer). Exposed as "app".
