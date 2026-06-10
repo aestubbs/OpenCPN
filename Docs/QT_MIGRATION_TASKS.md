@@ -1910,8 +1910,12 @@ where top-level):
    override-SCAMIN. (A separate route-point icon default already exists —
    `RouteDefaultsConfig.routepointIcon`.)
 5. UI → **per-element Fonts** (font + colour + reset) — needs a FontMgr equivalent.
-6. Display → **Show Grid** / **Show Chart Outlines**; Advanced → vector/raster
-   **chart-zoom weighting** sliders + **extended chart-bar info** toggle.
+6. ~~Display → **Show Grid** / **Show Chart Outlines**~~ — **DONE
+   (2026-06-10)**: `GridLayer` graticule + the cell-grid toggle
+   (`DisplayConfig.showGrid` / `showChartOutlines`), both on Options >
+   Display. Still open: Advanced → vector/raster **chart-zoom weighting**
+   sliders + **extended chart-bar info** toggle (wx-specific zoom-weighting
+   may be moot under the Qt quilt — assess before porting).
 7. **Configuration Templates** (Display → Templates) — whole feature; deferred.
 8. Sound-output **device selection** / custom play command.
 
