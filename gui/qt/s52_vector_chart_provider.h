@@ -31,6 +31,8 @@
 
 #include <QList>
 #include <QPointF>
+#include <QSet>
+#include <QVector>
 #include <QPolygonF>
 #include <QRectF>
 #include <QString>
@@ -80,6 +82,12 @@ public:
    *  it forces a rebuild (emits changed()). */
   void setDisplayCategory(int cat);
   int displayCategory() const { return m_displayCategory; }
+
+  /** Per-class visibility filter (P3.6, wx MARINERS_STANDARD "User Standard
+   *  Objects"): hide every primitive whose S-57 class acronym is in
+   *  `hidden`. Applied only while displayCategory == 3 (Mariner's
+   *  Standard); DISPLAYBASE items always show. Forces a rebuild. */
+  void setHiddenClasses(const QSet<QString>& hidden);
 
   // S-52 viewing-group toggles (mirror s52plib's GetShowSoundings /
   // GetShowS57Text). Applied as a post-decode filter on the cached buffer's
@@ -271,7 +279,22 @@ private:
   // the gesture each frame only view-culls + counter-scales the cached subtree,
   // so zooming stays smooth and the CPU work happens once at the end.
   QTimer* m_zoom_timer = nullptr;
-  int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All
+  int m_displayCategory = 1;  // 0 Base, 1 Standard, 2 All, 3 Mariner's Std
+  QSet<QString> m_hiddenClasses;  // acronyms hidden in Mariner's Standard
+  QVector<bool> m_hiddenIdx;      // m_buffer.classes index -> hidden?
+  void rebuildHiddenIdx();
+  // Category rank threshold: Mariner's Standard ranks as Standard, with the
+  // per-class filter applied on top.
+  int effectiveCategory() const {
+    return m_displayCategory == 3 ? 1 : m_displayCategory;
+  }
+  // True if a primitive is dropped by the display-category / per-class
+  // filters (P3.6). DISPLAYBASE (CatBase) is never class-filtered (wx).
+  bool catCulled(int dispCat, int classIdx) const {
+    if (dispCat > effectiveCategory()) return true;
+    return m_displayCategory == 3 && dispCat != 0 && classIdx >= 0 &&
+           classIdx < m_hiddenIdx.size() && m_hiddenIdx[classIdx];
+  }
   bool m_showSoundings = true;
   bool m_showText = true;
   bool m_showLights = true;

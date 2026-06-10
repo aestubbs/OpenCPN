@@ -37,7 +37,8 @@ Drawer {
         Repeater {
             model: [ { label: qsTr("Base"), cat: 0 },
                      { label: qsTr("Standard"), cat: 1 },
-                     { label: qsTr("All"), cat: 2 } ]
+                     { label: qsTr("All"), cat: 2 },
+                     { label: qsTr("Mariner's standard"), cat: 3 } ]
             delegate: RadioButton {
                 required property var modelData
                 text: modelData.label

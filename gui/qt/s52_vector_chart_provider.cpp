@@ -356,6 +356,22 @@ void S52VectorChartProvider::setDisplayCategory(int cat) {
   Q_EMIT changed();
 }
 
+void S52VectorChartProvider::setHiddenClasses(const QSet<QString>& hidden) {
+  if (hidden == m_hiddenClasses) return;
+  m_hiddenClasses = hidden;
+  rebuildHiddenIdx();
+  m_built = false;
+  Q_EMIT changed();
+}
+
+void S52VectorChartProvider::rebuildHiddenIdx() {
+  // Translate the acronym set into per-buffer class-index flags so the
+  // per-primitive check in the build pass is an array lookup.
+  m_hiddenIdx.resize(m_buffer.classes.size());
+  for (int i = 0; i < m_buffer.classes.size(); ++i)
+    m_hiddenIdx[i] = m_hiddenClasses.contains(m_buffer.classes[i]);
+}
+
 namespace {
 // Ray-casting point-in-polygon (ring in lon/lat; test point lon/lat).
 bool pointInPoly(const QList<QPointF>& ring, double lon, double lat) {
@@ -1058,7 +1074,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
 
   for (const s52sg::Prim& prim : m_buffer.prims) {
     if (prim.verts.isEmpty()) continue;
-    if (prim.dispCat > m_displayCategory) continue;  // display-category filter
+    if (catCulled(prim.dispCat, prim.classIdx)) continue;  // category/class
 
     // Line features: one anti-aliased line through the shared AA-line shader
     // (aa_line.h). Width is the physical S-52 pen width in logical px, kept
@@ -1125,7 +1141,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // before lines/symbols.
   m_patterns.clear();
   for (const s52sg::PatternFill& pf : m_buffer.patternFills) {
-    if (pf.dispCat > m_displayCategory || pf.tris.isEmpty() || pf.pattern.isNull() ||
+    if (catCulled(pf.dispCat, pf.classIdx) || pf.tris.isEmpty() || pf.pattern.isNull() ||
         !window)
       continue;
     QSGTexture* tex = root->texture(pf.pattern);  // cache-owned, deduped
@@ -1165,7 +1181,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // the path). Drawn over fills, under the point symbols/labels.
   m_complex_lines.clear();
   for (const s52sg::ComplexLine& cl : m_buffer.complexLines) {
-    if (cl.dispCat > m_displayCategory || cl.path.size() < 2 ||
+    if (catCulled(cl.dispCat, cl.classIdx) || cl.path.size() < 2 ||
         cl.symbol.isEmpty())
       continue;
     auto* node = sg::makeFlatColorNode(cl.color, QSGGeometry::DrawLines, 0);
@@ -1260,7 +1276,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // BEFORE text labels so a town/feature dot sits UNDER its name (e.g. the
   // "East Oakland" POPL dot), not over it.
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
-    if (sym.dispCat > m_displayCategory) continue;
+    if (catCulled(sym.dispCat, sym.classIdx)) continue;
     if (!viewGroupEnabled(sym.viewGroup)) continue;  // Lights/Buoys toggle
     addBillboard(sym.image,
                  QPointF(sym.pos.x(), Viewport::latToWorldY(sym.pos.y())),
@@ -1272,7 +1288,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // symbol-local pixels (pivot at origin); the billboard transform places
   // + screen-fixes them like the raster symbols.
   for (const s52sg::VectorSymbol& vs : m_buffer.vectorSymbols) {
-    if (vs.dispCat > m_displayCategory) continue;
+    if (catCulled(vs.dispCat, vs.classIdx)) continue;
     if (!viewGroupEnabled(vs.viewGroup)) continue;  // Lights/Buoys toggle
     auto* xform = new QSGTransformNode();
     for (const s52sg::VectorOp& op : vs.ops) {
@@ -1308,7 +1324,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // Text labels (soundings, names) -- appended LAST so they draw on top of
   // the point symbols / dots they annotate.
   for (const s52sg::Label& lab : m_buffer.labels) {
-    if (lab.dispCat > m_displayCategory) continue;
+    if (catCulled(lab.dispCat, lab.classIdx)) continue;
     // Viewing-group filter: soundings vs. other text (names), each
     // independently toggleable (mirrors s52plib's ShowSoundings /
     // ShowS57Text).

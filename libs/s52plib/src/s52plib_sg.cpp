@@ -306,12 +306,15 @@ int s52plib::RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules,
   // (it must persist as the composite underlay).
   const int scamin =
       (m_bUseSCAMIN && rzRules->obj) ? rzRules->obj->Scamin : 100000002;
+  const int cls =
+      rzRules->obj ? out.classOf(rzRules->obj->FeatureName) : -1;
 
   for (TriPrim *p_tp = ppg->tri_prim_head; p_tp; p_tp = p_tp->p_next) {
     s52sg::Prim prim;
     prim.dispCat = dc;
     prim.priority = prio;
     prim.scamin = scamin;
+    prim.classIdx = cls;
     switch (p_tp->type) {
       case PTG_TRIANGLE_STRIP:
         prim.type = s52sg::PrimType::TriangleStrip;
@@ -355,7 +358,7 @@ int s52plib::RenderToSGAC(s52sg::Buffer &out, ObjRazRules *rzRules,
 // "SOLD,2,CHGRD" -- style at [0..3], width at [5], colour token at [7].
 int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
                           const QList<QPointF> &pts, int dispCat, int priority,
-                          int scamin) {
+                          int scamin, int classIdx) {
   if (pts.size() < 2 || !rules->INSTstr) return 0;
   char *str = (char *)rules->INSTstr;
   S52color *c = getColor(str + 7);
@@ -379,6 +382,7 @@ int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
   prim.dispCat = dispCat;
   prim.priority = priority;
   prim.scamin = scamin;
+  prim.classIdx = classIdx;
   out.prims.push_back(std::move(prim));
   return 1;
 }
@@ -387,7 +391,8 @@ int s52plib::RenderToSGLS(s52sg::Buffer &out, Rules *rules,
 // colour and nominal point size come from s52plib's text parse; the
 // consumer renders it with a system font (not TexFont/DepthFont).
 static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
-                      double anchor_lat, int scamin, int dispCat, int viewGroup) {
+                      double anchor_lat, int scamin, int dispCat, int viewGroup,
+                      int classIdx) {
   if (!text || text->frmtd.IsEmpty()) return;
   s52sg::Label label;
   label.pos = QPointF(anchor_lon, anchor_lat);
@@ -405,6 +410,7 @@ static void EmitTextC(s52sg::Buffer &out, S52_TextC *text, double anchor_lon,
   label.scamin = scamin;
   label.dispCat = dispCat;
   label.viewGroup = viewGroup;
+  label.classIdx = classIdx;
   out.labels.push_back(std::move(label));
 }
 
@@ -432,6 +438,8 @@ int s52plib::RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
   const int dc = dispRank(rzRules->LUP->DISC);
   const int vg =
       rzRules->obj ? viewGroupFor(rzRules->obj->FeatureName) : s52sg::VgOther;
+  const int cls =
+      rzRules->obj ? out.classOf(rzRules->obj->FeatureName) : -1;
   auto handle = [&](Rules *rules) {
     S52_TextC *t = nullptr;
     if (rules->ruleType == RUL_TXT_TX)
@@ -444,7 +452,7 @@ int s52plib::RenderTextToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     // substitution (NOBJNM vs OBJNAM) is already handled inside
     // S52_PL_parseTX, which honours m_bShowNationalTexts.
     if (!(m_bShowS57ImportantTextOnly && t->dis >= 20))
-      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc, vg);
+      EmitTextC(out, t, anchor_lon, anchor_lat, scamin, dc, vg, cls);
     delete t;
   };
 
@@ -483,6 +491,8 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
   const int dc = dispRank(rzRules->LUP->DISC);
   const int vg =
       rzRules->obj ? viewGroupFor(rzRules->obj->FeatureName) : s52sg::VgOther;
+  const int cls =
+      rzRules->obj ? out.classOf(rzRules->obj->FeatureName) : -1;
 
   auto emitSY = [&](Rules *rules) {
     Rule *prule = rules->razRule;
@@ -525,6 +535,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
       sym.scamin = scamin;
       sym.dispCat = dc;
       sym.viewGroup = vg;
+      sym.classIdx = cls;
       out.symbols.push_back(std::move(sym));
     } else if (prule->definition.SYDF == 'V' && prule->vector.SVCT) {
       // Vector (HPGL) symbol -> billboard geometry. Render with r=(0,0),
@@ -538,6 +549,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
       vsym.scamin = scamin;
       vsym.dispCat = dc;
       vsym.viewGroup = vg;
+      vsym.classIdx = cls;
       HPGL->SetVP(&vp_plib);
       HPGL->SetTargetSG(&vsym);
       wxPoint r0(0, 0);
@@ -589,6 +601,7 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     vsym.scamin = scamin;
     vsym.dispCat = dc;
     vsym.viewGroup = s52sg::VgLights;
+    vsym.classIdx = cls;
 
     // Bearing is S-52 "from seaward", clockwise from north. Screen angle =
     // bearing - 90 with the billboard's y-down: north -> up, east -> right.
@@ -689,6 +702,8 @@ int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
   const int scamin = rzRules->obj ? rzRules->obj->Scamin : 100000002;
   const int vg =
       rzRules->obj ? viewGroupFor(rzRules->obj->FeatureName) : s52sg::VgOther;
+  const int cls =
+      rzRules->obj ? out.classOf(rzRules->obj->FeatureName) : -1;
 
   // LC: an HPGL line-symbol repeated along the line (cables, pipelines,
   // restricted-area borders, recommended tracks). Capture the symbol's glyph
@@ -727,6 +742,7 @@ int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
         cl.priority = prio;
         cl.scamin = scamin;
         cl.viewGroup = vg;
+        cl.classIdx = cls;
         out.complexLines.push_back(std::move(cl));
         return;
       }
@@ -742,6 +758,7 @@ int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
     prim.dispCat = dc;
     prim.priority = prio;
     prim.scamin = m_bUseSCAMIN ? scamin : 100000002;  // P2.14
+    prim.classIdx = cls;
     out.prims.push_back(std::move(prim));
   };
 
@@ -751,7 +768,7 @@ int s52plib::RenderLineToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
   const int ls_scamin = m_bUseSCAMIN ? scamin : 100000002;
   auto handle = [&](Rules *r) {
     if (r->ruleType == RUL_SIM_LN)
-      RenderToSGLS(out, r, pts, dc, prio, ls_scamin);
+      RenderToSGLS(out, r, pts, dc, prio, ls_scamin, cls);
     else if (r->ruleType == RUL_COM_LN)
       emitLC(r);
   };
@@ -922,6 +939,7 @@ int s52plib::RenderToSGAP(s52sg::Buffer &out, ObjRazRules *rzRules,
   pf.scamin = (m_bUseSCAMIN && rzRules->obj) ? rzRules->obj->Scamin : 100000002;
   pf.tileW = tileW;
   pf.tileH = tileH;
+  pf.classIdx = rzRules->obj ? out.classOf(rzRules->obj->FeatureName) : -1;
   out.patternFills.push_back(std::move(pf));
   return 1;
 }

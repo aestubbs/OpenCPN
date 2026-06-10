@@ -108,6 +108,12 @@ void S57Dictionary::load(const QString& dir) {
   });
 }
 
+QStringList S57Dictionary::classAcronyms() const {
+  QStringList out = m_class_desc.keys();
+  out.sort();
+  return out;
+}
+
 QString S57Dictionary::className(const QString& acronym) const {
   return m_class_desc.value(acronym);
 }

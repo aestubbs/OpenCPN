@@ -21,6 +21,7 @@
 
 #include <QHash>
 #include <QString>
+#include <QStringList>
 
 namespace ocpn::qtui {
 
@@ -32,6 +33,10 @@ public:
   /** Object-class description for a class acronym (e.g. "BOYSPP" ->
    *  "Buoy, special purpose/general"), or empty if unknown. */
   QString className(const QString& acronym) const;
+
+  /** All known object-class acronyms, sorted -- the "User Standard
+   *  Objects" checklist's row set (P3.6). */
+  QStringList classAcronyms() const;
 
   /** Attribute description for an acronym (e.g. "COLOUR" -> "Colour"), or
    *  empty if unknown. */

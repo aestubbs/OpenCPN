@@ -77,6 +77,7 @@
 #include "object_query_view_model.h"
 #include "raster_chart_provider.h"
 #include "route_list_view_model.h"
+#include "s57_dictionary.h"
 #include "switchable_nav_provider.h"
 #include "s52_engine.h"
 #include "s52_vector_chart_provider.h"
@@ -147,6 +148,10 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // are created, so the initial render reflects them.
   m_display_category =
       m_layer_config->value("display/category", m_display_category).toInt();
+  // Mariner's Standard per-class filter (P3.6): the hidden-class set.
+  m_hidden_classes = m_layer_config->value("display/hiddenClasses")
+                         .toString()
+                         .split(',', Qt::SkipEmptyParts);
   m_show_soundings =
       m_layer_config->value("display/soundings", m_show_soundings).toBool();
   // P2.16: text / lights / buoys symbol visibility is no longer a per-provider
@@ -1786,6 +1791,8 @@ void ChartCanvas::applyDisplaySettings(
     S52VectorChartProvider* provider) const {
   if (!provider) return;
   provider->setDisplayCategory(m_display_category);
+  provider->setHiddenClasses(
+      QSet<QString>(m_hidden_classes.cbegin(), m_hidden_classes.cend()));
   provider->setShowSoundings(m_show_soundings);
   provider->setShowText(m_show_text);
   provider->setShowLights(m_show_lights);
@@ -1843,6 +1850,34 @@ void ChartCanvas::setDisplayCategory(int cat) {
   if (m_layer_config) m_layer_config->setValue("display/category", cat);
   Q_EMIT displayCategoryChanged();
   update();
+}
+
+void ChartCanvas::setHiddenObjectClasses(const QStringList& classes) {
+  QStringList norm = classes;
+  norm.removeDuplicates();
+  norm.sort();
+  if (norm == m_hidden_classes) return;
+  m_hidden_classes = norm;
+  const QSet<QString> hidden(norm.cbegin(), norm.cend());
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().provider) it.value().provider->setHiddenClasses(hidden);
+  if (m_layer_config)
+    m_layer_config->setValue("display/hiddenClasses", norm.join(','));
+  Q_EMIT hiddenObjectClassesChanged();
+  update();
+}
+
+QVariantList ChartCanvas::s57ClassCatalog() const {
+  QVariantList out;
+  const S57Dictionary& dict = S57Dictionary::instance();
+  for (const QString& acr : dict.classAcronyms()) {
+    QVariantMap row;
+    row["acronym"] = acr;
+    const QString desc = dict.className(acr);
+    row["description"] = desc.isEmpty() ? acr : desc;
+    out.append(row);
+  }
+  return out;
 }
 
 void ChartCanvas::setShowSoundings(bool on) {

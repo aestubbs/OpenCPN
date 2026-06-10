@@ -35,10 +35,12 @@
 #define _S52_SG_H_
 
 #include <QColor>
+#include <QHash>
 #include <QImage>
 #include <QList>
 #include <QPointF>
 #include <QString>
+#include <QStringList>
 
 namespace s52sg {
 
@@ -83,6 +85,9 @@ struct Prim {
   // priority order so a depth-area fill never paints over the pontoon/berth
   // lines that lie on it (wx renders via the same per-priority pass).
   int priority = 5;
+  // Index into Buffer::classes (the source feature's S-57 class acronym), for
+  // the per-class "User Standard Objects" filter (P3.6). -1 = unknown.
+  int classIdx = -1;
 };
 
 /** An area filled with a repeated (tiled) pattern bitmap -- S-52 AP fills
@@ -103,6 +108,7 @@ struct PatternFill {
   // image dimensions" (the raster-pattern default the consumer already used).
   double tileW = 0.0;
   double tileH = 0.0;
+  int classIdx = -1;  // index into Buffer::classes (per-class filter, P3.6)
 };
 
 /** One drawing op of a vector symbol: either line segments (vertex pairs)
@@ -126,6 +132,7 @@ struct VectorSymbol {
   int scamin = 100000002;
   int dispCat = CatStandard;
   int viewGroup = VgOther;
+  int classIdx = -1;  // index into Buffer::classes (per-class filter, P3.6)
 };
 
 /** A complex (LC) line: an HPGL line-symbol walked along the polyline -- the
@@ -144,6 +151,7 @@ struct ComplexLine {
   int priority = 5;
   int scamin = 100000002;
   int viewGroup = VgOther;
+  int classIdx = -1;  // index into Buffer::classes (per-class filter, P3.6)
 };
 
 /** A point symbol placement (buoy, beacon, ...). `image` is the symbol
@@ -161,6 +169,7 @@ struct Symbol {
   int scamin = 100000002;
   int dispCat = CatStandard;
   int viewGroup = VgOther;
+  int classIdx = -1;  // index into Buffer::classes (per-class filter, P3.6)
 };
 
 /** A text label (sounding, feature name, ...). Rendered by the consumer
@@ -197,6 +206,7 @@ struct Label {
   // Per-feature-class viewing group (Lights/BuoysBeacons/Other), so the
   // consumer can apply the nav-aid detail-scale cap to a light/buoy name too.
   int viewGroup = VgOther;
+  int classIdx = -1;  // index into Buffer::classes (per-class filter, P3.6)
 };
 
 /** One S-57 attribute (acronym + value as text), for object query. */
@@ -233,6 +243,23 @@ public:
   QList<QList<QPointF>> landContours;
   // Queryable feature snapshots (object query); all feature classes.
   QList<QueryObject> queryObjects;
+  // Per-buffer S-57 class table: every primitive's classIdx indexes into
+  // `classes` (FeatureName acronyms encountered at emit), so the consumer
+  // can hide whole object classes -- the wx MARINERS_STANDARD / "User
+  // Standard Objects" filter (P3.6). classIndex is the emit-side
+  // lookup accelerator (same data, keyed by acronym).
+  QStringList classes;
+  QHash<QString, int> classIndex;
+  int classOf(const char *feature_name) {
+    if (!feature_name || !feature_name[0]) return -1;
+    const QString acr = QString::fromLatin1(
+        feature_name, static_cast<int>(qstrnlen(feature_name, 7)));
+    const auto it = classIndex.constFind(acr);
+    if (it != classIndex.constEnd()) return it.value();
+    classIndex.insert(acr, classes.size());
+    classes.append(acr);
+    return classes.size() - 1;
+  }
   void clear() {
     prims.clear();
     patternFills.clear();
@@ -242,6 +269,8 @@ public:
     labels.clear();
     landContours.clear();
     queryObjects.clear();
+    classes.clear();
+    classIndex.clear();
   }
   bool empty() const {
     return prims.isEmpty() && patternFills.isEmpty() && symbols.isEmpty() &&

@@ -610,13 +610,77 @@ Window {
                                 Repeater {
                                     model: [ { label: qsTr("Base"), cat: 0 },
                                              { label: qsTr("Standard"), cat: 1 },
-                                             { label: qsTr("All"), cat: 2 } ]
+                                             { label: qsTr("All"), cat: 2 },
+                                             { label: qsTr("Mariner's standard"), cat: 3 } ]
                                     delegate: RadioButton {
                                         required property var modelData
                                         text: modelData.label
                                         ButtonGroup.group: optCatGroup
                                         checked: chart.displayCategory === modelData.cat
                                         onClicked: chart.displayCategory = modelData.cat
+                                    }
+                                }
+
+                                // "User Standard Objects" (P3.6, wx
+                                // MARINERS_STANDARD): per-class visibility,
+                                // applied only in Mariner's standard. Checked
+                                // = shown; the hidden set persists.
+                                ColumnLayout {
+                                    id: objFilterPanel
+                                    visible: chart.displayCategory === 3
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    readonly property var catalog: chart.s57ClassCatalog()
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: qsTr("User standard objects")
+                                            font.bold: true
+                                            Layout.fillWidth: true
+                                        }
+                                        Button {
+                                            text: qsTr("Show all")
+                                            onClicked: chart.hiddenObjectClasses = []
+                                        }
+                                        Button {
+                                            text: qsTr("Hide all")
+                                            onClicked: chart.hiddenObjectClasses =
+                                                objFilterPanel.catalog.map(c => c.acronym)
+                                        }
+                                    }
+                                    Frame {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 240
+                                        padding: 2
+                                        ListView {
+                                            id: objFilterList
+                                            anchors.fill: parent
+                                            clip: true
+                                            model: objFilterPanel.catalog
+                                            delegate: CheckBox {
+                                                required property var modelData
+                                                width: objFilterList.width
+                                                text: modelData.acronym + " — " +
+                                                      modelData.description
+                                                font.pointSize: 11
+                                                checked: chart.hiddenObjectClasses
+                                                         .indexOf(modelData.acronym) < 0
+                                                onToggled: {
+                                                    var h = chart.hiddenObjectClasses.slice()
+                                                    const i = h.indexOf(modelData.acronym)
+                                                    if (checked && i >= 0) h.splice(i, 1)
+                                                    else if (!checked && i < 0)
+                                                        h.push(modelData.acronym)
+                                                    chart.hiddenObjectClasses = h
+                                                }
+                                            }
+                                            ScrollBar.vertical: ScrollBar {}
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Unchecked classes are hidden in Mariner's standard. Display-base objects (land, coastline, safety contour) always show.")
+                                        wrapMode: Text.Wrap; Layout.fillWidth: true
+                                        color: palette.placeholderText; font.pointSize: 10
                                     }
                                 }
 

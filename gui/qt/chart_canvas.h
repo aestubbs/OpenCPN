@@ -106,6 +106,10 @@ class ChartCanvas : public QQuickItem {
   // QML control; forwards to the vector chart provider.
   Q_PROPERTY(int displayCategory READ displayCategory WRITE setDisplayCategory
                  NOTIFY displayCategoryChanged)
+  // S-57 class acronyms hidden while displayCategory == 3 (Mariner's
+  // Standard) -- the wx "User Standard Objects" per-class filter (P3.6).
+  Q_PROPERTY(QStringList hiddenObjectClasses READ hiddenObjectClasses
+                 WRITE setHiddenObjectClasses NOTIFY hiddenObjectClassesChanged)
 
   // S-52 viewing-group toggles (soundings, text). Bound from QML controls;
   // forwarded to every loaded vector provider as a post-decode filter.
@@ -329,6 +333,13 @@ public:
   Q_INVOKABLE void deactivateRoute();
   Q_INVOKABLE void skipWaypoint();      // advance past the current waypoint
 
+  // --- "User Standard Objects" per-class filter (P3.6) ---
+  QStringList hiddenObjectClasses() const { return m_hidden_classes; }
+  void setHiddenObjectClasses(const QStringList& classes);
+  // The full S-57 class catalogue for the checklist UI: a list of
+  // {acronym, description} maps, sorted by acronym.
+  Q_INVOKABLE QVariantList s57ClassCatalog() const;
+
   // --- GPX import / export (P3.19, wx Route Manager Import/Export) ---
   // QML FileDialogs hand over file:// URLs; converted here. importGpx
   // returns {routes, tracks, waypoints, duplicates} counts (empty = parse
@@ -467,6 +478,7 @@ public:
 Q_SIGNALS:
   void s52EngineChanged();
   void displayCategoryChanged();
+  void hiddenObjectClassesChanged();
   void showSoundingsChanged();
   void showTextChanged();
   void showLightsChanged();
@@ -718,6 +730,7 @@ private:
   QString m_cursor_brgrng_text;
   bool m_route_build_mode = false;
   bool m_route_edit_mode = false;  // selected route is editable (P3.7)
+  QStringList m_hidden_classes;    // Mariner's Standard hidden classes (P3.6)
   QSet<QString> m_visible_routes;  // route GUIDs with the visibility eye on
   int m_route_vis_rev = 0;         // bumps on any eye change (QML re-eval)
   bool m_track_recording = false;
