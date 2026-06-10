@@ -1843,14 +1843,12 @@ Phase 6). New scope found untracked:
       6. P0.5 CI green on Linux + Windows (macOS-first decision 2026-06-10);
       7. a macOS user-acceptance pass on home waters (visual verification —
          no image-diff, per P0.7).
-- [ ] **P3.22** **Data Monitor launcher → Connections page.** The monitor
-      window itself is **done** (`Main.qml` `dataMonitorWindow` — live decoded
-      NMEA/N2K stream, pause, per-source filter, fed by `nmea_monitor_model`)
-      and currently opens from the main-toolbar 📡 button. Decision
-      (user, 2026-06-10): the entry point should move to the Connections
-      page (it is a connections-debugging tool), replacing the toolbar slot;
-      this also satisfies the "show NMEA debug window launcher" item under
-      the Connections page above. Update the P3.5 toolbar spec when done.
+- [x] **P3.22** **Data Monitor launcher → Connections page. DONE
+      (2026-06-10).** The 📡 toolbar slot is removed; a "Data monitor…"
+      button on Options > Connections opens the window
+      (`DataMonitorWindow.qml`) via an `OptionsWindow` signal wired in
+      Main.qml. Satisfies the "show NMEA debug window launcher" item under
+      the Connections page above.
 
 Agreed wx↔Qt aligned toolbar layout (the implementation target for P3.5; build
 in the P3.17 components `FloatToolbar.qml` + `MuiBar.qml`). wx behaviour traced
@@ -1867,8 +1865,8 @@ to source and cited. The wx app has three toolbar surfaces (master / MUI / iENC)
 7. ◑ Colour scheme (day / dusk / night cycle)
 8. ⎙ Print — wire to a print path (wx `DoPrint`); a stub/"not yet" is acceptable
    as a first cut (full chart printing is a separate feature)
-9. ≣ Data monitor (Qt addition) — **slated to move to the Connections page
-   (P3.22, 2026-06-10)**; drop this toolbar slot when that lands
+9. ≣ Data monitor (Qt addition) — **moved to the Connections page (P3.22,
+   done 2026-06-10)**; the toolbar slot is gone
 10. ⓘ Help / about
 11. ⚓ Anchor watch (drop / raise + radius) — **moved from the MUI bar**
 12. 🛟 MOB — drop MOB marker; icon **fixed ⚓→🛟** (`U+1F6DF` RING BUOY, matches
