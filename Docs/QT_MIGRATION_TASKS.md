@@ -2169,9 +2169,10 @@ existing `followOwnShip` property before adding).
       speed-coloured) and 2 hPa pressure isobars (marching squares) via
       the FIRST plugin-contributed Layer (toolkit seam proven). **+ cursor
       data readout (bilinear wind + pressure at the pointer, HUD pill)
-      2026-06-10.** Remaining for parity: precip/waves/current overlays,
-      particle animation, the GRIB request builder, density tuning —
-      verify with a real GRIB file first.
+      2026-06-10.** **+ saildocs request
+      builder (viewport-bounds GFS request via mailto) 2026-06-10.**
+      Remaining for parity: precip/waves/current overlays, particle
+      animation, density tuning — verify with a real GRIB file first.
 - [~] **P4.6** Document the plugin API —
       [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
       (interface, contribution seams, wx-ABI mapping table, porting
