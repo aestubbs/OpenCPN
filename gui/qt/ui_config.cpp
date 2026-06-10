@@ -38,6 +38,7 @@ UIConfig::UIConfig() {
   m_ships_bells = c.getBool("ui/playShipsBells", m_ships_bells);
   m_inland_ecdis = c.getBool("ui/inlandEcdis", m_inland_ecdis);
   m_split_view = c.getBool("ui/splitView", m_split_view);
+  m_split_fraction = c.getDouble("ui/splitFraction", m_split_fraction);
   m_options_x = c.getInt("ui/optionsX", m_options_x);
   m_options_y = c.getInt("ui/optionsY", m_options_y);
   m_gui_scale = c.getInt("ui/guiScaleFactor", m_gui_scale);
@@ -96,6 +97,10 @@ void UIConfig::setInlandEcdis(bool v) {
 }
 void UIConfig::setSplitView(bool v) {
   OCPN_UI_SET(m_split_view, v, "ui/splitView", setBool)
+}
+void UIConfig::setSplitFraction(double v) {
+  v = qBound(0.2, v, 0.8);
+  OCPN_UI_SET(m_split_fraction, v, "ui/splitFraction", setDouble)
 }
 void UIConfig::setOptionsX(int v) {
   OCPN_UI_SET(m_options_x, v, "ui/optionsX", setInt)

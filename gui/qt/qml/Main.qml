@@ -199,18 +199,31 @@ ApplicationWindow {
     ChartCanvas {
         id: splitPane
         visible: UIConfig.splitView && s52SplitPane !== null
-        width: visible ? parent.width * 0.4 : 0
+        width: visible ? parent.width * UIConfig.splitFraction : 0
         anchors.top: parent.top
         anchors.bottom: tideDrawer.top
         anchors.right: hudPanel.left
         clip: true
         s52Engine: s52SplitPane
-        Rectangle {  // divider
+        Rectangle {  // divider (drag to resize; fraction persists)
             width: 2
-            color: "#55202830"
+            color: dividerDrag.active ? "#cc3b82f6" : "#55202830"
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
+            MouseArea {
+                id: dividerDrag
+                property bool active: pressed
+                anchors.fill: parent
+                anchors.margins: -4  // fatter hit target
+                cursorShape: Qt.SplitHCursor
+                onPositionChanged: (m) => {
+                    if (!pressed) return
+                    const rootX = mapToItem(splitPane.parent, m.x, 0).x
+                    UIConfig.splitFraction =
+                        1.0 - rootX / splitPane.parent.width
+                }
+            }
         }
     }
 

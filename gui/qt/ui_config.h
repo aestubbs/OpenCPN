@@ -65,6 +65,9 @@ class UIConfig : public QObject {
   // Takes effect on restart (the pane's decode engine is created at
   // startup).
   Q_PROPERTY(bool splitView READ splitView WRITE setSplitView NOTIFY changed)
+  // Second-pane width fraction (0.2..0.8), divider-draggable.
+  Q_PROPERTY(double splitFraction READ splitFraction WRITE setSplitFraction
+                 NOTIFY changed)
   // Options-window position persistence (-1 = unset; size is fixed).
   Q_PROPERTY(int optionsX READ optionsX WRITE setOptionsX NOTIFY changed)
   Q_PROPERTY(int optionsY READ optionsY WRITE setOptionsY NOTIFY changed)
@@ -129,6 +132,8 @@ public:
   void setPlayShipsBells(bool v);
   bool splitView() const { return m_split_view; }
   void setSplitView(bool v);
+  double splitFraction() const { return m_split_fraction; }
+  void setSplitFraction(double v);
   int optionsX() const { return m_options_x; }
   void setOptionsX(int v);
   int optionsY() const { return m_options_y; }
@@ -179,6 +184,7 @@ private:
   bool m_touch = false;
   bool m_ships_bells = false;
   bool m_split_view = false;
+  double m_split_fraction = 0.4;
   int m_options_x = -1;
   int m_options_y = -1;
   bool m_inland_ecdis = false;
