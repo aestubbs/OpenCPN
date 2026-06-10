@@ -1329,7 +1329,13 @@ render anything onto the chart, only manages the plugin lifecycle.
       startup from the persisted Options language choice (restart applies).
       Remaining: actual translations (community/lupdate workflow) and any
       hard-coded strings still missing `qsTr()`.
-- [ ] **P3.11** Remove the parallel wx build path; fork is now Qt-only.
+- [~] **P3.11** Remove the parallel wx build path — **BEGUN (user
+      direction, 2026-06-10): increment 1 landed** — OCPN_BUILD_WX_APP
+      (default OFF) makes the wx app EXCLUDE_FROM_ALL, skips plugins/,
+      and excludes the broken wx-era opencpn-cmd; the default build is
+      Qt-only. Remaining: configure-time removal (gate the wx-only
+      find_package/staging blocks), then source deletion (gui/src,
+      gui/include, plugins/) once the acceptance pass closes.
 - [ ] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
       `slots` / `emit` keywords now that no wx/system headers remain to clash
       with. Touches the QObject classes added during Phase 1 (`observable_qt`,
