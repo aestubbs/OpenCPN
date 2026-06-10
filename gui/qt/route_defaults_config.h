@@ -58,6 +58,9 @@ class RouteDefaultsConfig : public QObject {
   // 0 = high (every fix), 1 = medium, 2 = low.
   Q_PROPERTY(int trackingPrecision READ trackingPrecision WRITE
                  setTrackingPrecision NOTIFY changed)
+  // Ask before deleting a route / track / mark (wx g_bConfirmObjectDelete).
+  Q_PROPERTY(bool confirmObjectDelete READ confirmObjectDelete WRITE
+                 setConfirmObjectDelete NOTIFY changed)
 
 public:
   static RouteDefaultsConfig& instance();
@@ -92,6 +95,8 @@ public:
   void setTrackColor(const QColor& v);
   int trackingPrecision() const { return m_tracking_precision; }
   void setTrackingPrecision(int v);
+  bool confirmObjectDelete() const { return m_confirm_delete; }
+  void setConfirmObjectDelete(bool v);
 
 Q_SIGNALS:
   void changed();
@@ -112,6 +117,7 @@ private:
   bool m_track_highlight = false;
   QColor m_track_color{120, 72, 40};  // brown (dashed breadcrumb default)
   int m_tracking_precision = 0;
+  bool m_confirm_delete = true;  // wx default
 };
 
 }  // namespace ocpn::qtui

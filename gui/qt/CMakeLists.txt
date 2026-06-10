@@ -47,6 +47,7 @@ qt_add_qml_module(opencpn-qt
     qml/VesselHud.qml
     qml/ChartContextMenus.qml
     qml/AisTargetListWindow.qml
+    qml/ConfirmDialog.qml
   SOURCES
     app_controller.h
     chart_canvas.h

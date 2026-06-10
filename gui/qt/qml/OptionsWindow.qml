@@ -2143,6 +2143,11 @@ Window {
                                     checked: RouteDefaultsConfig.persistActiveRoute
                                     onToggled: RouteDefaultsConfig.persistActiveRoute = checked
                                 }
+                                CheckBox {
+                                    text: qsTr("Confirm before deleting routes, tracks and marks")
+                                    checked: RouteDefaultsConfig.confirmObjectDelete
+                                    onToggled: RouteDefaultsConfig.confirmObjectDelete = checked
+                                }
 
                                 MenuSeparator { Layout.fillWidth: true }
 

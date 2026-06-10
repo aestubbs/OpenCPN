@@ -137,7 +137,9 @@ Item {
         MenuSeparator {}
         MenuItem {
             text: qsTr("Delete route")
-            onTriggered: chart.deleteRoute(routeMenu.routeIndex)
+            onTriggered: confirmDelete.ask(
+                qsTr("Delete this route?"),
+                function() { chart.deleteRoute(routeMenu.routeIndex) })
         }
     }
 
@@ -162,7 +164,9 @@ Item {
         MenuSeparator {}
         MenuItem {
             text: qsTr("Delete mark")
-            onTriggered: chart.deleteMark(markMenu.guid)
+            onTriggered: confirmDelete.ask(
+                qsTr("Delete mark \"%1\"?").arg(markMenu.markName),
+                function() { chart.deleteMark(markMenu.guid) })
         }
     }
 
@@ -207,7 +211,9 @@ Item {
         }
         MenuItem {
             text: qsTr("Delete route")
-            onTriggered: chart.deleteSelectedRoute()
+            onTriggered: confirmDelete.ask(
+                qsTr("Delete the route being edited?"),
+                function() { chart.deleteSelectedRoute() })
         }
         MenuSeparator {}
         MenuItem {
@@ -215,6 +221,9 @@ Item {
             onTriggered: chart.clearRouteSelection()
         }
     }
+
+    // Delete confirmation (P3.6, honours Options > Routes & Marks).
+    ConfirmDialog { id: confirmDelete }
 
     Connections {
         target: chart

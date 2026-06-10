@@ -48,6 +48,7 @@ RouteDefaultsConfig::RouteDefaultsConfig() {
   if (!tc.isEmpty()) m_track_color = QColor(tc);
   m_tracking_precision =
       c.getInt("routes/trackingPrecision", m_tracking_precision);
+  m_confirm_delete = c.getBool("routes/confirmDelete", m_confirm_delete);
 
   // Mirror the persisted defaults into the model globals the nav / track code
   // reads, so the dialog actually drives behaviour (not just persistence).
@@ -129,6 +130,13 @@ void RouteDefaultsConfig::setTrackingPrecision(int v) {
   m_tracking_precision = v;
   g_nTrackPrecision = v;  // the model ActiveTrack reads this on Start()
   ConfigStore::instance().setInt("routes/trackingPrecision", v);
+  Q_EMIT changed();
+}
+
+void RouteDefaultsConfig::setConfirmObjectDelete(bool v) {
+  if (m_confirm_delete == v) return;
+  m_confirm_delete = v;
+  ConfigStore::instance().setBool("routes/confirmDelete", v);
   Q_EMIT changed();
 }
 

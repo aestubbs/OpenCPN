@@ -49,6 +49,9 @@ Drawer {
         gpxStatusTimer.restart()
     }
 
+    // Delete confirmation (P3.6, honours Options > Routes & Marks).
+    ConfirmDialog { id: drawerConfirmDelete }
+
     // --- GPX interchange (P3.19, wx Route Manager Import/Export) ----------
     FileDialog {
         id: gpxImportDialog
@@ -265,7 +268,9 @@ Drawer {
                                         MenuSeparator {}
                                         MenuItem {
                                             text: qsTr("Delete")
-                                            onTriggered: chart.deleteRoute(index)
+                                            onTriggered: drawerConfirmDelete.ask(
+                                                qsTr("Delete route \"%1\"?").arg(modelData.name),
+                                                function() { chart.deleteRoute(index) })
                                         }
                                     }
                                 }
@@ -392,7 +397,9 @@ Drawer {
                                         MenuSeparator {}
                                         MenuItem {
                                             text: qsTr("Delete")
-                                            onTriggered: chart.deleteMark(modelData.guid)
+                                            onTriggered: drawerConfirmDelete.ask(
+                                                qsTr("Delete mark \"%1\"?").arg(modelData.name),
+                                                function() { chart.deleteMark(modelData.guid) })
                                         }
                                     }
                                 }
@@ -521,7 +528,9 @@ Drawer {
                                         MenuSeparator {}
                                         MenuItem {
                                             text: qsTr("Delete")
-                                            onTriggered: chart.deleteTrack(modelData.guid)
+                                            onTriggered: drawerConfirmDelete.ask(
+                                                qsTr("Delete track \"%1\"?").arg(modelData.name),
+                                                function() { chart.deleteTrack(modelData.guid) })
                                         }
                                     }
                                 }
