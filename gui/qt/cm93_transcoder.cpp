@@ -18,7 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include <wx/wx.h>  // wxMax/wxMin/wxPrintf (verbatim body; wx links anyway)
+#include <algorithm>  // std::max/min (de-wx'd from the verbatim body, P5.6)
 
 #include <QDateTime>
 
@@ -140,7 +140,7 @@ Extended_Geometry *Cm93Transcoder::buildGeom(Cm93Object *pobject, int iobject)
         int npoints = pgd->n_points;
         cm93_point *rseg = pgd->p_points;
 
-        n_max_points = wxMax(n_max_points, npoints);
+        n_max_points = std::max<int>(n_max_points, npoints);
 
         //    Establish ring starting conditions
         if (bnew_ring) {
@@ -158,10 +158,10 @@ Extended_Geometry *Cm93Transcoder::buildGeom(Cm93Object *pobject, int iobject)
             //                                    if(ncontours == 0) // outer
             //                                    ring describes envelope
             {
-              lon_max = wxMax(lon_max, rseg[j].x);
-              lon_min = wxMin(lon_min, rseg[j].x);
-              lat_max = wxMax(lat_max, rseg[j].y);
-              lat_min = wxMin(lat_min, rseg[j].y);
+              lon_max = std::max<int>(lon_max, rseg[j].x);
+              lon_min = std::min<int>(lon_min, rseg[j].x);
+              lat_max = std::max<int>(lat_max, rseg[j].y);
+              lat_min = std::min<int>(lat_min, rseg[j].y);
             }
 
             pPoints[ip].m_x = rseg[j].x;
@@ -175,10 +175,10 @@ Extended_Geometry *Cm93Transcoder::buildGeom(Cm93Object *pobject, int iobject)
             //                                    if(ncontours == 0) // outer
             //                                    ring describes envelope
             {
-              lon_max = wxMax(lon_max, rseg[j].x);
-              lon_min = wxMin(lon_min, rseg[j].x);
-              lat_max = wxMax(lat_max, rseg[j].y);
-              lat_min = wxMin(lat_min, rseg[j].y);
+              lon_max = std::max<int>(lon_max, rseg[j].x);
+              lon_min = std::min<int>(lon_min, rseg[j].x);
+              lat_max = std::max<int>(lat_max, rseg[j].y);
+              lat_min = std::min<int>(lat_min, rseg[j].y);
             }
 
             pPoints[ip].m_x = rseg[j].x;
@@ -300,14 +300,14 @@ Extended_Geometry *Cm93Transcoder::buildGeom(Cm93Object *pobject, int iobject)
         int npoints = pgd->n_points;
         cm93_point *rseg = pgd->p_points;
 
-        n_max_points = wxMax(n_max_points, npoints);
+        n_max_points = std::max<int>(n_max_points, npoints);
 
         if (((type_seg & 4) != 4)) {
           for (int j = 0; j < npoints; j++) {
-            lon_max = wxMax(lon_max, rseg[j].x);
-            lon_min = wxMin(lon_min, rseg[j].x);
-            lat_max = wxMax(lat_max, rseg[j].y);
-            lat_min = wxMin(lat_min, rseg[j].y);
+            lon_max = std::max<int>(lon_max, rseg[j].x);
+            lon_min = std::min<int>(lon_min, rseg[j].x);
+            lat_max = std::max<int>(lat_max, rseg[j].y);
+            lat_min = std::min<int>(lat_min, rseg[j].y);
 
             pPoints[ip].m_x = rseg[j].x;
             pPoints[ip].m_y = rseg[j].y;
@@ -318,10 +318,10 @@ Extended_Geometry *Cm93Transcoder::buildGeom(Cm93Object *pobject, int iobject)
         else if ((type_seg & 4) == 4)  // backwards
         {
           for (int j = npoints - 1; j >= 0; j--) {
-            lon_max = wxMax(lon_max, rseg[j].x);
-            lon_min = wxMin(lon_min, rseg[j].x);
-            lat_max = wxMax(lat_max, rseg[j].y);
-            lat_min = wxMin(lat_min, rseg[j].y);
+            lon_max = std::max<int>(lon_max, rseg[j].x);
+            lon_min = std::min<int>(lon_min, rseg[j].x);
+            lat_max = std::max<int>(lat_max, rseg[j].y);
+            lat_min = std::min<int>(lat_min, rseg[j].y);
 
             pPoints[ip].m_x = rseg[j].x;
             pPoints[ip].m_y = rseg[j].y;
@@ -375,10 +375,10 @@ Extended_Geometry *Cm93Transcoder::buildGeom(Cm93Object *pobject, int iobject)
         OGRPoint *ppoint = new OGRPoint(rseg[ip].x, rseg[ip].y, zp);
         pSMP->addGeometryDirectly(ppoint);
 
-        lon_max = wxMax(lon_max, rseg[ip].x);
-        lon_min = wxMin(lon_min, rseg[ip].x);
-        lat_max = wxMax(lat_max, rseg[ip].y);
-        lat_min = wxMin(lat_min, rseg[ip].y);
+        lon_max = std::max<int>(lon_max, rseg[ip].x);
+        lon_min = std::min<int>(lon_min, rseg[ip].x);
+        lat_max = std::max<int>(lat_max, rseg[ip].y);
+        lat_min = std::min<int>(lat_min, rseg[ip].y);
       }
 
       ret_ptr->pogrGeom = pSMP;
@@ -396,7 +396,7 @@ Extended_Geometry *Cm93Transcoder::buildGeom(Cm93Object *pobject, int iobject)
               // the parent has no geometry.....
 
     default: {
-      wxPrintf("Unexpected geomtype %d for Feature %d\n", geomtype, iobject);
+      qWarning("cm93: unexpected geomtype %d for feature %d", geomtype, iobject);
       break;
     }
 
@@ -870,10 +870,10 @@ S57Obj *Cm93Transcoder::createS57Obj(int cell_index, int iobject, int subcell,
           p.x = (int)xgeom->vertex_array[ip + 1].m_x;
           p.y = (int)xgeom->vertex_array[ip + 1].m_y;
           transformPoint(&p, 0, 0, &lat, &lon);
-          covr.lon_max = wxMax(covr.lon_max, lon);
-          covr.lon_min = wxMin(covr.lon_min, lon);
-          covr.lat_max = wxMax(covr.lat_max, lat);
-          covr.lat_min = wxMin(covr.lat_min, lat);
+          covr.lon_max = std::max<int>(covr.lon_max, lon);
+          covr.lon_min = std::min<int>(covr.lon_min, lon);
+          covr.lat_max = std::max<int>(covr.lat_max, lat);
+          covr.lat_min = std::min<int>(covr.lat_min, lat);
           covr.ring.append(QPointF(lon, lat));
         }
         m_covrs.append(covr);
