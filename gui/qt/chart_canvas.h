@@ -340,6 +340,13 @@ public:
   // {acronym, description} maps, sorted by acronym.
   Q_INVOKABLE QVariantList s57ClassCatalog() const;
 
+  // --- MMSI properties (P3.6, wx MmsiProperties): per-vessel AIS handling
+  //     (ignore / always-never track / MOB / persist track). Edits apply to
+  //     the live decoder (g_MMSI_Props_Array) and persist in the config. ---
+  Q_INVOKABLE QVariantList mmsiProperties() const;
+  Q_INVOKABLE void saveMmsiProperty(const QVariantMap& row);  // keyed by mmsi
+  Q_INVOKABLE void deleteMmsiProperty(int mmsi);
+
   // --- GPX import / export (P3.19, wx Route Manager Import/Export) ---
   // QML FileDialogs hand over file:// URLs; converted here. importGpx
   // returns {routes, tracks, waypoints, duplicates} counts (empty = parse
@@ -761,6 +768,10 @@ private:
   QString m_measure_text;
   MeasureLayer* m_measure_layer = nullptr;  // owned by the compositor
   void updateMeasure(double cur_lat, double cur_lon, bool has_cursor);
+
+  // MMSI-properties persistence (P3.6): ConfigStore <-> g_MMSI_Props_Array.
+  void loadMmsiProperties();
+  void persistMmsiProperties() const;
 
   // Hit-test a click against the visible free marks; fills guid/name of the
   // nearest within a small radius (P3.18).

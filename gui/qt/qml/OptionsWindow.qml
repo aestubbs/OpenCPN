@@ -1863,16 +1863,141 @@ Window {
                             }
                         }
 
-                        // --- MMSI Properties: per-MMSI editor (pending). ---
+                        // --- MMSI Properties: per-MMSI editor (P3.6, wx
+                        //     MmsiProperties). Edits feed the live decoder's
+                        //     g_MMSI_Props_Array and persist in the config. ---
                         Item {
                             ColumnLayout {
+                                id: mmsiTab
                                 anchors.fill: parent
+                                anchors.margins: 20
                                 spacing: 8
+
+                                property var entries: chart.mmsiProperties()
+                                function refresh() { entries = chart.mmsiProperties() }
+                                function loadForm(e) {
+                                    mmsiField.text = String(e.mmsi)
+                                    mmsiNameField.text = e.shipName
+                                    mmsiTrackBox.currentIndex = e.trackType
+                                    mmsiIgnore.checked = e.ignore
+                                    mmsiMob.checked = e.mob
+                                    mmsiVdm.checked = e.vdm
+                                    mmsiFollower.checked = e.follower
+                                    mmsiPersist.checked = e.persistTrack
+                                }
+                                function clearForm() {
+                                    mmsiField.text = ""
+                                    mmsiNameField.text = ""
+                                    mmsiTrackBox.currentIndex = 0
+                                    mmsiIgnore.checked = false
+                                    mmsiMob.checked = false
+                                    mmsiVdm.checked = false
+                                    mmsiFollower.checked = false
+                                    mmsiPersist.checked = false
+                                }
+
                                 Label { text: qsTr("MMSI properties"); font.bold: true }
                                 Label {
-                                    text: qsTr("Per-MMSI rules — track mode (default / always / never), persist track, ignore, treat as MOB, VDM follower and a custom ship name — map to the model's MmsiProperties / AIS name-file API, which is not yet bound into the Qt build. The per-MMSI list editor will live here.")
+                                    text: qsTr("Per-vessel rules applied by the AIS decoder: ignore the target, force its track on or off, persist its track, treat its position reports as your MOB / follower, and a display name.")
                                     wrapMode: Text.Wrap; Layout.fillWidth: true
-                                    color: palette.placeholderText
+                                    color: palette.placeholderText; font.pointSize: 11
+                                }
+
+                                Frame {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 130
+                                    padding: 2
+                                    ListView {
+                                        id: mmsiList
+                                        anchors.fill: parent
+                                        clip: true
+                                        model: mmsiTab.entries
+                                        delegate: ItemDelegate {
+                                            required property var modelData
+                                            width: mmsiList.width
+                                            height: 28
+                                            highlighted: mmsiField.text === String(modelData.mmsi)
+                                            onClicked: mmsiTab.loadForm(modelData)
+                                            contentItem: Label {
+                                                text: modelData.mmsi +
+                                                      (modelData.shipName.length ? "  ·  " + modelData.shipName : "") +
+                                                      (modelData.ignore ? qsTr("  ·  ignored") : "") +
+                                                      (modelData.trackType === 1 ? qsTr("  ·  always track")
+                                                       : modelData.trackType === 2 ? qsTr("  ·  never track") : "")
+                                                font.pointSize: 11
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                        ScrollBar.vertical: ScrollBar {}
+                                    }
+                                }
+
+                                GridLayout {
+                                    columns: 4
+                                    columnSpacing: 8; rowSpacing: 6
+                                    Layout.fillWidth: true
+                                    Label { text: qsTr("MMSI:"); Layout.alignment: Qt.AlignRight }
+                                    TextField {
+                                        id: mmsiField
+                                        Layout.preferredWidth: 110
+                                        inputMethodHints: Qt.ImhDigitsOnly
+                                        validator: IntValidator { bottom: 1; top: 999999999 }
+                                        selectByMouse: true
+                                    }
+                                    Label { text: qsTr("Name:"); Layout.alignment: Qt.AlignRight }
+                                    TextField {
+                                        id: mmsiNameField
+                                        Layout.fillWidth: true
+                                        selectByMouse: true
+                                    }
+                                    Label { text: qsTr("Track:"); Layout.alignment: Qt.AlignRight }
+                                    ComboBox {
+                                        id: mmsiTrackBox
+                                        Layout.preferredWidth: 140
+                                        model: [qsTr("Default"), qsTr("Always"), qsTr("Never")]
+                                    }
+                                    CheckBox { id: mmsiPersist; text: qsTr("Persist track") }
+                                    CheckBox { id: mmsiIgnore; text: qsTr("Ignore this target") }
+                                }
+                                RowLayout {
+                                    spacing: 8
+                                    CheckBox { id: mmsiMob; text: qsTr("Handle as MOB beacon") }
+                                    CheckBox { id: mmsiVdm; text: qsTr("Convert VDM to VDO") }
+                                    CheckBox { id: mmsiFollower; text: qsTr("Follower vessel") }
+                                }
+                                RowLayout {
+                                    spacing: 8
+                                    Button {
+                                        text: qsTr("Save")
+                                        enabled: parseInt(mmsiField.text) > 0
+                                        onClicked: {
+                                            chart.saveMmsiProperty({
+                                                mmsi: parseInt(mmsiField.text),
+                                                shipName: mmsiNameField.text,
+                                                trackType: mmsiTrackBox.currentIndex,
+                                                ignore: mmsiIgnore.checked,
+                                                mob: mmsiMob.checked,
+                                                vdm: mmsiVdm.checked,
+                                                follower: mmsiFollower.checked,
+                                                persistTrack: mmsiPersist.checked
+                                            })
+                                            mmsiTab.refresh()
+                                        }
+                                    }
+                                    Button {
+                                        text: qsTr("New")
+                                        onClicked: mmsiTab.clearForm()
+                                    }
+                                    Button {
+                                        text: qsTr("Delete")
+                                        enabled: parseInt(mmsiField.text) > 0
+                                        onClicked: {
+                                            chart.deleteMmsiProperty(parseInt(mmsiField.text))
+                                            mmsiTab.clearForm()
+                                            mmsiTab.refresh()
+                                        }
+                                    }
+                                    Item { Layout.fillWidth: true }
                                 }
                                 Item { Layout.fillHeight: true }
                             }

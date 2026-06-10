@@ -78,6 +78,9 @@
 #include "raster_chart_provider.h"
 #include "route_list_view_model.h"
 #include "s57_dictionary.h"
+#include "model/ais_decoder.h"   // g_MMSI_Props_Array (MMSI properties, P3.6)
+#include "model/ais_defs.h"      // TRACKTYPE_*
+#include "model/wx_qt_string.h"  // wxString <-> QString (MmsiProperties)
 #include "switchable_nav_provider.h"
 #include "s52_engine.h"
 #include "s52_vector_chart_provider.h"
@@ -152,6 +155,9 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_hidden_classes = m_layer_config->value("display/hiddenClasses")
                          .toString()
                          .split(',', Qt::SkipEmptyParts);
+  // Per-MMSI AIS handling (P3.6): populate the decoder's properties array
+  // from the persisted set before any AIS traffic arrives.
+  loadMmsiProperties();
   m_show_soundings =
       m_layer_config->value("display/soundings", m_show_soundings).toBool();
   // P2.16: text / lights / buoys symbol visibility is no longer a per-provider
@@ -1559,6 +1565,75 @@ QVariantList ChartCanvas::aisTargetSnapshot() const {
     out.append(row);
   }
   return out;
+}
+
+void ChartCanvas::loadMmsiProperties() {
+  const QString blob = ConfigStore::instance().getString("ais/mmsiProps");
+  if (blob.isEmpty()) return;
+  qDeleteAll(g_MMSI_Props_Array);
+  g_MMSI_Props_Array.clear();
+  for (const QString& spec : blob.split('|', Qt::SkipEmptyParts)) {
+    wxString wspec = QString_to_wxString(spec);
+    g_MMSI_Props_Array.append(new MmsiProperties(wspec));
+  }
+}
+
+void ChartCanvas::persistMmsiProperties() const {
+  QStringList specs;
+  for (MmsiProperties* p : g_MMSI_Props_Array)
+    if (p) specs.append(wxString_to_QString(p->Serialize()));
+  ConfigStore::instance().setString("ais/mmsiProps", specs.join('|'));
+}
+
+QVariantList ChartCanvas::mmsiProperties() const {
+  QVariantList out;
+  for (MmsiProperties* p : g_MMSI_Props_Array) {
+    if (!p) continue;
+    QVariantMap row;
+    row["mmsi"] = p->MMSI;
+    row["trackType"] = p->TrackType;  // 0 default, 1 always, 2 never
+    row["ignore"] = p->m_bignore;
+    row["mob"] = p->m_bMOB;
+    row["vdm"] = p->m_bVDM;
+    row["follower"] = p->m_bFollower;
+    row["persistTrack"] = p->m_bPersistentTrack;
+    row["shipName"] = wxString_to_QString(p->m_ShipName);
+    out.append(row);
+  }
+  return out;
+}
+
+void ChartCanvas::saveMmsiProperty(const QVariantMap& row) {
+  const int mmsi = row.value("mmsi").toInt();
+  if (mmsi <= 0) return;
+  MmsiProperties* p = nullptr;
+  for (MmsiProperties* q : g_MMSI_Props_Array)
+    if (q && q->MMSI == mmsi) {
+      p = q;
+      break;
+    }
+  if (!p) {
+    p = new MmsiProperties(mmsi);
+    g_MMSI_Props_Array.append(p);
+  }
+  p->TrackType = row.value("trackType", TRACKTYPE_DEFAULT).toInt();
+  p->m_bignore = row.value("ignore", false).toBool();
+  p->m_bMOB = row.value("mob", false).toBool();
+  p->m_bVDM = row.value("vdm", false).toBool();
+  p->m_bFollower = row.value("follower", false).toBool();
+  p->m_bPersistentTrack = row.value("persistTrack", false).toBool();
+  p->m_ShipName = QString_to_wxString(row.value("shipName").toString());
+  persistMmsiProperties();
+}
+
+void ChartCanvas::deleteMmsiProperty(int mmsi) {
+  for (int i = 0; i < g_MMSI_Props_Array.size(); ++i) {
+    if (g_MMSI_Props_Array[i] && g_MMSI_Props_Array[i]->MMSI == mmsi) {
+      delete g_MMSI_Props_Array.takeAt(i);
+      persistMmsiProperties();
+      return;
+    }
+  }
 }
 
 bool ChartCanvas::hitWaypointAt(const QPointF& sp, QString* guid,
