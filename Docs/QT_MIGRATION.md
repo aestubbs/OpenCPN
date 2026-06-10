@@ -1,7 +1,14 @@
 # OpenCPN → Qt / QtQuick Migration Plan
 
-> Status: **planning / design** — no code changes made yet.
-> This is a living document. It describes a **hard fork** of OpenCPN that
+> Status: **execution — Phases 0–2 complete, Phase 3 feature-complete**
+> (2026-06-10). The model is Qt-typed throughout (Phase 1), the S-52
+> scene-graph renderer is at parity with CM93 newly wired (Phase 2), and
+> the QtQuick shell covers the wx feature surface; what remains before
+> the wx build retires (P3.11) is chart verification, the Phase-4 plugin
+> decision, Linux/Windows CI and the acceptance pass. Execution detail
+> lives in [`QT_MIGRATION_TASKS.md`](./QT_MIGRATION_TASKS.md) — this
+> document keeps the design rationale.
+> It describes a **hard fork** of OpenCPN that
 > replaces the wxWidgets UI with a Qt / QtQuick frontend.
 
 ## 1. Purpose & objectives
