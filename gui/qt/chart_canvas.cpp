@@ -429,8 +429,12 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_chart_cfg_debounce = new QTimer(this);
   m_chart_cfg_debounce->setSingleShot(true);
   m_chart_cfg_debounce->setInterval(350);
-  connect(m_chart_cfg_debounce, &QTimer::timeout, this,
-          [this]() { applyChartConfig(); });
+  connect(m_chart_cfg_debounce, &QTimer::timeout, this, [this]() {
+    applyChartConfig();
+    // The CM93 detail slider changes which tier is ELIGIBLE, not how cells
+    // decode -- re-run the visible-cell selection too (cheap).
+    if (!m_catalog.isEmpty()) updateVisibleCells();
+  });
   connect(&ChartConfig::instance(), &ChartConfig::changed, this,
           [this]() { m_chart_cfg_debounce->start(); });
 
@@ -901,10 +905,16 @@ void ChartCanvas::updateVisibleCells() {
   const double displayN =
       displayScaleN(scale, m_viewport ? m_viewport->centerLat() : 0.0);
   const double k = m_overzoom_k > 0.0 ? m_overzoom_k : 2.0;  // 1 (at native)..5
-  // Content-eligible: the view is zoomed in to within k x of the chart's native
-  // scale (wx's GetNormalScaleMin / vector detail modifier; configurable).
+  // CM93 detail slider (P2.19, wx g_cm93_zoom_factor): bias WHICH tier of a
+  // CM93 set is eligible. +5 ~ two tiers finer (each tier is ~3x), -5 two
+  // tiers coarser; ENC cells are unaffected.
+  const double cm93_bias =
+      std::pow(3.0, ChartConfig::instance().cm93Detail() / 2.5);
   const auto eligible = [&](const CellExtent* c) {
-    return c->nativeScale > 0 && displayN <= c->nativeScale * k;
+    if (c->nativeScale <= 0) return false;
+    const bool is_cm93 = c->name.startsWith(QLatin1String("CM93-"));
+    const double eff = c->nativeScale * (is_cm93 ? cm93_bias : 1.0);
+    return displayN <= eff * k;
   };
 
   // Candidates finest -> coarsest.
