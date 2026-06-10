@@ -26,6 +26,7 @@ Item {
     signal newMarkRequested()
     signal editMarkRequested(string guid)
     signal routeDetailsRequested(int routeIndex)
+    signal aisTargetListRequested()
 
     // --- General canvas menu (right-click on open water / chart). ---------
     Menu {
@@ -156,6 +157,38 @@ Item {
         }
     }
 
+    // --- AIS target menu (right-click a target). ---------------------------
+    Menu {
+        id: aisMenu
+        property int mmsi: 0
+        property string targetName: ""
+
+        MenuItem {
+            // Opens the same info popup a left-click select does.
+            text: qsTr("Target query")
+            onTriggered: chart.selectAisTarget(aisMenu.mmsi)
+        }
+        MenuItem {
+            text: qsTr("Center view on target")
+            onTriggered: chart.centerOnAis(aisMenu.mmsi)
+        }
+        MenuItem {
+            text: chart.aisTrailEnabled(aisMenu.mmsi) ? qsTr("Hide target track")
+                                                      : qsTr("Show target track")
+            onTriggered: chart.setAisTrail(aisMenu.mmsi,
+                                           !chart.aisTrailEnabled(aisMenu.mmsi))
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("Target list…")
+            onTriggered: menus.aisTargetListRequested()
+        }
+        MenuItem {
+            text: qsTr("Copy MMSI")
+            onTriggered: chart.copyToClipboard(String(aisMenu.mmsi))
+        }
+    }
+
     // --- Route-node menu (right-click a node of the route being edited). --
     Menu {
         id: routeNodeMenu
@@ -189,6 +222,11 @@ Item {
             markMenu.guid = guid
             markMenu.markName = name
             markMenu.popup(x, y)
+        }
+        function onAisMenuRequested(x, y, mmsi, name) {
+            aisMenu.mmsi = mmsi
+            aisMenu.targetName = name
+            aisMenu.popup(x, y)
         }
         function onRouteNodeMenuRequested(x, y) {
             routeNodeMenu.popup(x, y)

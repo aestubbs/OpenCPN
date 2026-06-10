@@ -46,6 +46,7 @@ qt_add_qml_module(opencpn-qt
     qml/TideTimeBar.qml
     qml/VesselHud.qml
     qml/ChartContextMenus.qml
+    qml/AisTargetListWindow.qml
   SOURCES
     app_controller.h
     chart_canvas.h

@@ -26,9 +26,11 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QClipboard>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QStandardPaths>
 #include <QVarLengthArray>
 #include <QHoverEvent>
@@ -1425,6 +1427,88 @@ void ChartCanvas::updateMeasure(double cur_lat, double cur_lon,
   update();
 }
 
+bool ChartCanvas::hitAisAt(const QPointF& sp, int* mmsi,
+                           QString* name) const {
+  if (!m_nav_provider || !m_viewport) return false;
+  constexpr double kPickRadiusPx = 14.0;
+  const QMatrix4x4 m = m_viewport->transformMatrix(static_cast<int>(width()),
+                                                   static_cast<int>(height()));
+  double best = kPickRadiusPx * kPickRadiusPx;
+  bool found = false;
+  for (const AisTarget& t : m_nav_provider->aisTargets()) {
+    const QPointF s = m.map(QPointF(t.lon, Viewport::latToWorldY(t.lat)));
+    const double dx = s.x() - sp.x(), dy = s.y() - sp.y();
+    const double d2 = dx * dx + dy * dy;
+    if (d2 < best) {
+      best = d2;
+      if (mmsi) *mmsi = t.mmsi;
+      if (name) *name = t.name;
+      found = true;
+    }
+  }
+  return found;
+}
+
+void ChartCanvas::selectAisTarget(int mmsi) {
+  if (!m_ais_selection || !m_nav_provider) return;
+  for (const AisTarget& t : m_nav_provider->aisTargets()) {
+    if (t.mmsi == mmsi) {
+      m_ais_selection->select(t);
+      return;
+    }
+  }
+}
+
+void ChartCanvas::centerOnAis(int mmsi) {
+  if (!m_viewport || !m_nav_provider) return;
+  for (const AisTarget& t : m_nav_provider->aisTargets()) {
+    if (t.mmsi == mmsi) {
+      m_viewport->setCenter(t.lat, t.lon);
+      Q_EMIT viewChanged();
+      update();
+      return;
+    }
+  }
+}
+
+void ChartCanvas::copyToClipboard(const QString& text) const {
+  if (QClipboard* cb = QGuiApplication::clipboard()) cb->setText(text);
+}
+
+QVariantList ChartCanvas::aisTargetSnapshot() const {
+  QVariantList out;
+  if (!m_nav_provider) return out;
+  QList<AisTarget> targets = m_nav_provider->aisTargets();
+  // Nearest first; targets without a range solution sort to the end.
+  std::sort(targets.begin(), targets.end(),
+            [](const AisTarget& a, const AisTarget& b) {
+              const double ra = a.rangeNm >= 0 ? a.rangeNm : 1e9;
+              const double rb = b.rangeNm >= 0 ? b.rangeNm : 1e9;
+              return ra < rb;
+            });
+  DisplayConfig& dc = DisplayConfig::instance();
+  for (const AisTarget& t : targets) {
+    QVariantMap row;
+    row["mmsi"] = t.mmsi;
+    row["name"] = t.name.isEmpty() ? QString::number(t.mmsi) : t.name;
+    row["rangeText"] = t.rangeNm >= 0 ? dc.formatDistance(t.rangeNm)
+                                      : QStringLiteral("--");
+    row["bearingText"] = t.bearingDeg >= 0 ? dc.formatBearing(t.bearingDeg)
+                                           : QStringLiteral("--");
+    row["sogText"] = QString::number(t.sog, 'f', 1);
+    row["cogText"] = QString::number(t.cog, 'f', 0) + QChar(0x00B0);
+    row["cpaText"] =
+        t.cpaValid ? dc.formatDistance(t.cpaNm) : QStringLiteral("--");
+    row["tcpaText"] = t.cpaValid && t.tcpaMin >= 0
+                          ? QString::number(t.tcpaMin, 'f', 0) + tr(" min")
+                          : QStringLiteral("--");
+    row["dangerous"] = t.dangerous;
+    row["isSart"] = t.isSart;
+    out.append(row);
+  }
+  return out;
+}
+
 bool ChartCanvas::hitWaypointAt(const QPointF& sp, QString* guid,
                                 QString* name) const {
   if (!m_nav_provider || !m_viewport) return false;
@@ -1882,8 +1966,16 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
       return;
     }
 
-    // Object-focused menus (P3.18, wx CanvasMenuHandler): a mark, then a
-    // route node / segment, else the general canvas menu.
+    // Object-focused menus (P3.18, wx CanvasMenuHandler): an AIS target,
+    // then a mark, then a route node / segment, else the general menu.
+    int ais_mmsi = 0;
+    QString ais_name;
+    if (hitAisAt(event->position(), &ais_mmsi, &ais_name)) {
+      Q_EMIT aisMenuRequested(event->position().x(), event->position().y(),
+                              ais_mmsi, ais_name);
+      event->accept();
+      return;
+    }
     QString wp_guid, wp_name;
     if (hitWaypointAt(event->position(), &wp_guid, &wp_name)) {
       Q_EMIT markMenuRequested(event->position().x(), event->position().y(),

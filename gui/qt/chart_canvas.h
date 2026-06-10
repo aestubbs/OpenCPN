@@ -328,6 +328,18 @@ public:
   Q_INVOKABLE void deactivateRoute();
   Q_INVOKABLE void skipWaypoint();      // advance past the current waypoint
 
+  // --- AIS context-menu / target-list actions (P3.18 tier 2) ---
+  // Select the target by MMSI (opens the AIS info popup, as a click would).
+  Q_INVOKABLE void selectAisTarget(int mmsi);
+  // Centre the view on the target's current position.
+  Q_INVOKABLE void centerOnAis(int mmsi);
+  // System clipboard (Copy MMSI).
+  Q_INVOKABLE void copyToClipboard(const QString& text) const;
+  // Snapshot of the live AIS targets for the Target List window, sorted by
+  // range (unknown-range targets last). Each entry: mmsi, name, rangeText,
+  // bearingText, sogText, cogText, cpaText, tcpaText, dangerous, isSart.
+  Q_INVOKABLE QVariantList aisTargetSnapshot() const;
+
   // --- Canvas context-menu actions (P3.18) ---
   // Build + activate a temporary GOTO route from the own-ship fix to the
   // right-click point / to a mark (wx "Navigate To Here" / "Navigate To
@@ -468,6 +480,8 @@ Q_SIGNALS:
   // Right-click on a free mark; QML pops the mark menu (P3.18).
   void markMenuRequested(qreal x, qreal y, const QString& guid,
                          const QString& name);
+  // Right-click on an AIS target; QML pops the AIS menu (P3.18 tier 2).
+  void aisMenuRequested(qreal x, qreal y, int mmsi, const QString& name);
   // Measure tool state / readout changed (P3.18).
   void measureChanged();
   // The set of in-view / displayed ENC cells changed (chart bar refresh).
@@ -716,6 +730,9 @@ private:
   // Hit-test a click against the visible free marks; fills guid/name of the
   // nearest within a small radius (P3.18).
   bool hitWaypointAt(const QPointF& sp, QString* guid, QString* name) const;
+  // Hit-test a click against the live AIS targets without selecting; fills
+  // mmsi/name of the nearest within a small radius (P3.18 tier 2).
+  bool hitAisAt(const QPointF& sp, int* mmsi, QString* name) const;
   // Hit-test the user routes (screen px). Return the route + node within a
   // small radius, or the nearest segment + the cursor's lat/lon for insert.
   bool hitRouteNode(const QPointF& sp, int& route, int& node) const;

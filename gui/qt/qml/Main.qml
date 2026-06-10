@@ -169,6 +169,10 @@ ApplicationWindow {
         appWindow: root
     }
 
+    // --- AIS target list (AisTargetListWindow.qml, P3.18): live targets
+    //     nearest-first; opened from the AIS right-click menu.
+    AisTargetListWindow { id: aisTargetListWindow }
+
     // --- About (AboutWindow.qml, P3.17): mirrors the wx About dialog. ---
     AboutWindow { id: aboutWindow }
 
@@ -848,6 +852,9 @@ ApplicationWindow {
                 const rts = chart.routeList.routes
                 if (idx >= 0 && idx < rts.length)
                     routeDetailsDialog.openFor(idx, rts[idx].name)
+            }
+            onAisTargetListRequested: {
+                aisTargetListWindow.show(); aisTargetListWindow.raise()
             }
         }
 
