@@ -2134,7 +2134,13 @@ existing `followOwnShip` property before adding).
       plugin-side persistence. Verified loading + rendering. Remaining
       for parity: gauge/dial visuals, depth/temperature instruments
       (need the comm tap), instrument layout options.
-- [ ] **P4.4** Port `chartdldr` (chart downloader) as a built-in Qt module.
+- [~] **P4.4** Port `chartdldr` — **v1 landed (2026-06-10)**
+      (`gui/qt/plugin/chartdldr/`, built by default): catalog-XML fetch +
+      parse (NOAA schema, ENC product catalog default), per-chart download
+      with progress, libarchive ZIP extract into a chosen folder.
+      Remaining for parity: catalog presets list, update-checking against
+      installed charts, bulk download, auto-add to Chart Files (needs a
+      host seam).
 - [ ] **P4.5** Port `grib` as a built-in Qt module (world-anchored Layer).
 - [~] **P4.6** Document the plugin API —
       [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
