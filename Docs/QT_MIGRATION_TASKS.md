@@ -1537,7 +1537,9 @@ remain.
       Qt build renders exclusively through the Qt Quick scene graph (GPU
       always on, RHI manages texture upload/caching), so there is no GL on/off
       switch or texcache to tune. A note in the Advanced tab states this.
-- [ ] Chart-display update period — see the 10 Hz note above (no repaint timer).
+- [—] Chart-display update period — **covered by design (2026-06-10):** the
+      Qt scene graph is render-on-demand (a frame draws only when something
+      changes); there is no repaint timer to configure.
 
 **Display page → Templates** (wx sub-panel: Templates)
 - [ ] Configuration templates — list, create, apply, delete; multi-canvas
@@ -1569,7 +1571,9 @@ toggles stay on `chart` (ChartCanvas).
       shallow/safety/deep depth contours (`S52_MAR_*_CONTOUR`)**.
 - [ ] Vector → CM93 detail-level slider + offset — still inert (needs the CM93
       decode path, **P2.19**).
-- [ ] Vector → CM93 offset, "User Standard Objects" checklist (select-all /
+- [x] ~~"User Standard Objects" checklist~~ — DONE 2026-06-10 (P3.6 gap 1,
+      Mariner's Standard category). Still open here only: CM93 offset
+      (P2.19). Original line: Vector → CM93 offset, USO checklist (select-all /
       clear-all / reset-to-standard), ECDIS help (not surfaced).
 - [x] **Chart Groups (2026-05-31).** Qt-native named-group editor in
       `ChartSourceModel`: create / rename / remove groups, toggle each chart
@@ -1673,7 +1677,9 @@ filtering and the alert sound/dialog engine are still pending
       `AlertEngine` (P3.15): `cpaAlert` shows the banner, `cpaAlertSound` +
       `UIConfig.aisSoundFile` play it, `suppressMooredAlerts` gates inside
       `ais_cpa`, and `ackTimeoutMin` is the Acknowledge hold-off.
-- [ ] Realtime-prediction speed min (control not yet surfaced).
+- [—] Realtime-prediction speed min — **not applicable yet (2026-06-10):**
+      the Qt AIS layer has no realtime-prediction render path, so the
+      threshold would be a dead control; surface it with that feature.
 
 **Ships → MMSI Properties** (wx sub-panel: MMSI Properties)
 - [x] Per-MMSI list + editor (track mode default/always/never, persist track,
