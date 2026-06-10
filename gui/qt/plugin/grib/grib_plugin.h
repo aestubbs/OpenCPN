@@ -67,6 +67,12 @@ public:
    *  file is loaded. Bilinear interpolation over the current timestep. */
   Q_INVOKABLE QString readoutAt(double lat, double lon) const;
 
+  /** Compose a saildocs GRIB request for the given bounds and open the
+   *  user's mail client (mailto:). Returns the request body line. */
+  Q_INVOKABLE QString requestGrib(double north, double south, double east,
+                                  double west, int days, bool wind,
+                                  bool pressure, bool waves, bool precip);
+
   /** The Layer (owned by the compositor once registered). */
   ocpn::qtui::GribWindLayer* layer() const { return m_layer; }
   void setLayer(ocpn::qtui::GribWindLayer* l) { m_layer = l; }

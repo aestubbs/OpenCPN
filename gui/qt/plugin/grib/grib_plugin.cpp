@@ -12,6 +12,8 @@
 #include <cmath>
 
 #include <QDateTime>
+#include <QDesktopServices>
+#include <QUrlQuery>
 #include <QUrl>
 
 #include "GribReader.h"  // vendored zyGrib decode core (grib_pi)
@@ -161,6 +163,37 @@ QString GribContext::readoutAt(double lat, double lon) const {
       parts << QStringLiteral("%1 hPa").arg(pa / 100.0, 0, 'f', 0);
   }
   return parts.join(QStringLiteral("   "));
+}
+
+QString GribContext::requestGrib(double north, double south, double east,
+                                 double west, int days, bool wind,
+                                 bool pressure, bool waves, bool precip) {
+  // The classic saildocs GFS request line, e.g.
+  //   send GFS:42N,38N,10W,2W|0.5,0.5|0,6..72|WIND,PRMSL
+  auto coord = [](double v, char pos, char neg) {
+    return QStringLiteral("%1%2")
+        .arg(std::fabs(v), 0, 'f', 1)
+        .arg(v >= 0 ? pos : neg);
+  };
+  QStringList params;
+  if (wind) params << QStringLiteral("WIND");
+  if (pressure) params << QStringLiteral("PRMSL");
+  if (waves) params << QStringLiteral("HTSGW,WVDIR");
+  if (precip) params << QStringLiteral("APCP");
+  if (params.isEmpty()) params << QStringLiteral("WIND,PRMSL");
+  const QString body =
+      QStringLiteral("send GFS:%1,%2,%3,%4|0.5,0.5|0,6..%5|%6")
+          .arg(coord(north, 'N', 'S'), coord(south, 'N', 'S'),
+               coord(west, 'E', 'W'), coord(east, 'E', 'W'))
+          .arg(qBound(24, days * 24, 192))
+          .arg(params.join(','));
+  QUrl mailto(QStringLiteral("mailto:query@saildocs.com"));
+  QUrlQuery q;
+  q.addQueryItem(QStringLiteral("subject"), QStringLiteral("GRIB request"));
+  q.addQueryItem(QStringLiteral("body"), body);
+  mailto.setQuery(q);
+  QDesktopServices::openUrl(mailto);
+  return body;
 }
 
 bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {

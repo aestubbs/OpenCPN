@@ -1911,6 +1911,32 @@ void ChartCanvas::setRouteVisible(int index, bool on) {
 
 // --- Marks (free waypoints) -------------------------------------------------
 
+QVariantMap ChartCanvas::viewBounds() const {
+  QVariantMap m;
+  if (!m_viewport) return m;
+  double n = -90, s = 90, e = -180, w = 180;
+  const int cw = qMax(1, static_cast<int>(width()));
+  const int ch = qMax(1, static_cast<int>(height()));
+  // Sample all four corners (rotation-safe).
+  const double xs[2] = {0.0, static_cast<double>(cw)};
+  const double ys[2] = {0.0, static_cast<double>(ch)};
+  for (double sx : xs) {
+    for (double sy : ys) {
+      double lat = 0, lon = 0;
+      m_viewport->screenToLatLon(sx, sy, cw, ch, lat, lon);
+      n = qMax(n, lat);
+      s = qMin(s, lat);
+      e = qMax(e, lon);
+      w = qMin(w, lon);
+    }
+  }
+  m["north"] = n;
+  m["south"] = s;
+  m["east"] = e;
+  m["west"] = w;
+  return m;
+}
+
 void ChartCanvas::dropAnchorMark(double lat, double lon) {
   if (!m_nav_provider) return;
   const QString name =

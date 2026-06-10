@@ -51,6 +51,38 @@ ColumnLayout {
             font.family: "monospace"
         }
     }
+    MenuSeparator { Layout.fillWidth: true }
+    Label { text: qsTr("Request a forecast (saildocs)"); font.bold: true }
+    RowLayout {
+        spacing: 8
+        CheckBox { id: reqWind; text: qsTr("Wind"); checked: true }
+        CheckBox { id: reqPres; text: qsTr("Pressure"); checked: true }
+        CheckBox { id: reqWaves; text: qsTr("Waves") }
+        CheckBox { id: reqPrecip; text: qsTr("Rain") }
+        SpinBox {
+            id: reqDays
+            from: 1; to: 8; value: 3
+        }
+        Label { text: qsTr("days") }
+        Button {
+            text: qsTr("Email request…")
+            onClicked: {
+                const b = chart.viewBounds()
+                requestEcho.text = pluginContext.requestGrib(
+                    b.north, b.south, b.east, b.west, reqDays.value,
+                    reqWind.checked, reqPres.checked,
+                    reqWaves.checked, reqPrecip.checked)
+            }
+        }
+    }
+    Label {
+        id: requestEcho
+        visible: text.length > 0
+        font.family: "monospace"; font.pointSize: 10
+        color: palette.placeholderText
+        elide: Text.ElideMiddle
+        Layout.fillWidth: true
+    }
     Label {
         text: pluginContext ? pluginContext.status : ""
         color: "#3b82f6"

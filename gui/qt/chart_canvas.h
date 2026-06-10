@@ -457,6 +457,9 @@ public:
   /** Auto-anchor mark (wx parity): drop an anchor-icon mark at the given
    *  position, named by drop time. Used when the anchor watch is set. */
   Q_INVOKABLE void dropAnchorMark(double lat, double lon);
+  /** Current viewport corners as {north, south, east, west} — for
+   *  overlays/plugins that need the visible area (e.g. GRIB requests). */
+  Q_INVOKABLE QVariantMap viewBounds() const;
   Q_INVOKABLE double markDropLat() const { return m_ctx_lat; }
   Q_INVOKABLE double markDropLon() const { return m_ctx_lon; }
   Q_INVOKABLE void showMark(const QString& guid);   // select + centre
