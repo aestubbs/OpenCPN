@@ -1284,8 +1284,10 @@ render anything onto the chart, only manages the plugin lifecycle.
       Monitor slot moved to Connections (P3.22). **Print stays a stub**
       (inert button + "not yet implemented" tooltip) — explicitly acceptable
       per the P3.21 gate; full chart printing is a separate feature.
-- [ ] **P3.6** Settings / preferences UI in QML — the Options dialog
-      (see the breakdown below).
+- [x] **P3.6** Settings / preferences UI in QML — **all sub-items closed
+      (2026-06-10);** see the breakdown below. The only open row in the
+      breakdown is the per-element-fonts USER DECISION (drop
+      recommended); every built/behaviour item is done.
 - [x] **P3.7** **Route / mark / track manager UI in QML. DONE (2026-06-02).**
       Left-edge `Drawer` with a Routes | Marks | Tracks tab selector; visibility
       and selection are independent throughout (per-item "eye" toggles replaced
@@ -2047,17 +2049,24 @@ Phase 6). New scope found untracked:
       audit) as needed; P3.13's route-build keys fold in when both land.
 - [ ] **P3.21** **wx-retirement acceptance checklist — gates P3.11.** P3.11
       ("remove the parallel wx build") executes only when all of these hold:
-      1. P3.18 canvas context menus — tiers 1–2 minimum;
-      2. P3.19 GPX import/export;
-      3. the P3.6 "genuine remaining gaps" items 1–4 (User Standard Objects
-         checklist, MMSI Properties editor, HDT predictor + ring colour,
-         Routes & Marks behaviour toggles);
-      4. MOB + Print wired (P3.5 toolbar spec; Print stub acceptable);
+      1. ~~P3.18 canvas context menus — tiers 1–2 minimum~~ **DONE** (all
+         four tiers landed);
+      2. ~~P3.19 GPX import/export~~ **DONE**;
+      3. ~~the P3.6 "genuine remaining gaps" items 1–4~~ **DONE** (User
+         Standard Objects checklist, MMSI Properties editor, HDT
+         predictor + ring colour, Routes & Marks behaviour toggles);
+      4. ~~MOB + Print wired~~ **DONE** (P3.5 toolbar spec; Print stub);
       5. a recorded Phase-4 decision — which plugins must work day-1 vs
-         post-retirement (the wx build is the only plugin host today);
-      6. P0.5 CI green on Linux + Windows (macOS-first decision 2026-06-10);
+         post-retirement. **The decision input is now concrete:** the Qt
+         plugin platform is live with dashboard / chart-downloader / GRIB
+         at v1 (P4.1–P4.5) — what remains is the user's sign-off on
+         whether that set suffices for day-1;
+      6. P0.5 CI green (workflow authored 2026-06-10; needs the first
+         push-triggered run — macOS required, Linux best-effort);
       7. a macOS user-acceptance pass on home waters (visual verification —
          no image-diff, per P0.7).
+      **Status: items 1–4 complete; 5 awaits sign-off with the evidence in
+      place; 6 awaits a push; 7 is the user's pass.**
 - [x] **P3.22** **Data Monitor launcher → Connections page. DONE
       (2026-06-10).** The 📡 toolbar slot is removed; a "Data monitor…"
       button on Options > Connections opens the window
