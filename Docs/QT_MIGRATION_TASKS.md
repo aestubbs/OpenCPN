@@ -1544,8 +1544,10 @@ remain.
       pan/zoom is GPU scene-graph and inherently smooth, the wheel already
       zooms about the cursor, and redraw is driven by the scene-graph vsync
       (no fixed-Hz repaint timer to expose).
-- [ ] Auto-anchor mark. *(HDT predictor length landed 2026-06-10 — it
-      lives on Ships > Own ship.)*
+- [x] Auto-anchor mark — **landed 2026-06-10**
+      (RouteDefaultsConfig.autoAnchorMark + dropAnchorMark; checkbox on
+      Routes & Marks; undo-able). *(HDT predictor length landed
+      2026-06-10 — it lives on Ships > Own ship.)*
 
 **Display page → Units** (wx sub-panel: Units) — **[x] built**
 - [x] Distance, speed, wind-speed, depth, height, temperature unit choices
