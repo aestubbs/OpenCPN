@@ -61,6 +61,9 @@ class UIConfig : public QObject {
                  NOTIFY changed)
   Q_PROPERTY(bool playShipsBells READ playShipsBells WRITE setPlayShipsBells
                  NOTIFY changed)
+  // Options-window position persistence (-1 = unset; size is fixed).
+  Q_PROPERTY(int optionsX READ optionsX WRITE setOptionsX NOTIFY changed)
+  Q_PROPERTY(int optionsY READ optionsY WRITE setOptionsY NOTIFY changed)
   Q_PROPERTY(bool inlandEcdis READ inlandEcdis WRITE setInlandEcdis NOTIFY
                  changed)
   // Scale factors, -5 .. +5 (0 = none). guiScaleFactor is consumed live (touch
@@ -120,6 +123,10 @@ public:
   void setTouchInterface(bool v);
   bool playShipsBells() const { return m_ships_bells; }
   void setPlayShipsBells(bool v);
+  int optionsX() const { return m_options_x; }
+  void setOptionsX(int v);
+  int optionsY() const { return m_options_y; }
+  void setOptionsY(int v);
   bool inlandEcdis() const { return m_inland_ecdis; }
   void setInlandEcdis(bool v);
   int guiScaleFactor() const { return m_gui_scale; }
@@ -165,6 +172,8 @@ private:
   double m_toolbar_transparency = 0.0;
   bool m_touch = false;
   bool m_ships_bells = false;
+  int m_options_x = -1;
+  int m_options_y = -1;
   bool m_inland_ecdis = false;
   int m_gui_scale = 0;
   int m_chart_scale = 0;

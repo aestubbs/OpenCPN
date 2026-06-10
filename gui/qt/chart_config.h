@@ -78,12 +78,6 @@ class ChartConfig : public QObject {
   Q_PROPERTY(double deepContour READ deepContour WRITE setDeepContour NOTIFY
                  changed)
 
-  // Inland ECDIS mode (wx parity): a settings preset enforced by the
-  // Options page when switched on (km / km/h units, Standard category,
-  // AIS real-size off).
-  Q_PROPERTY(bool inlandEcdis READ inlandEcdis WRITE setInlandEcdis NOTIFY
-                 changed)
-
   // CM93 composite-chart controls.
   Q_PROPERTY(int cm93Detail READ cm93Detail WRITE setCm93Detail NOTIFY changed)
   Q_PROPERTY(double cm93OffsetX READ cm93OffsetX WRITE setCm93OffsetX NOTIFY
@@ -134,8 +128,6 @@ public:
   double deepContour() const { return m_deep; }
   void setDeepContour(double v);
 
-  bool inlandEcdis() const { return m_inland_ecdis; }
-  void setInlandEcdis(bool v);
   int cm93Detail() const { return m_cm93_detail; }
   void setCm93Detail(int v);
   double cm93OffsetX() const { return m_cm93_dx; }
@@ -168,7 +160,6 @@ private:
   double m_safety = 3.0;
   double m_deep = 6.0;
 
-  bool m_inland_ecdis = false;
   int m_cm93_detail = 0;
   double m_cm93_dx = 0.0;
   double m_cm93_dy = 0.0;

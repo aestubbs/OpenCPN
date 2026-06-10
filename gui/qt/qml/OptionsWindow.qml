@@ -33,6 +33,31 @@ Window {
     // on the Connections page (P3.22).
     signal dataMonitorRequested()
 
+    // Deep-link entry (wx SetInitialPage parity): show the window opened
+    // at a given page index.
+    function openAt(page) {
+        currentPage = page
+        show()
+        raise()
+    }
+
+    // Persist the window position across sessions (size is fixed by
+    // design, like macOS settings windows).
+    onXChanged: geometrySaver.restart()
+    onYChanged: geometrySaver.restart()
+    Timer {
+        id: geometrySaver
+        interval: 600
+        onTriggered: if (optionsWindow.visible) {
+            UIConfig.optionsX = optionsWindow.x
+            UIConfig.optionsY = optionsWindow.y
+        }
+    }
+    onVisibleChanged: if (visible && UIConfig.optionsX >= 0) {
+        x = UIConfig.optionsX
+        y = UIConfig.optionsY
+    }
+
     flags: Qt.Dialog
     // macOS shows a wider window (sidebar + pane), like System Settings.
     // Other platforms get the compact top-tab layout.
@@ -807,30 +832,6 @@ Window {
                                 }
 
                                 MenuSeparator { Layout.fillWidth: true }
-
-                                CheckBox {
-                                    text: qsTr("Inland ECDIS mode")
-                                    checked: ChartConfig.inlandEcdis
-                                    onToggled: {
-                                        ChartConfig.inlandEcdis = checked
-                                        if (checked) {
-                                            // The Inland ECDIS preset (wx
-                                            // SwitchInlandEcdisMode parity).
-                                            DisplayConfig.distanceUnit = 2  // km
-                                            DisplayConfig.speedUnit = 2     // km/h
-                                            chart.displayCategory = 1       // Standard
-                                            AisConfig.showRealSize = false
-                                        }
-                                    }
-                                }
-                                Label {
-                                    visible: ChartConfig.inlandEcdis
-                                    text: qsTr("Units forced to km / km/h, display category Standard, AIS real-size off. Switch off to restore your own settings.")
-                                    wrapMode: Text.Wrap
-                                    Layout.fillWidth: true
-                                    font.pointSize: 10
-                                    color: palette.placeholderText
-                                }
 
                                 Label { text: qsTr("CM93"); font.bold: true }
                                 RowLayout {
@@ -2189,7 +2190,24 @@ Window {
                                 CheckBox {
                                     text: qsTr("Use Inland ECDIS")
                                     checked: UIConfig.inlandEcdis
-                                    onToggled: UIConfig.inlandEcdis = checked
+                                    onToggled: {
+                                        UIConfig.inlandEcdis = checked
+                                        if (checked) {
+                                            // wx SwitchInlandEcdisMode preset.
+                                            DisplayConfig.distanceUnit = 2  // km
+                                            DisplayConfig.speedUnit = 2     // km/h
+                                            chart.displayCategory = 1       // Standard
+                                            AisConfig.showRealSize = false
+                                        }
+                                    }
+                                }
+                                Label {
+                                    visible: UIConfig.inlandEcdis
+                                    text: qsTr("Units forced to km / km/h, display category Standard, AIS real-size off. Switch off to restore your own settings.")
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                    font.pointSize: 10
+                                    color: palette.placeholderText
                                 }
                                 CheckBox {
                                     text: qsTr("Play ship's bells")
