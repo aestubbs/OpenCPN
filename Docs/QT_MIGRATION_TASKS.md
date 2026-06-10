@@ -1820,8 +1820,11 @@ be split into a component module *before* this build-out — **P3.17**.
     Copy-as-KML / Send-to-GPS / Send-to-Peer interop, per-mark
     Anchor-Watch, Chart Groups + CM93 offset entries (CM93 itself is
     P2.19).
-  - *Tier 4:* **Undo / Redo** (:334/342); Paste WP/Route/Track from KML
-    (:539-552); Send-to-GPS / Send-to-Peer / Copy-as-KML interop generally.
+  - *Tier 4:* **Copy-as-KML DONE (2026-06-10)** — route / mark / track
+    context menus copy a wx-parser-compatible KML document to the
+    clipboard (provider serializers; gui/src/kml.cpp is too wx-entangled
+    to reuse). Still open: **Undo / Redo** (:334/342), Paste WP/Route/
+    Track from KML (:539-552), Send-to-GPS / Send-to-Peer.
   Several Tier-1/3 actions exist in the **left drawer** (activate / reverse /
   delete) but not as a canvas right-click — parity needs the on-chart gesture.
 
