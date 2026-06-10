@@ -808,6 +808,30 @@ Window {
 
                                 MenuSeparator { Layout.fillWidth: true }
 
+                                CheckBox {
+                                    text: qsTr("Inland ECDIS mode")
+                                    checked: ChartConfig.inlandEcdis
+                                    onToggled: {
+                                        ChartConfig.inlandEcdis = checked
+                                        if (checked) {
+                                            // The Inland ECDIS preset (wx
+                                            // SwitchInlandEcdisMode parity).
+                                            DisplayConfig.distanceUnit = 2  // km
+                                            DisplayConfig.speedUnit = 2     // km/h
+                                            chart.displayCategory = 1       // Standard
+                                            AisConfig.showRealSize = false
+                                        }
+                                    }
+                                }
+                                Label {
+                                    visible: ChartConfig.inlandEcdis
+                                    text: qsTr("Units forced to km / km/h, display category Standard, AIS real-size off. Switch off to restore your own settings.")
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                    font.pointSize: 10
+                                    color: palette.placeholderText
+                                }
+
                                 Label { text: qsTr("CM93"); font.bold: true }
                                 RowLayout {
                                     Layout.fillWidth: true

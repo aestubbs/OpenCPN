@@ -44,6 +44,7 @@ ChartConfig::ChartConfig() {
   m_safety = c.getDouble("vchart/safetyContour", m_safety);
   m_deep = c.getDouble("vchart/deepContour", m_deep);
   m_cm93_detail = c.getInt("vchart/cm93Detail", m_cm93_detail);
+  m_inland_ecdis = c.getBool("vchart/inlandEcdis", m_inland_ecdis);
   m_cm93_dx = c.getDouble("vchart/cm93OffsetX", m_cm93_dx);
   m_cm93_dy = c.getDouble("vchart/cm93OffsetY", m_cm93_dy);
 }
@@ -102,6 +103,9 @@ void ChartConfig::setSafetyContour(double v) {
 }
 void ChartConfig::setDeepContour(double v) {
   OCPN_VC_SET(m_deep, v, "vchart/deepContour", setDouble)
+}
+void ChartConfig::setInlandEcdis(bool v) {
+  OCPN_VC_SET(m_inland_ecdis, v, "vchart/inlandEcdis", setBool)
 }
 void ChartConfig::setCm93Detail(int v) {
   OCPN_VC_SET(m_cm93_detail, v, "vchart/cm93Detail", setInt)
