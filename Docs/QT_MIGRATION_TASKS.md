@@ -1047,11 +1047,13 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       dashed outlines). The Qt CM93 detail / offset controls already exist but
       drive nothing. Add a CM93 decode path feeding the s52plib SG emit.
       *(severity: low — large effort)*
-- [~] **P2.20** **Show Grid + Show Depth Units** display controls (split from
+- [x] **P2.20** **Show Grid + Show Depth Units** display controls (split from
       P2.16). **Show Grid DONE (2026-06-10):** `GridLayer` — labelled
       meridians/parallels at a scale-picked interval, world-anchored,
       rebuilt per view change, gated by `DisplayConfig.showGrid`
-      (Options > Display). Show Depth Units still TODO:
+      (Options > Display). **Show Depth Units DONE (2026-06-10):** a HUD
+      pill beside the scale bar ("Depths: m/ft/fm"), gated by the persisted
+      `DisplayConfig.showDepthUnits` (default on, wx parity). Original note:
       Show Depth Units is an on-chart legend showing the sounding unit
       (m / ft / fm) the active cell uses. Add the `DisplayConfig`/`ChartConfig`
       property + QML control alongside the render path. **Smooth Pan/Zoom is
