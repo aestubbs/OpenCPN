@@ -1793,8 +1793,10 @@ QML-singleton (persisted). Several controls are wired live to the shell.
       `LOCALE_CHANGED`, `REBUILD_RASTER_CACHE`, …) — the Qt port needs an
       equivalent "what changed → what to refresh" dispatch. The current
       QML pane applies changes live (no Apply button).
-- [ ] Initial-page / sub-page deep-linking (`SetInitialPage`), colour
-      scheme, persisted window position/size.
+- [x] Initial-page deep-linking (`openAt(page)`, SetInitialPage parity)
+      + persisted window position — **landed 2026-06-10**. Size is fixed
+      by design (macOS settings convention); colour scheme follows the
+      app-wide scheme already.
 
 ### UI parity audit — toolbars / context-menus / settings (2026-06-09)
 
