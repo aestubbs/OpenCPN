@@ -229,6 +229,29 @@ Item {
         }
     }
 
+    // --- Track menu (right-click a track's line, P3.18 tier 3). -----------
+    Menu {
+        id: trackMenu
+        property string guid: ""
+        property string trackName: ""
+
+        MenuItem {
+            text: qsTr("Hide track")
+            onTriggered: chart.setTrackVisible(trackMenu.guid, false)
+        }
+        MenuItem {
+            text: qsTr("Zoom to track")
+            onTriggered: chart.showTrack(trackMenu.guid)
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("Delete track")
+            onTriggered: confirmDelete.ask(
+                qsTr("Delete track \"%1\"?").arg(trackMenu.trackName),
+                function() { chart.deleteTrack(trackMenu.guid) })
+        }
+    }
+
     // --- Route-node menu (right-click a node of the route being edited). --
     Menu {
         id: routeNodeMenu
@@ -272,6 +295,11 @@ Item {
             aisMenu.mmsi = mmsi
             aisMenu.targetName = name
             aisMenu.popup(x, y)
+        }
+        function onTrackMenuRequested(x, y, guid, name) {
+            trackMenu.guid = guid
+            trackMenu.trackName = name
+            trackMenu.popup(x, y)
         }
         function onRouteNodeMenuRequested(x, y) {
             routeNodeMenu.popup(x, y)

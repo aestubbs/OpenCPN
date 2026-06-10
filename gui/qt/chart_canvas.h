@@ -519,6 +519,9 @@ Q_SIGNALS:
                          const QString& name);
   // Right-click on an AIS target; QML pops the AIS menu (P3.18 tier 2).
   void aisMenuRequested(qreal x, qreal y, int mmsi, const QString& name);
+  // Right-click on a track's line; QML pops the track menu (P3.18 tier 3).
+  void trackMenuRequested(qreal x, qreal y, const QString& guid,
+                          const QString& name);
   // Measure tool state / readout changed (P3.18).
   void measureChanged();
   // The set of in-view / displayed ENC cells changed (chart bar refresh).
@@ -779,6 +782,8 @@ private:
   // Hit-test a click against the live AIS targets without selecting; fills
   // mmsi/name of the nearest within a small radius (P3.18 tier 2).
   bool hitAisAt(const QPointF& sp, int* mmsi, QString* name) const;
+  // Hit-test a click against the visible tracks' polylines (P3.18 tier 3).
+  bool hitTrackAt(const QPointF& sp, QString* guid, QString* name) const;
   // Hit-test the user routes (screen px). Return the route + node within a
   // small radius, or the nearest segment + the cursor's lat/lon for insert.
   bool hitRouteNode(const QPointF& sp, int& route, int& node) const;

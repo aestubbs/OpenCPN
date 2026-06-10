@@ -1636,6 +1636,43 @@ void ChartCanvas::deleteMmsiProperty(int mmsi) {
   }
 }
 
+bool ChartCanvas::hitTrackAt(const QPointF& sp, QString* guid,
+                             QString* name) const {
+  if (!m_nav_provider || !m_viewport) return false;
+  constexpr double kR = 8.0;  // px to the nearest segment (route parity)
+  const QMatrix4x4 m = m_viewport->transformMatrix(static_cast<int>(width()),
+                                                   static_cast<int>(height()));
+  double best = kR * kR;
+  bool found = false;
+  for (const NavTrack& t : m_nav_provider->tracks()) {
+    if (!t.visible || t.points.size() < 2) continue;
+    QPointF prev;
+    for (int i = 0; i < t.points.size(); ++i) {
+      const QPointF w(t.points[i].x(), Viewport::latToWorldY(t.points[i].y()));
+      const QPointF s2 = m.map(w);
+      if (i > 0) {
+        const QPointF d = s2 - prev;
+        const double len2 = d.x() * d.x() + d.y() * d.y();
+        double tparam = 0.0;
+        if (len2 > 1e-9)
+          tparam = std::clamp((QPointF::dotProduct(sp - prev, d)) / len2, 0.0,
+                              1.0);
+        const QPointF c = prev + tparam * d;
+        const double dx = c.x() - sp.x(), dy = c.y() - sp.y();
+        const double d2 = dx * dx + dy * dy;
+        if (d2 < best) {
+          best = d2;
+          if (guid) *guid = t.guid;
+          if (name) *name = t.name;
+          found = true;
+        }
+      }
+      prev = s2;
+    }
+  }
+  return found;
+}
+
 bool ChartCanvas::hitWaypointAt(const QPointF& sp, QString* guid,
                                 QString* name) const {
   if (!m_nav_provider || !m_viewport) return false;
@@ -2166,6 +2203,13 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
                        m_nav_provider->userRoutes().value(rt).active;
       Q_EMIT routeMenuRequested(event->position().x(), event->position().y(),
                                 rt, act, true);
+      event->accept();
+      return;
+    }
+    QString trk_guid, trk_name;
+    if (hitTrackAt(event->position(), &trk_guid, &trk_name)) {
+      Q_EMIT trackMenuRequested(event->position().x(), event->position().y(),
+                                trk_guid, trk_name);
       event->accept();
       return;
     }
