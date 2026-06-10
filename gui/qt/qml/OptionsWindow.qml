@@ -2224,6 +2224,47 @@ Window {
                                 }
 
                                 MenuSeparator { Layout.fillWidth: true }
+                                Label { text: qsTr("Configuration templates"); font.bold: true }
+                                Label {
+                                    text: qsTr("Named snapshots of every setting. Applying a template takes full effect on the next start.")
+                                    wrapMode: Text.Wrap; Layout.fillWidth: true
+                                    font.pointSize: 10
+                                    color: palette.placeholderText
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    TextField {
+                                        id: templateName
+                                        Layout.fillWidth: true
+                                        placeholderText: qsTr("Template name")
+                                    }
+                                    Button {
+                                        text: qsTr("Save current…")
+                                        enabled: templateName.text.trim().length > 0
+                                        onClicked: {
+                                            ConfigTemplates.saveCurrent(templateName.text)
+                                            templateName.clear()
+                                        }
+                                    }
+                                }
+                                Repeater {
+                                    model: ConfigTemplates.templates
+                                    delegate: RowLayout {
+                                        required property string modelData
+                                        Layout.fillWidth: true
+                                        Label { text: modelData; Layout.fillWidth: true }
+                                        Button {
+                                            text: qsTr("Apply")
+                                            onClicked: ConfigTemplates.apply(modelData)
+                                        }
+                                        Button {
+                                            text: qsTr("Delete")
+                                            onClicked: ConfigTemplates.remove(modelData)
+                                        }
+                                    }
+                                }
+
+                                MenuSeparator { Layout.fillWidth: true }
 
                                 Label { text: qsTr("Scale factors"); font.bold: true }
                                 GridLayout {

@@ -114,4 +114,27 @@ void ConfigStore::setDouble(const QString& key, double value) {
   setString(key, QString::number(value, 'g', 10));
 }
 
+QVariantMap ConfigStore::allEntries() const {
+  QVariantMap out;
+  if (!m_db) return out;
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(m_db, "SELECT key, value FROM qt_config", -1, &stmt,
+                         nullptr) != SQLITE_OK)
+    return out;
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    out.insert(
+        QString::fromUtf8(
+            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))),
+        QString::fromUtf8(
+            reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))));
+  }
+  sqlite3_finalize(stmt);
+  return out;
+}
+
+void ConfigStore::setEntries(const QVariantMap& entries) {
+  for (auto it = entries.cbegin(); it != entries.cend(); ++it)
+    setString(it.key(), it.value().toString());
+}
+
 }  // namespace ocpn::qtui

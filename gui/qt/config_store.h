@@ -21,6 +21,8 @@
 #ifndef OCPN_QT_CONFIG_STORE_H_
 #define OCPN_QT_CONFIG_STORE_H_
 
+#include <QVariantMap>
+
 #include <QString>
 
 struct sqlite3;
@@ -39,6 +41,11 @@ public:
   void setBool(const QString& key, bool value);
   double getDouble(const QString& key, double def) const;
   void setDouble(const QString& key, double value);
+
+  /** All key/value rows (raw strings) — config-template snapshots. */
+  QVariantMap allEntries() const;
+  /** Bulk-write raw rows (template apply); existing keys overwritten. */
+  void setEntries(const QVariantMap& entries);
 
 private:
   ConfigStore();
