@@ -1619,9 +1619,9 @@ filtering and the alert sound/dialog engine are still pending
 
 **Ships → MMSI Properties** (wx sub-panel: MMSI Properties)
 - [x] Per-MMSI list + editor (track mode default/always/never, persist track,
-      ignore, MOB, VDM follower, ship name). Placeholder pane only: needs the
-      model's `MmsiProperties` / AIS name-file API (P1.6c) bound into the Qt
-      build, plus a list model. Documented in-pane.
+      ignore, MOB, VDM follower, ship name) — **DONE (2026-06-10)**: full
+      editor on Ships > MMSI bound to the live `g_MMSI_Props_Array`,
+      persisted via ConfigStore (`ais/mmsiProps`).
 
 **Ships → Routes/Points** (wx sub-panel: Routes/Points) — controls built;
 persisted (`RouteDefaultsConfig.*`), pending styled route/track creation
