@@ -1779,7 +1779,11 @@ be split into a component module *before* this build-out — **P3.17**.
   ChartCanvas subtree in Main.qml — the 953-line shell is manageable and
   they are genuinely chart-coupled.
 
-- [~] **P3.18** **Canvas context-menu parity.** Qt had only a general
+- [~] **P3.18** **Canvas context-menu parity. Tiers 1–4 effectively DONE
+  (2026-06-10)** — the only remaining items across all tiers are
+  **Send-to-GPS / Send-to-Peer** (need the upload/peer-discovery UI; the
+  model machinery exists) and minor tier-3 odds (per-mark anchor watch,
+  Chart Groups / CM93-offset menu entries). Original audit: Qt had only a general
   `chartContextMenu` + a route-node menu (edit-mode only); wx builds a focused
   popup per object via `CanvasMenuHandler` (`canvas_menu.cpp`).
   **Progress (2026-06-10): Tier 1 largely DONE** — ChartCanvas now hit-tests
