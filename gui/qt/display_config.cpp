@@ -41,6 +41,7 @@ DisplayConfig::DisplayConfig() {
   m_show_grid = c.getBool("display/showGrid", m_show_grid);
   m_show_depth_units =
       c.getBool("display/showDepthUnits", m_show_depth_units);
+  m_show_outlines = c.getBool("display/showChartOutlines", m_show_outlines);
   m_look_ahead = c.getBool("display/lookAhead", m_look_ahead);
   m_preserve_scale = c.getBool("display/preserveScale", m_preserve_scale);
   m_wheel_zoom = c.getDouble("display/wheelZoom", m_wheel_zoom);
@@ -90,6 +91,10 @@ void DisplayConfig::setShowGrid(bool v) {
 void DisplayConfig::setShowDepthUnits(bool v) {
   OCPN_SET(m_show_depth_units, v,
            ConfigStore::instance().setBool("display/showDepthUnits", v))
+}
+void DisplayConfig::setShowChartOutlines(bool v) {
+  OCPN_SET(m_show_outlines, v,
+           ConfigStore::instance().setBool("display/showChartOutlines", v))
 }
 void DisplayConfig::setLookAhead(bool v) {
   OCPN_SET(m_look_ahead, v,

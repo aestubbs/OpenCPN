@@ -58,6 +58,10 @@ class DisplayConfig : public QObject {
   // On-chart sounding-unit legend (wx "Show depth units", P2.20).
   Q_PROPERTY(bool showDepthUnits READ showDepthUnits WRITE setShowDepthUnits
                  NOTIFY changed)
+  // ENC cell outline grid (wx "Show chart outlines"). Qt default ON (the
+  // cell grid has always drawn here), unlike wx's off.
+  Q_PROPERTY(bool showChartOutlines READ showChartOutlines WRITE
+                 setShowChartOutlines NOTIFY changed)
   // Keep the current zoom when the reference chart changes, rather than
   // snapping to the new chart's native scale.
   Q_PROPERTY(bool preserveScaleOnSwitch READ preserveScaleOnSwitch WRITE
@@ -149,6 +153,8 @@ public:
   void setShowGrid(bool v);
   bool showDepthUnits() const { return m_show_depth_units; }
   void setShowDepthUnits(bool v);
+  bool showChartOutlines() const { return m_show_outlines; }
+  void setShowChartOutlines(bool v);
   void setNavMode(int v);
   bool lookAhead() const { return m_look_ahead; }
   void setLookAhead(bool v);
@@ -231,6 +237,7 @@ private:
   int m_nav_mode = 0;
   bool m_show_grid = false;
   bool m_show_depth_units = true;  // wx default on
+  bool m_show_outlines = true;     // Qt default (cell grid always drew)
   bool m_look_ahead = false;
   bool m_preserve_scale = false;
   double m_wheel_zoom = 1.3;

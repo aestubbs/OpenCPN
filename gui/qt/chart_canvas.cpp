@@ -730,6 +730,13 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
     auto* layer = new ChartLayer(m_boundary_provider, m_viewport.get());
     layer->setZOrder(100);
     m_compositor->addLayer(layer);
+    // wx "Show chart outlines": the toggle hides/shows the cell grid.
+    layer->setVisible(DisplayConfig::instance().showChartOutlines());
+    connect(&DisplayConfig::instance(), &DisplayConfig::changed, layer,
+            [layer]() {
+              layer->setVisible(
+                  DisplayConfig::instance().showChartOutlines());
+            });
   }
   m_boundary_provider->setExtents(cells);
 

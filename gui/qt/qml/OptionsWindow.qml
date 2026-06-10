@@ -243,6 +243,11 @@ Window {
                                     onToggled: DisplayConfig.showDepthUnits = checked
                                 }
                                 CheckBox {
+                                    text: qsTr("Show chart outlines (ENC cell grid)")
+                                    checked: DisplayConfig.showChartOutlines
+                                    onToggled: DisplayConfig.showChartOutlines = checked
+                                }
+                                CheckBox {
                                     text: qsTr("Grey “no data” fill where no ENC coverage")
                                     checked: DisplayConfig.showNoData
                                     onToggled: DisplayConfig.showNoData = checked
