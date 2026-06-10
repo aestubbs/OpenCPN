@@ -47,6 +47,16 @@ ColumnLayout {
             text: qsTr("Choose folder…")
             onClicked: folderDialog.open()
         }
+        Button {
+            text: qsTr("Download all")
+            enabled: pluginContext && !pluginContext.busy
+            onClicked: pluginContext.downloadAll()
+        }
+        Button {
+            text: qsTr("Stop")
+            visible: pluginContext && pluginContext.busy
+            onClicked: pluginContext.cancelAll()
+        }
     }
     FolderDialog {
         id: folderDialog

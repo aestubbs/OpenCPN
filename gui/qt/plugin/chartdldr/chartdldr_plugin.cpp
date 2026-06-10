@@ -211,7 +211,49 @@ void ChartDldrContext::downloadChart(int index) {
     setStatus(ok ? tr("Done — add the folder under Options > Charts > "
                       "Chart Files if it's not there yet")
                  : tr("Extract failed — the ZIP was removed"));
+    if (!m_queue.isEmpty()) {
+      const int next = m_queue.takeFirst();
+      setStatus(tr("Queue: %1 left…").arg(m_queue.size() + 1));
+      downloadChart(next);
+    }
   });
+}
+
+void ChartDldrContext::downloadAll() {
+  if (m_busy || m_charts.isEmpty()) return;
+  const QString dest = m_target.isLocalFile()
+                           ? m_target.toLocalFile()
+                           : QStandardPaths::writableLocation(
+                                 QStandardPaths::DownloadLocation);
+  m_queue.clear();
+  int skipped = 0;
+  for (int i = 0; i < m_charts.size(); ++i) {
+    const QUrl u(m_charts[i].toMap().value("url").toString());
+    // Skip when the ZIP's stem already exists as an extracted entry.
+    const QString stem = QFileInfo(u.path()).completeBaseName();
+    if (!stem.isEmpty() &&
+        (QDir(dest).exists(stem) ||
+         QFile::exists(dest + QDir::separator() + stem + ".000"))) {
+      ++skipped;
+      continue;
+    }
+    m_queue.append(i);
+  }
+  if (m_queue.isEmpty()) {
+    setStatus(tr("Everything in the catalog is already present (%1 skipped)")
+                  .arg(skipped));
+    return;
+  }
+  setStatus(tr("Queued %1 charts (%2 already present)")
+                .arg(m_queue.size())
+                .arg(skipped));
+  downloadChart(m_queue.takeFirst());
+}
+
+void ChartDldrContext::cancelAll() {
+  const int n = m_queue.size();
+  m_queue.clear();
+  if (n) setStatus(tr("Cancelled %1 queued downloads").arg(n));
 }
 
 bool ChartDldrPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {

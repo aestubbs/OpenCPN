@@ -63,6 +63,10 @@ public:
 
   Q_INVOKABLE void loadCatalog();
   Q_INVOKABLE void downloadChart(int index);
+  /** Queue every catalog entry; charts whose extracted folder already
+   *  exists in the target are skipped. */
+  Q_INVOKABLE void downloadAll();
+  Q_INVOKABLE void cancelAll();
 
 Q_SIGNALS:
   void catalogChanged();
@@ -82,6 +86,7 @@ private:
   int m_progress = 0;
   QString m_status;
   QUrl m_target;
+  QList<int> m_queue;  // pending catalog indices for downloadAll
 };
 
 class ChartDldrPlugin : public QObject, public ocpn::qtui::OcpnQtPlugin {
