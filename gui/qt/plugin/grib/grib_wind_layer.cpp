@@ -35,10 +35,12 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
     m_root = new QSGNode();
   else
     while (QSGNode* c = m_root->firstChild()) delete c;
-  if (!window || m_grid.ni <= 1 || m_grid.nj <= 1) return m_root;
+  if (!window) return m_root;
 
   SgBuilder b(m_root, window);
   b.setPencil(false);
+  drawIsobars(b);
+  if (m_grid.ni <= 1 || m_grid.nj <= 1) return m_root;
 
   // World units per px for screen-fixed arrow sizing; decimate the grid so
   // arrows sit >= ~34 px apart at the current zoom.
@@ -82,6 +84,55 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
     }
   }
   return m_root;
+}
+
+// Marching-squares isolines over the pressure grid, one polyline segment
+// set per 2 hPa level (the wx overlay's default isobar spacing).
+void GribWindLayer::drawIsobars(SgBuilder& b) {
+  const ScalarGrid& g = m_isobars;
+  if (g.ni <= 1 || g.nj <= 1) return;
+  float lo = 1e9f, hi = -1e9f;
+  for (float v : g.v) {
+    if (std::isnan(v)) continue;
+    lo = std::min(lo, v);
+    hi = std::max(hi, v);
+  }
+  if (hi <= lo) return;
+  const double kStep = 2.0;  // hPa
+  b.setPen(QColor(120, 120, 140, 200), 1.0f);
+  b.noBrush();
+  auto worldPt = [&](double fi, double fj) {
+    return QPointF(g.lon0 + fi * g.di,
+                   Viewport::latToWorldY(g.lat0 + fj * g.dj));
+  };
+  for (double level = std::ceil(lo / kStep) * kStep; level < hi;
+       level += kStep) {
+    for (int j = 0; j + 1 < g.nj; ++j) {
+      for (int i = 0; i + 1 < g.ni; ++i) {
+        const float v00 = g.v[j * g.ni + i];
+        const float v10 = g.v[j * g.ni + i + 1];
+        const float v01 = g.v[(j + 1) * g.ni + i];
+        const float v11 = g.v[(j + 1) * g.ni + i + 1];
+        if (std::isnan(v00) || std::isnan(v10) || std::isnan(v01) ||
+            std::isnan(v11))
+          continue;
+        // Edge crossings, linearly interpolated.
+        QList<QPointF> pts;
+        auto cross = [&](float a, float bb, double xi0, double yj0,
+                         double xi1, double yj1) {
+          if ((a < level) == (bb < level)) return;
+          const double t = (level - a) / (bb - a);
+          pts.append(worldPt(xi0 + (xi1 - xi0) * t, yj0 + (yj1 - yj0) * t));
+        };
+        cross(v00, v10, i, j, i + 1, j);          // bottom
+        cross(v10, v11, i + 1, j, i + 1, j + 1);  // right
+        cross(v01, v11, i, j + 1, i + 1, j + 1);  // top
+        cross(v00, v01, i, j, i, j + 1);          // left
+        if (pts.size() >= 2) b.drawLine(pts[0], pts[1]);
+        if (pts.size() == 4) b.drawLine(pts[2], pts[3]);  // saddle
+      }
+    }
+  }
 }
 
 }  // namespace ocpn::qtui

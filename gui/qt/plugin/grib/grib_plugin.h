@@ -42,6 +42,8 @@ class GribContext : public QObject {
   Q_PROPERTY(int timeIndex READ timeIndex WRITE setTimeIndex NOTIFY
                  timeChanged)
   Q_PROPERTY(bool showWind READ showWind WRITE setShowWind NOTIFY timeChanged)
+  Q_PROPERTY(bool showPressure READ showPressure WRITE setShowPressure NOTIFY
+                 timeChanged)
   Q_PROPERTY(QString status READ status NOTIFY gribChanged)
 
 public:
@@ -54,6 +56,8 @@ public:
   void setTimeIndex(int i);
   bool showWind() const { return m_show_wind; }
   void setShowWind(bool on);
+  bool showPressure() const { return m_show_pressure; }
+  void setShowPressure(bool on);
   QString status() const { return m_status; }
 
   Q_INVOKABLE void openFile(const QUrl& url);
@@ -76,6 +80,7 @@ private:
   QList<long long> m_step_times;
   int m_time_index = 0;
   bool m_show_wind = true;
+  bool m_show_pressure = true;
   QString m_status;
 };
 

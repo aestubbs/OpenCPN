@@ -22,6 +22,11 @@ ColumnLayout {
             checked: pluginContext ? pluginContext.showWind : true
             onToggled: if (pluginContext) pluginContext.showWind = checked
         }
+        CheckBox {
+            text: qsTr("Pressure")
+            checked: pluginContext ? pluginContext.showPressure : true
+            onToggled: if (pluginContext) pluginContext.showPressure = checked
+        }
     }
     FileDialog {
         id: gribFileDialog

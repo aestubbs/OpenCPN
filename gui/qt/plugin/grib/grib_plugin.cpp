@@ -64,13 +64,49 @@ void GribContext::setShowWind(bool on) {
   pushToLayer();
 }
 
+void GribContext::setShowPressure(bool on) {
+  if (on == m_show_pressure) return;
+  m_show_pressure = on;
+  Q_EMIT timeChanged();
+  pushToLayer();
+}
+
 void GribContext::pushToLayer() {
   if (!m_layer) return;
-  if (!m_reader || !m_show_wind || m_step_times.isEmpty()) {
+  if (!m_reader || m_step_times.isEmpty()) {
     m_layer->clearGrid();
+    m_layer->clearIsobars();
     return;
   }
   const time_t t = static_cast<time_t>(m_step_times[m_time_index]);
+  // Mean-sea-level pressure -> 2 hPa isobars.
+  GribRecord* rp =
+      m_show_pressure
+          ? m_reader->getGribRecord(GRB_PRESSURE, LV_MSL, 0, t)
+          : nullptr;
+  if (rp && rp->isOk()) {
+    ocpn::qtui::GribWindLayer::ScalarGrid pg;
+    pg.ni = rp->getNi();
+    pg.nj = rp->getNj();
+    pg.lon0 = rp->getX(0);
+    pg.lat0 = rp->getY(0);
+    pg.di = rp->getNi() > 1 ? rp->getX(1) - rp->getX(0) : 0;
+    pg.dj = rp->getNj() > 1 ? rp->getY(1) - rp->getY(0) : 0;
+    pg.v.resize(pg.ni * pg.nj);
+    for (int j = 0; j < pg.nj; ++j)
+      for (int i = 0; i < pg.ni; ++i)
+        pg.v[j * pg.ni + i] =
+            rp->isDefined(i, j)
+                ? static_cast<float>(rp->getValue(i, j) / 100.0)  // Pa->hPa
+                : NAN;
+    m_layer->setIsobars(pg);
+  } else {
+    m_layer->clearIsobars();
+  }
+  if (!m_show_wind) {
+    m_layer->clearGrid();
+    return;
+  }
   // 10 m wind components (the zyGrib constants the wx overlay uses).
   GribRecord* ru = m_reader->getGribRecord(GRB_WIND_VX, LV_ABOV_GND, 10, t);
   GribRecord* rv = m_reader->getGribRecord(GRB_WIND_VY, LV_ABOV_GND, 10, t);

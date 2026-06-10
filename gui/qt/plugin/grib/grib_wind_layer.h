@@ -50,10 +50,27 @@ public:
     Q_EMIT dirty();
   }
 
+  /** Scalar field (pressure, hPa) for isoline rendering. */
+  struct ScalarGrid {
+    int ni = 0, nj = 0;
+    double lon0 = 0, lat0 = 0, di = 0, dj = 0;
+    QVector<float> v;  // row-major; NaN = undefined
+  };
+  void setIsobars(const ScalarGrid& g) {
+    m_isobars = g;
+    Q_EMIT dirty();
+  }
+  void clearIsobars() {
+    m_isobars = ScalarGrid{};
+    Q_EMIT dirty();
+  }
+
   QSGNode* updateSubtree(QSGNode* old, QQuickWindow* window) override;
 
 private:
+  void drawIsobars(SgBuilder& b);
   WindGrid m_grid;
+  ScalarGrid m_isobars;
   QSGNode* m_root = nullptr;
 };
 
