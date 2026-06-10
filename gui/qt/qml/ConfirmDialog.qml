@@ -8,6 +8,7 @@
  **************************************************************************/
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import opencpn.qt
@@ -15,12 +16,16 @@ import opencpn.qt
 // Delete-confirmation dialog (P3.6, wx g_bConfirmObjectDelete): call
 // ask(message, fn) and fn runs on OK -- or immediately, with no dialog,
 // when the user has turned confirmation off in Options > Routes & Marks.
-Dialog {
+// A real dialog WINDOW (native controls, app-modal) -- the app-wide
+// dialog convention (user feedback 2026-06-10).
+Window {
     id: confirmDialog
     title: qsTr("Confirm delete")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    standardButtons: Dialog.Ok | Dialog.Cancel
+    flags: Qt.Dialog
+    modality: Qt.ApplicationModal
+    width: 360
+    height: 130
+    color: palette.window
 
     property string message: ""
     property var action: null
@@ -32,12 +37,27 @@ Dialog {
         }
         message = msg
         action = fn
-        open()
+        show(); raise(); requestActivate()
     }
-    onAccepted: if (action) action()
 
-    Label {
-        text: confirmDialog.message
-        wrapMode: Text.Wrap
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 18
+        spacing: 10
+        Label {
+            text: confirmDialog.message
+            wrapMode: Text.Wrap
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+        DialogButtonBox {
+            Layout.fillWidth: true
+            standardButtons: DialogButtonBox.Ok | DialogButtonBox.Cancel
+            onAccepted: {
+                confirmDialog.close()
+                if (confirmDialog.action) confirmDialog.action()
+            }
+            onRejected: confirmDialog.close()
+        }
     }
 }
