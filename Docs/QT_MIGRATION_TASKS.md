@@ -1035,13 +1035,15 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       The 3 *new* display controls once bundled here are split to **P2.20**
       (Show Grid + Show Depth Units — new render paths; Smooth Pan/Zoom N/A).
       Remaining for [x]: P2.23 (declutter + super-SCAMIN). *(was: severity high)*
-- [ ] **P2.17** **M_COVR polygon render clip** (wx `ActiveRegion` parity).
-      Today each cell clips to its geographic **bounding box** (`QSGClipNode`,
-      `s52_vector_chart_provider.cpp`), not its M_COVR coverage, and M_COVR
-      interior rings are discarded at catalog-scan time. Clipping to
-      `M_COVR − union(finer coverage)` removes coastline **slivers** at cell
-      edges and honours coverage holes. **Low priority** — the composite
-      underlay already prevents holes, so this is polish. *(severity: low)*
+- [x] **P2.17** **M_COVR polygon render clip** — **implemented
+      (2026-06-10):** the per-cell `QSGClipNode` geometry is now the
+      tessellated M_COVR coverage union (libtess2, NONZERO winding —
+      concave rings + holes honoured), with the bbox quad as the fallback
+      for coverage-less cells. wx `ActiveRegion` parity for the
+      edge-sliver symptom; the `− union(finer coverage)` subtraction
+      remains covered by the finest-owner suppression + draw order.
+      Visual confirmation of known sliver sites folds into the P2.25
+      sweep.
 - [x] **P2.18** **Overscale / overzoom indication.** Was already implemented
       but left unmarked (audit 2026-06-10): the provider draws a per-cell
       vertical overscale hatch when the display is zoomed finer than the
