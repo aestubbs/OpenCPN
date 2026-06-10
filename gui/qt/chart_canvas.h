@@ -55,6 +55,7 @@
 #include "route_list_view_model.h"    // complete type needed for Q_PROPERTY
 #include "route_follower.h"           // complete type needed for Q_PROPERTY
 #include "sim_ship_controller.h"      // complete type needed for Q_PROPERTY
+#include "peer_send_controller.h"     // complete type needed for Q_PROPERTY
 #include "s52_engine.h"    // S52Engine -- complete type needed for Q_PROPERTY
 
 class OcpnConfig;
@@ -173,6 +174,9 @@ class ChartCanvas : public QQuickItem {
   // Test ship (P3.16): a synthetic, mouse-placed + cursor-key-steered GPS for
   // simulating a voyage; binds the on-chart sim panel.
   Q_PROPERTY(ocpn::qtui::SimShipController* simShip READ simShip CONSTANT)
+
+  // Send-to-Peer (P3.18 tier 4): mDNS peer discovery + transfer.
+  Q_PROPERTY(ocpn::qtui::PeerSendController* peerSend READ peerSend CONSTANT)
 
   // Data-source connections for the Options > Connections tab (#34).
   Q_PROPERTY(ocpn::qtui::ConnectionsViewModel* connections READ connections
@@ -412,6 +416,8 @@ public:
   QString measureText() const { return m_measure_text; }
   // Drop the test ship at the last right-click point (m_ctx_lat/lon) and make
   // it the live position source (P3.16).
+  PeerSendController* peerSend() const { return m_peer_send.get(); }
+
   Q_INVOKABLE void placeSimShipHere();
   // Select (highlight) the route and zoom the viewport to its extent -- the
   // route-drawer tile click (P3.7).
@@ -636,6 +642,7 @@ private:
   std::unique_ptr<RouteFollower> m_route_follower;
   // Test ship (P3.16): synthetic GPS for simulating a voyage.
   std::unique_ptr<SimShipController> m_sim_ship;
+  std::unique_ptr<PeerSendController> m_peer_send;  // Send-to-Peer (P3.18)
   // Data-source connections (Options > Connections, #34).
   std::unique_ptr<ConnectionsViewModel> m_connections;
   // Chart directories (Options > Charts > Chart Files); drives the scan.

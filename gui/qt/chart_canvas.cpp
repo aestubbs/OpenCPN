@@ -219,6 +219,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // a voyage so following can be exercised without a live feed.
   m_route_follower = std::make_unique<RouteFollower>();
   m_sim_ship = std::make_unique<SimShipController>();
+  // Send-to-Peer (P3.18 tier 4): discovery + transfer controller.
+  m_peer_send = std::make_unique<PeerSendController>();
   // Re-run the follow solution on every own-ship tick (cheap no-op when no
   // route is active).
   connect(m_nav_provider.get(), &NavDataProvider::dynamicChanged, this,

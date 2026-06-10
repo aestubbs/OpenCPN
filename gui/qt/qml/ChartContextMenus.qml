@@ -28,6 +28,9 @@ Item {
     signal routeDetailsRequested(int routeIndex)
     signal aisTargetListRequested()
     signal fullScreenRequested()
+    signal sendRouteToPeerRequested(int routeIndex)
+    signal sendMarkToPeerRequested(string guid, string name)
+    signal sendTrackToPeerRequested(string guid, string name)
 
     // --- General canvas menu (right-click on open water / chart). ---------
     Menu {
@@ -180,6 +183,10 @@ Item {
             text: qsTr("Copy as KML")
             onTriggered: chart.copyRouteAsKml(routeMenu.routeIndex)
         }
+        MenuItem {
+            text: qsTr("Send to peer…")
+            onTriggered: menus.sendRouteToPeerRequested(routeMenu.routeIndex)
+        }
         MenuSeparator {}
         MenuItem {
             text: qsTr("Delete route")
@@ -210,6 +217,11 @@ Item {
         MenuItem {
             text: qsTr("Copy as KML")
             onTriggered: chart.copyMarkAsKml(markMenu.guid)
+        }
+        MenuItem {
+            text: qsTr("Send to peer…")
+            onTriggered: menus.sendMarkToPeerRequested(markMenu.guid,
+                                                       markMenu.markName)
         }
         MenuSeparator {}
         MenuItem {
@@ -269,6 +281,11 @@ Item {
         MenuItem {
             text: qsTr("Copy as KML")
             onTriggered: chart.copyTrackAsKml(trackMenu.guid)
+        }
+        MenuItem {
+            text: qsTr("Send to peer…")
+            onTriggered: menus.sendTrackToPeerRequested(trackMenu.guid,
+                                                        trackMenu.trackName)
         }
         MenuSeparator {}
         MenuItem {

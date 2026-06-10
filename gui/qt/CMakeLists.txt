@@ -53,6 +53,7 @@ qt_add_qml_module(opencpn-qt
     qml/ChartContextMenus.qml
     qml/AisTargetListWindow.qml
     qml/ConfirmDialog.qml
+    qml/SendToPeerDialog.qml
   SOURCES
     app_controller.h
     chart_canvas.h
@@ -181,6 +182,8 @@ qt_add_qml_module(opencpn-qt
     osenc_reader.cpp
     nmea_monitor_model.h
     nmea_monitor_model.cpp
+    peer_send_controller.h
+    peer_send_controller.cpp
     wind_decoder.h
     wind_decoder.cpp
 )

@@ -172,6 +172,10 @@ ApplicationWindow {
         }
     }
 
+    // --- Send to Peer (SendToPeerDialog.qml, P3.18 tier 4): mDNS-discovered
+    //     OpenCPN instances + route/mark/track transfer with PIN pairing.
+    SendToPeerDialog { id: sendToPeerDialog }
+
     // --- AIS target list (AisTargetListWindow.qml, P3.18): live targets
     //     nearest-first; opened from the AIS right-click menu.
     AisTargetListWindow { id: aisTargetListWindow }
@@ -883,6 +887,15 @@ ApplicationWindow {
             }
             onFullScreenRequested: root.visibility === Window.FullScreen
                                    ? root.showNormal() : root.showFullScreen()
+            onSendRouteToPeerRequested: (idx) => {
+                const rts = chart.routeList.routes
+                sendToPeerDialog.openForRoute(
+                    idx, idx >= 0 && idx < rts.length ? rts[idx].name : "")
+            }
+            onSendMarkToPeerRequested: (guid, name) =>
+                sendToPeerDialog.openForMark(guid, name)
+            onSendTrackToPeerRequested: (guid, name) =>
+                sendToPeerDialog.openForTrack(guid, name)
         }
 
         // Measure-tool readout (P3.18): the running leg bearing/distance +
