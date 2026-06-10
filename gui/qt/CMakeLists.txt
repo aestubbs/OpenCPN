@@ -7,6 +7,9 @@
 # See docs/QT_MIGRATION_TASKS.md Phase 2 for the three-tier scene-graph
 # plan this implements.
 
+# The plugin-facing layer toolkit (shared library; see toolkit/).
+add_subdirectory(toolkit)
+
 qt_add_executable(opencpn-qt
   main.cpp
 )
@@ -59,17 +62,8 @@ qt_add_qml_module(opencpn-qt
     app_controller.h
     chart_canvas.h
     chart_canvas.cpp
-    layer.h
     layer_compositor.h
     layer_compositor.cpp
-    viewport.h
-    sg_helpers.h
-    sg_helpers.cpp
-    sg_texture_cache.h
-    sg_builder.h
-    sg_builder.cpp
-    aa_line.h
-    aa_line.cpp
     coast_shade.h
     coast_shade.cpp
     area_pattern_material.h
@@ -94,11 +88,8 @@ qt_add_qml_module(opencpn-qt
     chart_worker.cpp
     shapefile_basemap_provider.h
     shapefile_basemap_provider.cpp
-    nav_data.h
-    nav_data_provider.h
     demo_nav_data_provider.h
     demo_nav_data_provider.cpp
-    nav_layer.h
     ais_layer.h
     ais_layer.cpp
     own_ship_layer.h
@@ -251,6 +242,7 @@ endif ()
 target_include_directories(opencpn-qt PRIVATE
   ${CMAKE_SOURCE_DIR}/libs/libtess2/Include
 )
+target_link_libraries(opencpn-qt PRIVATE opencpn_qt_toolkit)
 
 # Optional: an absolute path to a real S-57 .000 ENC cell to load on
 # startup (P2.8d). Set -DOCPN_QT_TEST_ENC=/path/to/CELL.000 at configure
