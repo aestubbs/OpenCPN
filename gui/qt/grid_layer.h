@@ -20,6 +20,9 @@
 #ifndef OCPN_QT_GRID_LAYER_H_
 #define OCPN_QT_GRID_LAYER_H_
 
+#include <QHash>
+#include <QImage>
+
 #include "nav_layer.h"
 
 namespace ocpn::qtui {
@@ -36,7 +39,11 @@ public:
 
 private:
   const Viewport* m_vp;
-  QSGNode* m_root = nullptr;  // stable root (StaticNavLayer retention pattern)
+  QSGNode* m_root = nullptr;
+  // Label raster cache: text -> rendered image. QPainter text
+  // rasterization dominated the per-pan rebuild (PERF option 1); the
+  // texture upload below is already cached by TextureCacheNode.
+  QHash<QString, QImage> m_label_cache;  // stable root (StaticNavLayer retention pattern)
 };
 
 }  // namespace ocpn::qtui

@@ -321,11 +321,11 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
   // just reuses the cached subtree). This is the key pan-performance lever.
   // Zoom rebuild is debounced: keep GPU-transforming the cached subtree
   // during the gesture and re-lay-out (declutter + billboard counter-scale)
-  // once it settles. m_zoom_timer fires changed() ~110ms after the last
+  // once it settles. m_zoom_timer fires changed() ~60ms after the last
   // scale change.
   m_zoom_timer = new QTimer(this);
   m_zoom_timer->setSingleShot(true);
-  m_zoom_timer->setInterval(110);
+  m_zoom_timer->setInterval(60);  // PERF option 2: faster zoom settle
   connect(m_zoom_timer, &QTimer::timeout, this, [this]() {
     // Zoom settled: owe a full declutter re-layout (density depends on scale).
     m_relayout_pending = true;

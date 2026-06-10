@@ -93,6 +93,9 @@ QSGNode* GridLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* window) {
   }
   if (!(n > s) || !(e > west)) return m_root;
 
+  // Bound the label cache (panning the world accumulates labels).
+  if (m_label_cache.size() > 600) m_label_cache.clear();
+
   const double iv = pickInterval(currentScale(), 140.0);
   // Bound the line count (a degenerate viewport could explode it).
   if ((n - s) / iv > 60 || (e - west) / iv > 60) return m_root;
@@ -111,7 +114,10 @@ QSGNode* GridLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* window) {
   // Meridians (vertical lines of constant longitude) + top-edge labels.
   for (double lon = std::ceil(west / iv) * iv; lon <= e + 1e-9; lon += iv) {
     b.drawLine(QPointF(lon, tl.y()), QPointF(lon, br.y()));
-    const QImage img = SgBuilder::renderText(fmtCoord(lon, false), text, 8.5f);
+    const QString lbl = fmtCoord(lon, false);
+    if (!m_label_cache.contains(lbl))
+      m_label_cache.insert(lbl, SgBuilder::renderText(lbl, text, 8.5f));
+    const QImage img = m_label_cache.value(lbl);
     if (!img.isNull()) {
       const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1;
       b.drawImage(QRectF(lon + 3.0 * wpp, tl.y() + 3.0 * wpp,
@@ -123,7 +129,10 @@ QSGNode* GridLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* window) {
   for (double lat = std::ceil(s / iv) * iv; lat <= n + 1e-9; lat += iv) {
     const double y = world(lat, 0).y();
     b.drawLine(QPointF(tl.x(), y), QPointF(br.x(), y));
-    const QImage img = SgBuilder::renderText(fmtCoord(lat, true), text, 8.5f);
+    const QString lbl2 = fmtCoord(lat, true);
+    if (!m_label_cache.contains(lbl2))
+      m_label_cache.insert(lbl2, SgBuilder::renderText(lbl2, text, 8.5f));
+    const QImage img = m_label_cache.value(lbl2);
     if (!img.isNull()) {
       const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1;
       b.drawImage(QRectF(tl.x() + 3.0 * wpp, y + 3.0 * wpp,
