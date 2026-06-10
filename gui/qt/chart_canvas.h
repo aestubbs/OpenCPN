@@ -709,6 +709,12 @@ private:
   // Coalesces a burst of pan/zoom into one visible-cell evaluation.
   QTimer* m_load_debounce = nullptr;
   QTimer* m_chart_cfg_debounce = nullptr;  // coalesces ChartConfig edits
+  // Edge auto-pan while route-building / measuring (P3.13, wx CheckEdgePan):
+  // the cursor inside a 5%-margin edge band pans the view a small step per
+  // 200 ms tick, so a route extends past the current view without stopping.
+  QTimer* m_edge_pan_timer = nullptr;
+  QPointF m_edge_pan_step;  // px per tick (screen-drag convention)
+  void checkEdgePan(const QPointF& pos);
   QString m_s57data_dir;
   // The catalog scan publishes progressively; fit the viewport to the set
   // only on the first batch (refitting each batch would jump the view).

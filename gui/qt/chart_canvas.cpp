@@ -281,6 +281,18 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   // Decoded-message stream for the Data Monitor (taps all comm messages).
   m_nmea_monitor = std::make_unique<NmeaMonitorModel>();
 
+  // Edge auto-pan tick (P3.13, wx pPanTimer 200 ms / 2%-per-tick).
+  m_edge_pan_timer = new QTimer(this);
+  m_edge_pan_timer->setInterval(200);
+  connect(m_edge_pan_timer, &QTimer::timeout, this, [this]() {
+    if (!m_viewport ||
+        (!m_route_build_mode && !m_measure_active && !m_dragging_node)) {
+      m_edge_pan_timer->stop();
+      return;
+    }
+    m_viewport->panBy(m_edge_pan_step.x(), m_edge_pan_step.y());
+  });
+
   // Restore the persisted colour scheme (#35).
   setColorScheme(ConfigStore::instance().getInt("display/colorScheme", 0));
   // Force the route-defaults singleton up now so it seeds the model globals
@@ -2270,6 +2282,7 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event) {
     m_viewport->screenToLatLon(p.x(), p.y(), static_cast<int>(width()),
                                static_cast<int>(height()), lat, lon);
     m_nav_provider->moveRoutePoint(m_selected_route, m_drag_node, lat, lon);
+    checkEdgePan(p);  // dragging a node toward an edge scrolls the view
     event->accept();
     return;
   }
@@ -2296,6 +2309,18 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
       m_viewport->screenToLatLon(event->position().x(), event->position().y(),
                                  static_cast<int>(width()),
                                  static_cast<int>(height()), lat, lon);
+      // Nearby-waypoint snap (P3.13, wx GetNearbyWaypoint): clicking within
+      // pick range of an existing mark places the vertex exactly on it.
+      QString snap_guid;
+      if (hitWaypointAt(event->position(), &snap_guid, nullptr)) {
+        for (const NavWaypoint& wp : m_nav_provider->waypoints()) {
+          if (wp.guid == snap_guid) {
+            lat = wp.lat;
+            lon = wp.lon;
+            break;
+          }
+        }
+      }
       m_nav_provider->addRoutePoint(lat, lon);
     }
     event->accept();
@@ -2346,6 +2371,30 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event) {
   } else {
     QQuickItem::mouseReleaseEvent(event);
   }
+}
+
+void ChartCanvas::checkEdgePan(const QPointF& pos) {
+  // 5%-margin band, 2%-of-dimension step per tick (wx CheckEdgePan(…,5,2)).
+  const double w = width(), h = height();
+  if (w <= 0 || h <= 0) return;
+  const double mx = w * 0.05, my = h * 0.05;
+  QPointF step(0, 0);
+  // panBy takes a mouse-drag delta: cursor at the LEFT edge should reveal
+  // more west = drag right = +x.
+  if (pos.x() < mx)
+    step.setX(w * 0.02);
+  else if (pos.x() > w - mx)
+    step.setX(-w * 0.02);
+  if (pos.y() < my)
+    step.setY(h * 0.02);
+  else if (pos.y() > h - my)
+    step.setY(-h * 0.02);
+  if (step.isNull()) {
+    m_edge_pan_timer->stop();
+    return;
+  }
+  m_edge_pan_step = step;
+  if (!m_edge_pan_timer->isActive()) m_edge_pan_timer->start();
 }
 
 void ChartCanvas::keyPressEvent(QKeyEvent* event) {
@@ -2435,6 +2484,11 @@ void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {
     // Measure tool (P3.18): trail the dashed rubber-band + live readout.
     if (m_measure_active && !m_measure_pts.isEmpty())
       updateMeasure(lat, lon, true);
+    // Edge auto-pan while building / measuring (P3.13).
+    if (m_route_build_mode || m_measure_active)
+      checkEdgePan(p);
+    else if (m_edge_pan_timer->isActive())
+      m_edge_pan_timer->stop();
   }
   QQuickItem::hoverMoveEvent(event);
 }
