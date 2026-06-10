@@ -2227,9 +2227,10 @@ symbols, chart-colour editor — stays where it is in Phase 2.)
       S52Engine + own decode worker; engine constructed only when the
       persisted toggle is on), sharing the chart library / nav data /
       settings. Verified live with both engines decoding concurrently.
-      Inspection-only v1; remaining for wx parity: a shared decode
+      Inspection-only v1; **+ draggable divider with persisted
+      fraction (2026-06-10).** Remaining for wx parity: a shared decode
       service (single worker pool), per-pane toolbar + scale linkage,
-      draggable divider, per-pane editing.
+      per-pane editing.
 
 ---
 
