@@ -32,6 +32,8 @@ qt_add_qml_module(opencpn-qt
     qml/Main.qml
     qml/FloatToolbar.qml
     qml/MuiBar.qml
+    qml/OptionsWindow.qml
+    qml/VectorDetailList.qml
   SOURCES
     app_controller.h
     chart_canvas.h
