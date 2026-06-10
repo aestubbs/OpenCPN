@@ -19,11 +19,17 @@
 #ifndef OCPN_QT_WAYPOINT_ICONS_H_
 #define OCPN_QT_WAYPOINT_ICONS_H_
 
+#include <QStringList>
+
 namespace ocpn::qtui {
 
 /** Render the default mark icons (data/svg/markicons) into pWayPointMan's
  *  catalogue. Call once at startup after pWayPointMan exists. */
 void loadDefaultWaypointIcons();
+
+/** The picker's icon keys: one per distinct image — alias keys mapping to
+ *  the same SVG (wx vocabulary, kept for persisted data) are skipped. */
+QStringList pickerIconKeys();
 
 }  // namespace ocpn::qtui
 

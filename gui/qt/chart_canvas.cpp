@@ -78,6 +78,7 @@
 #include "raster_chart_provider.h"
 #include "route_list_view_model.h"
 #include "grid_layer.h"
+#include "waypoint_icons.h"
 #include "s57_dictionary.h"
 #include "model/ais_decoder.h"   // g_MMSI_Props_Array (MMSI properties, P3.6)
 #include "model/ais_defs.h"      // TRACKTYPE_*
@@ -1940,13 +1941,9 @@ void ChartCanvas::deleteMark(const QString& guid) {
 }
 
 QStringList ChartCanvas::markIconNames() const {
-  QStringList out;
-  if (!pWayPointMan) return out;
-  const int n = pWayPointMan->GetNumIcons();
-  out.reserve(n);
-  for (int i = 0; i < n; ++i)
-    if (QString* key = pWayPointMan->GetIconKey(i)) out.append(*key);
-  return out;
+  // The picker list is deduplicated: alias keys sharing one image (the wx
+  // vocabulary, kept so persisted marks resolve) show a single tile.
+  return pickerIconKeys();
 }
 
 // --- Tracks (own-vessel) ----------------------------------------------------

@@ -18,6 +18,8 @@
 #include <QImage>
 #include <QPainter>
 #include <QString>
+#include <QSet>
+#include <QStringList>
 #include <QSvgRenderer>
 
 #include "model/routeman.h"  // pWayPointMan
@@ -116,6 +118,18 @@ void loadDefaultWaypointIcons() {
       pWayPointMan->AddMarkIcon(QString::fromLatin1(d.key),
                                 QString::fromLatin1(d.key), img);
   }
+}
+
+QStringList pickerIconKeys() {
+  QStringList out;
+  QSet<QString> seen_files;
+  for (const IconDef& d : kIcons) {
+    const QString file = QString::fromLatin1(d.file);
+    if (seen_files.contains(file)) continue;  // alias of an earlier key
+    seen_files.insert(file);
+    out.append(QString::fromLatin1(d.key));
+  }
+  return out;
 }
 
 }  // namespace ocpn::qtui

@@ -96,22 +96,27 @@ Window {
             text: markEditor.positionText
             color: palette.placeholderText; font.pointSize: 10
         }
-        TextField {
-            id: markNameField
-            placeholderText: qsTr("Name")
+        // macOS HIG form layout: a right-aligned leading-label column
+        // (System Settings style) -- placeholder-only fields lose their
+        // label the moment you type. Matches RouteDetailsWindow.
+        GridLayout {
+            columns: 2
+            columnSpacing: 10; rowSpacing: 8
             Layout.fillWidth: true
-            selectByMouse: true
+            Label { text: qsTr("Name:"); Layout.alignment: Qt.AlignRight }
+            TextField {
+                id: markNameField
+                Layout.fillWidth: true
+                selectByMouse: true
+            }
+            Label { text: qsTr("Comment:"); Layout.alignment: Qt.AlignRight }
+            TextField {
+                id: markCommentField
+                Layout.fillWidth: true
+                selectByMouse: true
+            }
         }
-        TextField {
-            id: markCommentField
-            placeholderText: qsTr("Comment")
-            Layout.fillWidth: true
-            selectByMouse: true
-        }
-        Label {
-            text: qsTr("Icon")
-            font.pointSize: 10; color: palette.placeholderText
-        }
+        Label { text: qsTr("Icon:") }
         Frame {
             Layout.fillWidth: true
             Layout.fillHeight: true
