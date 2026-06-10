@@ -1584,8 +1584,10 @@ remain.
       changes); there is no repaint timer to configure.
 
 **Display page → Templates** (wx sub-panel: Templates)
-- [ ] Configuration templates — list, create, apply, delete; multi-canvas
-      screen-config selector. Not yet built (a whole feature; deferred).
+- [x] Configuration templates — **landed 2026-06-10** (ConfigTemplates
+      singleton: JSON snapshots of the whole ConfigStore; save / apply /
+      delete on the User Interface page; apply effective on next start).
+      The multi-canvas screen-config selector rides P6.1.
 
 **Charts page** (wx sub-panels: Chart Files, Vector Chart Display, Chart
 Groups, Tides & Currents) — now four sub-tabs in `optionsWindow`. The extended
