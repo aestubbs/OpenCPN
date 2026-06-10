@@ -116,9 +116,9 @@ Pane {
         Tool {
             visible: !floatToolbar.collapsed
             text: "✚"; checkable: true
-            checked: chart.routeBuildMode
+            checked: (root.activeChart || chart).routeBuildMode
             ToolTip.text: qsTr("Create route  (left-click adds points, right-click finishes)")
-            onClicked: chart.routeBuildMode = checked
+            onClicked: (root.activeChart || chart).routeBuildMode = checked
         }
         // wx ID_ROUTEMANAGER.
         Tool {

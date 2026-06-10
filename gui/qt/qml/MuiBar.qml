@@ -88,13 +88,13 @@ Pane {
         // look-ahead = DisplayConfig.lookAhead, honoured by the follow centring.
         MuiTool {
             id: followBtn
-            text: !chart.followOwnShip ? "⊙"
+            text: !(root.activeChart || chart).followOwnShip ? "⊙"
                   : (DisplayConfig.lookAhead ? "➤" : "◉")
-            ToolTip.text: !chart.followOwnShip ? qsTr("Follow / jump to ship")
+            ToolTip.text: !(root.activeChart || chart).followOwnShip ? qsTr("Follow / jump to ship")
                   : (DisplayConfig.lookAhead ? qsTr("Following (look-ahead)")
                                              : qsTr("Following (centred)"))
-            highlighted: chart.followOwnShip
-            onClicked: chart.followOwnShip = !chart.followOwnShip
+            highlighted: (root.activeChart || chart).followOwnShip
+            onClicked: { const c = root.activeChart || chart; c.followOwnShip = !c.followOwnShip }
             onPressAndHold: followFlyout.open()
             TapHandler {
                 acceptedButtons: Qt.RightButton
@@ -129,16 +129,16 @@ Pane {
                     spacing: 2
                     MuiTool {
                         text: "◉"; ToolTip.text: qsTr("Follow (centred)")
-                        highlighted: chart.followOwnShip && !DisplayConfig.lookAhead
+                        highlighted: (root.activeChart || chart).followOwnShip && !DisplayConfig.lookAhead
                         onClicked: { DisplayConfig.lookAhead = false
-                                     chart.followOwnShip = true
+                                     (root.activeChart || chart).followOwnShip = true
                                      followFlyout.close() }
                     }
                     MuiTool {
                         text: "➤"; ToolTip.text: qsTr("Follow + look-ahead")
-                        highlighted: chart.followOwnShip && DisplayConfig.lookAhead
+                        highlighted: (root.activeChart || chart).followOwnShip && DisplayConfig.lookAhead
                         onClicked: { DisplayConfig.lookAhead = true
-                                     chart.followOwnShip = true
+                                     (root.activeChart || chart).followOwnShip = true
                                      followFlyout.close() }
                     }
                 }
