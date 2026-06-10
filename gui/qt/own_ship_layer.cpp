@@ -106,7 +106,7 @@ void OwnShipLayer::rebuildRings(double lat) {
       circle.append(QPointF(std::cos(a) * r, std::sin(a) * r));
     }
     if (QSGGeometryNode* ring =
-            makeAaLineNode(circle, kRingColor, kRingPx, /*closed=*/true))
+            makeAaLineNode(circle, cfg.ringColor(), kRingPx, /*closed=*/true))
       m_rings->appendChildNode(ring);
   }
   if (m_rings->childCount() == 0) {
@@ -260,7 +260,9 @@ QSGNode* OwnShipLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* /*window*/)
   }
   m_heading = heading;
 
-  if (course_changed) {
+  // heading_changed: the HDT predictor (P3.6) follows the true heading, which
+  // can move while COG/SOG hold steady.
+  if (course_changed || heading_changed) {
     // Rebuild the AA-line vectors (world units; widths screen-fixed by the
     // shader). Laylines are dashed (cartographic convention). Re-insert
     // before the symbol so the marker draws on top: laylines first, then the
@@ -274,6 +276,11 @@ QSGNode* OwnShipLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* /*window*/)
       m_pos->removeChildNode(m_predictor);
       delete m_predictor;
       m_predictor = nullptr;
+    }
+    if (m_hdt_predictor) {
+      m_pos->removeChildNode(m_hdt_predictor);
+      delete m_hdt_predictor;
+      m_hdt_predictor = nullptr;
     }
 
     const QPointF port = headingVec(s.cog - kLaylineDeg) * kLaylineLenDeg;
@@ -290,6 +297,20 @@ QSGNode* OwnShipLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* /*window*/)
       m_predictor = makeAaLineNode({QPointF(0, 0), headingVec(s.cog) * len},
                                    kOwnColor, kVectorPx);
       if (m_predictor) m_pos->insertChildNodeBefore(m_predictor, m_symbolXf);
+    }
+    // HDT predictor (wx g_ownship_HDTpredictor_miles): a fixed-length, thinner
+    // line along the true heading -- only drawn when a heading is available
+    // and it differs from COG (else it would hide under the COG predictor).
+    const double hdt_nm = OwnShipConfig::instance().hdtPredictorNm();
+    if (hdt_nm > 0.0 && s.hdg < 360.0 &&
+        std::abs(s.hdg - s.cog) > 0.5) {
+      const double hdt_len = hdt_nm / 60.0;  // NM -> world degrees
+      m_hdt_predictor =
+          makeAaLineNode({QPointF(0, 0), headingVec(s.hdg) * hdt_len},
+                         kOwnColor, kVectorPx * 0.6f, /*closed=*/false,
+                         /*dash_on_px=*/6.0f, /*dash_off_px=*/4.0f);
+      if (m_hdt_predictor)
+        m_pos->insertChildNodeBefore(m_hdt_predictor, m_symbolXf);
     }
   }
 

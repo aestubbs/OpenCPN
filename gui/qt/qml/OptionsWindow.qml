@@ -1498,6 +1498,19 @@ Window {
                                     checked: OwnShipConfig.showWaypointDirection
                                     onToggled: OwnShipConfig.showWaypointDirection = checked
                                 }
+                                RowLayout {
+                                    spacing: 8
+                                    Label { text: qsTr("Heading (HDT) predictor length:") }
+                                    SpinBox {
+                                        from: 0; to: 20
+                                        value: Math.round(OwnShipConfig.hdtPredictorNm)
+                                        onValueModified: OwnShipConfig.hdtPredictorNm = value
+                                    }
+                                    Label {
+                                        text: qsTr("NM (0 = off; dashed, separate from the COG predictor)")
+                                        color: palette.placeholderText; font.pointSize: 11
+                                    }
+                                }
 
                                 MenuSeparator { Layout.fillWidth: true }
 
@@ -1541,6 +1554,21 @@ Window {
                                         currentIndex: OwnShipConfig.ringUnit
                                         onActivated: OwnShipConfig.ringUnit = currentIndex
                                     }
+                                    Label {
+                                        text: qsTr("Ring colour:")
+                                        Layout.alignment: Qt.AlignRight
+                                    }
+                                    Rectangle {
+                                        width: 48; height: 22; radius: 4
+                                        color: OwnShipConfig.ringColor
+                                        border.color: "#80808080"
+                                        TapHandler { onTapped: ringColorDialog.open() }
+                                    }
+                                }
+                                ColorDialog {
+                                    id: ringColorDialog
+                                    selectedColor: OwnShipConfig.ringColor
+                                    onAccepted: OwnShipConfig.ringColor = selectedColor
                                 }
                                 Label {
                                     text: qsTr("Real-scale icon, GPS offsets and range rings are saved; the own-ship marker is a fixed symbol until those render paths land.")

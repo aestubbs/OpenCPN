@@ -62,6 +62,7 @@ private:
   QSGTransformNode* m_symbolXf = nullptr;// rotate(hdg/cog) [* scale(world/px)]
   QSGGeometryNode* m_symbol = nullptr;   // marker triangle OR real-scale hull
   QSGGeometryNode* m_predictor = nullptr;// COG/SOG vector (world units)
+  QSGGeometryNode* m_hdt_predictor = nullptr;  // HDT vector (fixed NM, dashed)
   QSGGeometryNode* m_laylines = nullptr; // port + starboard laylines
   QSGNode* m_rings = nullptr;            // range-ring group (child of m_pos)
   double m_rings_lat = 999.0;            // latitude the rings were sized for

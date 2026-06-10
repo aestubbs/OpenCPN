@@ -20,6 +20,7 @@
 #ifndef OCPN_QT_OWN_SHIP_CONFIG_H_
 #define OCPN_QT_OWN_SHIP_CONFIG_H_
 
+#include <QColor>
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
@@ -67,6 +68,12 @@ class OwnShipConfig : public QObject {
                  changed)
   // Ring spacing unit: 0 = NM, 1 = km, 2 = statute miles.
   Q_PROPERTY(int ringUnit READ ringUnit WRITE setRingUnit NOTIFY changed)
+  // Range-ring colour (wx g_colourOwnshipRangeRingsColour).
+  Q_PROPERTY(QColor ringColor READ ringColor WRITE setRingColor NOTIFY changed)
+  // Heading (HDT) predictor length, NM; 0 disables. Separate from the
+  // time-based COG/SOG predictor (wx g_ownship_HDTpredictor_miles).
+  Q_PROPERTY(double hdtPredictorNm READ hdtPredictorNm WRITE setHdtPredictorNm
+                 NOTIFY changed)
 
 public:
   static OwnShipConfig& instance();
@@ -108,6 +115,10 @@ public:
   void setRingSpacing(double v);
   int ringUnit() const { return m_ring_unit; }
   void setRingUnit(int v);
+  QColor ringColor() const { return m_ring_color; }
+  void setRingColor(const QColor& v);
+  double hdtPredictorNm() const { return m_hdt_predictor_nm; }
+  void setHdtPredictorNm(double v);
 
 Q_SIGNALS:
   void changed();
@@ -129,6 +140,8 @@ private:
   int m_ring_count = 0;
   double m_ring_spacing = 1.0;
   int m_ring_unit = 0;
+  QColor m_ring_color = QColor(90, 110, 150);  // muted blue-grey (layer default)
+  double m_hdt_predictor_nm = 0.0;             // 0 = no HDT predictor
 };
 
 }  // namespace ocpn::qtui

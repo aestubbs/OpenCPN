@@ -40,6 +40,10 @@ OwnShipConfig::OwnShipConfig() {
   m_ring_count = c.getInt("ownship/ringCount", m_ring_count);
   m_ring_spacing = c.getDouble("ownship/ringSpacing", m_ring_spacing);
   m_ring_unit = c.getInt("ownship/ringUnit", m_ring_unit);
+  const QString rc = c.getString("ownship/ringColor");
+  if (!rc.isEmpty() && QColor::isValidColorName(rc)) m_ring_color = QColor(rc);
+  m_hdt_predictor_nm =
+      c.getDouble("ownship/hdtPredictorNm", m_hdt_predictor_nm);
 }
 
 void OwnShipConfig::setVesselName(const QString& name) {
@@ -105,6 +109,17 @@ void OwnShipConfig::setRingSpacing(double v) {
 }
 void OwnShipConfig::setRingUnit(int v) {
   OCPN_OS_SET(m_ring_unit, v, "ownship/ringUnit", setInt)
+}
+
+void OwnShipConfig::setRingColor(const QColor& v) {
+  if (v == m_ring_color || !v.isValid()) return;
+  m_ring_color = v;
+  ConfigStore::instance().setString("ownship/ringColor", v.name());
+  Q_EMIT changed();
+}
+
+void OwnShipConfig::setHdtPredictorNm(double v) {
+  OCPN_OS_SET(m_hdt_predictor_nm, v, "ownship/hdtPredictorNm", setDouble)
 }
 
 #undef OCPN_OS_SET
