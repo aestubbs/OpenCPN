@@ -2117,8 +2117,14 @@ existing `followOwnShip` property before adding).
       persisted, errors surfaced on the new Options > Plugins catalogue
       page); registered Layers join the compositor like built-ins, HUD
       components load above the chart, settings pages stack under
-      Options > Plugins. Exercised end-to-end once the first Phase-4
-      module (P4.3+) exists.
+      Options > Plugins. **Verified end-to-end (2026-06-10)** with the
+      opt-in example plugin (`gui/qt/plugin/example/`,
+      -DOCPN_QT_EXAMPLE_PLUGIN=ON): it loads from the app-data dir, its
+      HUD clock contribution renders and its settings page stacks under
+      the catalogue. Recorded constraint: plugins contributing LAYERS
+      need the layer toolkit's symbols exported (a shared library split —
+      Phase-4 architecture follow-up); HUD/settings contributions are
+      header-only against the interface and work today.
 - [ ] **P4.3** Port `dashboard` as a built-in Qt module (display-anchored / HUD).
 - [ ] **P4.4** Port `chartdldr` (chart downloader) as a built-in Qt module.
 - [ ] **P4.5** Port `grib` as a built-in Qt module (world-anchored Layer).

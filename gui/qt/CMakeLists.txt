@@ -241,6 +241,12 @@ qt_add_translations(opencpn-qt
   LUPDATE_OPTIONS -no-obsolete
 )
 
+# The example Qt plugin (P4.2 validation; opt-in).
+option(OCPN_QT_EXAMPLE_PLUGIN "Build the example Qt plugin" OFF)
+if (OCPN_QT_EXAMPLE_PLUGIN)
+  add_subdirectory(plugin/example)
+endif ()
+
 # libtess2: the basemap provider tessellates the land polygons.
 target_include_directories(opencpn-qt PRIVATE
   ${CMAKE_SOURCE_DIR}/libs/libtess2/Include

@@ -1,6 +1,8 @@
 # OpenCPN-Qt Plugin API (draft 1.0)
 
-Status: **interface drafted (P4.1), loader live (P4.2)** — awaiting the
+Status: **interface drafted (P4.1), loader live and VERIFIED (P4.2 — the
+example plugin loads, its HUD clock renders and its settings page
+appears)** — awaiting the
 Phase-4 "day-1 plugins" decision before the first module ports
 (P4.3–P4.5). IID: `org.opencpn.qt.plugin/1.0` — any breaking change bumps
 it.
@@ -11,8 +13,8 @@ modules; no wx types appear anywhere in the surface.
 
 ## Where plugins live
 
-`<AppDataLocation>/plugins-qt/` (e.g.
-`~/Library/Application Support/opencpn-qt/plugins-qt/` on macOS). One
+`<AppDataLocation>/plugins-qt/` (verified on macOS:
+`~/Library/Application Support/OpenCPN/opencpn-qt/plugins-qt/`). One
 shared library per plugin (`.dylib`/`.so`/`.dll`). The catalogue, load
 errors and per-plugin enable switches show under **Options > Plugins**
 (enable changes apply on restart).
