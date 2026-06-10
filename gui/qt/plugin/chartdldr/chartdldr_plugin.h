@@ -57,6 +57,10 @@ public:
   QUrl targetFolder() const { return m_target; }
   void setTargetFolder(const QUrl& url);
 
+  /** Bundled catalog presets: {label, url} (the wx chartdldr ships a
+   *  sources list; these are the NOAA entries that remain live). */
+  Q_INVOKABLE QVariantList presets() const;
+
   Q_INVOKABLE void loadCatalog();
   Q_INVOKABLE void downloadChart(int index);
 

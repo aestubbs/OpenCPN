@@ -10,6 +10,18 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
+        Label { text: qsTr("Preset:") }
+        ComboBox {
+            id: presetBox
+            Layout.fillWidth: true
+            textRole: "label"
+            model: pluginContext ? pluginContext.presets() : []
+            onActivated: if (pluginContext)
+                pluginContext.catalogUrl = model[currentIndex].url
+        }
+    }
+    RowLayout {
+        Layout.fillWidth: true
         Label { text: qsTr("Catalog:") }
         TextField {
             Layout.fillWidth: true

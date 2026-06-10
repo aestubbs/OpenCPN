@@ -63,24 +63,51 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
       const double lat = m_grid.lat0 + j * m_grid.dj;
       const QPointF w(lon, Viewport::latToWorldY(lat));
 
-      // Arrow along the wind vector (towards where it blows), length
-      // scaled by half the decimated grid spacing.
-      const double len = std::fabs(m_grid.di) * step * 0.45;
+      // Meteorological wind barb (wx GRIB presentation parity): the
+      // staff points INTO the wind (towards where it comes from); half
+      // barbs = 5 kn, full barbs = 10 kn, pennants = 50 kn, on the
+      // clockwise side (northern-hemisphere convention).
+      const double len = std::fabs(m_grid.di) * step * 0.9;
       const double n = std::hypot(u, v);
-      const QPointF dir(u / n, -v / n);  // world y is inverted-lat
-      const QPointF tip = w + QPointF(dir.x() * len, dir.y() * len);
-      const QPointF tail = w - QPointF(dir.x() * len, dir.y() * len);
-      b.setPen(windColor(kn), 1.6f);
+      // Flow direction in world coords; the staff runs opposite it.
+      const QPointF flow(u / n, -v / n);
+      const QPointF staff(-flow.x(), -flow.y());
+      const QPointF perp(-staff.y(), staff.x());
+      const QPointF tip = w + QPointF(staff.x() * len, staff.y() * len);
+      b.setPen(windColor(kn), 1.4f);
       b.noBrush();
-      b.drawLine(tail, tip);
-      // Head: two short back-strokes.
-      const QPointF back(-dir.x(), -dir.y());
-      const QPointF perp(-dir.y(), dir.x());
-      const double hl = len * 0.35;
-      b.drawLine(tip, tip + QPointF((back.x() + perp.x() * 0.6) * hl,
-                                    (back.y() + perp.y() * 0.6) * hl));
-      b.drawLine(tip, tip + QPointF((back.x() - perp.x() * 0.6) * hl,
-                                    (back.y() - perp.y() * 0.6) * hl));
+      b.drawLine(w, tip);
+
+      int rem = static_cast<int>(std::round(kn / 5.0)) * 5;
+      double along = 1.0;             // fraction of the staff, outer end first
+      const double spacing = 0.16;    // staff fractions between barbs
+      const double bl = len * 0.42;   // full-barb length
+      auto at = [&](double f) {
+        return w + QPointF(staff.x() * len * f, staff.y() * len * f);
+      };
+      while (rem >= 50) {
+        const QPointF p0 = at(along), p1 = at(along - spacing);
+        const QPointF apex = p0 + QPointF(perp.x() * bl, perp.y() * bl);
+        b.setBrush(windColor(kn));
+        b.drawPolygon({p0, apex, p1});
+        b.noBrush();
+        rem -= 50;
+        along -= spacing * 1.4;
+      }
+      while (rem >= 10) {
+        const QPointF p0 = at(along);
+        b.drawLine(p0, p0 + QPointF((perp.x() + staff.x() * 0.35) * bl,
+                                    (perp.y() + staff.y() * 0.35) * bl));
+        rem -= 10;
+        along -= spacing;
+      }
+      if (rem >= 5) {
+        if (along > 0.95) along = 0.85;  // a lone half barb sits inboard
+        const QPointF p0 = at(along);
+        b.drawLine(p0,
+                   p0 + QPointF((perp.x() + staff.x() * 0.35) * bl * 0.5,
+                                (perp.y() + staff.y() * 0.35) * bl * 0.5));
+      }
     }
   }
   return m_root;

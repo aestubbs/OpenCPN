@@ -55,6 +55,21 @@ void ChartDldrContext::setStatus(const QString& s) {
   Q_EMIT statusChanged();
 }
 
+QVariantList ChartDldrContext::presets() const {
+  auto entry = [](const char* label, const char* url) {
+    QVariantMap m;
+    m["label"] = QString::fromUtf8(label);
+    m["url"] = QString::fromUtf8(url);
+    return QVariant(m);
+  };
+  return {entry("NOAA ENC (vector, all)",
+                "https://www.charts.noaa.gov/ENCs/ENCProdCat_19115.xml"),
+          entry("NOAA RNC (raster, all)",
+                "https://www.charts.noaa.gov/RNCs/RNCProdCat_19115.xml"),
+          entry("Inland ENC (US Army Corps)",
+                "https://ienccloud.us/ienc/products/catalog/IENCU37ProdCat_19115.xml")};
+}
+
 void ChartDldrContext::loadCatalog() {
   if (m_busy || m_catalog_url.isEmpty()) return;
   m_busy = true;
