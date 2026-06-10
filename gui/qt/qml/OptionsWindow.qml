@@ -1852,7 +1852,9 @@ Window {
                                     }
                                     Button {
                                         text: qsTr("Test")
-                                        enabled: false  // pending the sound engine
+                                        // Same file the alert engine fires for
+                                        // an AIS CPA danger (UI > Sounds).
+                                        onClicked: SoundPlayer.play(UIConfig.aisSoundFile)
                                     }
                                 }
                                 CheckBox {
@@ -1870,11 +1872,7 @@ Window {
                                         onValueModified: AisConfig.ackTimeoutMin = value
                                     }
                                 }
-                                Label {
-                                    text: qsTr("These settings are saved now; CPA/TCPA computation, target filtering and the alert engine are not wired in yet.")
-                                    wrapMode: Text.Wrap; Layout.fillWidth: true
-                                    color: palette.placeholderText; font.pointSize: 11
-                                }
+
                             }
                         }
 
