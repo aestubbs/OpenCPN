@@ -1730,10 +1730,25 @@ be split into a component module *before* this build-out — **P3.17**.
   ChartCanvas subtree in Main.qml — the 953-line shell is manageable and
   they are genuinely chart-coupled.
 
-- [ ] **P3.18** **Canvas context-menu parity.** Qt has only a general
-  `chartContextMenu` (`Main.qml`:3997) + a route-node menu (4041, edit-mode
-  only); wx builds a focused popup per object via `CanvasMenuHandler`
-  (`canvas_menu.cpp`). Missing, by tier:
+- [~] **P3.18** **Canvas context-menu parity.** Qt had only a general
+  `chartContextMenu` + a route-node menu (edit-mode only); wx builds a focused
+  popup per object via `CanvasMenuHandler` (`canvas_menu.cpp`).
+  **Progress (2026-06-10): Tier 1 largely DONE** — ChartCanvas now hit-tests
+  right-clicks against marks + route nodes/segments outside edit mode and
+  pops focused menus (all in the new `ChartContextMenus.qml`):
+  **Navigate to here / to a mark** (temporary GOTO route via provider
+  `createRoute`, activated at once, auto-deleted on arrival — wx
+  `m_bDeleteOnArrival`); **route menu** (Activate / Deactivate / Activate
+  next waypoint / Zero XTE / Insert waypoint here / Edit points / Reverse /
+  Details… / Delete); **mark menu** (Navigate to / Edit / Delete);
+  **Zero XTE** (`RouteFollower::zeroXte` →
+  `Routeman::ZeroCurrentXTEToActivePoint`); and the **Measure tool**
+  (click legs + dashed rubber-band via the new `MeasureLayer`, live
+  leg brg/dist + running total readout pill, Esc/menu to end).
+  Tier-1 remainder: route **Append waypoint** (needs an append-to-existing
+  route-build mode) and **Split at leg**; wx's reverse "Rename waypoints?"
+  prompt and delete confirmations are skipped by design (Qt convention so
+  far). Missing, by tier:
   - *Tier 1 (core nav):* **Navigate To Here / To This mark**
     (`canvas_menu.cpp`:490/923); a **route** right-click menu (Activate /
     Deactivate / Activate-Next / Insert / Append / Split / Reverse / Properties,
