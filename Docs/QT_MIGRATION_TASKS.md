@@ -1741,6 +1741,13 @@ be split into a component module *before* this build-out — **P3.17**.
   windows/drawers are reached via signals wired in Main.qml; shell state /
   window sizing passes as properties (`appWindow`); sibling-id anchors stay
   at the instantiation site in Main.qml (the shell owns layout topology).
+  **Dialog convention (user feedback 2026-06-10):** every dialog is a real
+  `Window { flags: Qt.Dialog; modality: Qt.ApplicationModal }` with native
+  title bar/controls, 18–20 px content margins and a `DialogButtonBox` —
+  never an in-scene QtQuick `Dialog`/sheet (MarkEditor / ScaleDialog /
+  ConfirmDialog were converted 2026-06-10). Corner-anchored chart-state
+  cards (anchor watch, AIS info, look-ahead flyout) remain `Popup`
+  popovers by design.
   **Remaining (by design):** the two small canvas context menus extract as
   part of the P3.18 rebuild (no point moving them twice); the display-
   anchored canvas overlays (alert banner, compass, nav-HUD pills, chart bar,
