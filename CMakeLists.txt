@@ -97,6 +97,12 @@ include(CheckSymbolExists)
 # OCPN_USE_QT_GUI will later switch the GUI layer over.
 #
 option(OCPN_USE_QT_GUI "Build the Qt/QtQuick GUI instead of wxWidgets" OFF)
+# P3.11 (wx deprecation, begun 2026-06-10): the legacy wxWidgets
+# application and its plugins are opt-in. The target is still CONFIGURED
+# (shared libraries and staging reference it) but no longer builds by
+# default; full configure-time removal completes P3.11.
+option(OCPN_BUILD_WX_APP
+       "Build the deprecated wxWidgets application + plugins" OFF)
 
 if (NOT QT_ANDROID)
   # Homebrew installs Qt keg-only; add its prefix so find_package can see it.
@@ -1106,6 +1112,11 @@ elseif (QT_ANDROID)
   add_library(${PACKAGE_NAME} SHARED ${HDRS} ${SRCS})
 else ()
   add_executable(${PACKAGE_NAME} ${HDRS} ${SRCS})
+endif ()
+
+if (NOT OCPN_BUILD_WX_APP)
+  # Deprecated: excluded from the default build (P3.11 increment 1).
+  set_target_properties(${PACKAGE_NAME} PROPERTIES EXCLUDE_FROM_ALL ON)
 endif ()
 
 if (QT_ANDROID)
@@ -2502,7 +2513,9 @@ if (MSVC AND OCPN_USE_GL)
 endif ()
 
 if (NOT SKIP_PLUGINS)
-  add_subdirectory(plugins)
+  if (OCPN_BUILD_WX_APP)
+    add_subdirectory(plugins)
+  endif ()
 endif ()
 
 #

@@ -21,6 +21,12 @@
 
 set(SRC_CONSOLE console.cpp api_shim.cpp)
 add_executable(opencpn-cmd ${SRC_CONSOLE})
+if (NOT OCPN_BUILD_WX_APP)
+  # wx-era CLI; excluded from Qt-only default builds (P3.11). Currently
+  # does not compile against the Qt-typed model (OcpnConfig fwd-decl) --
+  # fix or retire with the full P3.11 removal.
+  set_target_properties(opencpn-cmd PROPERTIES EXCLUDE_FROM_ALL ON)
+endif ()
 set_property(TARGET opencpn-cmd PROPERTY ENABLE_EXPORTS ON)
 if (NOT "${ENABLE_SANITIZER}" MATCHES "none")
   target_link_libraries(opencpn-cmd PRIVATE -fsanitize=${ENABLE_SANITIZER})
