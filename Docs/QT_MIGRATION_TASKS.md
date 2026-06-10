@@ -2202,23 +2202,19 @@ existing `followOwnShip` property before adding).
 - [ ] **P5.3** Validate RHI backend selection (Vulkan/GLES) on the target.
 - [ ] **P5.4** Touch / input tuning for embedded hardware.
 - [ ] **P5.5** Qt for Device Creation packaging / image build.
-- [ ] **P5.6** **Get wxWidgets out of the `opencpn-qt` link graph** (prerequisite
-      for any iOS/embedded build — wxWidgets has no UIKit port). Audited
-      2026-06-09: `opencpn-qt` drives only `s52plib`'s **scene-graph emit** path
-      (`RenderAreaToSG`/`LineToSG`/`PointSymbolToSG`/`TextToSG` + `S52_LUPLookup`
-      + `S52_setMarinerParam` + the colour/font resolver hooks); the wx-heavy
-      DC/GL render paths (`RenderObjectToDC`/`GL`, `TexFont`/`DepthFont`,
-      `s52shaders`/`Cs52_shaders`/`s52plibGL.h`, ~375 `glXxx()` calls in
-      `s52plib.cpp`) are **dead for the Qt build and deletable**. Steps: delete
-      dead DC/GL/font files → strip the GL/DC render methods from `s52plib.cpp` →
-      convert the public API (`s52plib.h` resolvers `wxColour`→`QColor`,
-      value types `wxString`/`wxPoint`/`wxRect`→`QString`/`QPointF`/`QRectF`) →
-      de-wx `s52plib_sg.cpp` + `s52_engine.cpp` (its only wx use is the `wxImage`
-      symbol-atlas load → `QImage`, + `wxInitialize`). Necessary-but-not-
-      sufficient: `opencpn-qt` also links all of `libmodel.a` (104 wx files), so
-      the reachable `model` subset is the larger follow-on (split-lib vs. carve).
-      **Deferred** — pure plumbing, no user/functional parity payoff; do it when
-      iOS/embedded is the active goal, not during the Qt parity push.
+- [~] **P5.6** **Get wxWidgets out of the `opencpn-qt` link graph**
+      (prerequisite for slim embedded builds). **Measured baseline
+      (2026-06-10):** 13 gui/qt files touch wx directly; the app layer's
+      OWN wx artifacts are now removed (cm93_transcoder de-wx'd) — every
+      remaining usage is the **boundary contract** with the two wx-coupled
+      dependencies: `libs/s52plib` (wxString APIs, wxPoint2DDouble in
+      Extended_Geometry, chartsymbols) and the residual wx surfaces in
+      `model/` (BasePlatform, comm bridges' wxString fields) plus the
+      vendored GRIB decode core. The project = de-wx s52plib's public API
+      (or fork a Qt-typed s52plib-qt), then sweep the bridges
+      (QString_to_wxString call sites: chart_canvas 4, route_defaults 5,
+      s52_engine 3, others ≤2). Multi-week; sequenced post-P3.11 so the
+      wx build doesn't need dual maintenance during it.
 
 ## Phase 6 — Post-migration follow-ups (parked)
 
