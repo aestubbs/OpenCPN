@@ -250,6 +250,12 @@ if (OCPN_QT_CHARTDLDR_PLUGIN)
   add_subdirectory(plugin/chartdldr)
 endif ()
 
+# The GRIB plugin (P4.5 v1).
+option(OCPN_QT_GRIB_PLUGIN "Build the GRIB Qt plugin" ON)
+if (OCPN_QT_GRIB_PLUGIN)
+  add_subdirectory(plugin/grib)
+endif ()
+
 # libtess2: the basemap provider tessellates the land polygons.
 target_include_directories(opencpn-qt PRIVATE
   ${CMAKE_SOURCE_DIR}/libs/libtess2/Include
