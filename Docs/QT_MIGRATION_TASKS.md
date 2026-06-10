@@ -1618,7 +1618,7 @@ filtering and the alert sound/dialog engine are still pending
 - [ ] Realtime-prediction speed min (control not yet surfaced).
 
 **Ships → MMSI Properties** (wx sub-panel: MMSI Properties)
-- [ ] Per-MMSI list + editor (track mode default/always/never, persist track,
+- [x] Per-MMSI list + editor (track mode default/always/never, persist track,
       ignore, MOB, VDM follower, ship name). Placeholder pane only: needs the
       model's `MmsiProperties` / AIS name-file API (P1.6c) bound into the Qt
       build, plus a list model. Documented in-pane.
@@ -1818,8 +1818,11 @@ where top-level):
    `objfilter/viz<ACR>` in ConfigStore, reset-to-STANDARD = the classes
    whose LUP category is STANDARD/DISPLAYBASE); pOBJLArray itself stays
    unused (it is inert on the SG path).
-2. **MMSI Properties** editor (`[~]` placeholder) — per-vessel ignore / always-
-   track / MOB / persist-track.
+2. ~~**MMSI Properties** editor~~ — **DONE (2026-06-10):** the Ships > MMSI
+   placeholder is a full list + editor (MMSI, name, track mode, persist
+   track, ignore, MOB, VDM→VDO, follower); edits feed the live decoder's
+   `g_MMSI_Props_Array` and persist via ConfigStore (`ais/mmsiProps`,
+   wx-compatible serialize format), loaded at canvas startup.
 3. ~~Own-ship **HDT predictor length** (separate from COG) + **range-ring
    colour**~~ — **DONE (2026-06-10):** `OwnShipConfig.hdtPredictorNm` +
    `ringColor`, drawn by the own-ship layer (dashed HDT vector), set on
