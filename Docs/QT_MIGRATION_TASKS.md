@@ -1387,8 +1387,11 @@ render anything onto the chart, only manages the plugin lifecycle.
       `events()` + `valueAtMarker`, all in the user's units); the QML graph is a
       `Canvas` aligned to the bar's shared time→x mapping. Current-speed labels +
       height-unit formatting also landed (the animation-on-drag polish too).
-      **Remaining:** current-station *slack* markers, scale-gated decluttering,
-      DST/timezone tick labels, and the **active-tides** sounding adjustment
+      **Remaining (updated 2026-06-10):** ~~slack markers~~ + ~~DST tick
+      labels~~ DONE — slack zero-crossings ring the graph's zero line with
+      "Slack hh:mm", and the time bar marks each local midnight with a
+      day-name divider (hour labels were already DST-correct). Still open:
+      scale-gated decluttering and the **active-tides** sounding adjustment
       (the per-(lat,lon,time) seam lives in `TideLayer`/the engine).
       *(severity: medium — large effort)*
 - [x] **P3.15** **Alert engine (sound triggering). DONE (2026-06-01).** All
