@@ -189,6 +189,8 @@ qt_add_qml_module(opencpn-qt
     gps_upload_controller.cpp
     cm93_dictionary.h
     cm93_dictionary.cpp
+    cm93_cell_reader.h
+    cm93_cell_reader.cpp
     wind_decoder.h
     wind_decoder.cpp
 )
