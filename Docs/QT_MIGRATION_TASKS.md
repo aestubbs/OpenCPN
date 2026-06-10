@@ -1053,9 +1053,14 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       progress (2026-06-10):** `cm93_dictionary.{h,cpp}` (pure-Qt
       dictionary loader) AND `cm93_cell_reader.{h,cpp}` (descramble +
       header/table readers + Ingest, verbatim extraction with mechanical
-      renames) both compile in opencpn-qt. Next: the **CreateS57Obj
-      transcoder + BuildGeom** extraction (the ~650-line semantic core),
-      then the extent scanner + worker decode case + scale tiering + UI.
+      renames) compile in opencpn-qt, and **`cm93_transcoder.{h,cpp}`** now carries
+      the geometry layer: `buildGeom` (verbatim cm93chart::BuildGeom —
+      ring/segment reconstruction, 3-D sounding clusters), `transformPoint`
+      (cell-local → lat/lon) and the packed-attribute walker. Next: the
+      **CreateS57Obj** extraction (the ~650-line class/attribute semantic
+      transcoding, cm93.cpp:3163+) producing S57Objs for the existing SG
+      emit, then the extent scanner + worker decode case + scale tiering +
+      offset/detail UI.
       **Implementation plan (scoped 2026-06-10):** CM93 decode already
       produces s52plib-compatible `S57Obj`s (`cm93chart::CreateS57Obj`,
       `gui/src/cm93.cpp:3163` — ~650 lines of attribute/class transcoding,
