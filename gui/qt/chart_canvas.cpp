@@ -23,6 +23,8 @@
 
 #include "chart_canvas.h"
 
+#include <QPointer>
+
 #include <algorithm>
 #include <cmath>
 
@@ -620,13 +622,37 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
   }
 }
 
+// P6.1 shared decode: when split view runs two canvases, they share ONE
+// worker (one engine, one decode thread). The first canvas creates and
+// owns it; the second connects to the same instance and filters results
+// by its own m_needed set (exactly how stale results are dropped today).
+static QPointer<ChartWorker> s_shared_worker;
+
 void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
                                  const QString& s57data) {
+  const bool share = ConfigStore::instance().getBool("ui/splitView", false);
+  if (share && s_shared_worker) {
+    // Second pane: ride the existing worker; no thread of our own.
+    m_worker = s_shared_worker;
+    connect(m_worker, &ChartWorker::extentsScanned, this,
+            &ChartCanvas::onExtentsScanned);
+    connect(m_worker, &ChartWorker::cellLoaded, this,
+            &ChartCanvas::onCellLoaded);
+    connect(m_worker, &ChartWorker::rasterCellLoaded, this,
+            &ChartCanvas::onRasterCellLoaded);
+    // The owner's scan broadcast also reaches this canvas; a re-scan here
+    // is a cheap no-op (worker guards re-entry; the catalog cache hits).
+    QMetaObject::invokeMethod(m_worker, "scanExtents", Qt::QueuedConnection,
+                              Q_ARG(QStringList, cell_paths));
+    return;
+  }
+
   m_worker_thread = new QThread(this);
   m_worker = new ChartWorker(m_s52_engine, s57data);  // no parent (moved)
   m_worker->moveToThread(m_worker_thread);
   connect(m_worker_thread, &QThread::finished, m_worker,
           &QObject::deleteLater);
+  if (share) s_shared_worker = m_worker;
 
   // Results arrive on the main thread (queued; receiver lives here).
   connect(m_worker, &ChartWorker::extentsScanned, this,
@@ -829,7 +855,7 @@ void ChartCanvas::onRasterCellLoaded(const QString& id, const QImage& image,
   c.north = north; c.south = south; c.east = east; c.west = west;
   c.name = id;
   CellExtent cat = m_catalog.value(id, c);
-  if (image.isNull() || !m_needed.contains(id)) {
+  if (m_loaded.contains(id) || image.isNull() || !m_needed.contains(id)) {
     m_requested.remove(id);
     return;
   }
@@ -863,6 +889,12 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   // Use the catalog entry (it carries the native scale + accurate extent);
   // fall back to the loaded bounds if somehow absent.
   CellExtent cat = m_catalog.value(id, c);
+  // Shared-worker mode (P6.1): the same cell may arrive twice (each pane
+  // requests independently; broadcasts reach both). Already loaded -> done.
+  if (m_loaded.contains(id)) {
+    m_requested.remove(id);
+    return;
+  }
   // Dropped if the per-location selection moved off it while it was decoding.
   if (buffer.empty() || !m_needed.contains(id)) {
     qWarning("onCellLoaded: DROP %s (%s)", qPrintable(id),
