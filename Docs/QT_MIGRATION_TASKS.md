@@ -2122,7 +2122,11 @@ existing `followOwnShip` property before adding).
 - [ ] **P4.3** Port `dashboard` as a built-in Qt module (display-anchored / HUD).
 - [ ] **P4.4** Port `chartdldr` (chart downloader) as a built-in Qt module.
 - [ ] **P4.5** Port `grib` as a built-in Qt module (world-anchored Layer).
-- [ ] **P4.6** Document the plugin API for future third-party / open use.
+- [~] **P4.6** Document the plugin API —
+      [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
+      (interface, contribution seams, wx-ABI mapping table, porting
+      guidance). Freezes once the API survives the P4.3–P4.5 first-party
+      ports unchanged.
 
 ## Phase 5 — Embedded / device targets  (est. 4–8 wks)
 
