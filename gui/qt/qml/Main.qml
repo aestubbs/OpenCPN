@@ -213,6 +213,24 @@ ApplicationWindow {
         anchors.right: hudPanel.left
         clip: true
         s52Engine: s52SplitPane
+        // P6.1 per-pane editing: this pane's own context menus, acting on
+        // splitPane and sharing the app dialogs.
+        ChartContextMenus {
+            targetChart: splitPane
+            onObjectQueryRequested: {
+                objectQueryWindow.show(); objectQueryWindow.raise()
+            }
+            onNewMarkRequested: {
+                markEditor.targetChart = splitPane
+                markEditor.openNew()
+            }
+            onAisTargetListRequested: {
+                aisListWindow.show(); aisListWindow.raise()
+            }
+            onFullScreenRequested: root.visibility === Window.FullScreen
+                                   ? root.showNormal() : root.showFullScreen()
+        }
+
         Rectangle {  // divider (drag to resize; fraction persists)
             width: 2
             color: dividerDrag.active ? "#cc3b82f6" : "#55202830"
@@ -921,7 +939,10 @@ ApplicationWindow {
             onObjectQueryRequested: {
                 objectQueryWindow.show(); objectQueryWindow.raise()
             }
-            onNewMarkRequested: markEditor.openNew()
+            onNewMarkRequested: {
+                markEditor.targetChart = chart
+                markEditor.openNew()
+            }
             onEditMarkRequested: (guid) => {
                 const wps = chart.routeList.waypoints
                 for (let i = 0; i < wps.length; ++i) {

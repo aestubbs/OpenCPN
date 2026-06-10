@@ -35,10 +35,13 @@ Window {
     // binding would evaluate once at startup and stick at 0,0).
     property string positionText: ""
 
+    // P6.1: the pane whose context position / mark API this dialog uses.
+    property var targetChart: chart
+
     function openNew() {
         editMode = false; guid = "";
         positionText = qsTr("At ") + DisplayConfig.formatLatLon(
-            chart.markDropLat(), chart.markDropLon())
+            targetChart.markDropLat(), targetChart.markDropLon())
         markNameField.text = ""; markCommentField.text = "";
         // Default to the configured mark icon (Options > User Interface >
         // Routes & Marks).
@@ -56,7 +59,7 @@ Window {
         ringsStep.text = "1.0"
         ringsUnits.currentIndex = 0
         scaminField.text = "0"
-        const wps = chart.routeList.waypoints
+        const wps = targetChart.routeList.waypoints
         for (let i = 0; i < wps.length; ++i) {
             if (wps[i].guid === g) {
                 ringsCheck.checked = wps[i].showRings
@@ -72,16 +75,16 @@ Window {
     }
     function apply() {
         if (editMode) {
-            chart.renameMark(guid, markNameField.text)
-            chart.setMarkComment(guid, markCommentField.text)
-            chart.setMarkIcon(guid, iconName)
-            chart.setMarkRangeRings(guid, ringsCheck.checked,
+            targetChart.renameMark(guid, markNameField.text)
+            targetChart.setMarkComment(guid, markCommentField.text)
+            targetChart.setMarkIcon(guid, iconName)
+            targetChart.setMarkRangeRings(guid, ringsCheck.checked,
                                     ringsCount.value,
                                     parseFloat(ringsStep.text) || 0,
                                     ringsUnits.currentIndex)
-            chart.setMarkScamin(guid, parseInt(scaminField.text) || 0)
+            targetChart.setMarkScamin(guid, parseInt(scaminField.text) || 0)
         } else {
-            chart.dropMarkHere(markNameField.text, markCommentField.text,
+            targetChart.dropMarkHere(markNameField.text, markCommentField.text,
                                iconName)
         }
     }
@@ -125,7 +128,7 @@ Window {
                 anchors.fill: parent
                 clip: true
                 cellWidth: 44; cellHeight: 44
-                model: chart.markIconNames()
+                model: targetChart.markIconNames()
                 delegate: Rectangle {
                     required property var modelData
                     width: 42; height: 42; radius: 4

@@ -22,6 +22,10 @@ import opencpn.qt
 Item {
     id: menus
 
+    // P6.1 focused-canvas: which pane these menus act on (default: the
+    // primary chart; the second pane instantiates its own copy).
+    property var targetChart: chart
+
     signal objectQueryRequested()
     signal newMarkRequested()
     signal editMarkRequested(string guid)
@@ -39,43 +43,43 @@ Item {
         id: chartContextMenu
         MenuItem {
             text: qsTr("Undo")
-            enabled: chart.canUndo
-            onTriggered: chart.undo()
+            enabled: targetChart.canUndo
+            onTriggered: targetChart.undo()
         }
         MenuItem {
             text: qsTr("Redo")
-            enabled: chart.canRedo
-            onTriggered: chart.redo()
+            enabled: targetChart.canRedo
+            onTriggered: targetChart.redo()
         }
         MenuSeparator {}
         MenuItem {
             // wx ID_DEF_MENU_GOTO_HERE: temp route from the fix to here,
             // activated at once, deleted on arrival.
             text: qsTr("Navigate to here")
-            enabled: chart.navState && chart.navState.ownShipValid
-            onTriggered: chart.navigateToHere()
+            enabled: targetChart.navState && targetChart.navState.ownShipValid
+            onTriggered: targetChart.navigateToHere()
         }
         MenuItem {
             text: qsTr("Zero XTE")
-            visible: chart.routeFollower.active
+            visible: targetChart.routeFollower.active
             height: visible ? implicitHeight : 0
-            onTriggered: chart.zeroXte()
+            onTriggered: targetChart.zeroXte()
         }
         MenuItem {
             text: qsTr("Object query here")
             onTriggered: {
-                chart.queryObjectsHere()
+                targetChart.queryObjectsHere()
                 menus.objectQueryRequested()
             }
         }
         MenuItem {
             text: qsTr("Center view here")
-            onTriggered: chart.centerViewHere()
+            onTriggered: targetChart.centerViewHere()
         }
         MenuSeparator {}
         // Chart controls (P3.18 tier 3, wx canvas_menu.cpp:441-611).
-        MenuItem { text: qsTr("Scale in");  onTriggered: chart.zoomIn() }
-        MenuItem { text: qsTr("Scale out"); onTriggered: chart.zoomOut() }
+        MenuItem { text: qsTr("Scale in");  onTriggered: targetChart.zoomIn() }
+        MenuItem { text: qsTr("Scale out"); onTriggered: targetChart.zoomOut() }
         Menu {
             title: qsTr("Chart orientation")
             MenuItem {
@@ -101,29 +105,29 @@ Item {
         MenuSeparator {}
         MenuItem {
             text: qsTr("Create route")
-            onTriggered: chart.routeBuildMode = true
+            onTriggered: targetChart.routeBuildMode = true
         }
         MenuItem {
             text: qsTr("Drop mark here")
             onTriggered: menus.newMarkRequested()  // dialog uses the ctx point
         }
         MenuItem {
-            text: chart.measureActive ? qsTr("Measure off") : qsTr("Measure")
-            onTriggered: chart.measureActive ? chart.stopMeasure()
-                                             : chart.startMeasure()
+            text: targetChart.measureActive ? qsTr("Measure off") : qsTr("Measure")
+            onTriggered: targetChart.measureActive ? targetChart.stopMeasure()
+                                             : targetChart.startMeasure()
         }
         MenuItem {
             text: qsTr("Paste KML")
-            onTriggered: chart.pasteKmlFromClipboard()
+            onTriggered: targetChart.pasteKmlFromClipboard()
         }
         MenuSeparator {}
         MenuItem {
             // Test ship (P3.16): drop a synthetic GPS here and grab the
             // keyboard so the cursor keys steer it straight away.
-            text: chart.simShip.active ? qsTr("Move test ship here")
+            text: targetChart.simShip.active ? qsTr("Move test ship here")
                                        : qsTr("Place test ship here")
             onTriggered: {
-                chart.placeSimShipHere()
+                targetChart.placeSimShipHere()
                 simKeyHandler.forceActiveFocus()
             }
         }
@@ -139,43 +143,43 @@ Item {
         MenuItem {
             text: routeMenu.isActive ? qsTr("Deactivate") : qsTr("Activate")
             onTriggered: routeMenu.isActive
-                         ? chart.deactivateRoute()
-                         : chart.activateRoute(routeMenu.routeIndex)
+                         ? targetChart.deactivateRoute()
+                         : targetChart.activateRoute(routeMenu.routeIndex)
         }
         MenuItem {
             text: qsTr("Activate next waypoint")
             visible: routeMenu.isActive
             height: visible ? implicitHeight : 0
-            onTriggered: chart.skipWaypoint()
+            onTriggered: targetChart.skipWaypoint()
         }
         MenuItem {
             text: qsTr("Zero XTE")
             visible: routeMenu.isActive
             height: visible ? implicitHeight : 0
-            onTriggered: chart.zeroXte()
+            onTriggered: targetChart.zeroXte()
         }
         MenuSeparator {}
         MenuItem {
             text: qsTr("Insert waypoint here")
             enabled: routeMenu.canInsert
-            onTriggered: chart.insertRoutePointAtMenu()
+            onTriggered: targetChart.insertRoutePointAtMenu()
         }
         MenuItem {
             text: qsTr("Append waypoints")
-            onTriggered: chart.appendToRoute(routeMenu.routeIndex)
+            onTriggered: targetChart.appendToRoute(routeMenu.routeIndex)
         }
         MenuItem {
             text: qsTr("Split at this leg")
             enabled: routeMenu.canInsert && !routeMenu.isActive
-            onTriggered: chart.splitRouteAtMenu()
+            onTriggered: targetChart.splitRouteAtMenu()
         }
         MenuItem {
             text: qsTr("Edit route points")
-            onTriggered: chart.editRoute(routeMenu.routeIndex)
+            onTriggered: targetChart.editRoute(routeMenu.routeIndex)
         }
         MenuItem {
             text: qsTr("Reverse")
-            onTriggered: chart.reverseRoute(routeMenu.routeIndex)
+            onTriggered: targetChart.reverseRoute(routeMenu.routeIndex)
         }
         MenuItem {
             text: qsTr("Details…")
@@ -183,7 +187,7 @@ Item {
         }
         MenuItem {
             text: qsTr("Copy as KML")
-            onTriggered: chart.copyRouteAsKml(routeMenu.routeIndex)
+            onTriggered: targetChart.copyRouteAsKml(routeMenu.routeIndex)
         }
         MenuItem {
             text: qsTr("Send to peer…")
@@ -198,7 +202,7 @@ Item {
             text: qsTr("Delete route")
             onTriggered: confirmDelete.ask(
                 qsTr("Delete this route?"),
-                function() { chart.deleteRoute(routeMenu.routeIndex) })
+                function() { targetChart.deleteRoute(routeMenu.routeIndex) })
         }
     }
 
@@ -213,8 +217,8 @@ Item {
             text: markMenu.markName.length > 0
                   ? qsTr("Navigate to \"%1\"").arg(markMenu.markName)
                   : qsTr("Navigate to this mark")
-            enabled: chart.navState && chart.navState.ownShipValid
-            onTriggered: chart.navigateToWaypoint(markMenu.guid)
+            enabled: targetChart.navState && targetChart.navState.ownShipValid
+            onTriggered: targetChart.navigateToWaypoint(markMenu.guid)
         }
         MenuItem {
             text: qsTr("Edit mark…")
@@ -222,7 +226,7 @@ Item {
         }
         MenuItem {
             text: qsTr("Copy as KML")
-            onTriggered: chart.copyMarkAsKml(markMenu.guid)
+            onTriggered: targetChart.copyMarkAsKml(markMenu.guid)
         }
         MenuItem {
             text: qsTr("Send to peer…")
@@ -239,7 +243,7 @@ Item {
             text: qsTr("Delete mark")
             onTriggered: confirmDelete.ask(
                 qsTr("Delete mark \"%1\"?").arg(markMenu.markName),
-                function() { chart.deleteMark(markMenu.guid) })
+                function() { targetChart.deleteMark(markMenu.guid) })
         }
     }
 
@@ -252,17 +256,17 @@ Item {
         MenuItem {
             // Opens the same info popup a left-click select does.
             text: qsTr("Target query")
-            onTriggered: chart.selectAisTarget(aisMenu.mmsi)
+            onTriggered: targetChart.selectAisTarget(aisMenu.mmsi)
         }
         MenuItem {
             text: qsTr("Center view on target")
-            onTriggered: chart.centerOnAis(aisMenu.mmsi)
+            onTriggered: targetChart.centerOnAis(aisMenu.mmsi)
         }
         MenuItem {
-            text: chart.aisTrailEnabled(aisMenu.mmsi) ? qsTr("Hide target track")
+            text: targetChart.aisTrailEnabled(aisMenu.mmsi) ? qsTr("Hide target track")
                                                       : qsTr("Show target track")
-            onTriggered: chart.setAisTrail(aisMenu.mmsi,
-                                           !chart.aisTrailEnabled(aisMenu.mmsi))
+            onTriggered: targetChart.setAisTrail(aisMenu.mmsi,
+                                           !targetChart.aisTrailEnabled(aisMenu.mmsi))
         }
         MenuSeparator {}
         MenuItem {
@@ -271,7 +275,7 @@ Item {
         }
         MenuItem {
             text: qsTr("Copy MMSI")
-            onTriggered: chart.copyToClipboard(String(aisMenu.mmsi))
+            onTriggered: targetChart.copyToClipboard(String(aisMenu.mmsi))
         }
     }
 
@@ -283,15 +287,15 @@ Item {
 
         MenuItem {
             text: qsTr("Hide track")
-            onTriggered: chart.setTrackVisible(trackMenu.guid, false)
+            onTriggered: targetChart.setTrackVisible(trackMenu.guid, false)
         }
         MenuItem {
             text: qsTr("Zoom to track")
-            onTriggered: chart.showTrack(trackMenu.guid)
+            onTriggered: targetChart.showTrack(trackMenu.guid)
         }
         MenuItem {
             text: qsTr("Copy as KML")
-            onTriggered: chart.copyTrackAsKml(trackMenu.guid)
+            onTriggered: targetChart.copyTrackAsKml(trackMenu.guid)
         }
         MenuItem {
             text: qsTr("Send to peer…")
@@ -303,7 +307,7 @@ Item {
             text: qsTr("Delete track")
             onTriggered: confirmDelete.ask(
                 qsTr("Delete track \"%1\"?").arg(trackMenu.trackName),
-                function() { chart.deleteTrack(trackMenu.guid) })
+                function() { targetChart.deleteTrack(trackMenu.guid) })
         }
     }
 
@@ -312,18 +316,18 @@ Item {
         id: routeNodeMenu
         MenuItem {
             text: qsTr("Delete point")
-            onTriggered: chart.deleteRoutePointAtMenu()
+            onTriggered: targetChart.deleteRoutePointAtMenu()
         }
         MenuItem {
             text: qsTr("Delete route")
             onTriggered: confirmDelete.ask(
                 qsTr("Delete the route being edited?"),
-                function() { chart.deleteSelectedRoute() })
+                function() { targetChart.deleteSelectedRoute() })
         }
         MenuSeparator {}
         MenuItem {
             text: qsTr("Finish editing")
-            onTriggered: chart.clearRouteSelection()
+            onTriggered: targetChart.clearRouteSelection()
         }
     }
 
@@ -331,7 +335,7 @@ Item {
     ConfirmDialog { id: confirmDelete }
 
     Connections {
-        target: chart
+        target: targetChart
         function onContextMenuRequested(x, y) {
             chartContextMenu.popup(x, y)
         }
