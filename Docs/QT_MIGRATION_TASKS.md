@@ -1241,8 +1241,19 @@ render anything onto the chart, only manages the plugin lifecycle.
       Existing DBs upgraded in place by a one-shot `MigrateTrkPointsSchema()`
       table-rebuild (transaction-wrapped, FK off; ISO→epoch via `strftime`);
       verified against the live `navobj.db` (schema changed, routes survived).
-- [ ] **P3.8** Chart selection / quilting UI.
-- [ ] **P3.9** Dialogs (AIS target info, object query, alarms) in QML.
+- [x] **P3.8** Chart selection / quilting UI — **covered (2026-06-10
+      audit):** the Qt canvas always quilts (deliberate divergence — the
+      composite quilt replaced wx's reference-chart selection, see the
+      P2 renderer notes), the **chart bar** shows the in-view cells, and
+      selection-adjacent controls live in Options > Charts (directory
+      manager, chart groups, detail/over-zoom sliders). No further
+      manual-selection UI is planned.
+- [x] **P3.9** Dialogs (AIS target info, object query, alarms) in QML —
+      **DONE (2026-06-10 audit):** AIS info card + the AIS **Target List
+      window** (P3.18 tier 2), the **object query** window (stacked-feature
+      stepper), and the alert surface (banner + sounds via AlertEngine /
+      P3.15, anchor-watch card). All follow the native-dialog convention
+      where they are dialogs.
 - [ ] **P3.10** i18n via Qt Linguist (`.ts`/`tr()`); migrate translatable strings.
 - [ ] **P3.11** Remove the parallel wx build path; fork is now Qt-only.
 - [ ] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
