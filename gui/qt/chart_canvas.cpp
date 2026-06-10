@@ -1552,6 +1552,30 @@ void ChartCanvas::copyToClipboard(const QString& text) const {
   if (QClipboard* cb = QGuiApplication::clipboard()) cb->setText(text);
 }
 
+bool ChartCanvas::copyRouteAsKml(int index) const {
+  if (!m_nav_provider) return false;
+  const QString kml = m_nav_provider->routeAsKml(index);
+  if (kml.isEmpty()) return false;
+  copyToClipboard(kml);
+  return true;
+}
+
+bool ChartCanvas::copyTrackAsKml(const QString& guid) const {
+  if (!m_nav_provider) return false;
+  const QString kml = m_nav_provider->trackAsKml(guid);
+  if (kml.isEmpty()) return false;
+  copyToClipboard(kml);
+  return true;
+}
+
+bool ChartCanvas::copyMarkAsKml(const QString& guid) const {
+  if (!m_nav_provider) return false;
+  const QString kml = m_nav_provider->waypointAsKml(guid);
+  if (kml.isEmpty()) return false;
+  copyToClipboard(kml);
+  return true;
+}
+
 QVariantList ChartCanvas::aisTargetSnapshot() const {
   QVariantList out;
   if (!m_nav_provider) return out;

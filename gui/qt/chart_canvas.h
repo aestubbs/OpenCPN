@@ -365,6 +365,11 @@ public:
   Q_INVOKABLE void centerOnAis(int mmsi);
   // System clipboard (Copy MMSI).
   Q_INVOKABLE void copyToClipboard(const QString& text) const;
+  // Copy a nav object to the clipboard as KML (P3.18 tier 4, wx
+  // Kml::Copy*ToClipboard). Returns false if the object wasn't found.
+  Q_INVOKABLE bool copyRouteAsKml(int index) const;
+  Q_INVOKABLE bool copyTrackAsKml(const QString& guid) const;
+  Q_INVOKABLE bool copyMarkAsKml(const QString& guid) const;
   // Snapshot of the live AIS targets for the Target List window, sorted by
   // range (unknown-range targets last). Each entry: mmsi, name, rangeText,
   // bearingText, sogText, cogText, cpaText, tcpaText, dangerous, isSart.

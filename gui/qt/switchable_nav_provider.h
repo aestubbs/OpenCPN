@@ -149,6 +149,13 @@ public:
   bool exportGpxTrack(const QString& guid, const QString& path) const;
   bool exportGpxWaypoint(const QString& guid, const QString& path) const;
 
+  // --- KML interop (P3.18 tier 4, wx Kml::MakeKmlFrom*) ----------------
+  /** The object serialized as a KML document (Placemark Point(s) +
+   *  LineString path), clipboard-ready; empty if not found. */
+  QString routeAsKml(int route) const;
+  QString trackAsKml(const QString& guid) const;
+  QString waypointAsKml(const QString& guid) const;
+
   // --- Marks (free waypoints), all persisted via NavObj_dB ---
   void dropMark(double lat, double lon, const QString& name,
                 const QString& comment, const QString& icon);

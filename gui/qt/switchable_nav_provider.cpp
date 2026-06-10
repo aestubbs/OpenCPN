@@ -179,6 +179,84 @@ QVariantMap SwitchableNavDataProvider::importGpx(const QString& path) {
   return out;
 }
 
+namespace {
+// Minimal KML document shell (wx Kml::StandardHead parity): the caller
+// appends Placemark fragments into %1.
+QString kmlDocument(const QString& name, const QString& placemarks) {
+  return QStringLiteral(
+             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+             "<kml xmlns=\"http://www.opengis.net/kml/2.2\" "
+             "xmlns:atom=\"http://www.w3.org/2005/Atom\">\n"
+             "  <Document>\n    <name>%1</name>\n%2  </Document>\n</kml>\n")
+      .arg(name.toHtmlEscaped(), placemarks);
+}
+
+QString kmlPointPlacemark(const QString& name, double lat, double lon) {
+  return QStringLiteral(
+             "    <Placemark>\n      <name>%1</name>\n      <Point>\n"
+             "        <coordinates>%2,%3,0. </coordinates>\n"
+             "      </Point>\n    </Placemark>\n")
+      .arg(name.toHtmlEscaped())
+      .arg(lon, 0, 'f', 8)
+      .arg(lat, 0, 'f', 8);
+}
+
+QString kmlPathPlacemark(const QString& coords) {
+  return QStringLiteral(
+             "    <Placemark>\n      <name>Path</name>\n      <LineString>\n"
+             "        <coordinates>%1</coordinates>\n"
+             "      </LineString>\n    </Placemark>\n")
+      .arg(coords);
+}
+}  // namespace
+
+QString SwitchableNavDataProvider::routeAsKml(int route) const {
+  if (!pRouteList || route < 0 || route >= static_cast<int>(pRouteList->size()))
+    return {};
+  Route* r = (*pRouteList)[route];
+  if (!r || !r->pRoutePointList) return {};
+  QString placemarks, coords;
+  for (RoutePoint* wp : *r->pRoutePointList) {
+    if (!wp) continue;
+    placemarks += kmlPointPlacemark(wp->GetName(), wp->m_lat, wp->m_lon);
+    coords += QStringLiteral("%1,%2,0. ")
+                  .arg(wp->m_lon, 0, 'f', 8)
+                  .arg(wp->m_lat, 0, 'f', 8);
+  }
+  placemarks += kmlPathPlacemark(coords);
+  const QString name =
+      r->GetName().isEmpty() ? QStringLiteral("OpenCPN Route") : r->GetName();
+  return kmlDocument(name, placemarks);
+}
+
+QString SwitchableNavDataProvider::trackAsKml(const QString& guid) const {
+  for (Track* t : g_TrackList) {
+    if (!t || t->m_GUID != guid) continue;
+    QString coords;
+    for (int i = 0; i < t->GetnPoints(); ++i) {
+      const TrackPoint* p = t->GetPoint(i);
+      if (!p) continue;
+      coords += QStringLiteral("%1,%2,0. ")
+                    .arg(p->m_lon, 0, 'f', 8)
+                    .arg(p->m_lat, 0, 'f', 8);
+    }
+    const QString name =
+        t->GetName().isEmpty() ? QStringLiteral("OpenCPN Track") : t->GetName();
+    return kmlDocument(name, kmlPathPlacemark(coords));
+  }
+  return {};
+}
+
+QString SwitchableNavDataProvider::waypointAsKml(const QString& guid) const {
+  RoutePoint* wp =
+      pWayPointMan ? pWayPointMan->FindRoutePointByGUID(guid) : nullptr;
+  if (!wp) return {};
+  const QString name =
+      wp->GetName().isEmpty() ? QStringLiteral("OpenCPN Waypoint")
+                              : wp->GetName();
+  return kmlDocument(name, kmlPointPlacemark(name, wp->m_lat, wp->m_lon));
+}
+
 bool SwitchableNavDataProvider::exportGpxAll(const QString& path) const {
   NavObjectCollection1 doc;
   doc.SetRootGPXNode();

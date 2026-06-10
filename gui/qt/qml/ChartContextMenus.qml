@@ -161,6 +161,10 @@ Item {
             text: qsTr("Details…")
             onTriggered: menus.routeDetailsRequested(routeMenu.routeIndex)
         }
+        MenuItem {
+            text: qsTr("Copy as KML")
+            onTriggered: chart.copyRouteAsKml(routeMenu.routeIndex)
+        }
         MenuSeparator {}
         MenuItem {
             text: qsTr("Delete route")
@@ -187,6 +191,10 @@ Item {
         MenuItem {
             text: qsTr("Edit mark…")
             onTriggered: menus.editMarkRequested(markMenu.guid)
+        }
+        MenuItem {
+            text: qsTr("Copy as KML")
+            onTriggered: chart.copyMarkAsKml(markMenu.guid)
         }
         MenuSeparator {}
         MenuItem {
@@ -242,6 +250,10 @@ Item {
         MenuItem {
             text: qsTr("Zoom to track")
             onTriggered: chart.showTrack(trackMenu.guid)
+        }
+        MenuItem {
+            text: qsTr("Copy as KML")
+            onTriggered: chart.copyTrackAsKml(trackMenu.guid)
         }
         MenuSeparator {}
         MenuItem {
