@@ -426,9 +426,13 @@ ApplicationWindow {
             // Hidden when the HUD panel supersedes it, or by the Display
             // option (wx "Show compass window").
             visible: !app.hudExpanded && DisplayConfig.showCompass
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.margins: 12
+            // Draggable (with the nav pill riding underneath); position
+            // persists as canvas fractions, default top-right.
+            x: UIConfig.hudStatsX >= 0
+               ? UIConfig.hudStatsX * (parent.width - width)
+               : parent.width - width - 12
+            y: UIConfig.hudStatsY >= 0
+               ? UIConfig.hudStatsY * (parent.height - height) : 12
             width: 72; height: 72; radius: width / 2
             color: "#cc101418"
             border.color: "#3affffff"
@@ -483,11 +487,25 @@ ApplicationWindow {
                 font.pointSize: 9; font.bold: true
             }
 
-            // Click the rose to cycle North-Up -> Course-Up -> Head-Up.
+            // Click the rose to cycle North-Up -> Course-Up -> Head-Up;
+            // drag it to move the whole HUD group (pill rides along).
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
+                drag.target: compass
+                drag.threshold: 6
+                drag.minimumX: 0
+                drag.maximumX: compass.parent.width - compass.width
+                drag.minimumY: 0
+                drag.maximumY: compass.parent.height - compass.height - 80
+                onReleased: {
+                    if (!drag.active) return
+                    UIConfig.hudStatsX = compass.x /
+                        Math.max(1, compass.parent.width - compass.width)
+                    UIConfig.hudStatsY = compass.y /
+                        Math.max(1, compass.parent.height - compass.height)
+                }
                 onClicked: DisplayConfig.navMode = (DisplayConfig.navMode + 1) % 3
                 ToolTip.visible: containsMouse
                 ToolTip.text: [qsTr("North-Up (click to change)"),
@@ -501,9 +519,10 @@ ApplicationWindow {
         Rectangle {
             id: navHud
             visible: !app.hudExpanded  // the HUD panel supersedes it
-            anchors.top: compass.bottom
-            anchors.right: parent.right
-            anchors.margins: 12
+            anchors.top: compass.visible ? compass.bottom : parent.top
+            anchors.right: compass.visible ? compass.right : parent.right
+            anchors.topMargin: compass.visible ? 8 : 12
+            anchors.rightMargin: compass.visible ? -((width - compass.width) / 2) : 12
             width: hudCol.implicitWidth + 24
             height: hudCol.implicitHeight + 16
             radius: 6
@@ -514,20 +533,88 @@ ApplicationWindow {
             // Active-route following solution (P3.16); null-safe via `active`.
             readonly property var rf: chart.routeFollower
 
+            // The pick-able stat rows (right-click / long-press to choose).
+            // Values render in the pill's existing row style.
+            readonly property var statCatalog: [
+                { key: "sog", label: qsTr("SOG") },
+                { key: "cog", label: qsTr("COG") },
+                { key: "hdg", label: qsTr("HDG") },
+                { key: "stw", label: qsTr("STW") },
+                { key: "awa", label: qsTr("AWA") },
+                { key: "twa", label: qsTr("TWA") },
+                { key: "dpt", label: qsTr("DPT") },
+                { key: "mtw", label: qsTr("SEA") },
+                { key: "pos", label: qsTr("POS") },
+            ]
+            function statValue(key) {
+                const n = navHud.nav
+                switch (key) {
+                case "sog": return n ? n.sogText : "--"
+                case "cog": return n ? n.cogText : "--"
+                case "hdg": return n && n.hdgValid
+                    ? ("00" + Math.round(n.hdg)).slice(-3) + "°" : "--"
+                case "stw": return n && n.stw >= 0
+                    ? n.stw.toFixed(1) + " kn" : "--"
+                case "awa": return n && n.awaValid
+                    ? Math.round(n.awa) + "° " + n.aws.toFixed(1) + " kn" : "--"
+                case "twa": return n && n.twaValid
+                    ? Math.round(n.twa) + "° " + n.tws.toFixed(1) + " kn" : "--"
+                case "dpt": return chart.depthText
+                case "mtw": return chart.waterTempText
+                default: return ""
+                }
+            }
+
+            // Right-click opens the stat picker (checkable menu).
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                onClicked: statPicker.popup()
+            }
+            Menu {
+                id: statPicker
+                title: qsTr("HUD values")
+                Instantiator {
+                    model: navHud.statCatalog
+                    delegate: MenuItem {
+                        required property var modelData
+                        text: modelData.label
+                        checkable: true
+                        checked: UIConfig.hudStats.indexOf(modelData.key) >= 0
+                        onTriggered: {
+                            var l = UIConfig.hudStats.slice()
+                            if (l.indexOf(modelData.key) >= 0)
+                                l.splice(l.indexOf(modelData.key), 1)
+                            else l.push(modelData.key)
+                            UIConfig.hudStats = navHud.statCatalog
+                                .map((s) => s.key)
+                                .filter((k) => l.indexOf(k) >= 0)
+                        }
+                        onCheckedChanged: { }  // driven by the binding
+                    }
+                    onObjectAdded: (i, o) => statPicker.insertItem(i, o)
+                    onObjectRemoved: (i, o) => statPicker.removeItem(o)
+                }
+            }
+
             Column {
                 id: hudCol
                 anchors.centerIn: parent
                 spacing: 2
 
-                Text {
-                    text: qsTr("SOG  ") + (navHud.nav ? navHud.nav.sogText : "--")
-                    color: "#e0e0e0"; font.pointSize: 13; font.bold: true
+                Repeater {
+                    model: navHud.statCatalog.filter(
+                               (st) => st.key !== "pos" &&
+                                       UIConfig.hudStats.indexOf(st.key) >= 0)
+                    delegate: Text {
+                        required property var modelData
+                        text: modelData.label + "  " +
+                              navHud.statValue(modelData.key)
+                        color: "#e0e0e0"; font.pointSize: 13; font.bold: true
+                    }
                 }
                 Text {
-                    text: qsTr("COG  ") + (navHud.nav ? navHud.nav.cogText : "--")
-                    color: "#e0e0e0"; font.pointSize: 13; font.bold: true
-                }
-                Text {
+                    visible: UIConfig.hudStats.indexOf("pos") >= 0
                     text: navHud.nav ? navHud.nav.positionText : "---"
                     color: "#b0d0ff"; font.pointSize: 11
                 }
@@ -980,9 +1067,6 @@ ApplicationWindow {
             onSendMarkToGpsRequested: (guid, name) =>
                 sendToGpsDialog.openForMark(guid, name)
         }
-
-        // The built-in HUD stats panel (draggable; ⚙ picks the stats).
-        HudStatsPanel { }
 
         // Plugin HUD contributions (P4.2): each registered component loads
         // above the chart with its plugin context attached.

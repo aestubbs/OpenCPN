@@ -59,7 +59,6 @@ qt_add_qml_module(opencpn-qt
     qml/SendToPeerDialog.qml
     qml/SendToGpsDialog.qml
         qml/PrioritiesDialog.qml
-        qml/HudStatsPanel.qml
   SOURCES
     app_controller.h
     chart_canvas.h
@@ -248,8 +247,10 @@ if (OCPN_QT_EXAMPLE_PLUGIN)
   add_subdirectory(plugin/example)
 endif ()
 
-# The Dashboard plugin (P4.3) -- the first real Phase-4 module.
-option(OCPN_QT_DASHBOARD_PLUGIN "Build the Dashboard Qt plugin" ON)
+# The Dashboard plugin (P4.3) -- superseded by the built-in HUD stats
+# panel (user decision 2026-06-10); kept as a nav-data API reference,
+# off by default.
+option(OCPN_QT_DASHBOARD_PLUGIN "Build the Dashboard Qt plugin" OFF)
 if (OCPN_QT_DASHBOARD_PLUGIN)
   add_subdirectory(plugin/dashboard)
 endif ()

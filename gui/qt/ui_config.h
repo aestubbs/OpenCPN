@@ -197,8 +197,8 @@ private:
   double m_toolbar_transparency = 0.0;
   bool m_touch = false;
   bool m_ships_bells = false;
-  QStringList m_hud_stats{QStringLiteral("pos"), QStringLiteral("sog"),
-                          QStringLiteral("cog"), QStringLiteral("dpt")};
+  QStringList m_hud_stats{QStringLiteral("sog"), QStringLiteral("cog"),
+                          QStringLiteral("pos")};
   double m_hud_stats_x = -1;
   double m_hud_stats_y = -1;
   bool m_split_view = false;

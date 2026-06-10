@@ -2584,10 +2584,14 @@ Window {
             }
 
             // --- Plugins (P4.2): the Qt plugin catalogue. ---
-            Item {
+            Flickable {
+                clip: true
+                contentHeight: pluginsPageCol.implicitHeight + 40
+                ScrollBar.vertical: ScrollBar {}
                 ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 20
+                    id: pluginsPageCol
+                    width: parent.width - 40
+                    x: 20; y: 20
                     spacing: 8
                     Label { text: qsTr("Plugins"); font.bold: true }
                     Label {
