@@ -2232,9 +2232,11 @@ symbols, chart-colour editor — stays where it is in Phase 2.)
       duplicate-arrival guard; live-tested dual-pane) — 2026-06-10.**
       **+ focused-canvas routing (2026-06-10): root.activeChart follows
       focus; zoom, follow/look-ahead and route-build act on the focused
-      pane (track/MOB/colour-scheme deliberately global).** **+ cross-pane colour-scheme sync (2026-06-10).** Remaining for wx
-      parity: per-pane context menus + editing overlays (instantiate
-      ChartContextMenus per pane with a targetChart property).
+      pane (track/MOB/colour-scheme deliberately global).** **+ cross-pane colour-scheme sync + PER-PANE CONTEXT MENUS AND MARK
+      EDITING (targetChart retarget; verified both modes) — 2026-06-10.
+      P6.1's wx-parity surface is functionally covered**; residual polish
+      (per-pane measure pill placement, editing-overlay variants) as
+      verification feedback arrives.
 
 ---
 
