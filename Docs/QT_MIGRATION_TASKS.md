@@ -2226,12 +2226,14 @@ Deliberately out of scope for the migration; revisit after the wx build
 retires. (The "Future / post-Phase-2 follow-ups" capture list — vector S-52
 symbols, chart-colour editor — stays where it is in Phase 2.)
 
-- [ ] **P6.1** **Multi-canvas / split-screen** (wx supports two chart panes
-      with independent pan/zoom — `canvas_config`, `RenderOverlayMultiCanvas`).
-      **Decision (user, 2026-06-10): out of scope for the migration** — the Qt
-      shell is single-canvas by design; revisit on demand post-retirement.
-      The Templates sub-panel's multi-canvas screen-config selector (P3.6)
-      waits on this too.
+- [~] **P6.1** Multi-canvas / split-screen — **experimental v1 landed
+      (2026-06-10):** an independent second pane (own viewport + own
+      S52Engine + own decode worker; engine constructed only when the
+      persisted toggle is on), sharing the chart library / nav data /
+      settings. Verified live with both engines decoding concurrently.
+      Inspection-only v1; remaining for wx parity: a shared decode
+      service (single worker pool), per-pane toolbar + scale linkage,
+      draggable divider, per-pane editing.
 
 ---
 
