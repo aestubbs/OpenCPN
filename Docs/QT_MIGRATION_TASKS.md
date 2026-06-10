@@ -1644,10 +1644,13 @@ toggles stay on `chart` (ChartCanvas).
       editor — `MakeCommDriver` parks them (no driver), so exposing them would
       be inert. They return when the comm framework grows those transports
       (see `comm_drv_factory.cpp`).
-- [ ] Remaining: per-connection **priorities** (the comm-priority registry is a
-      separate subsystem), and a "show NMEA debug window" launcher from this
-      page (the data-monitor itself exists — `nmea_monitor_model`; the
-      launcher move from the toolbar is **P3.22**).
+- [x] Per-connection **priorities** — **landed 2026-06-10**
+      (CommPrioritiesModel + PrioritiesDialog over CommBridge's five
+      priority maps; re-rank with Move up/down, active source marked,
+      Clear All; Connections > Priorities…). The data-monitor launcher
+      moved to this page earlier (P3.22). **P3.6 has no open sub-items
+      left** beyond the user-decision rows (per-element fonts) and
+      explicitly-deferred ones (config templates).
 
 **Ships page** (wx sub-panels: Own ship, AIS Targets, MMSI Properties,
 Routes/Points) — now built as four sub-tabs in `optionsWindow`, backed by the
