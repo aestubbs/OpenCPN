@@ -84,10 +84,12 @@ GribContext::GribContext(QObject* timeline, QObject* parent)
   }
   // Restore the last GRIB on startup (wx parity): the timeline can
   // drive the weather immediately.
-  const QString last =
+  QString last =
       QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
           .value(QStringLiteral("lastFile"))
           .toString();
+  if (qEnvironmentVariableIsSet("OCPN_GRIB_FILE"))
+    last = qEnvironmentVariable("OCPN_GRIB_FILE");
   if (!last.isEmpty() && QFile::exists(last))
     QMetaObject::invokeMethod(
         this, [this, last] { openFile(QUrl::fromLocalFile(last)); },
@@ -123,7 +125,9 @@ void GribContext::onTimelineChanged() {
   // time moved >= 3 min from the last push (a scrub always qualifies).
   static qint64 s_last_push = 0;
   const qint64 e = displayEpoch();
-  if (std::llabs(e - s_last_push) < 180) return;
+  static const bool s_selftest =
+      qEnvironmentVariableIsSet("OCPN_GRIB_SELFTEST");
+  if (!s_selftest && std::llabs(e - s_last_push) < 180) return;
   s_last_push = e;
   pushToLayer();
 }
@@ -162,6 +166,35 @@ void GribContext::openFile(const QUrl& url) {
              r && r->isOk() ? qPrintable(QString::number(r->getValue(0, 0), 'f', 2))
                             : "n/a",
              r && r->isOk() ? r->getX(0) : 0.0);
+  }
+  if (qEnvironmentVariableIsSet("OCPN_GRIB_SELFTEST") && m_timeline &&
+      m_step_times.size() >= 2) {
+    // Drive the REAL timeline (the same path a user scrub takes)
+    // through steps and midpoints, 1.5 s apart.
+    auto* seq = new QTimer(this);
+    seq->setInterval(1500);
+    auto idx = std::make_shared<int>(0);
+    connect(seq, &QTimer::timeout, this, [this, seq, idx]() {
+      QList<qint64> targets;
+      for (int i = 0; i < m_step_times.size(); ++i) {
+        targets << m_step_times[i];
+        if (i + 1 < m_step_times.size())
+          targets << (m_step_times[i] + m_step_times[i + 1]) / 2;
+      }
+      if (*idx >= targets.size()) {
+        qWarning("grib-selftest: DONE");
+        seq->stop();
+        seq->deleteLater();
+        return;
+      }
+      const QDateTime t = QDateTime::fromSecsSinceEpoch(targets[*idx]);
+      qWarning("grib-selftest: setDisplayTime -> %s",
+               qPrintable(t.toString(Qt::ISODate)));
+      QMetaObject::invokeMethod(m_timeline, "setDisplayTime",
+                                Q_ARG(QDateTime, t));
+      ++(*idx);
+    });
+    seq->start();
   }
   m_status = tr("%1 records, %2 time steps")
                  .arg(m_reader->getTotalNumberOfGribRecords())
@@ -793,6 +826,14 @@ void GribContext::pushToLayer() {
       g.v[k] = rv->isDefined(i, j) ? static_cast<float>(rv->getValue(i, j))
                                    : NAN;
     }
+  }
+  {
+    double sum = 0;
+    int n = 0;
+    for (float u : g.u)
+      if (!std::isnan(u)) { sum += u; ++n; }
+    qWarning("grib: PUSH epoch=%lld lon0=%.1f meanU=%.3f n=%d", 
+             (long long)displayEpoch(), g.lon0, n ? sum / n : 0.0, n);
   }
   m_layer->setGrid(g);
   if (ownWind) {

@@ -118,8 +118,16 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
   const double cellPx = std::fabs(m_grid.di) / wpp;
   const int step =
       cellPx > 0 ? qMax(1, qCeil(60.0 / cellPx)) : qMax(1, m_grid.ni / 48);
-  qWarning("grib layer: rebuild ni=%d nj=%d cellPx=%.1f step=%d visible=%d",
-           m_grid.ni, m_grid.nj, cellPx, step, visible() ? 1 : 0);
+  {
+    double sum = 0;
+    int n = 0;
+    for (float u : m_grid.u)
+      if (!std::isnan(u)) { sum += u; ++n; }
+    qWarning("grib layer: REBUILD ni=%d nj=%d lon0=%.1f lat0=%.1f "
+             "cellPx=%.1f step=%d visible=%d meanU=%.3f",
+             m_grid.ni, m_grid.nj, m_grid.lon0, m_grid.lat0, cellPx, step,
+             visible() ? 1 : 0, n ? sum / n : 0.0);
+  }
 
   for (int j = 0; j < m_grid.nj; j += step) {
     for (int i = 0; i < m_grid.ni; i += step) {
