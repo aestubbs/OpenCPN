@@ -3,30 +3,36 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 
-// The GRIB control bar (wx parity, redesigned for readability): a light
-// opaque panel top-left (clear of the chart pills), with prev/step/next,
-// per-type toggle chips, overlay choice and quick actions. Toggled by
-// the 🌬 toolbar button.
+// The GRIB flyout (press-and-hold / right-click the 🌬 tool): the wx
+// floating dialog's controls as a compact panel beside the toolbar.
+// Time itself lives on the chart time bar; ⏮⏭ snap it between steps.
 Item {
     property var pluginContext: null
+
+    // Click-away closes the flyout.
+    MouseArea {
+        anchors.fill: parent
+        visible: pluginContext && pluginContext.controlsVisible
+        onPressed: (m) => { pluginContext.controlsVisible = false; m.accepted = false }
+    }
 
     Rectangle {
         visible: pluginContext && pluginContext.controlsVisible
         x: 76
-        y: 16
-        width: barCol.implicitWidth + 20
-        height: barCol.implicitHeight + 14
-        radius: 6
-        color: Qt.rgba(0.93, 0.93, 0.95, 0.92)
+        y: 120
+        width: flyCol.implicitWidth + 22
+        height: flyCol.implicitHeight + 18
+        radius: 8
+        color: Qt.rgba(0.95, 0.95, 0.97, 0.97)
         border.color: Qt.rgba(0, 0, 0, 0.35)
         border.width: 1
 
         ColumnLayout {
-            id: barCol
+            id: flyCol
             anchors.centerIn: parent
-            spacing: 4
+            spacing: 5
 
-            // Row 1: file + timestep navigation.
+            // File + step row.
             RowLayout {
                 spacing: 6
                 Button {
@@ -48,21 +54,18 @@ Item {
                         MenuSeparator { }
                         MenuItem {
                             text: qsTr("Browse…")
-                            onTriggered: gribBarFileDialog.open()
+                            onTriggered: gribFlyFileDialog.open()
                         }
                     }
                 }
                 Label {
                     text: pluginContext && pluginContext.fileName.length
-                          ? pluginContext.fileName : qsTr("— no GRIB loaded —")
-                    font.pointSize: 11
+                          ? pluginContext.fileName : qsTr("no file")
+                    font.pointSize: 10
                     color: "#1b1d21"
                     elide: Text.ElideMiddle
-                    Layout.maximumWidth: 200
+                    Layout.maximumWidth: 150
                 }
-                ToolSeparator { }
-                // Timestep prev / current / next: drives the app TIME BAR,
-                // which in turn drives the weather (single time source).
                 ToolButton {
                     text: "⏮"
                     enabled: pluginContext && pluginContext.timeIndex > 0
@@ -71,9 +74,8 @@ Item {
                 Label {
                     text: pluginContext &&
                           pluginContext.timeIndex < pluginContext.timeSteps.length
-                          ? pluginContext.timeSteps[pluginContext.timeIndex]
-                          : "--"
-                    font.pointSize: 11; font.bold: true
+                          ? pluginContext.timeSteps[pluginContext.timeIndex] : "--"
+                    font.pointSize: 10; font.bold: true
                     color: "#1b1d21"
                 }
                 ToolButton {
@@ -84,32 +86,36 @@ Item {
                 }
             }
 
-            // Row 2: what to show.
-            RowLayout {
-                spacing: 6
+            MenuSeparator { Layout.fillWidth: true }
+
+            // Type toggles, two columns.
+            GridLayout {
+                columns: 2
+                columnSpacing: 12
+                rowSpacing: 0
                 Repeater {
                     model: pluginContext ? pluginContext.dataTypes : []
-                    delegate: Button {
+                    delegate: CheckBox {
                         required property var modelData
                         visible: modelData.available
-                        checkable: true
-                        checked: modelData.shown
                         text: modelData.label
-                        font.pointSize: 10
-                        padding: 5
-                        onClicked: pluginContext.setTypeShown(modelData.key,
+                        font.pointSize: 11
+                        padding: 3
+                        checked: modelData.shown
+                        onToggled: pluginContext.setTypeShown(modelData.key,
                                                               checked)
                     }
                 }
-                ToolSeparator { }
-                Label {
-                    text: qsTr("Overlay")
-                    font.pointSize: 10; color: "#5a5d63"
-                }
+            }
+
+            MenuSeparator { Layout.fillWidth: true }
+
+            RowLayout {
+                spacing: 8
+                Label { text: qsTr("Overlay:"); font.pointSize: 11 }
                 ComboBox {
-                    id: overlayBox
                     font.pointSize: 10
-                    implicitWidth: 120
+                    implicitWidth: 115
                     model: {
                         const l = [{ key: "", label: qsTr("None") }]
                         const types = pluginContext ? pluginContext.dataTypes : []
@@ -128,16 +134,7 @@ Item {
                     }
                     onActivated: pluginContext.overlayKey = model[currentIndex].key
                 }
-                Button {
-                    checkable: true
-                    text: qsTr("Particles")
-                    font.pointSize: 10
-                    padding: 5
-                    checked: pluginContext ? pluginContext.particles : false
-                    onClicked: if (pluginContext) pluginContext.particles = checked
-                }
                 ComboBox {
-                    id: altBox
                     font.pointSize: 10
                     implicitWidth: 95
                     visible: model.length > 1
@@ -159,10 +156,37 @@ Item {
                     onActivated: pluginContext.windAltitude = model[currentIndex].hpa
                 }
             }
+            RowLayout {
+                spacing: 8
+                CheckBox {
+                    text: qsTr("Particles")
+                    font.pointSize: 11
+                    padding: 3
+                    checked: pluginContext ? pluginContext.particles : false
+                    onToggled: if (pluginContext) pluginContext.particles = checked
+                }
+                CheckBox {
+                    text: qsTr("Data at cursor")
+                    font.pointSize: 11
+                    padding: 3
+                    checked: pluginContext ? pluginContext.cursorPanelVisible : false
+                    onToggled: if (pluginContext)
+                                   pluginContext.cursorPanelVisible = checked
+                }
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: qsTr("Settings…")
+                    font.pointSize: 10
+                    onClicked: {
+                        pluginContext.controlsVisible = false
+                        optionsWindow.openPluginPrefs("GRIB")
+                    }
+                }
+            }
         }
     }
     FileDialog {
-        id: gribBarFileDialog
+        id: gribFlyFileDialog
         nameFilters: [qsTr("GRIB files (*.grb *.grb2 *.grib *.grib2 *.bz2 *.gz)"),
                       qsTr("All files (*)")]
         onAccepted: if (pluginContext) pluginContext.openFile(selectedFile)

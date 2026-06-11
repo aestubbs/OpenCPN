@@ -73,6 +73,14 @@ GribContext::GribContext(QObject* timeline, QObject* parent)
           st.value(QStringLiteral("show_") + t.key, false).toBool();
     m_overlay_key = st.value(QStringLiteral("overlayKey")).toString();
     m_grib_dir = st.value(QStringLiteral("gribDir")).toUrl();
+    m_particle_density = st.value(QStringLiteral("particleDensity"), 5).toInt();
+    m_interpolate = st.value(QStringLiteral("interpolate"), true).toBool();
+    m_overlay_transparency =
+        st.value(QStringLiteral("overlayTransparency"), 55).toInt();
+    const QStringList unitKeys =
+        st.value(QStringLiteral("unitKeys")).toStringList();
+    for (const QString& uk : unitKeys)
+      m_units[uk] = st.value(QStringLiteral("unit_") + uk).toString();
   }
   // Restore the last GRIB on startup (wx parity): the timeline can
   // drive the weather immediately.
@@ -210,6 +218,7 @@ GribRecord* GribContext::recordAt(int dataType, int levelType, int level,
   const time_t T = displayEpoch();
   GribRecord* exact = m_reader->getGribRecord(dataType, levelType, level, T);
   if (exact && exact->isOk()) return exact;
+  if (!m_interpolate) return nullptr;  // nearest-step mode
   // Bracket T between steps and interpolate (tier 3).
   for (int i = 0; i + 1 < m_step_times.size(); ++i) {
     if (T > m_step_times[i] && T < m_step_times[i + 1]) {
@@ -247,6 +256,7 @@ void GribContext::recordPairAt(int dtX, int dtY, int levelType, int level,
     *ry = ey;
     return;
   }
+  if (!m_interpolate) return;  // nearest-step mode
   for (int i = 0; i + 1 < m_step_times.size(); ++i) {
     if (T > m_step_times[i] && T < m_step_times[i + 1]) {
       const time_t t0 = static_cast<time_t>(m_step_times[i]);
@@ -282,6 +292,156 @@ void GribContext::setOverlayKey(const QString& k) {
       .setValue(QStringLiteral("overlayKey"), k);
   Q_EMIT typesChanged();
   pushToLayer();
+}
+
+namespace {
+// Unit tables per type kind. The FIRST entry is the default; factors
+// convert from the GRIB native unit.
+struct UnitDef { const char* name; double factor; double offset; };
+const UnitDef kSpeedUnits[] = {{"kn", 1.94384, 0}, {"m/s", 1.0, 0},
+                               {"km/h", 3.6, 0}, {"mph", 2.23694, 0}};
+const UnitDef kTempUnits[] = {{"°C", 1.0, -273.15},
+                              {"°F", 1.8, -459.67}};
+const UnitDef kHeightUnits[] = {{"m", 1.0, 0}, {"ft", 3.28084, 0}};
+const UnitDef kPressUnits[] = {{"hPa", 0.01, 0}, {"inHg", 0.0002953, 0}};
+
+const UnitDef* unitTable(const QString& key, int* n) {
+  if (key == QLatin1String("wind") || key == QLatin1String("gust") ||
+      key == QLatin1String("current")) {
+    *n = 4;
+    return kSpeedUnits;
+  }
+  if (key == QLatin1String("airtemp") || key == QLatin1String("seatemp")) {
+    *n = 2;
+    return kTempUnits;
+  }
+  if (key == QLatin1String("waves")) {
+    *n = 2;
+    return kHeightUnits;
+  }
+  if (key == QLatin1String("pressure")) {
+    *n = 2;
+    return kPressUnits;
+  }
+  *n = 0;
+  return nullptr;
+}
+}  // namespace
+
+// The active unit's conversion for a type (native -> display).
+static void activeUnit(const QString& key, const QString& chosen,
+                       double* factor, double* offset, QString* suffix) {
+  int n = 0;
+  const UnitDef* t = unitTable(key, &n);
+  for (int i = 0; i < n; ++i) {
+    if (chosen == QString::fromUtf8(t[i].name) || (chosen.isEmpty() && i == 0)) {
+      *factor = t[i].factor;
+      *offset = t[i].offset;
+      *suffix = QStringLiteral(" ") + QString::fromUtf8(t[i].name);
+      return;
+    }
+  }
+  if (n > 0) {
+    *factor = t[0].factor;
+    *offset = t[0].offset;
+    *suffix = QStringLiteral(" ") + QString::fromUtf8(t[0].name);
+  }
+}
+
+QStringList GribContext::unitOptions(const QString& key) const {
+  int n = 0;
+  const UnitDef* t = unitTable(key, &n);
+  QStringList out;
+  for (int i = 0; i < n; ++i) out << QString::fromUtf8(t[i].name);
+  return out;
+}
+
+QString GribContext::unitFor(const QString& key) const {
+  const QString u = m_units.value(key);
+  if (!u.isEmpty()) return u;
+  const QStringList opts = unitOptions(key);
+  return opts.isEmpty() ? QString() : opts.first();
+}
+
+void GribContext::setUnitFor(const QString& key, const QString& unit) {
+  if (m_units.value(key) == unit) return;
+  m_units[key] = unit;
+  QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"));
+  st.setValue(QStringLiteral("unit_") + key, unit);
+  st.setValue(QStringLiteral("unitKeys"), QStringList(m_units.keys()));
+  Q_EMIT typesChanged();
+  pushToLayer();
+}
+
+void GribContext::setParticleDensity(int d) {
+  d = qBound(1, d, 10);
+  if (d == m_particle_density) return;
+  m_particle_density = d;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
+      .setValue(QStringLiteral("particleDensity"), d);
+  if (m_layer) m_layer->setParticleDensity(d);
+  Q_EMIT typesChanged();
+}
+
+void GribContext::setInterpolate(bool on) {
+  if (on == m_interpolate) return;
+  m_interpolate = on;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
+      .setValue(QStringLiteral("interpolate"), on);
+  Q_EMIT typesChanged();
+  pushToLayer();
+}
+
+void GribContext::setOverlayTransparency(int pct) {
+  pct = qBound(0, pct, 100);
+  if (pct == m_overlay_transparency) return;
+  m_overlay_transparency = pct;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
+      .setValue(QStringLiteral("overlayTransparency"), pct);
+  if (m_layer) m_layer->setOverlayAlpha(255 * (100 - pct) / 100 / 2);
+  Q_EMIT typesChanged();
+  pushToLayer();
+}
+
+void GribContext::setMasterEnabled(bool on) {
+  if (on == m_master_enabled) return;
+  m_master_enabled = on;
+  if (m_layer) m_layer->setVisible(on);
+  Q_EMIT controlsChanged();
+}
+
+QStringList GribContext::cursorRows(double lat, double lon) const {
+  QStringList rows;
+  if (!m_reader || m_step_times.isEmpty()) return rows;
+  const time_t t = static_cast<time_t>(m_step_times[m_time_index]);
+  auto val = [&](int dt, int lt, int lv) -> double {
+    GribRecord* r = m_reader->getGribRecord(dt, lt, lv, t);
+    if (!r || !r->isOk()) return GRIB_NOTDEF;
+    return r->getInterpolatedValue(lon, lat, true);
+  };
+  const double u = val(GRB_WIND_VX, LV_ABOV_GND, 10);
+  const double v = val(GRB_WIND_VY, LV_ABOV_GND, 10);
+  if (u != GRIB_NOTDEF && v != GRIB_NOTDEF) {
+    double dir = std::atan2(-u, -v) * 180.0 / M_PI;
+    if (dir < 0) dir += 360.0;
+    rows << tr("Wind\t%1°  %2 kn")
+                .arg(qRound(dir))
+                .arg(std::hypot(u, v) * 1.94384, 0, 'f', 1);
+  }
+  const double gust = val(GRB_WIND_GUST, LV_GND_SURF, 0);
+  if (gust != GRIB_NOTDEF)
+    rows << tr("Gust\t%1 kn").arg(gust * 1.94384, 0, 'f', 1);
+  const double pa = val(GRB_PRESSURE, LV_MSL, 0);
+  if (pa != GRIB_NOTDEF)
+    rows << tr("Pressure\t%1 hPa").arg(pa / 100.0, 0, 'f', 0);
+  const double hs = val(GRB_HTSGW, LV_GND_SURF, 0);
+  if (hs != GRIB_NOTDEF) rows << tr("Waves\t%1 m").arg(hs, 0, 'f', 1);
+  const double rn = val(GRB_PRECIP_TOT, LV_GND_SURF, 0);
+  if (rn != GRIB_NOTDEF) rows << tr("Rain\t%1 mm").arg(rn, 0, 'f', 1);
+  const double at = val(GRB_TEMP, LV_ABOV_GND, 2);
+  if (at != GRIB_NOTDEF)
+    rows << tr("Air\t%1 °C").arg(at - 273.15, 0, 'f', 0);
+  return rows;
 }
 
 void GribContext::stepTimeline(int delta) {
@@ -455,6 +615,13 @@ void GribContext::pushToLayer() {
       f.color = tspec.color;
       f.unitSuffix = QString::fromUtf8(tspec.suffix);
       f.unitFactor = tspec.factor;
+      {  // honour the user's unit choice when the type has one
+        double uf = f.unitFactor, uo = 0;
+        QString us = f.unitSuffix;
+        activeUnit(key, m_units.value(key), &uf, &uo, &us);
+        f.unitFactor = uf;
+        f.unitSuffix = us;
+      }
       f.dirMag = (tspec.kind == TypeSpec::ArrowsDirMag);
       bool own1 = false, own2 = false;
       GribRecord* r2 = nullptr;
@@ -515,6 +682,14 @@ void GribContext::pushToLayer() {
       f.suffix = QString::fromUtf8(tspec.suffix);
       f.factor = tspec.factor;
       f.offset = tspec.offset;
+      {
+        double uf = f.factor, uo = f.offset;
+        QString us = f.suffix;
+        activeUnit(key, m_units.value(key), &uf, &uo, &us);
+        f.factor = uf;
+        f.offset = uo;
+        f.suffix = us;
+      }
       f.decimals = tspec.decimals;
       m_layer->setNumbers(key, f);
       if (ownN) delete rn;
@@ -688,12 +863,19 @@ bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
     host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/CursorReadout.qml")),
                      m_ctx);
   if (host.registerHud)
-    host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/ControlBar.qml")),
+    host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/Flyout.qml")),
                      m_ctx);
+  if (host.registerHud)
+    host.registerHud(
+        QUrl(QStringLiteral("qrc:/grib_plugin/CursorDataHud.qml")), m_ctx);
   if (host.registerToolbarAction)
     host.registerToolbarAction(
-        QStringLiteral("🌬"), QStringLiteral("GRIB weather"),
-        [this] { if (m_ctx) m_ctx->toggleControls(); });
+        QStringLiteral("🌬"),
+        QStringLiteral("GRIB weather (hold for options)"),
+        [this] {
+          if (m_ctx) m_ctx->setMasterEnabled(!m_ctx->masterEnabled());
+        },
+        [this] { if (m_ctx) m_ctx->setControlsVisible(true); });
   if (host.registerSettingsPage)
     host.registerSettingsPage(
         QStringLiteral("GRIB"),

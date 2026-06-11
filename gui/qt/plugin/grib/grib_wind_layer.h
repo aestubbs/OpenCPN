@@ -134,6 +134,15 @@ public:
    *  timer drives re-render while enabled. */
   void setParticlesEnabled(bool on);
   bool particlesEnabled() const { return m_particles_on; }
+  void setParticleDensity(int d) {  // 1..10 -> 150..1500 particles
+    m_particle_count = 150 * qBound(1, d, 10);
+    m_particles.clear();
+    Q_EMIT dirty();
+  }
+  void setOverlayAlpha(int a) {
+    m_overlay_alpha = qBound(0, a, 255);
+    Q_EMIT dirty();
+  }
 
 private:
   void drawIsobars(SgBuilder& b);
@@ -161,6 +170,8 @@ private:
   void stepParticles();
   void drawParticles(SgBuilder& b);
   bool m_particles_on = false;
+  int m_particle_count = 750;
+  int m_overlay_alpha = 110;
   QVector<Particle> m_particles;
   QTimer* m_particle_timer = nullptr;
   QSGNode* m_root = nullptr;

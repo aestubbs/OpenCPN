@@ -103,12 +103,15 @@ Window {
             // STAGE edits locally and expose apply().
             DialogButtonBox {
                 Layout.fillWidth: true
-                standardButtons: DialogButtonBox.Ok | DialogButtonBox.Cancel
+                standardButtons: DialogButtonBox.Ok | DialogButtonBox.Cancel |
+                                 DialogButtonBox.Apply
                 onAccepted: {
                     if (prefsLoader.item && prefsLoader.item.apply)
                         prefsLoader.item.apply()
                     pluginPrefsDialog.close()
                 }
+                onApplied: if (prefsLoader.item && prefsLoader.item.apply)
+                               prefsLoader.item.apply()
                 onRejected: pluginPrefsDialog.close()
             }
         }

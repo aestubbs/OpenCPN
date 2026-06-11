@@ -61,11 +61,23 @@ class GribContext : public QObject {
                  typesChanged)
   Q_PROPERTY(bool particles READ particles WRITE setParticles NOTIFY
                  typesChanged)
+  // Settings-dialog knobs (staged in the dialog, applied on OK/Apply).
+  Q_PROPERTY(int particleDensity READ particleDensity WRITE setParticleDensity
+                 NOTIFY typesChanged)
+  Q_PROPERTY(bool interpolate READ interpolate WRITE setInterpolate NOTIFY
+                 typesChanged)
+  Q_PROPERTY(int overlayTransparency READ overlayTransparency WRITE
+                 setOverlayTransparency NOTIFY typesChanged)
   Q_PROPERTY(QVariantList altitudes READ altitudes NOTIFY typesChanged)
   Q_PROPERTY(QString status READ status NOTIFY gribChanged)
-  // The on-canvas control bar's visibility (toolbar 🌬 toggles it).
+  // The toolbar flyout (press-and-hold 🌬) + master weather switch
+  // (plain click) + the cursor-data HUD panel (toggled on the flyout).
   Q_PROPERTY(bool controlsVisible READ controlsVisible WRITE
                  setControlsVisible NOTIFY controlsChanged)
+  Q_PROPERTY(bool masterEnabled READ masterEnabled WRITE setMasterEnabled
+                 NOTIFY controlsChanged)
+  Q_PROPERTY(bool cursorPanelVisible READ cursorPanelVisible WRITE
+                 setCursorPanelVisible NOTIFY controlsChanged)
 
 public:
   explicit GribContext(QObject* timeline = nullptr,
@@ -93,6 +105,27 @@ public:
     Q_EMIT controlsChanged();
   }
   void toggleControls() { setControlsVisible(!m_controls_visible); }
+  bool masterEnabled() const { return m_master_enabled; }
+  void setMasterEnabled(bool on);
+  bool cursorPanelVisible() const { return m_cursor_panel; }
+  void setCursorPanelVisible(bool on) {
+    if (on == m_cursor_panel) return;
+    m_cursor_panel = on;
+    Q_EMIT controlsChanged();
+  }
+  /** Per-type cursor rows for the HUD panel: ["Wind\t214° 12.4 kn", ...]
+   *  for the types available at this position. */
+  Q_INVOKABLE QStringList cursorRows(double lat, double lon) const;
+  int particleDensity() const { return m_particle_density; }
+  void setParticleDensity(int d);
+  bool interpolate() const { return m_interpolate; }
+  void setInterpolate(bool on);
+  int overlayTransparency() const { return m_overlay_transparency; }
+  void setOverlayTransparency(int pct);
+  /** Unit choices for a type key (first = current selection). */
+  Q_INVOKABLE QStringList unitOptions(const QString& key) const;
+  Q_INVOKABLE QString unitFor(const QString& key) const;
+  Q_INVOKABLE void setUnitFor(const QString& key, const QString& unit);
 
   /** Wind/pressure at a position for the cursor readout: a formatted
    *  one-liner ("12.4 kn @ 215°   1013 hPa"), empty when off-grid or no
@@ -155,9 +188,15 @@ private:
   QUrl m_grib_dir;
   int m_wind_altitude = 0;
   bool m_particles = false;
+  int m_particle_density = 5;        // 1..10
+  bool m_interpolate = true;
+  int m_overlay_transparency = 55;   // %
+  QMap<QString, QString> m_units;    // per-type unit choice
   QMap<QString, bool> m_type_shown;     // persisted per-type toggles
   QMap<QString, bool> m_type_available; // present in the loaded file
   bool m_controls_visible = false;
+  bool m_master_enabled = true;
+  bool m_cursor_panel = false;
   QObject* m_timeline = nullptr;
   QString m_status;
 };

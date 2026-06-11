@@ -79,7 +79,7 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
               m_overlay_max > 0 ? qBound(0.0, v / m_overlay_max, 1.0) : 0.0;
           c = QColor::fromHsvF(0.66 * (1.0 - f), 0.85, 0.95);
         }
-        c.setAlpha(110);  // translucent wash over the chart
+        c.setAlpha(m_overlay_alpha);  // user transparency
         row[i] = c.rgba();
       }
     }
@@ -233,7 +233,7 @@ static void sampleWind(const GribWindLayer::WindGrid& g, double lon,
 void GribWindLayer::stepParticles() {
   const WindGrid& g = m_grid;
   if (g.ni < 2 || g.nj < 2) return;
-  const int kCount = 600;
+  const int kCount = m_particle_count;
   const double lonSpan = (g.ni - 1) * g.di;
   const double latSpan = (g.nj - 1) * g.dj;
   auto respawn = [&](Particle& p, int seed) {

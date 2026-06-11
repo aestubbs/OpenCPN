@@ -193,13 +193,18 @@ Pane {
                 text: modelData.glyph
                 ToolTip.text: modelData.tooltip
                 onClicked: chart.pluginRegistry.triggerToolbarAction(index)
-                onPressAndHold: floatToolbar.pluginPrefsRequested(
-                                    modelData.pluginName)
-                // wx parity: right-click the tool opens its preferences.
+                // Long-press / right-click: the plugin's FLYOUT when it
+                // has one, else its preferences (wx parity).
+                function secondary() {
+                    if (modelData.hasFlyout)
+                        chart.pluginRegistry.triggerToolbarLongPress(index)
+                    else
+                        floatToolbar.pluginPrefsRequested(modelData.pluginName)
+                }
+                onPressAndHold: secondary()
                 TapHandler {
                     acceptedButtons: Qt.RightButton
-                    onTapped: floatToolbar.pluginPrefsRequested(
-                                  modelData.pluginName)
+                    onTapped: parent.secondary()
                 }
             }
         }

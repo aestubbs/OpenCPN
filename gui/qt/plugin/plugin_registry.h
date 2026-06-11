@@ -83,6 +83,7 @@ public:
   QVariantList toolbarActions() const { return m_toolbar_actions; }
   QVariantList contextMenuItems() const { return m_menu_items; }
   Q_INVOKABLE void triggerToolbarAction(int index);
+  Q_INVOKABLE void triggerToolbarLongPress(int index);
   Q_INVOKABLE void triggerContextMenuItem(int index, double lat, double lon);
 
   /** Enable/disable by name (persisted). A change applies on restart --
@@ -113,6 +114,7 @@ private:
   QVariantList m_toolbar_actions;
   QVariantList m_menu_items;
   QList<std::function<void()>> m_toolbar_callbacks;
+  QList<std::function<void()>> m_toolbar_longpress;
   QList<std::function<void(double, double)>> m_menu_callbacks;
 };
 
