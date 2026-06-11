@@ -103,7 +103,12 @@ void GribContext::onTimelineChanged() {
       best = i;
     }
   }
-  setTimeIndex(best);
+  if (best != m_time_index) {
+    m_time_index = best;  // label tracking; push happens below anyway
+    Q_EMIT timeChanged();
+  }
+  // Tier 3: every scrub re-renders -- fields interpolate between steps.
+  pushToLayer();
 }
 
 GribContext::~GribContext() { delete m_reader; }
@@ -177,6 +182,90 @@ void GribContext::setTypeShown(const QString& key, bool on) {
   pushToLayer();
 }
 
+time_t GribContext::displayEpoch() const {
+  // The timeline's exact time, clamped to the file's span; falls back to
+  // the selected step when no timeline rides along.
+  qint64 e = m_step_times.isEmpty() ? 0 : m_step_times[m_time_index];
+  if (m_timeline) {
+    const QDateTime t = m_timeline->property("displayTime").toDateTime();
+    if (t.isValid()) e = t.toSecsSinceEpoch();
+  }
+  if (!m_step_times.isEmpty())
+    e = qBound(m_step_times.first(), e, m_step_times.last());
+  return static_cast<time_t>(e);
+}
+
+GribRecord* GribContext::recordAt(int dataType, int levelType, int level,
+                                  bool* owned, bool directional) {
+  *owned = false;
+  const time_t T = displayEpoch();
+  GribRecord* exact = m_reader->getGribRecord(dataType, levelType, level, T);
+  if (exact && exact->isOk()) return exact;
+  // Bracket T between steps and interpolate (tier 3).
+  for (int i = 0; i + 1 < m_step_times.size(); ++i) {
+    if (T > m_step_times[i] && T < m_step_times[i + 1]) {
+      GribRecord* a = m_reader->getGribRecord(
+          dataType, levelType, level, static_cast<time_t>(m_step_times[i]));
+      GribRecord* b = m_reader->getGribRecord(
+          dataType, levelType, level,
+          static_cast<time_t>(m_step_times[i + 1]));
+      if (a && b && a->isOk() && b->isOk()) {
+        const double d =
+            double(T - m_step_times[i]) /
+            double(m_step_times[i + 1] - m_step_times[i]);
+        GribRecord* r = GribRecord::InterpolatedRecord(*a, *b, d,
+                                                       directional);
+        if (r) *owned = true;
+        return r;
+      }
+      break;
+    }
+  }
+  return nullptr;
+}
+
+void GribContext::recordPairAt(int dtX, int dtY, int levelType, int level,
+                               GribRecord** rx, GribRecord** ry,
+                               bool* owned) {
+  *owned = false;
+  *rx = nullptr;
+  *ry = nullptr;
+  const time_t T = displayEpoch();
+  GribRecord* ex = m_reader->getGribRecord(dtX, levelType, level, T);
+  GribRecord* ey = m_reader->getGribRecord(dtY, levelType, level, T);
+  if (ex && ey && ex->isOk() && ey->isOk()) {
+    *rx = ex;
+    *ry = ey;
+    return;
+  }
+  for (int i = 0; i + 1 < m_step_times.size(); ++i) {
+    if (T > m_step_times[i] && T < m_step_times[i + 1]) {
+      const time_t t0 = static_cast<time_t>(m_step_times[i]);
+      const time_t t1 = static_cast<time_t>(m_step_times[i + 1]);
+      GribRecord* ax = m_reader->getGribRecord(dtX, levelType, level, t0);
+      GribRecord* ay = m_reader->getGribRecord(dtY, levelType, level, t0);
+      GribRecord* bx = m_reader->getGribRecord(dtX, levelType, level, t1);
+      GribRecord* by = m_reader->getGribRecord(dtY, levelType, level, t1);
+      if (ax && ay && bx && by && ax->isOk() && ay->isOk() && bx->isOk() &&
+          by->isOk()) {
+        const double d = double(T - t0) / double(t1 - t0);
+        GribRecord* iy = nullptr;
+        GribRecord* ix =
+            GribRecord::Interpolated2DRecord(iy, *ax, *ay, *bx, *by, d);
+        if (ix && iy) {
+          *rx = ix;
+          *ry = iy;
+          *owned = true;
+        } else {
+          delete ix;
+          delete iy;
+        }
+      }
+      return;
+    }
+  }
+}
+
 void GribContext::setOverlayKey(const QString& k) {
   if (k == m_overlay_key) return;
   m_overlay_key = k;
@@ -223,10 +312,9 @@ void GribContext::pushToLayer() {
     GribRecord* rpp = m_reader->getGribRecord(GRB_PRESSURE, LV_MSL, 0, t);
     m_type_available[QStringLiteral("pressure")] = rpp && rpp->isOk();
   }
+  bool ownP = false;
   GribRecord* rp =
-      m_show_pressure
-          ? m_reader->getGribRecord(GRB_PRESSURE, LV_MSL, 0, t)
-          : nullptr;
+      m_show_pressure ? recordAt(GRB_PRESSURE, LV_MSL, 0, &ownP) : nullptr;
   if (rp && rp->isOk()) {
     ocpn::qtui::GribWindLayer::ScalarGrid pg;
     pg.ni = rp->getNi();
@@ -246,6 +334,7 @@ void GribContext::pushToLayer() {
   } else {
     m_layer->clearIsobars();
   }
+  if (ownP) delete rp;
   // Tier-1 fields: availability + per-type push.
   auto scalarFrom = [](GribRecord* r) {
     ocpn::qtui::GribWindLayer::ScalarGrid g;
@@ -282,14 +371,19 @@ void GribContext::pushToLayer() {
       f.unitSuffix = QString::fromUtf8(tspec.suffix);
       f.unitFactor = tspec.factor;
       f.dirMag = (tspec.kind == TypeSpec::ArrowsDirMag);
+      bool own1 = false, own2 = false;
       GribRecord* r2 = nullptr;
-      if (f.dirMag)  // direction record rides next to the magnitude
-        r2 = m_reader->getGribRecord(GRB_WVDIR, tspec.levelType,
-                                     tspec.level, t);
-      else
-        r2 = m_reader->getGribRecord(GRB_VOGRD, tspec.levelType,
-                                     tspec.level, t);
-      if (!r2 || !r2->isOk()) {
+      if (f.dirMag) {  // magnitude + FROM-direction, both interpolated
+        r1 = recordAt(tspec.dataType, tspec.levelType, tspec.level, &own1);
+        r2 = recordAt(GRB_WVDIR, tspec.levelType, tspec.level, &own2, true);
+      } else {  // u/v pair, vector-interpolated together
+        recordPairAt(GRB_UOGRD, GRB_VOGRD, tspec.levelType, tspec.level,
+                     &r1, &r2, &own1);
+        own2 = false;  // pair ownership rides own1
+      }
+      if (!r1 || !r2 || !r1->isOk() || !r2->isOk()) {
+        if (own1) { delete r1; if (!f.dirMag) delete r2; }
+        if (own2) delete r2;
         m_layer->clearArrows(key);
         continue;
       }
@@ -315,29 +409,41 @@ void GribContext::pushToLayer() {
           }
         }
       m_layer->setArrows(key, f);
+      if (own1) { delete r1; if (!f.dirMag) delete r2; }
+      if (own2) delete r2;
     } else {  // Numbers
       if (!shown) {
         m_layer->clearNumbers(key);
         continue;
       }
+      bool ownN = false;
+      GribRecord* rn =
+          recordAt(tspec.dataType, tspec.levelType, tspec.level, &ownN);
+      if (!rn || !rn->isOk()) {
+        if (ownN) delete rn;
+        m_layer->clearNumbers(key);
+        continue;
+      }
       ocpn::qtui::GribWindLayer::NumberField f;
-      f.grid = scalarFrom(r1);
+      f.grid = scalarFrom(rn);
       f.color = tspec.color;
       f.suffix = QString::fromUtf8(tspec.suffix);
       f.factor = tspec.factor;
       f.offset = tspec.offset;
       f.decimals = tspec.decimals;
       m_layer->setNumbers(key, f);
+      if (ownN) delete rn;
     }
   }
   // Colour-mapped overlay (tier 2): one field at a time.
   if (m_overlay_key.isEmpty()) {
     m_layer->clearOverlay();
   } else if (m_overlay_key == QLatin1String("wind")) {
-    GribRecord* ru =
-        m_reader->getGribRecord(GRB_WIND_VX, LV_ABOV_GND, 10, t);
-    GribRecord* rv =
-        m_reader->getGribRecord(GRB_WIND_VY, LV_ABOV_GND, 10, t);
+    bool ownW = false;
+    GribRecord* ru = nullptr;
+    GribRecord* rv = nullptr;
+    recordPairAt(GRB_WIND_VX, GRB_WIND_VY, LV_ABOV_GND, 10, &ru, &rv,
+                 &ownW);
     if (ru && rv && ru->isOk() && rv->isOk()) {
       auto g = scalarFrom(ru);  // reuse geometry; recompute as speed
       for (int j = 0; j < g.nj; ++j)
@@ -350,6 +456,7 @@ void GribContext::pushToLayer() {
                       : NAN;
         }
       m_layer->setOverlay(g, QStringLiteral("wind"), 0);
+      if (ownW) { delete ru; delete rv; }
     } else {
       m_layer->clearOverlay();
     }
@@ -358,10 +465,10 @@ void GribContext::pushToLayer() {
     const TypeSpec* spec = nullptr;
     for (const TypeSpec& ts : kTypes)
       if (m_overlay_key == QLatin1String(ts.key)) spec = &ts;
-    GribRecord* r = spec ? m_reader->getGribRecord(
-                               spec->dataType, spec->levelType,
-                               spec->level, t)
-                         : nullptr;
+    bool ownO = false;
+    GribRecord* r =
+        spec ? recordAt(spec->dataType, spec->levelType, spec->level, &ownO)
+             : nullptr;
     if (r && r->isOk()) {
       auto g = scalarFrom(r);
       float mx = 0;
@@ -371,6 +478,7 @@ void GribContext::pushToLayer() {
     } else {
       m_layer->clearOverlay();
     }
+    if (ownO) delete r;
   }
 
   Q_EMIT typesChanged();
@@ -379,9 +487,12 @@ void GribContext::pushToLayer() {
     m_layer->clearGrid();
     return;
   }
-  // 10 m wind components (the zyGrib constants the wx overlay uses).
-  GribRecord* ru = m_reader->getGribRecord(GRB_WIND_VX, LV_ABOV_GND, 10, t);
-  GribRecord* rv = m_reader->getGribRecord(GRB_WIND_VY, LV_ABOV_GND, 10, t);
+  // 10 m wind, vector-interpolated to the exact display time (tier 3).
+  bool ownWind = false;
+  GribRecord* ru = nullptr;
+  GribRecord* rv = nullptr;
+  recordPairAt(GRB_WIND_VX, GRB_WIND_VY, LV_ABOV_GND, 10, &ru, &rv,
+               &ownWind);
   if (!ru || !rv || !ru->isOk() || !rv->isOk()) {
     m_layer->clearGrid();
     return;
@@ -405,6 +516,10 @@ void GribContext::pushToLayer() {
     }
   }
   m_layer->setGrid(g);
+  if (ownWind) {
+    delete ru;
+    delete rv;
+  }
 }
 
 QString GribContext::readoutAt(double lat, double lon) const {

@@ -32,6 +32,7 @@
 #include "../ocpn_qt_plugin.h"
 
 class GribReader;
+class GribRecord;
 
 namespace ocpn::qtui {
 class GribWindLayer;
@@ -112,6 +113,13 @@ private Q_SLOTS:
 
 private:
   void pushToLayer();
+  // Records at the exact display time: linear interpolation between the
+  // bracketing timesteps (tier 3). *owned=true -> caller deletes.
+  GribRecord* recordAt(int dataType, int levelType, int level,
+                       bool* owned, bool directional = false);
+  void recordPairAt(int dtX, int dtY, int levelType, int level,
+                    GribRecord** rx, GribRecord** ry, bool* owned);
+  time_t displayEpoch() const;
 
   GribReader* m_reader = nullptr;
   ocpn::qtui::GribWindLayer* m_layer = nullptr;  // compositor-owned
