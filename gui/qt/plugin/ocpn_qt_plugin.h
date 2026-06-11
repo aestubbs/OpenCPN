@@ -73,7 +73,11 @@ struct OcpnQtPluginHost {
    *  glyph for v1 (SVG icons follow). */
   std::function<void(const QString& glyph, const QString& tooltip,
                      std::function<void()> onTriggered,
-                     std::function<void()> onLongPress)> registerToolbarAction;
+                     std::function<void()> onLongPress,
+                     std::function<bool()> isChecked)> registerToolbarAction;
+  /** Call after your toolbar action's checked state changes so the
+   *  button re-reads isChecked(). */
+  std::function<void()> toolbarStateChanged;
   /** Register a chart context-menu item (wx INSTALLS_CONTEXTMENU_ITEMS
    *  parity): appended to the right-click menu; the callback receives
    *  the click position. */

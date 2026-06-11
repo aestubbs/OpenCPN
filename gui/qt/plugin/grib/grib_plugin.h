@@ -198,6 +198,9 @@ private:
   bool m_master_enabled = true;
   bool m_cursor_panel = false;
   QObject* m_timeline = nullptr;
+public:
+  std::function<void()> notifyToolbar;  // set by the plugin at init
+private:
   QString m_status;
 };
 

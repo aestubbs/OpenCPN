@@ -192,6 +192,12 @@ Pane {
                 visible: !floatToolbar.collapsed
                 text: modelData.glyph
                 ToolTip.text: modelData.tooltip
+                // Checkable actions show their on-state like the Tides
+                // tool (shaded chip).
+                checkable: modelData.checkable === true
+                checked: modelData.checkable === true &&
+                         (chart.pluginRegistry.toolbarStateSerial,
+                          chart.pluginRegistry.toolbarActionChecked(index))
                 onClicked: chart.pluginRegistry.triggerToolbarAction(index)
                 // Long-press / right-click: the plugin's FLYOUT when it
                 // has one, else its preferences (wx parity).

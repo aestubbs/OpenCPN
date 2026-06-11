@@ -115,15 +115,22 @@ void PluginRegistry::loadFrom(const QString& dir) {
     host.registerToolbarAction = [this, iface](const QString& glyph,
                                                const QString& tooltip,
                                                std::function<void()> cb,
-                                               std::function<void()> lp) {
+                                               std::function<void()> lp,
+                                               std::function<bool()> chk) {
       QVariantMap a;
       a["glyph"] = glyph;
       a["tooltip"] = tooltip;
       a["pluginName"] = iface->name();
       a["hasFlyout"] = bool(lp);  // else long-press falls back to prefs
+      a["checkable"] = bool(chk);
       m_toolbar_actions.append(a);
       m_toolbar_callbacks.append(std::move(cb));
       m_toolbar_longpress.append(std::move(lp));
+      m_toolbar_checked.append(std::move(chk));
+    };
+    host.toolbarStateChanged = [this] {
+      ++m_toolbar_serial;
+      Q_EMIT toolbarStateChanged();
     };
     host.registerContextMenuItem =
         [this](const QString& label, std::function<void(double, double)> cb) {
@@ -164,6 +171,13 @@ void PluginRegistry::triggerToolbarLongPress(int index) {
   if (index >= 0 && index < m_toolbar_longpress.size() &&
       m_toolbar_longpress[index])
     m_toolbar_longpress[index]();
+}
+
+bool PluginRegistry::toolbarActionChecked(int index) const {
+  if (index >= 0 && index < m_toolbar_checked.size() &&
+      m_toolbar_checked[index])
+    return m_toolbar_checked[index]();
+  return false;
 }
 
 void PluginRegistry::triggerContextMenuItem(int index, double lat,

@@ -36,7 +36,8 @@ bool ExamplePlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
   if (host.registerToolbarAction)
     host.registerToolbarAction(QStringLiteral("⭐"),
                                QStringLiteral("Example plugin action"),
-                               [] { qInfo("example: toolbar action"); });
+                               [] { qInfo("example: toolbar action"); },
+                               {}, {});
   if (host.registerContextMenuItem)
     host.registerContextMenuItem(
         QStringLiteral("Example: log position"),

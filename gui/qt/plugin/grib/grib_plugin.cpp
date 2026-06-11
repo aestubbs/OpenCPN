@@ -407,6 +407,7 @@ void GribContext::setMasterEnabled(bool on) {
   if (on == m_master_enabled) return;
   m_master_enabled = on;
   if (m_layer) m_layer->setVisible(on);
+  if (notifyToolbar) notifyToolbar();
   Q_EMIT controlsChanged();
 }
 
@@ -866,13 +867,16 @@ bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
   if (host.registerHud)
     host.registerHud(
         QUrl(QStringLiteral("qrc:/grib_plugin/CursorDataHud.qml")), m_ctx);
+  m_ctx->notifyToolbar = host.toolbarStateChanged;
   if (host.registerToolbarAction)
     host.registerToolbarAction(
-        QStringLiteral("🌬"), QStringLiteral("GRIB weather"),
-        [this] {
-          if (m_ctx) m_ctx->setControlsVisible(!m_ctx->controlsVisible());
+        QStringLiteral("🌬"),
+        QStringLiteral("GRIB weather  (hold for options)"),
+        [this] {  // click: weather on/off, state shown on the chip
+          if (m_ctx) m_ctx->setMasterEnabled(!m_ctx->masterEnabled());
         },
-        [this] { if (m_ctx) m_ctx->setControlsVisible(true); });
+        [this] { if (m_ctx) m_ctx->setControlsVisible(true); },
+        [this] { return m_ctx && m_ctx->masterEnabled(); });
   if (host.registerSettingsPage)
     host.registerSettingsPage(
         QStringLiteral("GRIB"),
