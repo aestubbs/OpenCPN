@@ -6,11 +6,13 @@ import QtQuick.Layouts
 // The GRIB control bar (wx GRIB control parity, v1): toggled by the 🌬
 // toolbar button; file open, current-timestep readout (driven by the app
 // time bar), layer toggles. Bottom-left, above the time bar.
-Rectangle {
+Item {
     property var pluginContext: null
+
+    Rectangle {
     visible: pluginContext && pluginContext.controlsVisible
-    anchors.left: parent ? parent.left : undefined
-    anchors.bottom: parent ? parent.bottom : undefined
+    anchors.left: parent.left
+    anchors.bottom: parent.bottom
     anchors.leftMargin: 76
     anchors.bottomMargin: 12
     width: barRow.implicitWidth + 20
@@ -62,5 +64,6 @@ Rectangle {
         nameFilters: [qsTr("GRIB files (*.grb *.grb2 *.grib *.grib2 *.bz2 *.gz)"),
                       qsTr("All files (*)")]
         onAccepted: if (pluginContext) pluginContext.openFile(selectedFile)
+    }
     }
 }

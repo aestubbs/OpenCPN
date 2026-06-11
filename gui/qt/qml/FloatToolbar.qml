@@ -46,6 +46,8 @@ Pane {
     signal routeManagerRequested()
     signal aboutRequested()
     signal anchorWatchRequested()
+    // Long-press on a plugin tool: open that plugin's preferences.
+    signal pluginPrefsRequested(string pluginName)
 
     background: Rectangle {
         color: Qt.rgba(0.93, 0.93, 0.95, floatToolbar.panelAlpha)
@@ -180,7 +182,8 @@ Pane {
         }
 
         // Plugin toolbar actions (wx INSTALLS_TOOLBAR_TOOL parity),
-        // styled like the native tools.
+        // styled like the native tools. Press-and-hold (or right-click)
+        // opens the plugin's preferences, wx-style.
         Repeater {
             model: chart.pluginRegistry.toolbarActions
             delegate: Tool {
@@ -190,6 +193,8 @@ Pane {
                 text: modelData.glyph
                 ToolTip.text: modelData.tooltip
                 onClicked: chart.pluginRegistry.triggerToolbarAction(index)
+                onPressAndHold: floatToolbar.pluginPrefsRequested(
+                                    modelData.pluginName)
             }
         }
     }

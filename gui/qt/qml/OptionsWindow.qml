@@ -60,6 +60,16 @@ Window {
 
     PrioritiesDialog { id: prioritiesDialog }
 
+    // Open a plugin's preferences by plugin name (toolbar long-press).
+    function openPluginPrefs(pluginName) {
+        const pages = chart.pluginRegistry.settingsPages
+        for (let i = 0; i < pages.length; ++i)
+            if (pages[i].pluginName === pluginName) {
+                pluginPrefsDialog.openFor(pages[i])
+                return
+            }
+    }
+
     // Plugin preferences host (wx WANTS_PREFERENCES parity): a native
     // dialog wrapping whatever page the plugin registered.
     Window {

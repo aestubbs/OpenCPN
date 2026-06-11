@@ -112,12 +112,13 @@ void PluginRegistry::loadFrom(const QString& dir) {
       p["context"] = QVariant::fromValue(context);
       m_panes.append(p);
     };
-    host.registerToolbarAction = [this](const QString& glyph,
-                                        const QString& tooltip,
-                                        std::function<void()> cb) {
+    host.registerToolbarAction = [this, iface](const QString& glyph,
+                                               const QString& tooltip,
+                                               std::function<void()> cb) {
       QVariantMap a;
       a["glyph"] = glyph;
       a["tooltip"] = tooltip;
+      a["pluginName"] = iface->name();  // long-press -> its Preferences
       m_toolbar_actions.append(a);
       m_toolbar_callbacks.append(std::move(cb));
     };

@@ -1174,6 +1174,7 @@ ApplicationWindow {
                                                      : routeDrawer.open()
         onAboutRequested: { aboutWindow.show(); aboutWindow.raise() }
         onAnchorWatchRequested: anchorPopup.open()
+        onPluginPrefsRequested: (name) => optionsWindow.openPluginPrefs(name)
     }
 
     // Full-screen toggle (P3.20, wx F11). A window-level Shortcut: function

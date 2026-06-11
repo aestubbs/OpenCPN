@@ -2,9 +2,12 @@ import QtQuick
 
 // The dashboard instrument strip: one pill per enabled instrument,
 // top-left under the toolbar area. `pluginContext` is the DashboardContext.
-Grid {
-    id: strip
+Item {
     property var pluginContext: null
+
+    Grid {
+    id: strip
+    readonly property var pluginContext: parent.pluginContext
     readonly property string corner: pluginContext ? pluginContext.corner : "tl"
     columns: pluginContext && pluginContext.vertical ? 1 : 99
     spacing: 6
@@ -75,4 +78,5 @@ Grid {
             }
         }
     }
+}
 }

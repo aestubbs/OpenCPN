@@ -13,6 +13,8 @@
 #include <cstdlib>
 
 #include <QDateTime>
+#include <QFile>
+#include <QSettings>
 #include <QDesktopServices>
 #include <QUrlQuery>
 #include <QUrl>
@@ -23,6 +25,16 @@
 
 GribContext::GribContext(QObject* timeline, QObject* parent)
     : QObject(parent), m_timeline(timeline) {
+  // Restore the last GRIB on startup (wx parity): the timeline can
+  // drive the weather immediately.
+  const QString last =
+      QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
+          .value(QStringLiteral("lastFile"))
+          .toString();
+  if (!last.isEmpty() && QFile::exists(last))
+    QMetaObject::invokeMethod(
+        this, [this, last] { openFile(QUrl::fromLocalFile(last)); },
+        Qt::QueuedConnection);
   // Follow the app time bar (wx parity: the GRIB rides the chart
   // timeline, not its own slider).
   if (m_timeline)
@@ -66,6 +78,8 @@ void GribContext::openFile(const QUrl& url) {
     return;
   }
   m_file = path.section('/', -1);
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
+      .setValue(QStringLiteral("lastFile"), path);
   for (time_t t : m_reader->getListDates()) {
     m_step_times.append(static_cast<long long>(t));
     m_steps.append(QDateTime::fromSecsSinceEpoch(t)
