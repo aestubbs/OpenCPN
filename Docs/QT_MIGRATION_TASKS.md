@@ -2261,6 +2261,11 @@ existing `followOwnShip` property before adding).
       listed but unsupported. **Needs the user's o-charts account for
       end-to-end verification** (login → identify → install → charts
       render); flip to [x] after that pass.
+- [ ] **P4.8** **Plugin-API gap list (wx-ABI audit, 2026-06-11; table in
+      QT_PLUGIN_API.md):** inter-plugin messaging bus, route/waypoint
+      WRITE API (weather-routing-class plugins need it), mouse/keyboard
+      input hooks, tide-click hook, object-query hook, colour-scheme
+      change signal. Build on demand as porting candidates need them.
 - [~] **P4.6** Document the plugin API —
       [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
       (interface, contribution seams, wx-ABI mapping table, porting

@@ -69,16 +69,32 @@ unload.
   emitter's concrete type is not part of the API. The Dashboard plugin's
   depth/water-temp instruments are the reference consumer.
 
-## What the wx ABI surface maps to
+## wx ABI capability audit (2026-06-11)
 
-| wx ABI concept | Qt equivalent |
-|---|---|
-| `RenderOverlay` / `RenderGLOverlay` | a registered `Layer` (scene-graph, no paint events) |
-| `SetPositionFixEx` callbacks | `host.navData` snapshots + `dynamicChanged()` |
-| plugin message strings (JSON) | direct `Q_PROPERTY`/signal surface on your context object |
-| `AddCanvasContextMenuItem` | not yet exposed (planned with the first port that needs it) |
-| toolbar tools | register a HUD component (or planned toolbar seam) |
-| `wxAuiManager` panes / dialogs | QML components (HUD or settings page) |
+| wx capability flag / API | Qt seam | Status |
+|---|---|---|
+| WANTS_OVERLAY/OPENGL_OVERLAY (RenderOverlay) | `registerLayer` (scene-graph Layer) | ✅ (GRIB) |
+| WANTS_NMEA/AIS_SENTENCES | `host.navMsgTap` (decoded stream) | ✅ (dashboard) |
+| WANTS_NMEA_EVENTS / SetPositionFixEx | `host.navData` snapshots | ✅ (dashboard) |
+| INSTALLS_TOOLBOX_PAGE (options tabs) | `registerOptionsPane(section,…)` | ✅ (o-charts, chartdldr) |
+| WANTS_PREFERENCES | `registerSettingsPage` → Preferences… dialog | ✅ |
+| INSTALLS_TOOLBAR_TOOL | `registerToolbarAction` | ✅ (example) |
+| INSTALLS_CONTEXTMENU_ITEMS | `registerContextMenuItem(label, cb(lat,lon))` | ✅ (example) |
+| WANTS_CURSOR_LATLON | HUD components bind `chart.cursorLat/Lon` | ✅ pattern (GRIB readout) |
+| WANTS_CONFIG | plugin-side QSettings | ✅ convention |
+| INSTALLS_PLUGIN_CHART(_GL) | chart formats are core-native (o-charts/CM93/KAP) | ✅ by design |
+| USES_AUI_MANAGER (panes/dialogs) | QML HUD components / native dialogs | ✅ |
+| WANTS_PLUGIN_MESSAGING (JSON strings) | — | ❌ gap (inter-plugin bus) |
+| Route/waypoint CRUD from plugins | — | ❌ gap (navData is read-only) |
+| WANTS_MOUSE/KEYBOARD_EVENTS | — | ❌ gap (input hooks) |
+| WANTS_TIDECURRENT_CLICK | — | ❌ gap |
+| WANTS_PRESHUTDOWN_HOOK / LATE_INIT | deinit() exists; late-init unneeded | ◐ |
+| WANTS_VECTOR_CHART_OBJECT_INFO | — | ❌ gap (object-query hook) |
+| Colour-scheme notification | — | ❌ gap (layers can poll; no signal) |
+
+The Plugins pane is MANAGEMENT ONLY (wx parity): catalogue, enable
+switches, per-plugin Preferences… button. Plugin UI lives in its own
+options panes, toolbar actions, HUD components and dialogs.
 
 ## Porting guidance (Phase 4)
 
