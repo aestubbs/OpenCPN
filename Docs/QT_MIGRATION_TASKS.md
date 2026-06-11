@@ -2271,8 +2271,11 @@ existing `followOwnShip` property before adding).
          there, wx parity) + linear interpolation between timesteps.
       4. *(week)* Particle animation for wind/current (the wx particle
          system on the scene graph; ties into PERF ladder).
-      5. *(days)* Altitude selector; multi-file management; bz2/gz
-         transparent open (zuFile already supports — surface in UI).
+      5. *(days)* Altitude selector; GRIB DIRECTORY management (wx sets
+         a gribs dir, not single files — browser lists the dir, newest
+         first) + multi-file; bz2/gz transparent open (zuFile already
+         supports — surface in UI). Last-file session restore landed
+         2026-06-11.
       6. Request dialog upgrade to full model/resolution matrix.
       Each tier lands behind the existing control bar so the UI grows
       in place. End-state = drop-in replacement for grib_pi minus the
