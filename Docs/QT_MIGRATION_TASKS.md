@@ -2276,18 +2276,26 @@ existing `followOwnShip` property before adding).
          scalar + vector (Interpolated2DRecord) interpolation at the
          exact bar time; scrub/play renders continuously. (Play/speed
          buttons live on the app time bar already.)
-      4. *(week)* Particle animation for wind/current (the wx particle
-         system on the scene graph; ties into PERF ladder).
+      4. ~~Particle animation~~ **DONE (2026-06-11):** 600 advected
+         particles, fading streaks, 33 ms timer while enabled (off by
+         default; control-bar toggle).
       5. ~~Altitude selector + GRIB directory management~~ **DONE
          (2026-06-11):** Open… lists the configured folder newest-first
          (+Browse…); folder picker on the prefs page; wind at
          surface/850/700/500/300 hPa when isobaric levels are present;
          bz2/gz transparent; last-file session restore. Multi-file
          layering (several files merged) remains a refinement.
-      6. Request dialog upgrade to full model/resolution matrix.
-      Each tier lands behind the existing control bar so the UI grows
-      in place. End-state = drop-in replacement for grib_pi minus the
-      weather-routing bus (P4.8).
+      6. ~~Request dialog matrix~~ **DONE (2026-06-11):** model/
+         resolution/interval selection (GFS/ECMWF/ICON/ARPEGE/NAM),
+         GFS-only params auto-limited.
+      **ALL SIX TIERS LANDED (2026-06-11).** Remaining refinements vs
+      wx: multi-file layering, per-type units dialog (kn/ms/kmh…),
+      isotachs/isotherms beyond isobars, gust-as-barbs variant,
+      cursor-data panel listing every type. Functional end-state
+      reached: file/dir open, 13-type catalog, overlay wash, barbs/
+      arrows/numbers, timeline follow + interpolation + play,
+      particles, altitude selector, request matrix — verify against
+      real forecasts and refine.
 - [~] **P4.7** o-charts SHOP plugin — **v1 landed (2026-06-11),
       built by default:** login2/getlist/identifySystem/assign/request
       against the live API (parameters verified against ochartShop.cpp),
