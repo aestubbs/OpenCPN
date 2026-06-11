@@ -1088,6 +1088,9 @@ ApplicationWindow {
             model: chart.pluginRegistry.hudComponents
             delegate: Loader {
                 required property var modelData
+                // Fill the overlay area so a component's own anchors
+                // (bottom-left bar, top-right pill...) are meaningful.
+                anchors.fill: parent
                 source: modelData.component
                 onLoaded: if (item && modelData.context)
                               item.pluginContext = modelData.context
