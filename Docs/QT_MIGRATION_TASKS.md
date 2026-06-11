@@ -2242,17 +2242,41 @@ existing `followOwnShip` property before adding).
       and auto-add to the chart library (the new host.addChartDirectory
       seam) — 2026-06-10. Parity complete for the wx feature set short of
       its FTP-era niceties; exercise against the live NOAA catalog.**
-- [~] **P4.5** Port `grib` — **v1 landed (2026-06-10)**
-      (`gui/qt/plugin/grib/`, built by default): the zyGrib decode core
-      compiled as-is, file open + timeline scrub on the settings page, the
-      10 m wind field as meteorological barbs (5/10/50 kn, clockwise side,
-      speed-coloured) and 2 hPa pressure isobars (marching squares) via
-      the FIRST plugin-contributed Layer (toolkit seam proven). **+ cursor
-      data readout (bilinear wind + pressure at the pointer, HUD pill)
-      2026-06-10.** **+ saildocs request
-      builder (viewport-bounds GFS request via mailto) 2026-06-10.**
-      Remaining for parity: precip/waves/current overlays, particle
-      animation, density tuning — verify with a real GRIB file first.
+- [~] **P4.5** Port `grib` — **wx-parity ANALYSIS complete (2026-06-11,
+      from the in-tree grib_pi sources); plan below. Landed so far:**
+      decode core compiled as-is; wind barbs (screen-fixed ~42 px,
+      zoom-adaptive density) + 2 hPa isobars via the first
+      plugin-contributed Layer; 🌬 toolbar icon + on-canvas control bar;
+      the GRIB follows the chart TIME BAR (host.timeline seam); cursor
+      readout; saildocs request builder; settings page.
+      **The wx feature set (canonical, GribSettingsDialog.cpp):**
+      13 data types — Wind, Wind Gust, Pressure, Waves, Current,
+      Rainfall, Cloud Cover, Air Temp, Sea Temp, CAPE, Composite
+      Reflectivity, Altitude (geopotential), Relative Humidity — each
+      with per-type display modes (barbed arrows, isolines ± abbreviated
+      numbers, direction arrows, colour-mapped OVERLAY raster, numbers,
+      PARTICLE animation) and per-type units; wind at 4 altitudes
+      (850/700/500/300 hPa); timeline play/speed + interpolation between
+      timesteps; cursor data panel for every loaded type; the request
+      dialog (model/resolution/days/waves selection); multi-file + zu/
+      bz2; weather-routing messaging (→ P4.8 bus).
+      **Parity plan, tiered:**
+      1. *(days)* Generalize the layer to N scalar/vector fields:
+         waves (HTSGW+WVDIR direction arrows), current (UOGRD/VOGRD),
+         gust, rainfall/cloud/temps/CAPE/reflectivity/humidity as
+         NUMBERS mode; per-type toggles on the control bar.
+      2. *(days)* Colour-mapped OVERLAY mode (one QSGImageNode raster
+         per field, the wx OverlayMap ramps) + per-type units engine.
+      3. *(week)* Timeline play on the app time bar (play/speed lives
+         there, wx parity) + linear interpolation between timesteps.
+      4. *(week)* Particle animation for wind/current (the wx particle
+         system on the scene graph; ties into PERF ladder).
+      5. *(days)* Altitude selector; multi-file management; bz2/gz
+         transparent open (zuFile already supports — surface in UI).
+      6. Request dialog upgrade to full model/resolution matrix.
+      Each tier lands behind the existing control bar so the UI grows
+      in place. End-state = drop-in replacement for grib_pi minus the
+      weather-routing bus (P4.8).
 - [~] **P4.7** o-charts SHOP plugin — **v1 landed (2026-06-11),
       built by default:** login2/getlist/identifySystem/assign/request
       against the live API (parameters verified against ochartShop.cpp),
