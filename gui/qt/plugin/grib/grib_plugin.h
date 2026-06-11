@@ -59,6 +59,8 @@ class GribContext : public QObject {
   // Wind altitude: 0 = 10 m surface; 850/700/500/300 hPa isobaric.
   Q_PROPERTY(int windAltitude READ windAltitude WRITE setWindAltitude NOTIFY
                  typesChanged)
+  Q_PROPERTY(bool particles READ particles WRITE setParticles NOTIFY
+                 typesChanged)
   Q_PROPERTY(QVariantList altitudes READ altitudes NOTIFY typesChanged)
   Q_PROPERTY(QString status READ status NOTIFY gribChanged)
   // The on-canvas control bar's visibility (toolbar 🌬 toggles it).
@@ -102,13 +104,17 @@ public:
   QVariantList dirFiles() const;
   int windAltitude() const { return m_wind_altitude; }
   void setWindAltitude(int hpa);
+  bool particles() const { return m_particles; }
+  void setParticles(bool on);
   QVariantList altitudes() const;
 
   /** Compose a saildocs GRIB request for the given bounds and open the
    *  user's mail client (mailto:). Returns the request body line. */
-  Q_INVOKABLE QString requestGrib(double north, double south, double east,
-                                  double west, int days, bool wind,
-                                  bool pressure, bool waves, bool precip);
+  Q_INVOKABLE QString requestGrib(const QString& model, double resolution,
+                                  int intervalHours, double north,
+                                  double south, double east, double west,
+                                  int days, bool wind, bool pressure,
+                                  bool waves, bool precip);
 
   /** The Layer (owned by the compositor once registered). */
   ocpn::qtui::GribWindLayer* layer() const { return m_layer; }
@@ -145,6 +151,7 @@ private:
   QString m_overlay_key;
   QUrl m_grib_dir;
   int m_wind_altitude = 0;
+  bool m_particles = false;
   QMap<QString, bool> m_type_shown;     // persisted per-type toggles
   QMap<QString, bool> m_type_available; // present in the loaded file
   bool m_controls_visible = false;

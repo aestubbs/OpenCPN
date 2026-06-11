@@ -108,6 +108,7 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
   drawIsobars(b);
   drawArrows(b);
   drawNumbers(b);
+  drawParticles(b);
   if (m_label_cache.size() > 1200) m_label_cache.clear();
   if (m_grid.ni <= 1 || m_grid.nj <= 1) return m_root;
 
@@ -178,6 +179,107 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
     }
   }
   return m_root;
+}
+
+void GribWindLayer::setParticlesEnabled(bool on) {
+  if (on == m_particles_on) return;
+  m_particles_on = on;
+  if (!m_particle_timer) {
+    m_particle_timer = new QTimer(this);
+    m_particle_timer->setInterval(33);
+    connect(m_particle_timer, &QTimer::timeout, this, [this]() {
+      stepParticles();
+      Q_EMIT dirty();
+    });
+  }
+  if (on) {
+    m_particles.clear();
+    m_particle_timer->start();
+  } else {
+    m_particle_timer->stop();
+    m_particles.clear();
+  }
+  Q_EMIT dirty();
+}
+
+// Bilinear sample of the wind grid at (lon, lat); NaN off-grid.
+static void sampleWind(const GribWindLayer::WindGrid& g, double lon,
+                       double lat, double* u, double* v) {
+  *u = NAN;
+  *v = NAN;
+  if (g.ni < 2 || g.nj < 2 || g.di == 0 || g.dj == 0) return;
+  const double fi = (lon - g.lon0) / g.di;
+  const double fj = (lat - g.lat0) / g.dj;
+  const int i = static_cast<int>(std::floor(fi));
+  const int j = static_cast<int>(std::floor(fj));
+  if (i < 0 || j < 0 || i + 1 >= g.ni || j + 1 >= g.nj) return;
+  const double ax = fi - i, ay = fj - j;
+  auto at = [&](const QVector<float>& a, int ii, int jj) {
+    return a[jj * g.ni + ii];
+  };
+  const float u00 = at(g.u, i, j), u10 = at(g.u, i + 1, j),
+              u01 = at(g.u, i, j + 1), u11 = at(g.u, i + 1, j + 1);
+  const float v00 = at(g.v, i, j), v10 = at(g.v, i + 1, j),
+              v01 = at(g.v, i, j + 1), v11 = at(g.v, i + 1, j + 1);
+  if (std::isnan(u00) || std::isnan(u10) || std::isnan(u01) ||
+      std::isnan(u11))
+    return;
+  *u = (1 - ax) * ((1 - ay) * u00 + ay * u01) +
+       ax * ((1 - ay) * u10 + ay * u11);
+  *v = (1 - ax) * ((1 - ay) * v00 + ay * v01) +
+       ax * ((1 - ay) * v10 + ay * v11);
+}
+
+void GribWindLayer::stepParticles() {
+  const WindGrid& g = m_grid;
+  if (g.ni < 2 || g.nj < 2) return;
+  const int kCount = 600;
+  const double lonSpan = (g.ni - 1) * g.di;
+  const double latSpan = (g.nj - 1) * g.dj;
+  auto respawn = [&](Particle& p, int seed) {
+    // Deterministic-ish scatter from the seed (no RNG dependency).
+    const double fx = ((seed * 7919) % 1000) / 1000.0;
+    const double fy = ((seed * 104729) % 1000) / 1000.0;
+    p.lon = g.lon0 + fx * lonSpan;
+    p.lat = g.lat0 + fy * latSpan;
+    p.plon = p.lon;
+    p.plat = p.lat;
+    p.age = (seed * 31) % 140;
+  };
+  if (m_particles.size() != kCount) {
+    m_particles.resize(kCount);
+    for (int k = 0; k < kCount; ++k) respawn(m_particles[k], k + 1);
+  }
+  static int s_tick = 0;
+  ++s_tick;
+  // Advection: m/s -> degrees per tick, exaggerated for visibility.
+  const double kSpeed = 0.033 * 0.00022;
+  for (int k = 0; k < m_particles.size(); ++k) {
+    Particle& p = m_particles[k];
+    double u, v;
+    sampleWind(g, p.lon, p.lat, &u, &v);
+    if (std::isnan(u) || ++p.age > 160) {
+      respawn(p, k + s_tick);
+      continue;
+    }
+    p.plon = p.lon;
+    p.plat = p.lat;
+    p.lon += u * kSpeed / qMax(0.2, std::cos(p.lat * M_PI / 180.0));
+    p.lat += v * kSpeed;
+  }
+}
+
+void GribWindLayer::drawParticles(SgBuilder& b) {
+  if (!m_particles_on || m_particles.isEmpty()) return;
+  b.setPen(QColor(235, 240, 250, 170), 1.2f);
+  b.noBrush();
+  for (const Particle& p : m_particles) {
+    const QPointF a(p.plon, Viewport::latToWorldY(p.plat));
+    const QPointF c(p.lon, Viewport::latToWorldY(p.lat));
+    // Extend the streak backwards for a comet tail.
+    const QPointF tail = a + (a - c) * 2.5;
+    b.drawLine(tail, c);
+  }
 }
 
 // Direction arrows (waves / current): screen-fixed ~26 px shafts with a

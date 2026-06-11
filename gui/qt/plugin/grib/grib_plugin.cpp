@@ -329,6 +329,13 @@ QVariantList GribContext::altitudes() const {
   return out;
 }
 
+void GribContext::setParticles(bool on) {
+  if (on == m_particles) return;
+  m_particles = on;
+  if (m_layer) m_layer->setParticlesEnabled(on);
+  Q_EMIT typesChanged();
+}
+
 void GribContext::setWindAltitude(int hpa) {
   if (hpa == m_wind_altitude) return;
   m_wind_altitude = hpa;
@@ -613,11 +620,13 @@ QString GribContext::readoutAt(double lat, double lon) const {
   return parts.join(QStringLiteral("   "));
 }
 
-QString GribContext::requestGrib(double north, double south, double east,
-                                 double west, int days, bool wind,
-                                 bool pressure, bool waves, bool precip) {
-  // The classic saildocs GFS request line, e.g.
-  //   send GFS:42N,38N,10W,2W|0.5,0.5|0,6..72|WIND,PRMSL
+QString GribContext::requestGrib(const QString& model, double resolution,
+                                 int intervalHours, double north,
+                                 double south, double east, double west,
+                                 int days, bool wind, bool pressure,
+                                 bool waves, bool precip) {
+  // The saildocs request line (wx request-dialog matrix, tier 6), e.g.
+  //   send GFS:42N,38N,10W,2W|0.25,0.25|0,3..96|WIND,PRMSL
   auto coord = [](double v, char pos, char neg) {
     return QStringLiteral("%1%2")
         .arg(std::fabs(v), 0, 'f', 1)
@@ -626,14 +635,19 @@ QString GribContext::requestGrib(double north, double south, double east,
   QStringList params;
   if (wind) params << QStringLiteral("WIND");
   if (pressure) params << QStringLiteral("PRMSL");
-  if (waves) params << QStringLiteral("HTSGW,WVDIR");
-  if (precip) params << QStringLiteral("APCP");
+  // Waves/rain ride GFS only on saildocs.
+  if (waves && model == QLatin1String("GFS"))
+    params << QStringLiteral("HTSGW,WVDIR");
+  if (precip && model == QLatin1String("GFS"))
+    params << QStringLiteral("APCP");
   if (params.isEmpty()) params << QStringLiteral("WIND,PRMSL");
+  const QString res = QString::number(resolution, 'f', 2);
   const QString body =
-      QStringLiteral("send GFS:%1,%2,%3,%4|0.5,0.5|0,6..%5|%6")
-          .arg(coord(north, 'N', 'S'), coord(south, 'N', 'S'),
-               coord(west, 'E', 'W'), coord(east, 'E', 'W'))
-          .arg(qBound(24, days * 24, 192))
+      QStringLiteral("send %1:%2,%3,%4,%5|%6,%6|0,%7..%8|%9")
+          .arg(model, coord(north, 'N', 'S'), coord(south, 'N', 'S'),
+               coord(west, 'E', 'W'), coord(east, 'E', 'W'), res)
+          .arg(intervalHours)
+          .arg(qBound(24, days * 24, 384))
           .arg(params.join(','));
   QUrl mailto(QStringLiteral("mailto:query@saildocs.com"));
   QUrlQuery q;

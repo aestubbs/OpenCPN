@@ -75,6 +75,34 @@ ColumnLayout {
     Label { text: qsTr("Request a forecast (saildocs)"); font.bold: true }
     RowLayout {
         spacing: 8
+        ComboBox {
+            id: reqModel
+            implicitWidth: 110
+            // saildocs models + their available resolutions (deg).
+            property var matrix: ({ "GFS": [0.25, 0.5, 1.0],
+                                    "ECMWF": [0.4],
+                                    "ICON": [0.25],
+                                    "ARPEGE": [0.5],
+                                    "NAM": [0.25] })
+            model: Object.keys(matrix)
+            onActivated: reqRes.currentIndex = 0
+        }
+        ComboBox {
+            id: reqRes
+            implicitWidth: 80
+            model: reqModel.matrix[reqModel.currentText]
+            displayText: currentText + "°"
+        }
+        ComboBox {
+            id: reqInterval
+            implicitWidth: 70
+            model: [3, 6, 12]
+            displayText: currentText + " h"
+            currentIndex: 1
+        }
+    }
+    RowLayout {
+        spacing: 8
         CheckBox { id: reqWind; text: qsTr("Wind"); checked: true }
         CheckBox { id: reqPres; text: qsTr("Pressure"); checked: true }
         CheckBox { id: reqWaves; text: qsTr("Waves") }
@@ -89,6 +117,9 @@ ColumnLayout {
             onClicked: {
                 const b = chart.viewBounds()
                 requestEcho.text = pluginContext.requestGrib(
+                    reqModel.currentText,
+                    reqRes.model[reqRes.currentIndex],
+                    reqInterval.model[reqInterval.currentIndex],
                     b.north, b.south, b.east, b.west, reqDays.value,
                     reqWind.checked, reqPres.checked,
                     reqWaves.checked, reqPrecip.checked)

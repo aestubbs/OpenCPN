@@ -112,6 +112,12 @@ Item {
             }
             onActivated: pluginContext.overlayKey = model[currentIndex].key
         }
+        CheckBox {
+            text: qsTr("Particles")
+            font.pointSize: 10
+            checked: pluginContext ? pluginContext.particles : false
+            onToggled: if (pluginContext) pluginContext.particles = checked
+        }
         Repeater {
             model: pluginContext ? pluginContext.dataTypes : []
             delegate: CheckBox {

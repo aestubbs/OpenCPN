@@ -23,6 +23,7 @@
 #include <QHash>
 #include <QImage>
 #include <QMap>
+#include <QTimer>
 #include <QVector>
 
 #include "layer.h"       // opencpn_qt_toolkit
@@ -128,6 +129,12 @@ public:
 
   QSGNode* updateSubtree(QSGNode* old, QQuickWindow* window) override;
 
+  /** Particle animation over the wind field (wx parity, tier 4): ~600
+   *  particles advected by the grid, drawn as fading streaks; a 33 ms
+   *  timer drives re-render while enabled. */
+  void setParticlesEnabled(bool on);
+  bool particlesEnabled() const { return m_particles_on; }
+
 private:
   void drawIsobars(SgBuilder& b);
   double worldPerPx() const;
@@ -145,6 +152,17 @@ private:
   QMap<QString, ArrowField> m_arrows;
   QMap<QString, NumberField> m_numbers;
   QHash<QString, QImage> m_label_cache;  // numbers raster cache (bounded)
+
+  struct Particle {
+    double lon = 0, lat = 0;
+    double plon = 0, plat = 0;  // previous position (trail)
+    int age = 0;
+  };
+  void stepParticles();
+  void drawParticles(SgBuilder& b);
+  bool m_particles_on = false;
+  QVector<Particle> m_particles;
+  QTimer* m_particle_timer = nullptr;
   QSGNode* m_root = nullptr;
 };
 
