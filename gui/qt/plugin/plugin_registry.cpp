@@ -87,14 +87,42 @@ void PluginRegistry::loadFrom(const QString& dir) {
       h["context"] = QVariant::fromValue(context);
       m_huds.append(h);
     };
-    host.registerSettingsPage = [this](const QString& title,
-                                       const QUrl& component,
-                                       QObject* context) {
+    host.registerSettingsPage = [this, iface](const QString& title,
+                                              const QUrl& component,
+                                              QObject* context) {
       QVariantMap p;
       p["title"] = title;
       p["component"] = component;
       p["context"] = QVariant::fromValue(context);
+      p["pluginName"] = iface->name();
       m_pages.append(p);
+    };
+    host.registerOptionsPane = [this](const QString& section,
+                                      const QString& title,
+                                      const QUrl& component,
+                                      QObject* context) {
+      QVariantMap p;
+      p["section"] = section;
+      p["title"] = title;
+      p["component"] = component;
+      p["context"] = QVariant::fromValue(context);
+      m_panes.append(p);
+    };
+    host.registerToolbarAction = [this](const QString& glyph,
+                                        const QString& tooltip,
+                                        std::function<void()> cb) {
+      QVariantMap a;
+      a["glyph"] = glyph;
+      a["tooltip"] = tooltip;
+      m_toolbar_actions.append(a);
+      m_toolbar_callbacks.append(std::move(cb));
+    };
+    host.registerContextMenuItem =
+        [this](const QString& label, std::function<void(double, double)> cb) {
+      QVariantMap mi;
+      mi["label"] = label;
+      m_menu_items.append(mi);
+      m_menu_callbacks.append(std::move(cb));
     };
     host.navData = m_nav_data;
     host.navMsgTap = m_nav_msg_tap;
@@ -115,6 +143,17 @@ void PluginRegistry::loadFrom(const QString& dir) {
   }
   Q_EMIT pluginsChanged();
   Q_EMIT contributionsChanged();
+}
+
+void PluginRegistry::triggerToolbarAction(int index) {
+  if (index >= 0 && index < m_toolbar_callbacks.size())
+    m_toolbar_callbacks[index]();
+}
+
+void PluginRegistry::triggerContextMenuItem(int index, double lat,
+                                            double lon) {
+  if (index >= 0 && index < m_menu_callbacks.size())
+    m_menu_callbacks[index](lat, lon);
 }
 
 void PluginRegistry::setPluginEnabled(const QString& name, bool enabled) {

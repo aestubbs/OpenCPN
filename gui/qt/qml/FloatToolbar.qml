@@ -178,6 +178,20 @@ Pane {
             text: "🛟"; ToolTip.text: qsTr("Drop MOB marker")
             onClicked: chart.dropMob()
         }
+
+        // Plugin toolbar actions (wx INSTALLS_TOOLBAR_TOOL parity),
+        // styled like the native tools.
+        Repeater {
+            model: chart.pluginRegistry.toolbarActions
+            delegate: Tool {
+                required property var modelData
+                required property int index
+                visible: !floatToolbar.collapsed
+                text: modelData.glyph
+                ToolTip.text: modelData.tooltip
+                onClicked: chart.pluginRegistry.triggerToolbarAction(index)
+            }
+        }
     }
 
     // Drag the whole toolbar; clamp within the parent (the chart overlay).

@@ -279,9 +279,9 @@ void ChartDldrContext::cancelAll() {
 
 bool ChartDldrPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
   m_ctx = new ChartDldrContext(host.addChartDirectory, this);
-  if (host.registerSettingsPage)
-    host.registerSettingsPage(
-        QStringLiteral("Chart downloader"),
+  if (host.registerOptionsPane)
+    host.registerOptionsPane(
+        QStringLiteral("charts"), QStringLiteral("Chart Downloader"),
         QUrl(QStringLiteral("qrc:/chartdldr_plugin/Settings.qml")), m_ctx);
   return true;
 }

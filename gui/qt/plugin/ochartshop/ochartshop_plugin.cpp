@@ -488,9 +488,9 @@ bool ShopContext::extractZip(const QString& zipPath, const QString& destDir,
 
 bool OchartShopPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
   m_ctx = new ShopContext(host.ochartsService, host.addChartDirectory, this);
-  if (host.registerSettingsPage)
-    host.registerSettingsPage(
-        QStringLiteral("o-charts shop"),
+  if (host.registerOptionsPane)
+    host.registerOptionsPane(
+        QStringLiteral("charts"), QStringLiteral("o-charts"),
         QUrl(QStringLiteral("qrc:/ochartshop_plugin/Settings.qml")), m_ctx);
   return true;
 }

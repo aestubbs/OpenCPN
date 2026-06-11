@@ -55,9 +55,29 @@ struct OcpnQtPluginHost {
   /** Register a QML HUD component (a qrc:/ or module URL). The shell
    *  instantiates it above the chart with `plugin` as a context object. */
   std::function<void(const QUrl& component, QObject* context)> registerHud;
-  /** Register a settings page shown under Options > Plugins. */
+  /** Register the plugin's PREFERENCES page (wx WANTS_PREFERENCES
+   *  parity): opened from the plugin's row on the Plugins management
+   *  pane via its Preferences button, in a native dialog. */
   std::function<void(const QString& title, const QUrl& component,
                      QObject* context)> registerSettingsPage;
+  /** Register a plugin-owned OPTIONS PANE (wx INSTALLS_TOOLBOX_PAGE
+   *  parity): a tab inside an existing Options section. Sections:
+   *  "charts" (more as needed). The tab exists only while the plugin
+   *  is loaded. */
+  std::function<void(const QString& section, const QString& title,
+                     const QUrl& component, QObject* context)>
+      registerOptionsPane;
+  /** Register a toolbar action (wx INSTALLS_TOOLBAR_TOOL parity): a
+   *  button appended to the main toolbar. `glyph` is a short text/emoji
+   *  glyph for v1 (SVG icons follow). */
+  std::function<void(const QString& glyph, const QString& tooltip,
+                     std::function<void()> onTriggered)> registerToolbarAction;
+  /** Register a chart context-menu item (wx INSTALLS_CONTEXTMENU_ITEMS
+   *  parity): appended to the right-click menu; the callback receives
+   *  the click position. */
+  std::function<void(const QString& label,
+                     std::function<void(double lat, double lon)> onTriggered)>
+      registerContextMenuItem;
   /** Add a directory to the chart library (Options > Charts > Chart
    *  Files) and rescan -- e.g. after a chart downloader installs cells.
    *  Idempotent for already-listed directories. */

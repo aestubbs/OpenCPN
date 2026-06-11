@@ -131,6 +131,22 @@ Item {
                 simKeyHandler.forceActiveFocus()
             }
         }
+    
+    // Plugin context-menu items (wx INSTALLS_CONTEXTMENU_ITEMS parity):
+    // appended to the general chart menu with the click position.
+    Instantiator {
+        model: targetChart.pluginRegistry.contextMenuItems
+        delegate: MenuItem {
+            required property var modelData
+            required property int index
+            text: modelData.label
+            onTriggered: targetChart.pluginRegistry.triggerContextMenuItem(
+                             index, targetChart.markDropLat(),
+                             targetChart.markDropLon())
+        }
+        onObjectAdded: (i, o) => chartContextMenu.addItem(o)
+        onObjectRemoved: (i, o) => chartContextMenu.removeItem(o)
+    }
     }
 
     // --- Route menu (right-click a route's line or node). -----------------

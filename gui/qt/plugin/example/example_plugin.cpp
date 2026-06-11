@@ -32,6 +32,17 @@ bool ExamplePlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
     host.registerSettingsPage(
         QStringLiteral("Example plugin"),
         QUrl(QStringLiteral("qrc:/example_plugin/Settings.qml")), m_ctx);
+  // Seam validation: a toolbar action + a context-menu item.
+  if (host.registerToolbarAction)
+    host.registerToolbarAction(QStringLiteral("⭐"),
+                               QStringLiteral("Example plugin action"),
+                               [] { qInfo("example: toolbar action"); });
+  if (host.registerContextMenuItem)
+    host.registerContextMenuItem(
+        QStringLiteral("Example: log position"),
+        [](double lat, double lon) {
+          qInfo("example: context item at %.4f, %.4f", lat, lon);
+        });
   return true;
 }
 

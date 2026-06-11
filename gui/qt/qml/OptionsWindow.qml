@@ -60,14 +60,42 @@ Window {
 
     PrioritiesDialog { id: prioritiesDialog }
 
-    // The o-charts pane is FULLY plugin-provided (wx parity): no shop
-    // plugin -> no o-charts tab.
-    readonly property var ochartsShopPage: {
-        const pages = chart.pluginRegistry.settingsPages
-        for (let i = 0; i < pages.length; ++i)
-            if (pages[i].title === "o-charts shop") return pages[i]
-        return null
+    // Plugin preferences host (wx WANTS_PREFERENCES parity): a native
+    // dialog wrapping whatever page the plugin registered.
+    Window {
+        id: pluginPrefsDialog
+        flags: Qt.Dialog
+        modality: Qt.ApplicationModal
+        width: 560; height: 440
+        color: palette.window
+        property var page: null
+        function openFor(p) { page = p; title = p.title; show(); raise() }
+        Flickable {
+            anchors.fill: parent
+            anchors.margins: 18
+            clip: true
+            contentHeight: prefsLoader.implicitHeight
+            ScrollBar.vertical: ScrollBar {}
+            Loader {
+                id: prefsLoader
+                width: parent.width
+                source: pluginPrefsDialog.page ? pluginPrefsDialog.page.component : ""
+                onLoaded: if (pluginPrefsDialog.page)
+                    item.pluginContext = pluginPrefsDialog.page.context
+            }
+        }
     }
+
+    // Plugin-owned Options panes (wx INSTALLS_TOOLBOX_PAGE parity), by
+    // section. A pane's tab exists only while its plugin is loaded.
+    readonly property var chartsPluginPanes:
+        chart.pluginRegistry.optionsPanes
+            .filter((p) => p.section === "charts")
+            .sort((a, b) => {  // o-charts first (wx tab order), then A-Z
+                if (a.title === "o-charts") return -1
+                if (b.title === "o-charts") return 1
+                return a.title.localeCompare(b.title)
+            })
 
     flags: Qt.Dialog
     // macOS shows a wider window (sidebar + pane), like System Settings.
@@ -570,10 +598,12 @@ Window {
                         TabButton { text: qsTr("Vector Display") }
                         TabButton { text: qsTr("Groups") }
                         TabButton { text: qsTr("Tides") }
-                        TabButton {
-                            text: qsTr("o-charts")
-                            visible: optionsWindow.ochartsShopPage !== null
-                            width: visible ? implicitWidth : 0
+                        Repeater {
+                            model: optionsWindow.chartsPluginPanes
+                            delegate: TabButton {
+                                required property var modelData
+                                text: modelData.title
+                            }
                         }
                     }
 
@@ -1079,20 +1109,21 @@ Window {
                             }
                         }
 
-                        // --- o-charts: FULLY plugin-provided (P4.7). ---
-                        Flickable {
-                            clip: true
-                            contentHeight: ochartsShopLoader.implicitHeight + 40
-                            ScrollBar.vertical: ScrollBar {}
-                            Loader {
-                                id: ochartsShopLoader
-                                width: parent.width - 40
-                                x: 20; y: 20
-                                source: optionsWindow.ochartsShopPage
-                                        ? optionsWindow.ochartsShopPage.component : ""
-                                onLoaded: if (optionsWindow.ochartsShopPage)
-                                    item.pluginContext =
-                                        optionsWindow.ochartsShopPage.context
+                        // --- Plugin-owned panes (e.g. o-charts, P4.7) ---
+                        Repeater {
+                            model: optionsWindow.chartsPluginPanes
+                            delegate: Flickable {
+                                required property var modelData
+                                clip: true
+                                contentHeight: paneLoader.implicitHeight + 40
+                                ScrollBar.vertical: ScrollBar {}
+                                Loader {
+                                    id: paneLoader
+                                    width: parent.width - 40
+                                    x: 20; y: 20
+                                    source: modelData.component
+                                    onLoaded: item.pluginContext = modelData.context
+                                }
                             }
                         }
                     }
@@ -2617,6 +2648,18 @@ Window {
                                             Layout.fillWidth: true
                                         }
                                     }
+                                    Button {
+                                        readonly property var prefsPage: {
+                                            const pages = chart.pluginRegistry.settingsPages
+                                            for (let i = 0; i < pages.length; ++i)
+                                                if (pages[i].pluginName === modelData.name)
+                                                    return pages[i]
+                                            return null
+                                        }
+                                        visible: prefsPage !== null
+                                        text: qsTr("Preferences…")
+                                        onClicked: pluginPrefsDialog.openFor(prefsPage)
+                                    }
                                     Label {
                                         text: modelData.loaded ? qsTr("loaded") : qsTr("off")
                                         color: palette.placeholderText
@@ -2632,23 +2675,8 @@ Window {
                         text: qsTr("No Qt plugins installed.")
                         color: palette.placeholderText
                     }
-                    // Plugin-contributed settings pages, stacked below.
-                    Repeater {
-                        model: chart.pluginRegistry.settingsPages.filter(
-                                   (p) => p.title !== "o-charts shop").filter(
-                                   (p) => p.title !== "o-charts shop")
-                        delegate: ColumnLayout {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            Label { text: modelData.title; font.bold: true }
-                            Loader {
-                                Layout.fillWidth: true
-                                source: modelData.component
-                                onLoaded: if (item && modelData.context)
-                                              item.pluginContext = modelData.context
-                            }
-                        }
-                    }
+                    // Management only (wx parity): plugin UI lives in its
+                    // own panes/dialogs, never on this page.
                 }
             }
         }

@@ -46,8 +46,18 @@ class PluginRegistry : public QObject {
   // to instantiate above the chart.
   Q_PROPERTY(QVariantList hudComponents READ hudComponents NOTIFY
                  contributionsChanged)
-  // Settings pages: {title, component (url), context (QObject*)}.
+  // Preferences pages: {title, component (url), context (QObject*),
+  // pluginName} -- opened from the Plugins management pane.
   Q_PROPERTY(QVariantList settingsPages READ settingsPages NOTIFY
+                 contributionsChanged)
+  // Plugin-owned Options panes: {section, title, component, context}.
+  Q_PROPERTY(QVariantList optionsPanes READ optionsPanes NOTIFY
+                 contributionsChanged)
+  // Toolbar actions: {glyph, tooltip}; trigger by index.
+  Q_PROPERTY(QVariantList toolbarActions READ toolbarActions NOTIFY
+                 contributionsChanged)
+  // Context-menu items: {label}; trigger by index with the click position.
+  Q_PROPERTY(QVariantList contextMenuItems READ contextMenuItems NOTIFY
                  contributionsChanged)
 
 public:
@@ -67,6 +77,11 @@ public:
   QVariantList plugins() const { return m_rows; }
   QVariantList hudComponents() const { return m_huds; }
   QVariantList settingsPages() const { return m_pages; }
+  QVariantList optionsPanes() const { return m_panes; }
+  QVariantList toolbarActions() const { return m_toolbar_actions; }
+  QVariantList contextMenuItems() const { return m_menu_items; }
+  Q_INVOKABLE void triggerToolbarAction(int index);
+  Q_INVOKABLE void triggerContextMenuItem(int index, double lat, double lon);
 
   /** Enable/disable by name (persisted). A change applies on restart --
    *  contributions cannot be detached live in v1. */
@@ -90,6 +105,11 @@ private:
   QVariantList m_rows;
   QVariantList m_huds;
   QVariantList m_pages;
+  QVariantList m_panes;
+  QVariantList m_toolbar_actions;
+  QVariantList m_menu_items;
+  QList<std::function<void()>> m_toolbar_callbacks;
+  QList<std::function<void(double, double)>> m_menu_callbacks;
 };
 
 }  // namespace ocpn::qtui
