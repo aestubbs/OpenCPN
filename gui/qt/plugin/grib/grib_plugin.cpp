@@ -153,6 +153,16 @@ void GribContext::openFile(const QUrl& url) {
     m_steps.append(QDateTime::fromSecsSinceEpoch(t)
                        .toString(QStringLiteral("ddd dd MMM hh:mm")));
   }
+  for (int i = 0; i < m_step_times.size(); ++i) {
+    GribRecord* r = m_reader->getGribRecord(
+        GRB_WIND_VX, LV_ABOV_GND, 10,
+        static_cast<time_t>(m_step_times[i]));
+    qWarning("grib: step %d (%s) u[0]=%s lon0=%.1f", i,
+             qPrintable(m_steps[i]),
+             r && r->isOk() ? qPrintable(QString::number(r->getValue(0, 0), 'f', 2))
+                            : "n/a",
+             r && r->isOk() ? r->getX(0) : 0.0);
+  }
   m_status = tr("%1 records, %2 time steps")
                  .arg(m_reader->getTotalNumberOfGribRecords())
                  .arg(m_steps.size());
@@ -418,7 +428,9 @@ QStringList GribContext::cursorRows(double lat, double lon) const {
   auto val = [&](int dt, int lt, int lv) -> double {
     GribRecord* r = m_reader->getGribRecord(dt, lt, lv, t);
     if (!r || !r->isOk()) return GRIB_NOTDEF;
-    return r->getInterpolatedValue(lon, lat, true);
+    const double qlon =
+        (r->getX(0) >= 180.0 && lon < 0) ? lon + 360.0 : lon;
+    return r->getInterpolatedValue(qlon, lat, true);
   };
   const double u = val(GRB_WIND_VX, LV_ABOV_GND, 10);
   const double v = val(GRB_WIND_VY, LV_ABOV_GND, 10);
@@ -566,6 +578,7 @@ void GribContext::pushToLayer() {
     pg.ni = rp->getNi();
     pg.nj = rp->getNj();
     pg.lon0 = rp->getX(0);
+    if (pg.lon0 >= 180.0) pg.lon0 -= 360.0;
     pg.lat0 = rp->getY(0);
     pg.di = rp->getNi() > 1 ? rp->getX(1) - rp->getX(0) : 0;
     pg.dj = rp->getNj() > 1 ? rp->getY(1) - rp->getY(0) : 0;
@@ -587,6 +600,7 @@ void GribContext::pushToLayer() {
     g.ni = r->getNi();
     g.nj = r->getNj();
     g.lon0 = r->getX(0);
+    if (g.lon0 >= 180.0) g.lon0 -= 360.0;  // GRIB 0..360 convention
     g.lat0 = r->getY(0);
     g.di = r->getNi() > 1 ? r->getX(1) - r->getX(0) : 0;
     g.dj = r->getNj() > 1 ? r->getY(1) - r->getY(0) : 0;
@@ -644,6 +658,7 @@ void GribContext::pushToLayer() {
       f.grid.ni = r1->getNi();
       f.grid.nj = r1->getNj();
       f.grid.lon0 = r1->getX(0);
+      if (f.grid.lon0 >= 180.0) f.grid.lon0 -= 360.0;
       f.grid.lat0 = r1->getY(0);
       f.grid.di = r1->getNi() > 1 ? r1->getX(1) - r1->getX(0) : 0;
       f.grid.dj = r1->getNj() > 1 ? r1->getY(1) - r1->getY(0) : 0;
@@ -764,6 +779,7 @@ void GribContext::pushToLayer() {
   g.ni = ru->getNi();
   g.nj = ru->getNj();
   g.lon0 = ru->getX(0);
+  if (g.lon0 >= 180.0) g.lon0 -= 360.0;
   g.lat0 = ru->getY(0);
   g.di = ru->getNi() > 1 ? ru->getX(1) - ru->getX(0) : 0;
   g.dj = ru->getNj() > 1 ? ru->getY(1) - ru->getY(0) : 0;
@@ -792,9 +808,11 @@ QString GribContext::readoutAt(double lat, double lon) const {
   GribRecord* ru = m_reader->getGribRecord(GRB_WIND_VX, LV_ABOV_GND, 10, t);
   GribRecord* rv = m_reader->getGribRecord(GRB_WIND_VY, LV_ABOV_GND, 10, t);
   if (ru && rv && ru->isOk() && rv->isOk()) {
+    const double qlon =
+        (ru->getX(0) >= 180.0 && lon < 0) ? lon + 360.0 : lon;
     // getInterpolatedValue handles bilinear sampling + grid bounds.
-    const double u = ru->getInterpolatedValue(lon, lat, true);
-    const double v = rv->getInterpolatedValue(lon, lat, true);
+    const double u = ru->getInterpolatedValue(qlon, lat, true);
+    const double v = rv->getInterpolatedValue(qlon, lat, true);
     if (u != GRIB_NOTDEF && v != GRIB_NOTDEF) {
       const double kn = std::hypot(u, v) * 1.94384;
       double dir = std::atan2(-u, -v) * 180.0 / M_PI;  // FROM direction
