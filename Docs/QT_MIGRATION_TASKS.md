@@ -2278,11 +2278,12 @@ existing `followOwnShip` property before adding).
          buttons live on the app time bar already.)
       4. *(week)* Particle animation for wind/current (the wx particle
          system on the scene graph; ties into PERF ladder).
-      5. *(days)* Altitude selector; GRIB DIRECTORY management (wx sets
-         a gribs dir, not single files — browser lists the dir, newest
-         first) + multi-file; bz2/gz transparent open (zuFile already
-         supports — surface in UI). Last-file session restore landed
-         2026-06-11.
+      5. ~~Altitude selector + GRIB directory management~~ **DONE
+         (2026-06-11):** Open… lists the configured folder newest-first
+         (+Browse…); folder picker on the prefs page; wind at
+         surface/850/700/500/300 hPa when isobaric levels are present;
+         bz2/gz transparent; last-file session restore. Multi-file
+         layering (several files merged) remains a refinement.
       6. Request dialog upgrade to full model/resolution matrix.
       Each tier lands behind the existing control bar so the UI grows
       in place. End-state = drop-in replacement for grib_pi minus the
