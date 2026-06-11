@@ -53,6 +53,13 @@ class GribContext : public QObject {
   // The colour-mapped overlay field key ("" = none; wx OverlayMap).
   Q_PROPERTY(QString overlayKey READ overlayKey WRITE setOverlayKey NOTIFY
                  typesChanged)
+  // The GRIB directory (wx parity: a managed folder, newest first).
+  Q_PROPERTY(QUrl gribDir READ gribDir WRITE setGribDir NOTIFY gribChanged)
+  Q_PROPERTY(QVariantList dirFiles READ dirFiles NOTIFY gribChanged)
+  // Wind altitude: 0 = 10 m surface; 850/700/500/300 hPa isobaric.
+  Q_PROPERTY(int windAltitude READ windAltitude WRITE setWindAltitude NOTIFY
+                 typesChanged)
+  Q_PROPERTY(QVariantList altitudes READ altitudes NOTIFY typesChanged)
   Q_PROPERTY(QString status READ status NOTIFY gribChanged)
   // The on-canvas control bar's visibility (toolbar 🌬 toggles it).
   Q_PROPERTY(bool controlsVisible READ controlsVisible WRITE
@@ -90,6 +97,12 @@ public:
   Q_INVOKABLE void setTypeShown(const QString& key, bool on);
   QString overlayKey() const { return m_overlay_key; }
   void setOverlayKey(const QString& k);
+  QUrl gribDir() const { return m_grib_dir; }
+  void setGribDir(const QUrl& d);
+  QVariantList dirFiles() const;
+  int windAltitude() const { return m_wind_altitude; }
+  void setWindAltitude(int hpa);
+  QVariantList altitudes() const;
 
   /** Compose a saildocs GRIB request for the given bounds and open the
    *  user's mail client (mailto:). Returns the request body line. */
@@ -130,6 +143,8 @@ private:
   bool m_show_wind = true;
   bool m_show_pressure = true;
   QString m_overlay_key;
+  QUrl m_grib_dir;
+  int m_wind_altitude = 0;
   QMap<QString, bool> m_type_shown;     // persisted per-type toggles
   QMap<QString, bool> m_type_available; // present in the loaded file
   bool m_controls_visible = false;

@@ -51,6 +51,26 @@ ColumnLayout {
             font.family: "monospace"
         }
     }
+    RowLayout {
+        Layout.fillWidth: true
+        Label { text: qsTr("GRIB folder:") }
+        Label {
+            text: pluginContext && pluginContext.gribDir.toString().length
+                  ? pluginContext.gribDir : qsTr("(Downloads)")
+            elide: Text.ElideMiddle
+            Layout.fillWidth: true
+            color: palette.placeholderText
+        }
+        Button {
+            text: qsTr("Choose…")
+            onClicked: gribDirDialog.open()
+        }
+        FolderDialog {
+            id: gribDirDialog
+            onAccepted: if (pluginContext) pluginContext.gribDir = selectedFolder
+        }
+    }
+
     MenuSeparator { Layout.fillWidth: true }
     Label { text: qsTr("Request a forecast (saildocs)"); font.bold: true }
     RowLayout {

@@ -28,7 +28,50 @@ Item {
         Button {
             text: qsTr("Open…")
             font.pointSize: 10
-            onClicked: gribBarFileDialog.open()
+            // wx parity: list the GRIB DIRECTORY newest-first; Browse…
+            // for one-offs.
+            onClicked: dirMenu.open()
+            Menu {
+                id: dirMenu
+                y: -implicitHeight - 4
+                Instantiator {
+                    model: pluginContext ? pluginContext.dirFiles : []
+                    delegate: MenuItem {
+                        required property var modelData
+                        text: modelData.name + "   " + modelData.date
+                        onTriggered: pluginContext.openFile(modelData.path)
+                    }
+                    onObjectAdded: (i, o) => dirMenu.insertItem(i, o)
+                    onObjectRemoved: (i, o) => dirMenu.removeItem(o)
+                }
+                MenuSeparator { }
+                MenuItem {
+                    text: qsTr("Browse…")
+                    onTriggered: gribBarFileDialog.open()
+                }
+            }
+        }
+        ComboBox {
+            id: altBox
+            font.pointSize: 10
+            implicitWidth: 100
+            visible: model.length > 1
+            model: {
+                const l = []
+                const alts = pluginContext ? pluginContext.altitudes : []
+                for (let i = 0; i < alts.length; ++i)
+                    if (alts[i].available) l.push(alts[i])
+                return l
+            }
+            textRole: "label"
+            currentIndex: {
+                for (let i = 0; i < model.length; ++i)
+                    if (model[i].hpa === (pluginContext
+                                          ? pluginContext.windAltitude : 0))
+                        return i
+                return 0
+            }
+            onActivated: pluginContext.windAltitude = model[currentIndex].hpa
         }
         Label {
             text: pluginContext && pluginContext.fileName.length

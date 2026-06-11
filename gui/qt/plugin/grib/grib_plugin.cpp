@@ -14,7 +14,9 @@
 
 #include <QDateTime>
 #include <QFile>
+#include <QDir>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QDesktopServices>
 #include <QUrlQuery>
 #include <QUrl>
@@ -70,6 +72,7 @@ GribContext::GribContext(QObject* timeline, QObject* parent)
       m_type_shown[QLatin1String(t.key)] =
           st.value(QStringLiteral("show_") + t.key, false).toBool();
     m_overlay_key = st.value(QStringLiteral("overlayKey")).toString();
+    m_grib_dir = st.value(QStringLiteral("gribDir")).toUrl();
   }
   // Restore the last GRIB on startup (wx parity): the timeline can
   // drive the weather immediately.
@@ -275,6 +278,64 @@ void GribContext::setOverlayKey(const QString& k) {
   pushToLayer();
 }
 
+void GribContext::setGribDir(const QUrl& d) {
+  if (d == m_grib_dir) return;
+  m_grib_dir = d;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
+      .setValue(QStringLiteral("gribDir"), d);
+  Q_EMIT gribChanged();
+}
+
+QVariantList GribContext::dirFiles() const {
+  QVariantList out;
+  const QString dir = m_grib_dir.isLocalFile()
+                          ? m_grib_dir.toLocalFile()
+                          : QStandardPaths::writableLocation(
+                                QStandardPaths::DownloadLocation);
+  QDir qd(dir);
+  const auto entries = qd.entryInfoList(
+      {QStringLiteral("*.grb"), QStringLiteral("*.grb2"),
+       QStringLiteral("*.grib"), QStringLiteral("*.grib2"),
+       QStringLiteral("*.bz2"), QStringLiteral("*.gz")},
+      QDir::Files, QDir::Time);  // newest first (wx parity)
+  for (const QFileInfo& fi : entries) {
+    QVariantMap m;
+    m["name"] = fi.fileName();
+    m["path"] = QUrl::fromLocalFile(fi.absoluteFilePath());
+    m["date"] = fi.lastModified().toString(QStringLiteral("dd MMM hh:mm"));
+    out.append(m);
+  }
+  return out;
+}
+
+QVariantList GribContext::altitudes() const {
+  QVariantList out;
+  auto add = [&](int hpa, const QString& label, bool avail) {
+    QVariantMap m;
+    m["hpa"] = hpa;
+    m["label"] = label;
+    m["available"] = avail;
+    out.append(m);
+  };
+  add(0, tr("Surface"), true);
+  if (m_reader && !m_step_times.isEmpty()) {
+    const time_t t = static_cast<time_t>(m_step_times[m_time_index]);
+    for (int hpa : {850, 700, 500, 300}) {
+      GribRecord* r =
+          m_reader->getGribRecord(GRB_WIND_VX, LV_ISOBARIC, hpa, t);
+      add(hpa, QStringLiteral("%1 hPa").arg(hpa), r && r->isOk());
+    }
+  }
+  return out;
+}
+
+void GribContext::setWindAltitude(int hpa) {
+  if (hpa == m_wind_altitude) return;
+  m_wind_altitude = hpa;
+  Q_EMIT typesChanged();
+  pushToLayer();
+}
+
 void GribContext::setTimeIndex(int i) {
   if (i == m_time_index || i < 0 || i >= m_step_times.size()) return;
   m_time_index = i;
@@ -442,8 +503,9 @@ void GribContext::pushToLayer() {
     bool ownW = false;
     GribRecord* ru = nullptr;
     GribRecord* rv = nullptr;
-    recordPairAt(GRB_WIND_VX, GRB_WIND_VY, LV_ABOV_GND, 10, &ru, &rv,
-                 &ownW);
+    const int olt = m_wind_altitude > 0 ? LV_ISOBARIC : LV_ABOV_GND;
+    const int olv = m_wind_altitude > 0 ? m_wind_altitude : 10;
+    recordPairAt(GRB_WIND_VX, GRB_WIND_VY, olt, olv, &ru, &rv, &ownW);
     if (ru && rv && ru->isOk() && rv->isOk()) {
       auto g = scalarFrom(ru);  // reuse geometry; recompute as speed
       for (int j = 0; j < g.nj; ++j)
@@ -491,8 +553,9 @@ void GribContext::pushToLayer() {
   bool ownWind = false;
   GribRecord* ru = nullptr;
   GribRecord* rv = nullptr;
-  recordPairAt(GRB_WIND_VX, GRB_WIND_VY, LV_ABOV_GND, 10, &ru, &rv,
-               &ownWind);
+  const int wlt = m_wind_altitude > 0 ? LV_ISOBARIC : LV_ABOV_GND;
+  const int wlv = m_wind_altitude > 0 ? m_wind_altitude : 10;
+  recordPairAt(GRB_WIND_VX, GRB_WIND_VY, wlt, wlv, &ru, &rv, &ownWind);
   if (!ru || !rv || !ru->isOk() || !rv->isOk()) {
     m_layer->clearGrid();
     return;
