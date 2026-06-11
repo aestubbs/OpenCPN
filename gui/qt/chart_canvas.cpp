@@ -83,6 +83,7 @@
 #include "cm93_scanner.h"
 #include "grid_layer.h"
 #include "raster_chart_layer.h"
+#include "time_controller.h"
 #include "waypoint_icons.h"
 #include "s57_dictionary.h"
 #include "model/ais_decoder.h"   // g_MMSI_Props_Array (MMSI properties, P3.6)
@@ -385,7 +386,9 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
           reloadCharts();
         }
       },
-      &OChartsService::instance());  // shop plugin: fpr + daemon status
+      &OChartsService::instance(),  // shop plugin: fpr + daemon status
+      m_viewport.get(),              // plugin layers: scale/screen sizing
+      &TimeController::instance());  // time-aware plugins follow the bar
   m_plugin_registry->loadFrom(
       QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
       QStringLiteral("/plugins-qt"));

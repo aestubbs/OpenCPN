@@ -67,6 +67,8 @@ public:
                  NavDataProvider* navData, QObject* navMsgTap = nullptr,
                  std::function<void(const QString&)> addChartDir = {},
                  QObject* ochartsService = nullptr,
+                 const Viewport* viewport = nullptr,
+                 QObject* timeline = nullptr,
                  QObject* parent = nullptr);
   ~PluginRegistry() override;
 
@@ -101,6 +103,8 @@ private:
   QObject* m_nav_msg_tap = nullptr;
   std::function<void(const QString&)> m_add_chart_dir;
   QObject* m_ocharts_service = nullptr;
+  const Viewport* m_viewport = nullptr;
+  QObject* m_timeline = nullptr;
   QList<Loaded> m_loaded;
   QVariantList m_rows;
   QVariantList m_huds;

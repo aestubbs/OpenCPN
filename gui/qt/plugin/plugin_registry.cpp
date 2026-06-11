@@ -20,13 +20,17 @@ namespace ocpn::qtui {
 PluginRegistry::PluginRegistry(std::function<void(Layer*)> registerLayer,
                                NavDataProvider* navData, QObject* navMsgTap,
                                std::function<void(const QString&)> addChartDir,
-                               QObject* ochartsService, QObject* parent)
+                               QObject* ochartsService,
+                               const Viewport* viewport, QObject* timeline,
+                               QObject* parent)
     : QObject(parent),
       m_register_layer(std::move(registerLayer)),
       m_nav_data(navData),
       m_nav_msg_tap(navMsgTap),
       m_add_chart_dir(std::move(addChartDir)),
-      m_ocharts_service(ochartsService) {}
+      m_ocharts_service(ochartsService),
+      m_viewport(viewport),
+      m_timeline(timeline) {}
 
 PluginRegistry::~PluginRegistry() {
   for (const Loaded& l : m_loaded) {
@@ -125,6 +129,8 @@ void PluginRegistry::loadFrom(const QString& dir) {
       m_menu_callbacks.append(std::move(cb));
     };
     host.navData = m_nav_data;
+    host.viewport = m_viewport;
+    host.timeline = m_timeline;
     host.navMsgTap = m_nav_msg_tap;
     host.addChartDirectory = m_add_chart_dir;
     host.ochartsService = m_ocharts_service;

@@ -32,6 +32,10 @@ class GribWindLayer : public Layer {
   Q_OBJECT
 public:
   using Layer::Layer;
+
+  /** Wire the viewport: barbs render SCREEN-FIXED (rebuild on zoom,
+   *  pure transform on pan -- the NavLayer pattern). */
+  void setViewport(const Viewport* vp);
   QString id() const override { return QStringLiteral("plugin.grib.wind"); }
   QString name() const override { return QStringLiteral("GRIB wind"); }
   Anchor anchor() const override { return WorldAnchored; }
@@ -69,6 +73,9 @@ public:
 
 private:
   void drawIsobars(SgBuilder& b);
+  double worldPerPx() const;
+  const Viewport* m_vp = nullptr;
+  double m_last_scale = 0;
   WindGrid m_grid;
   ScalarGrid m_isobars;
   QSGNode* m_root = nullptr;

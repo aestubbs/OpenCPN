@@ -10,6 +10,7 @@
 #include "grib_plugin.h"
 
 #include <cmath>
+#include <cstdlib>
 
 #include <QDateTime>
 #include <QDesktopServices>
@@ -20,7 +21,32 @@
 #include "GribRecord.h"
 #include "grib_wind_layer.h"
 
-GribContext::GribContext(QObject* parent) : QObject(parent) {}
+GribContext::GribContext(QObject* timeline, QObject* parent)
+    : QObject(parent), m_timeline(timeline) {
+  // Follow the app time bar (wx parity: the GRIB rides the chart
+  // timeline, not its own slider).
+  if (m_timeline)
+    connect(m_timeline, SIGNAL(timeChanged()), this,
+            SLOT(onTimelineChanged()));
+}
+
+void GribContext::onTimelineChanged() {
+  if (!m_timeline || m_step_times.isEmpty()) return;
+  const QDateTime t =
+      m_timeline->property("displayTime").toDateTime();
+  if (!t.isValid()) return;
+  const qint64 epoch = t.toSecsSinceEpoch();
+  int best = 0;
+  qint64 bestD = std::abs(m_step_times[0] - epoch);
+  for (int i = 1; i < m_step_times.size(); ++i) {
+    const qint64 d = std::abs(m_step_times[i] - epoch);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  setTimeIndex(best);
+}
 
 GribContext::~GribContext() { delete m_reader; }
 
@@ -197,9 +223,10 @@ QString GribContext::requestGrib(double north, double south, double east,
 }
 
 bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
-  m_ctx = new GribContext(this);
+  m_ctx = new GribContext(host.timeline, this);
   if (host.registerLayer) {
     auto* layer = new ocpn::qtui::GribWindLayer();
+    layer->setViewport(host.viewport);
     layer->setZOrder(1450);  // over charts/grid, under the nav overlays
     m_ctx->setLayer(layer);
     host.registerLayer(layer);  // compositor takes ownership
@@ -207,6 +234,13 @@ bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
   if (host.registerHud)
     host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/CursorReadout.qml")),
                      m_ctx);
+  if (host.registerHud)
+    host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/ControlBar.qml")),
+                     m_ctx);
+  if (host.registerToolbarAction)
+    host.registerToolbarAction(
+        QStringLiteral("🌬"), QStringLiteral("GRIB weather"),
+        [this] { if (m_ctx) m_ctx->toggleControls(); });
   if (host.registerSettingsPage)
     host.registerSettingsPage(
         QStringLiteral("GRIB"),

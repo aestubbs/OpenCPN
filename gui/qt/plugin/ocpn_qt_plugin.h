@@ -44,6 +44,7 @@ namespace ocpn::qtui {
 
 class Layer;             // gui/qt/layer.h -- the scene-graph Layer contract
 class NavDataProvider;   // gui/qt/nav_data_provider.h -- nav snapshots
+class Viewport;          // gui/qt/toolkit/viewport.h -- world<->screen
 
 /** What the host hands a plugin at init: the contribution registry plus
  *  the data seams it may consume. All pointers are host-owned and outlive
@@ -84,6 +85,13 @@ struct OcpnQtPluginHost {
   std::function<void(const QString& dir)> addChartDirectory;
   /** Live navigation snapshots (own ship, AIS, routes...). */
   NavDataProvider* navData = nullptr;
+  /** The chart viewport (scale/centre; toolkit type) -- lets plugin
+   *  Layers size screen-fixed symbols and rebuild on zoom. */
+  const Viewport* viewport = nullptr;
+  /** The app timeline (QObject with Q_PROPERTY QDateTime displayTime +
+   *  signal timeChanged()): the time bar under the chart. Time-aware
+   *  plugins (GRIB) follow it instead of owning their own slider. */
+  QObject* timeline = nullptr;
   /** The o-charts daemon service (nullptr if absent): a QObject exposing
    *  Q_PROPERTY fingerprintFile/daemonAvailable/busy/status, signal
    *  changed(), and Q_INVOKABLE generateFingerprint(). Connect/invoke by

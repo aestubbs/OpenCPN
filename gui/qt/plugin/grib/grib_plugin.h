@@ -45,9 +45,13 @@ class GribContext : public QObject {
   Q_PROPERTY(bool showPressure READ showPressure WRITE setShowPressure NOTIFY
                  timeChanged)
   Q_PROPERTY(QString status READ status NOTIFY gribChanged)
+  // The on-canvas control bar's visibility (toolbar 🌬 toggles it).
+  Q_PROPERTY(bool controlsVisible READ controlsVisible WRITE
+                 setControlsVisible NOTIFY controlsChanged)
 
 public:
-  explicit GribContext(QObject* parent = nullptr);
+  explicit GribContext(QObject* timeline = nullptr,
+                       QObject* parent = nullptr);
   ~GribContext() override;
 
   QString fileName() const { return m_file; }
@@ -61,6 +65,13 @@ public:
   QString status() const { return m_status; }
 
   Q_INVOKABLE void openFile(const QUrl& url);
+  bool controlsVisible() const { return m_controls_visible; }
+  void setControlsVisible(bool on) {
+    if (on == m_controls_visible) return;
+    m_controls_visible = on;
+    Q_EMIT controlsChanged();
+  }
+  void toggleControls() { setControlsVisible(!m_controls_visible); }
 
   /** Wind/pressure at a position for the cursor readout: a formatted
    *  one-liner ("12.4 kn @ 215°   1013 hPa"), empty when off-grid or no
@@ -80,6 +91,11 @@ public:
 Q_SIGNALS:
   void gribChanged();
   void timeChanged();
+  void controlsChanged();
+
+private Q_SLOTS:
+  // The app time bar moved: snap to the nearest GRIB timestep.
+  void onTimelineChanged();
 
 private:
   void pushToLayer();
@@ -92,6 +108,8 @@ private:
   int m_time_index = 0;
   bool m_show_wind = true;
   bool m_show_pressure = true;
+  bool m_controls_visible = false;
+  QObject* m_timeline = nullptr;
   QString m_status;
 };
 

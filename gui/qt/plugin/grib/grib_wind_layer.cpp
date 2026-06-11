@@ -11,6 +11,8 @@
 
 #include <cmath>
 
+#include <QtMath>
+
 #include <QQuickWindow>
 #include <QSGNode>
 
@@ -29,6 +31,24 @@ QColor windColor(double kn) {
 }
 }  // namespace
 
+void GribWindLayer::setViewport(const Viewport* vp) {
+  m_vp = vp;
+  if (!m_vp) return;
+  m_last_scale = m_vp->scale();
+  connect(m_vp, &Viewport::changed, this, [this]() {
+    const double s = m_vp->scale();
+    if (s != m_last_scale) {
+      m_last_scale = s;
+      Q_EMIT dirty();
+    }
+  });
+}
+
+double GribWindLayer::worldPerPx() const {
+  const double s = m_vp ? m_vp->scale() : 0.0;
+  return s > 0 ? 1.0 / s : 0.01;
+}
+
 QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
                                       QQuickWindow* window) {
   if (!m_root)
@@ -42,14 +62,12 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
   drawIsobars(b);
   if (m_grid.ni <= 1 || m_grid.nj <= 1) return m_root;
 
-  // World units per px for screen-fixed arrow sizing; decimate the grid so
-  // arrows sit >= ~34 px apart at the current zoom.
-  const double wpp = 1.0;  // sized in world units of the grid spacing below
-  Q_UNUSED(wpp);
-  // Approximate px per grid cell from the layer's compositor transform is
-  // not available here; use a fixed decimation against the grid size for
-  // v1 (the GRIB grids are coarse; density tuning follows verification).
-  const int step = qMax(1, qMax(m_grid.ni, m_grid.nj) / 48);
+  // Screen-fixed sizing: barbs are ~42 px regardless of zoom; the grid
+  // decimates so barbs sit >= ~60 px apart (PERF: rebuilds only on zoom).
+  const double wpp = worldPerPx();
+  const double cellPx = std::fabs(m_grid.di) / wpp;
+  const int step =
+      cellPx > 0 ? qMax(1, qCeil(60.0 / cellPx)) : qMax(1, m_grid.ni / 48);
 
   for (int j = 0; j < m_grid.nj; j += step) {
     for (int i = 0; i < m_grid.ni; i += step) {
@@ -67,7 +85,7 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
       // staff points INTO the wind (towards where it comes from); half
       // barbs = 5 kn, full barbs = 10 kn, pennants = 50 kn, on the
       // clockwise side (northern-hemisphere convention).
-      const double len = std::fabs(m_grid.di) * step * 0.9;
+      const double len = 42.0 * wpp;  // ~42 px staff, zoom-independent
       const double n = std::hypot(u, v);
       // Flow direction in world coords; the staff runs opposite it.
       const QPointF flow(u / n, -v / n);
