@@ -1066,10 +1066,15 @@ Window {
                             }
                         }
 
-                        // --- o-charts (built-in, native -- not a plugin) ---
-                        Item {
+                        // --- o-charts: shop (plugin-provided) + native decrypt ---
+                        Flickable {
+                            clip: true
+                            contentHeight: ochartsPaneCol.implicitHeight + 40
+                            ScrollBar.vertical: ScrollBar {}
                             ColumnLayout {
-                                anchors.fill: parent
+                                id: ochartsPaneCol
+                                width: parent.width - 40
+                                x: 20; y: 20
                                 spacing: 8
                                 Label { text: qsTr("o-charts (encrypted)"); font.bold: true }
                                 Label {
@@ -1081,9 +1086,29 @@ Window {
                                                                    : palette.placeholderText
                                 }
 
+                                // The shop page contributed by the o-charts
+                                // plugin loads HERE (wx parity: the shop
+                                // lives on the Charts > o-charts panel).
+                                readonly property var shopPage: {
+                                    const pages = chart.pluginRegistry.settingsPages
+                                    for (let i = 0; i < pages.length; ++i)
+                                        if (pages[i].title === "o-charts shop")
+                                            return pages[i]
+                                    return null
+                                }
+                                MenuSeparator { Layout.fillWidth: true }
+                                Loader {
+                                    visible: ochartsPaneCol.shopPage !== null
+                                    Layout.fillWidth: true
+                                    source: ochartsPaneCol.shopPage
+                                            ? ochartsPaneCol.shopPage.component : ""
+                                    onLoaded: if (ochartsPaneCol.shopPage)
+                                        item.pluginContext = ochartsPaneCol.shopPage.context
+                                }
+
                                 MenuSeparator { Layout.fillWidth: true }
 
-                                Label { text: qsTr("System fingerprint"); font.bold: true }
+                                Label { text: qsTr("Manual licensing"); font.bold: true }
                                 Label {
                                     text: qsTr("Generate this computer's fingerprint, then upload the .fpr file at o-charts.org to licence a chart set to this machine.")
                                     wrapMode: Text.Wrap; Layout.fillWidth: true
@@ -1107,9 +1132,8 @@ Window {
                                     wrapMode: Text.Wrap; Layout.fillWidth: true
                                     font.family: "monospace"; font.pointSize: 11
                                 }
-                                Item { Layout.fillHeight: true }
                                 Label {
-                                    text: qsTr("Decryption + chart loading is built into the app (no plugin); install a licensed o-charts set, then add its folder under Chart Files.")
+                                    text: qsTr("Decryption + chart loading is built in; manually installed sets just need their folder added under Chart Files.")
                                     wrapMode: Text.Wrap; Layout.fillWidth: true
                                     color: palette.placeholderText; font.pointSize: 11
                                 }
@@ -2654,7 +2678,8 @@ Window {
                     }
                     // Plugin-contributed settings pages, stacked below.
                     Repeater {
-                        model: chart.pluginRegistry.settingsPages
+                        model: chart.pluginRegistry.settingsPages.filter(
+                                   (p) => p.title !== "o-charts shop")
                         delegate: ColumnLayout {
                             required property var modelData
                             Layout.fillWidth: true

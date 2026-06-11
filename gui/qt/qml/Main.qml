@@ -487,29 +487,33 @@ ApplicationWindow {
                 font.pointSize: 9; font.bold: true
             }
 
-            // Click the rose to cycle North-Up -> Course-Up -> Head-Up;
-            // drag it to move the whole HUD group (pill rides along).
+            // Drag to move the whole HUD group (pill rides along). The
+            // handler writes the persisted FRACTIONS live and x/y stay
+            // bound to them -- one source of truth, nothing to snap back.
+            DragHandler {
+                id: hudDrag
+                target: null
+                property real baseX: 0
+                property real baseY: 0
+                onActiveChanged: if (active) {
+                    baseX = compass.x
+                    baseY = compass.y
+                }
+                onActiveTranslationChanged: {
+                    if (!active) return
+                    const spanX = Math.max(1, compass.parent.width - compass.width)
+                    const spanY = Math.max(1, compass.parent.height - compass.height)
+                    UIConfig.hudStatsX = Math.max(0, Math.min(1,
+                        (baseX + activeTranslation.x) / spanX))
+                    UIConfig.hudStatsY = Math.max(0, Math.min(1,
+                        (baseY + activeTranslation.y) / spanY))
+                }
+            }
+            // Click the rose to cycle North-Up -> Course-Up -> Head-Up.
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                drag.target: compass
-                drag.threshold: 6
-                drag.minimumX: 0
-                drag.maximumX: compass.parent.width - compass.width
-                drag.minimumY: 0
-                drag.maximumY: compass.parent.height - compass.height
-                property bool dragged: false
-                onPositionChanged: if (drag.active) dragged = true
-                onReleased: {
-                    // drag.active can already be false here -- track moves.
-                    if (!dragged) return
-                    dragged = false
-                    UIConfig.hudStatsX = compass.x /
-                        Math.max(1, compass.parent.width - compass.width)
-                    UIConfig.hudStatsY = compass.y /
-                        Math.max(1, compass.parent.height - compass.height)
-                }
                 onClicked: DisplayConfig.navMode = (DisplayConfig.navMode + 1) % 3
                 ToolTip.visible: containsMouse
                 ToolTip.text: [qsTr("North-Up (click to change)"),
