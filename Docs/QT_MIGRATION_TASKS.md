@@ -2261,10 +2261,13 @@ existing `followOwnShip` property before adding).
       dialog (model/resolution/days/waves selection); multi-file + zu/
       bz2; weather-routing messaging (→ P4.8 bus).
       **Parity plan, tiered:**
-      1. *(days)* Generalize the layer to N scalar/vector fields:
-         waves (HTSGW+WVDIR direction arrows), current (UOGRD/VOGRD),
-         gust, rainfall/cloud/temps/CAPE/reflectivity/humidity as
-         NUMBERS mode; per-type toggles on the control bar.
+      1. ~~Generalize the layer to N scalar/vector fields~~ **DONE
+         (2026-06-11):** waves (dir+height arrows), current (u/v
+         arrows), gust/rain/cloud/air+sea temp/CAPE/reflectivity/
+         humidity as numbers with unit conversion; per-type toggles on
+         the control bar, shown only when the type is present in the
+         file; flags persisted. Toolbar right-click + long-press open
+         the GRIB preferences (wx parity).
       2. *(days)* Colour-mapped OVERLAY mode (one QSGImageNode raster
          per field, the wx OverlayMap ramps) + per-type units engine.
       3. *(week)* Timeline play on the app time bar (play/speed lives
