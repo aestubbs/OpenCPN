@@ -195,6 +195,12 @@ Pane {
                 onClicked: chart.pluginRegistry.triggerToolbarAction(index)
                 onPressAndHold: floatToolbar.pluginPrefsRequested(
                                     modelData.pluginName)
+                // wx parity: right-click the tool opens its preferences.
+                TapHandler {
+                    acceptedButtons: Qt.RightButton
+                    onTapped: floatToolbar.pluginPrefsRequested(
+                                  modelData.pluginName)
+                }
             }
         }
     }

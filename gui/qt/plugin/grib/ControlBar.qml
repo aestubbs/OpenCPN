@@ -46,17 +46,16 @@ Item {
             color: "#8fd14f"
             font.pointSize: 10; font.bold: true
         }
-        CheckBox {
-            text: qsTr("Wind")
-            font.pointSize: 10
-            checked: pluginContext ? pluginContext.showWind : true
-            onToggled: if (pluginContext) pluginContext.showWind = checked
-        }
-        CheckBox {
-            text: qsTr("Pressure")
-            font.pointSize: 10
-            checked: pluginContext ? pluginContext.showPressure : true
-            onToggled: if (pluginContext) pluginContext.showPressure = checked
+        Repeater {
+            model: pluginContext ? pluginContext.dataTypes : []
+            delegate: CheckBox {
+                required property var modelData
+                visible: modelData.available
+                text: modelData.label
+                font.pointSize: 10
+                checked: modelData.shown
+                onToggled: pluginContext.setTypeShown(modelData.key, checked)
+            }
         }
     }
     FileDialog {

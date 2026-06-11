@@ -60,6 +60,9 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
   SgBuilder b(m_root, window);
   b.setPencil(false);
   drawIsobars(b);
+  drawArrows(b);
+  drawNumbers(b);
+  if (m_label_cache.size() > 1200) m_label_cache.clear();
   if (m_grid.ni <= 1 || m_grid.nj <= 1) return m_root;
 
   // Screen-fixed sizing: barbs are ~42 px regardless of zoom; the grid
@@ -129,6 +132,112 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
     }
   }
   return m_root;
+}
+
+// Direction arrows (waves / current): screen-fixed ~26 px shafts with a
+// small head, optional magnitude number beneath.
+void GribWindLayer::drawArrows(SgBuilder& b) {
+  const double wpp = worldPerPx();
+  for (auto it = m_arrows.cbegin(); it != m_arrows.cend(); ++it) {
+    const ArrowField& f = it.value();
+    const WindGrid& g = f.grid;
+    if (g.ni <= 1 || g.nj <= 1) continue;
+    const double cellPx = std::fabs(g.di) / wpp;
+    const int step =
+        cellPx > 0 ? qMax(1, qCeil(70.0 / cellPx)) : qMax(1, g.ni / 40);
+    const double len = 26.0 * wpp;
+    b.setPen(f.color, 1.6f);
+    b.noBrush();
+    for (int j = 0; j < g.nj; j += step) {
+      for (int i = 0; i < g.ni; i += step) {
+        const float a = g.u[j * g.ni + i];
+        const float m = g.v[j * g.ni + i];
+        if (std::isnan(a) || std::isnan(m)) continue;
+        double dx, dy, mag;
+        if (f.dirMag) {
+          if (m <= 0.01) continue;
+          // FROM-direction degrees -> flow vector (towards).
+          const double rad = (a + 180.0) * M_PI / 180.0;
+          dx = std::sin(rad);
+          dy = -std::cos(rad);
+          mag = m;
+        } else {
+          mag = std::hypot(a, m);
+          if (mag <= 0.01) continue;
+          dx = a / mag;
+          dy = -m / mag;
+        }
+        const double lon = g.lon0 + i * g.di;
+        const double lat = g.lat0 + j * g.dj;
+        const QPointF w(lon, Viewport::latToWorldY(lat));
+        const QPointF tip = w + QPointF(dx * len, dy * len);
+        const QPointF tail = w - QPointF(dx * len, dy * len);
+        b.drawLine(tail, tip);
+        const QPointF back(-dx, -dy);
+        const QPointF perp(-dy, dx);
+        const double hl = len * 0.4;
+        b.drawLine(tip, tip + QPointF((back.x() + perp.x() * 0.5) * hl,
+                                      (back.y() + perp.y() * 0.5) * hl));
+        b.drawLine(tip, tip + QPointF((back.x() - perp.x() * 0.5) * hl,
+                                      (back.y() - perp.y() * 0.5) * hl));
+        if (f.showNumber) {
+          const QString t =
+              QString::number(mag * f.unitFactor, 'f', 1) + f.unitSuffix;
+          if (!m_label_cache.contains(t))
+            m_label_cache.insert(
+                t, SgBuilder::renderText(t, f.color, 8.0f));
+          const QImage img = m_label_cache.value(t);
+          if (!img.isNull()) {
+            const qreal dpr =
+                img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1;
+            b.drawImage(QRectF(w.x() + 4 * wpp, w.y() + 6 * wpp,
+                               img.width() / dpr * wpp,
+                               img.height() / dpr * wpp),
+                        img);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Scalar values as numbers at decimated grid points (gust, rain, temps…).
+void GribWindLayer::drawNumbers(SgBuilder& b) {
+  const double wpp = worldPerPx();
+  // Stack multiple number fields with a vertical offset per field.
+  int fieldRow = 0;
+  for (auto it = m_numbers.cbegin(); it != m_numbers.cend(); ++it) {
+    const NumberField& f = it.value();
+    const ScalarGrid& g = f.grid;
+    if (g.ni <= 1 || g.nj <= 1) continue;
+    const double cellPx = std::fabs(g.di) / wpp;
+    const int step =
+        cellPx > 0 ? qMax(1, qCeil(85.0 / cellPx)) : qMax(1, g.ni / 30);
+    for (int j = 0; j < g.nj; j += step) {
+      for (int i = 0; i < g.ni; i += step) {
+        const float v = g.v[j * g.ni + i];
+        if (std::isnan(v)) continue;
+        const QString t =
+            QString::number(v * f.factor + f.offset, 'f', f.decimals) +
+            f.suffix;
+        if (!m_label_cache.contains(t))
+          m_label_cache.insert(t, SgBuilder::renderText(t, f.color, 8.5f));
+        const QImage img = m_label_cache.value(t);
+        if (img.isNull()) continue;
+        const double lon = g.lon0 + i * g.di;
+        const double lat = g.lat0 + j * g.dj;
+        const QPointF w(lon, Viewport::latToWorldY(lat));
+        const qreal dpr =
+            img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1;
+        b.drawImage(QRectF(w.x() - img.width() / dpr * wpp / 2,
+                           w.y() + fieldRow * 12.0 * wpp,
+                           img.width() / dpr * wpp,
+                           img.height() / dpr * wpp),
+                    img);
+      }
+    }
+    ++fieldRow;
+  }
 }
 
 // Marching-squares isolines over the pressure grid, one polyline segment

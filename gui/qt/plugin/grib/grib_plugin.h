@@ -24,7 +24,9 @@
 
 #include <QObject>
 #include <QString>
+#include <QMap>
 #include <QStringList>
+#include <QVariantList>
 #include <QUrl>
 
 #include "../ocpn_qt_plugin.h"
@@ -44,6 +46,9 @@ class GribContext : public QObject {
   Q_PROPERTY(bool showWind READ showWind WRITE setShowWind NOTIFY timeChanged)
   Q_PROPERTY(bool showPressure READ showPressure WRITE setShowPressure NOTIFY
                  timeChanged)
+  // Per-type display catalog: [{key, label, available, shown}] -- the
+  // control bar builds its toggles from this (wx 13-type set, tier 1).
+  Q_PROPERTY(QVariantList dataTypes READ dataTypes NOTIFY typesChanged)
   Q_PROPERTY(QString status READ status NOTIFY gribChanged)
   // The on-canvas control bar's visibility (toolbar 🌬 toggles it).
   Q_PROPERTY(bool controlsVisible READ controlsVisible WRITE
@@ -77,6 +82,8 @@ public:
    *  one-liner ("12.4 kn @ 215°   1013 hPa"), empty when off-grid or no
    *  file is loaded. Bilinear interpolation over the current timestep. */
   Q_INVOKABLE QString readoutAt(double lat, double lon) const;
+  QVariantList dataTypes() const;
+  Q_INVOKABLE void setTypeShown(const QString& key, bool on);
 
   /** Compose a saildocs GRIB request for the given bounds and open the
    *  user's mail client (mailto:). Returns the request body line. */
@@ -92,6 +99,7 @@ Q_SIGNALS:
   void gribChanged();
   void timeChanged();
   void controlsChanged();
+  void typesChanged();
 
 private Q_SLOTS:
   // The app time bar moved: snap to the nearest GRIB timestep.
@@ -108,6 +116,8 @@ private:
   int m_time_index = 0;
   bool m_show_wind = true;
   bool m_show_pressure = true;
+  QMap<QString, bool> m_type_shown;     // persisted per-type toggles
+  QMap<QString, bool> m_type_available; // present in the loaded file
   bool m_controls_visible = false;
   QObject* m_timeline = nullptr;
   QString m_status;

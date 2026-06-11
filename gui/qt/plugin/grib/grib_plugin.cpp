@@ -23,8 +23,53 @@
 #include "GribRecord.h"
 #include "grib_wind_layer.h"
 
+namespace {
+// The tier-1 type catalog: key, label, GRIB record (type/levelType/level),
+// rendering recipe. Wind + pressure keep their dedicated paths.
+struct TypeSpec {
+  const char* key;
+  const char* label;
+  int dataType, levelType, level;
+  enum Kind { ArrowsUV, ArrowsDirMag, Numbers } kind;
+  QColor color;
+  const char* suffix;
+  double factor, offset;
+  int decimals;
+};
+const TypeSpec kTypes[] = {
+    {"waves", "Waves", GRB_HTSGW, LV_GND_SURF, 0, TypeSpec::ArrowsDirMag,
+     QColor(70, 160, 220), " m", 1.0, 0.0, 1},
+    {"current", "Current", GRB_UOGRD, LV_GND_SURF, 0, TypeSpec::ArrowsUV,
+     QColor(40, 120, 200), " kn", 1.94384, 0.0, 1},
+    {"gust", "Gust", GRB_WIND_GUST, LV_GND_SURF, 0, TypeSpec::Numbers,
+     QColor(220, 90, 40), " kn", 1.94384, 0.0, 0},
+    {"rain", "Rain", GRB_PRECIP_TOT, LV_GND_SURF, 0, TypeSpec::Numbers,
+     QColor(60, 110, 200), " mm", 1.0, 0.0, 1},
+    {"cloud", "Cloud", GRB_CLOUD_TOT, LV_ATMOS_ALL, 0, TypeSpec::Numbers,
+     QColor(120, 120, 130), " %", 1.0, 0.0, 0},
+    {"airtemp", "Air temp", GRB_TEMP, LV_ABOV_GND, 2, TypeSpec::Numbers,
+     QColor(200, 60, 60), QStringLiteral("°").toUtf8().constData(), 1.0,
+     -273.15, 0},
+    {"seatemp", "Sea temp", GRB_TEMP, LV_GND_SURF, 0, TypeSpec::Numbers,
+     QColor(40, 140, 120), QStringLiteral("°").toUtf8().constData(), 1.0,
+     -273.15, 0},
+    {"cape", "CAPE", GRB_CAPE, LV_GND_SURF, 0, TypeSpec::Numbers,
+     QColor(160, 60, 180), "", 1.0, 0.0, 0},
+    {"refl", "Reflectivity", GRB_COMP_REFL, LV_ATMOS_ALL, 0,
+     TypeSpec::Numbers, QColor(180, 140, 40), " dBZ", 1.0, 0.0, 0},
+    {"humid", "Humidity", GRB_HUMID_REL, LV_ABOV_GND, 2, TypeSpec::Numbers,
+     QColor(100, 100, 180), " %", 1.0, 0.0, 0},
+};
+}  // namespace
+
 GribContext::GribContext(QObject* timeline, QObject* parent)
     : QObject(parent), m_timeline(timeline) {
+  {
+    QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"));
+    for (const TypeSpec& t : kTypes)
+      m_type_shown[QLatin1String(t.key)] =
+          st.value(QStringLiteral("show_") + t.key, false).toBool();
+  }
   // Restore the last GRIB on startup (wx parity): the timeline can
   // drive the weather immediately.
   const QString last =
@@ -92,6 +137,45 @@ void GribContext::openFile(const QUrl& url) {
   pushToLayer();
 }
 
+QVariantList GribContext::dataTypes() const {
+  QVariantList out;
+  auto add = [&](const QString& key, const QString& label, bool avail,
+                 bool shown) {
+    QVariantMap m;
+    m["key"] = key;
+    m["label"] = label;
+    m["available"] = avail;
+    m["shown"] = shown;
+    out.append(m);
+  };
+  add("wind", tr("Wind"), m_type_available.value("wind", false), m_show_wind);
+  add("pressure", tr("Pressure"),
+      m_type_available.value("pressure", false), m_show_pressure);
+  for (const TypeSpec& t : kTypes)
+    add(QLatin1String(t.key), tr(t.label),
+        m_type_available.value(QLatin1String(t.key), false),
+        m_type_shown.value(QLatin1String(t.key), false));
+  return out;
+}
+
+void GribContext::setTypeShown(const QString& key, bool on) {
+  if (key == QLatin1String("wind")) {
+    setShowWind(on);
+    Q_EMIT typesChanged();
+    return;
+  }
+  if (key == QLatin1String("pressure")) {
+    setShowPressure(on);
+    Q_EMIT typesChanged();
+    return;
+  }
+  m_type_shown[key] = on;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
+      .setValue(QStringLiteral("show_") + key, on);
+  Q_EMIT typesChanged();
+  pushToLayer();
+}
+
 void GribContext::setTimeIndex(int i) {
   if (i == m_time_index || i < 0 || i >= m_step_times.size()) return;
   m_time_index = i;
@@ -122,6 +206,13 @@ void GribContext::pushToLayer() {
   }
   const time_t t = static_cast<time_t>(m_step_times[m_time_index]);
   // Mean-sea-level pressure -> 2 hPa isobars.
+  {
+    GribRecord* rw =
+        m_reader->getGribRecord(GRB_WIND_VX, LV_ABOV_GND, 10, t);
+    m_type_available[QStringLiteral("wind")] = rw && rw->isOk();
+    GribRecord* rpp = m_reader->getGribRecord(GRB_PRESSURE, LV_MSL, 0, t);
+    m_type_available[QStringLiteral("pressure")] = rpp && rpp->isOk();
+  }
   GribRecord* rp =
       m_show_pressure
           ? m_reader->getGribRecord(GRB_PRESSURE, LV_MSL, 0, t)
@@ -145,6 +236,92 @@ void GribContext::pushToLayer() {
   } else {
     m_layer->clearIsobars();
   }
+  // Tier-1 fields: availability + per-type push.
+  auto scalarFrom = [](GribRecord* r) {
+    ocpn::qtui::GribWindLayer::ScalarGrid g;
+    g.ni = r->getNi();
+    g.nj = r->getNj();
+    g.lon0 = r->getX(0);
+    g.lat0 = r->getY(0);
+    g.di = r->getNi() > 1 ? r->getX(1) - r->getX(0) : 0;
+    g.dj = r->getNj() > 1 ? r->getY(1) - r->getY(0) : 0;
+    g.v.resize(g.ni * g.nj);
+    for (int j = 0; j < g.nj; ++j)
+      for (int i = 0; i < g.ni; ++i)
+        g.v[j * g.ni + i] = r->isDefined(i, j)
+                                ? static_cast<float>(r->getValue(i, j))
+                                : NAN;
+    return g;
+  };
+  for (const TypeSpec& tspec : kTypes) {
+    const QString key = QLatin1String(tspec.key);
+    GribRecord* r1 =
+        m_reader->getGribRecord(tspec.dataType, tspec.levelType,
+                                tspec.level, t);
+    const bool avail = r1 && r1->isOk();
+    m_type_available[key] = avail;
+    const bool shown = avail && m_type_shown.value(key, false);
+    if (tspec.kind == TypeSpec::ArrowsUV ||
+        tspec.kind == TypeSpec::ArrowsDirMag) {
+      if (!shown) {
+        m_layer->clearArrows(key);
+        continue;
+      }
+      ocpn::qtui::GribWindLayer::ArrowField f;
+      f.color = tspec.color;
+      f.unitSuffix = QString::fromUtf8(tspec.suffix);
+      f.unitFactor = tspec.factor;
+      f.dirMag = (tspec.kind == TypeSpec::ArrowsDirMag);
+      GribRecord* r2 = nullptr;
+      if (f.dirMag)  // direction record rides next to the magnitude
+        r2 = m_reader->getGribRecord(GRB_WVDIR, tspec.levelType,
+                                     tspec.level, t);
+      else
+        r2 = m_reader->getGribRecord(GRB_VOGRD, tspec.levelType,
+                                     tspec.level, t);
+      if (!r2 || !r2->isOk()) {
+        m_layer->clearArrows(key);
+        continue;
+      }
+      // Pack: u <- (dir or u-component), v <- (magnitude or v-component).
+      f.grid.ni = r1->getNi();
+      f.grid.nj = r1->getNj();
+      f.grid.lon0 = r1->getX(0);
+      f.grid.lat0 = r1->getY(0);
+      f.grid.di = r1->getNi() > 1 ? r1->getX(1) - r1->getX(0) : 0;
+      f.grid.dj = r1->getNj() > 1 ? r1->getY(1) - r1->getY(0) : 0;
+      f.grid.u.resize(f.grid.ni * f.grid.nj);
+      f.grid.v.resize(f.grid.ni * f.grid.nj);
+      for (int j = 0; j < f.grid.nj; ++j)
+        for (int i = 0; i < f.grid.ni; ++i) {
+          const int k = j * f.grid.ni + i;
+          const bool ok1 = r1->isDefined(i, j), ok2 = r2->isDefined(i, j);
+          if (f.dirMag) {
+            f.grid.u[k] = ok2 ? static_cast<float>(r2->getValue(i, j)) : NAN;
+            f.grid.v[k] = ok1 ? static_cast<float>(r1->getValue(i, j)) : NAN;
+          } else {
+            f.grid.u[k] = ok1 ? static_cast<float>(r1->getValue(i, j)) : NAN;
+            f.grid.v[k] = ok2 ? static_cast<float>(r2->getValue(i, j)) : NAN;
+          }
+        }
+      m_layer->setArrows(key, f);
+    } else {  // Numbers
+      if (!shown) {
+        m_layer->clearNumbers(key);
+        continue;
+      }
+      ocpn::qtui::GribWindLayer::NumberField f;
+      f.grid = scalarFrom(r1);
+      f.color = tspec.color;
+      f.suffix = QString::fromUtf8(tspec.suffix);
+      f.factor = tspec.factor;
+      f.offset = tspec.offset;
+      f.decimals = tspec.decimals;
+      m_layer->setNumbers(key, f);
+    }
+  }
+  Q_EMIT typesChanged();
+
   if (!m_show_wind) {
     m_layer->clearGrid();
     return;

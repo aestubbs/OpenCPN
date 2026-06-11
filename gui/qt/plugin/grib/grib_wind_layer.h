@@ -20,6 +20,9 @@
 #ifndef OCPN_QT_GRIB_WIND_LAYER_H_
 #define OCPN_QT_GRIB_WIND_LAYER_H_
 
+#include <QHash>
+#include <QImage>
+#include <QMap>
 #include <QVector>
 
 #include "layer.h"       // opencpn_qt_toolkit
@@ -54,7 +57,7 @@ public:
     Q_EMIT dirty();
   }
 
-  /** Scalar field (pressure, hPa) for isoline rendering. */
+  /** Scalar field grid (pressure, gust, rain...). */
   struct ScalarGrid {
     int ni = 0, nj = 0;
     double lon0 = 0, lat0 = 0, di = 0, dj = 0;
@@ -69,15 +72,57 @@ public:
     Q_EMIT dirty();
   }
 
+  /** A direction-arrow vector field (waves, current): either u/v
+   *  components or direction-degrees + magnitude. */
+  struct ArrowField {
+    WindGrid grid;          // u/v in grid.u/.v OR dir-deg in u, mag in v
+    bool dirMag = false;    // true: u = FROM-direction degrees, v = magnitude
+    QColor color;
+    QString unitSuffix;     // for the magnitude number under the arrow
+    double unitFactor = 1;  // applied to magnitude for display
+    bool showNumber = true;
+  };
+  void setArrows(const QString& key, const ArrowField& f) {
+    m_arrows[key] = f;
+    Q_EMIT dirty();
+  }
+  void clearArrows(const QString& key) {
+    m_arrows.remove(key);
+    Q_EMIT dirty();
+  }
+
+  /** A scalar field rendered as NUMBERS at grid points. */
+  struct NumberField {
+    ScalarGrid grid;
+    QColor color;
+    QString suffix;
+    double factor = 1;    // display = value*factor + offset
+    double offset = 0;
+    int decimals = 0;
+  };
+  void setNumbers(const QString& key, const NumberField& f) {
+    m_numbers[key] = f;
+    Q_EMIT dirty();
+  }
+  void clearNumbers(const QString& key) {
+    m_numbers.remove(key);
+    Q_EMIT dirty();
+  }
+
   QSGNode* updateSubtree(QSGNode* old, QQuickWindow* window) override;
 
 private:
   void drawIsobars(SgBuilder& b);
   double worldPerPx() const;
+  void drawArrows(SgBuilder& b);
+  void drawNumbers(SgBuilder& b);
   const Viewport* m_vp = nullptr;
   double m_last_scale = 0;
   WindGrid m_grid;
   ScalarGrid m_isobars;
+  QMap<QString, ArrowField> m_arrows;
+  QMap<QString, NumberField> m_numbers;
+  QHash<QString, QImage> m_label_cache;  // numbers raster cache (bounded)
   QSGNode* m_root = nullptr;
 };
 
