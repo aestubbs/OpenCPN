@@ -83,6 +83,9 @@ public:
   QString status() const { return m_status; }
 
   Q_INVOKABLE void openFile(const QUrl& url);
+  /** Move the APP TIME BAR to the adjacent GRIB timestep (the bar is the
+   *  single time source; weather follows it). */
+  Q_INVOKABLE void stepTimeline(int delta);
   bool controlsVisible() const { return m_controls_visible; }
   void setControlsVisible(bool on) {
     if (on == m_controls_visible) return;

@@ -110,7 +110,13 @@ void GribContext::onTimelineChanged() {
     m_time_index = best;  // label tracking; push happens below anyway
     Q_EMIT timeChanged();
   }
-  // Tier 3: every scrub re-renders -- fields interpolate between steps.
+  // Tier 3: scrubs re-render with interpolation. Throttled: a full grid
+  // push per 1 s live tick is wasted work -- re-push only when display
+  // time moved >= 3 min from the last push (a scrub always qualifies).
+  static qint64 s_last_push = 0;
+  const qint64 e = displayEpoch();
+  if (std::llabs(e - s_last_push) < 180) return;
+  s_last_push = e;
   pushToLayer();
 }
 
@@ -276,6 +282,17 @@ void GribContext::setOverlayKey(const QString& k) {
       .setValue(QStringLiteral("overlayKey"), k);
   Q_EMIT typesChanged();
   pushToLayer();
+}
+
+void GribContext::stepTimeline(int delta) {
+  if (m_step_times.isEmpty()) return;
+  const int i = qBound(0, m_time_index + delta, int(m_step_times.size() - 1));
+  const QDateTime t = QDateTime::fromSecsSinceEpoch(m_step_times[i]);
+  if (m_timeline)
+    QMetaObject::invokeMethod(m_timeline, "setDisplayTime",
+                              Q_ARG(QDateTime, t));
+  else
+    setTimeIndex(i);
 }
 
 void GribContext::setGribDir(const QUrl& d) {

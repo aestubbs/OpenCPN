@@ -76,22 +76,40 @@ Window {
         id: pluginPrefsDialog
         flags: Qt.Dialog
         modality: Qt.ApplicationModal
-        width: 560; height: 440
+        width: 560; height: 480
         color: palette.window
         property var page: null
         function openFor(p) { page = p; title = p.title; show(); raise() }
-        Flickable {
+        ColumnLayout {
             anchors.fill: parent
             anchors.margins: 18
-            clip: true
-            contentHeight: prefsLoader.implicitHeight
-            ScrollBar.vertical: ScrollBar {}
-            Loader {
-                id: prefsLoader
-                width: parent.width
-                source: pluginPrefsDialog.page ? pluginPrefsDialog.page.component : ""
-                onLoaded: if (pluginPrefsDialog.page)
-                    item.pluginContext = pluginPrefsDialog.page.context
+            spacing: 10
+            Flickable {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentHeight: prefsLoader.implicitHeight
+                ScrollBar.vertical: ScrollBar {}
+                Loader {
+                    id: prefsLoader
+                    width: parent.width
+                    source: pluginPrefsDialog.page
+                            ? pluginPrefsDialog.page.component : ""
+                    onLoaded: if (pluginPrefsDialog.page)
+                        item.pluginContext = pluginPrefsDialog.page.context
+                }
+            }
+            // wx parity: changes apply on OK, discard on Cancel. Pages
+            // STAGE edits locally and expose apply().
+            DialogButtonBox {
+                Layout.fillWidth: true
+                standardButtons: DialogButtonBox.Ok | DialogButtonBox.Cancel
+                onAccepted: {
+                    if (prefsLoader.item && prefsLoader.item.apply)
+                        prefsLoader.item.apply()
+                    pluginPrefsDialog.close()
+                }
+                onRejected: pluginPrefsDialog.close()
             }
         }
     }

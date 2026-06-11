@@ -3,60 +3,33 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 
-// GRIB (P4.5 v1): open a file, scrub the timeline, toggle the wind layer.
+// GRIB preferences (wx GribSettingsDialog alignment): STAGED edits,
+// applied by the host dialog's OK (apply()), discarded on Cancel. File
+// opening / timestep / display toggles live on the CONTROL BAR, not here.
 ColumnLayout {
+    id: prefsPage
     property var pluginContext: null
-    spacing: 6
+    spacing: 8
 
-    RowLayout {
+    // --- staged state (loaded once when the page opens) ---
+    property url stagedDir: pluginContext ? pluginContext.gribDir : ""
+    function apply() {
+        if (!pluginContext) return
+        pluginContext.gribDir = stagedDir
+    }
+
+    Label { text: qsTr("Files"); font.bold: true }
+    GridLayout {
+        columns: 3
+        columnSpacing: 10
         Layout.fillWidth: true
-        Button { text: qsTr("Open GRIB…"); onClicked: gribFileDialog.open() }
         Label {
-            text: pluginContext && pluginContext.fileName.length
-                  ? pluginContext.fileName : qsTr("(no file)")
-            elide: Text.ElideMiddle
-            Layout.fillWidth: true
-        }
-        CheckBox {
-            text: qsTr("Wind")
-            checked: pluginContext ? pluginContext.showWind : true
-            onToggled: if (pluginContext) pluginContext.showWind = checked
-        }
-        CheckBox {
-            text: qsTr("Pressure")
-            checked: pluginContext ? pluginContext.showPressure : true
-            onToggled: if (pluginContext) pluginContext.showPressure = checked
-        }
-    }
-    FileDialog {
-        id: gribFileDialog
-        nameFilters: [qsTr("GRIB files (*.grb *.grb2 *.grib *.grib2 *.bz2 *.gz)"),
-                      qsTr("All files (*)")]
-        onAccepted: if (pluginContext) pluginContext.openFile(selectedFile)
-    }
-    RowLayout {
-        Layout.fillWidth: true
-        visible: pluginContext && pluginContext.timeSteps.length > 0
-        Slider {
-            Layout.fillWidth: true
-            from: 0
-            to: pluginContext ? pluginContext.timeSteps.length - 1 : 0
-            stepSize: 1
-            value: pluginContext ? pluginContext.timeIndex : 0
-            onMoved: if (pluginContext) pluginContext.timeIndex = value
+            text: qsTr("GRIB folder:")
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
         }
         Label {
-            text: pluginContext && pluginContext.timeIndex < pluginContext.timeSteps.length
-                  ? pluginContext.timeSteps[pluginContext.timeIndex] : ""
-            font.family: "monospace"
-        }
-    }
-    RowLayout {
-        Layout.fillWidth: true
-        Label { text: qsTr("GRIB folder:") }
-        Label {
-            text: pluginContext && pluginContext.gribDir.toString().length
-                  ? pluginContext.gribDir : qsTr("(Downloads)")
+            text: prefsPage.stagedDir.toString().length
+                  ? prefsPage.stagedDir : qsTr("(Downloads)")
             elide: Text.ElideMiddle
             Layout.fillWidth: true
             color: palette.placeholderText
@@ -65,20 +38,27 @@ ColumnLayout {
             text: qsTr("Choose…")
             onClicked: gribDirDialog.open()
         }
-        FolderDialog {
-            id: gribDirDialog
-            onAccepted: if (pluginContext) pluginContext.gribDir = selectedFolder
-        }
+    }
+    FolderDialog {
+        id: gribDirDialog
+        onAccepted: prefsPage.stagedDir = selectedFolder
+    }
+    Label {
+        text: qsTr("The Open… menu on the GRIB control bar lists this folder, newest first.")
+        font.pointSize: 10
+        color: palette.placeholderText
+        wrapMode: Text.Wrap
+        Layout.fillWidth: true
     }
 
     MenuSeparator { Layout.fillWidth: true }
+
     Label { text: qsTr("Request a forecast (saildocs)"); font.bold: true }
     RowLayout {
         spacing: 8
         ComboBox {
             id: reqModel
             implicitWidth: 110
-            // saildocs models + their available resolutions (deg).
             property var matrix: ({ "GFS": [0.25, 0.5, 1.0],
                                     "ECMWF": [0.4],
                                     "ICON": [0.25],
@@ -100,6 +80,8 @@ ColumnLayout {
             displayText: currentText + " h"
             currentIndex: 1
         }
+        SpinBox { id: reqDays; from: 1; to: 8; value: 3 }
+        Label { text: qsTr("days") }
     }
     RowLayout {
         spacing: 8
@@ -107,11 +89,6 @@ ColumnLayout {
         CheckBox { id: reqPres; text: qsTr("Pressure"); checked: true }
         CheckBox { id: reqWaves; text: qsTr("Waves") }
         CheckBox { id: reqPrecip; text: qsTr("Rain") }
-        SpinBox {
-            id: reqDays
-            from: 1; to: 8; value: 3
-        }
-        Label { text: qsTr("days") }
         Button {
             text: qsTr("Email request…")
             onClicked: {
@@ -136,8 +113,9 @@ ColumnLayout {
     }
     Label {
         text: pluginContext ? pluginContext.status : ""
-        color: "#3b82f6"
+        visible: text.length > 0
         wrapMode: Text.Wrap
         Layout.fillWidth: true
+        color: "#3b82f6"
     }
 }

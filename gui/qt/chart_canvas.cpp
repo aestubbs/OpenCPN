@@ -389,9 +389,6 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
       &OChartsService::instance(),  // shop plugin: fpr + daemon status
       m_viewport.get(),              // plugin layers: scale/screen sizing
       &TimeController::instance());  // time-aware plugins follow the bar
-  m_plugin_registry->loadFrom(
-      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
-      QStringLiteral("/plugins-qt"));
 
   // Measure-tool overlay (P3.18): above the nav overlays, below AIS.
   m_measure_layer = new MeasureLayer(m_nav_provider.get(), m_viewport.get());
@@ -613,6 +610,14 @@ void ChartCanvas::setS52Engine(S52Engine* engine) {
   m_s52_engine = engine;
   Q_EMIT s52EngineChanged();
   if (!m_s52_engine || !m_s52_engine->isOk()) return;
+
+  // Plugins load once the canvas has a real engine: the hidden split
+  // pane (null engine while split view is off) must NOT duplicate every
+  // plugin instance.
+  if (m_plugin_registry)
+    m_plugin_registry->loadFrom(
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
+        QStringLiteral("/plugins-qt"));
 
   m_s57data_dir = QString::fromUtf8(OCPN_QT_S57DATA_DIR);
 
