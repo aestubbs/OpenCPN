@@ -125,9 +125,11 @@ void GribContext::onTimelineChanged() {
   // time moved >= 3 min from the last push (a scrub always qualifies).
   static qint64 s_last_push = 0;
   const qint64 e = displayEpoch();
-  static const bool s_selftest =
-      qEnvironmentVariableIsSet("OCPN_GRIB_SELFTEST");
-  if (!s_selftest && std::llabs(e - s_last_push) < 180) return;
+  // Scrubbing (not live) re-renders on EVERY movement; only the live
+  // 1 Hz clock tick is throttled (a full grid rebuild per second for a
+  // 1-second weather change is waste).
+  const bool live = m_timeline->property("live").toBool();
+  if (live && std::llabs(e - s_last_push) < 180) return;
   s_last_push = e;
   pushToLayer();
 }
@@ -204,6 +206,13 @@ void GribContext::openFile(const QUrl& url) {
       ++(*idx);
     });
     seq->start();
+  }
+  // Pin the forecast steps onto the chart time bar (marks seam).
+  if (m_timeline) {
+    QVariantList marks;
+    for (qint64 t : m_step_times) marks << t;
+    QMetaObject::invokeMethod(m_timeline, "setMarks",
+                              Q_ARG(QVariantList, marks));
   }
   m_status = tr("%1 records, %2 time steps")
                  .arg(m_reader->getTotalNumberOfGribRecords())

@@ -30,6 +30,7 @@
 
 #include <QDateTime>
 #include <QObject>
+#include <QVariantList>
 #include <QQmlEngine>
 #include <QString>
 
@@ -103,13 +104,27 @@ public:
   Q_INVOKABLE void pause();
   Q_INVOKABLE void togglePlay();
 
+  /** Event marks pinned on the bar (epoch seconds) -- e.g. the loaded
+   *  GRIB's forecast steps. Set by time-aware plugins via the timeline
+   *  seam; the bar draws a dot per mark. */
+  Q_PROPERTY(QVariantList marks READ marks NOTIFY marksChanged)
+
+public:
+  QVariantList marks() const { return m_marks; }
+  Q_INVOKABLE void setMarks(const QVariantList& epochsSecs) {
+    m_marks = epochsSecs;
+    Q_EMIT marksChanged();
+  }
+
 Q_SIGNALS:
+  void marksChanged();
   void timeChanged();   // displayTime / nowFraction / time+date labels
   void modeChanged();   // live / playing
   void windowChanged(); // window edges / fraction / span
 
 private:
   void applyToGlobal();  // push m_time/m_live into model gTimeSource
+  QVariantList m_marks;
   void enterScrub();     // leave live + play, reset the live cadence
   void onTick();         // 1 Hz live-track / 100 ms play advance
 

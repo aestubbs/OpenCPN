@@ -104,6 +104,26 @@ Item {
             x: plot.width * TimeController.nowFraction - 1
             width: 2; height: plot.height; color: "#ff5b5b"
         }
+        // Event marks (e.g. GRIB forecast steps): a green dot per mark
+        // at its position on the panning axis.
+        Repeater {
+            model: TimeController.marks
+            delegate: Rectangle {
+                required property var modelData
+                readonly property double frac: {
+                    const a = TimeController.windowStart.getTime() / 1000
+                    const b = TimeController.windowEnd.getTime() / 1000
+                    return b > a ? (modelData - a) / (b - a) : -1
+                }
+                visible: frac >= 0 && frac <= 1
+                x: plot.width * frac - 3
+                y: 2
+                width: 6; height: 6; radius: 3
+                color: "#7dd87d"
+                border.color: "#1e5e1e"
+            }
+        }
+
         Rectangle {  // fixed read-marker (the axis pans under it)
             x: plot.width * TimeController.markerFraction - 1
             width: 2; height: plot.height; color: "#ffd27f"
