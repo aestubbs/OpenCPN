@@ -125,11 +125,10 @@ void GribContext::onTimelineChanged() {
   // time moved >= 3 min from the last push (a scrub always qualifies).
   static qint64 s_last_push = 0;
   const qint64 e = displayEpoch();
-  // Scrubbing (not live) re-renders on EVERY movement; only the live
-  // 1 Hz clock tick is throttled (a full grid rebuild per second for a
-  // 1-second weather change is waste).
-  const bool live = m_timeline->property("live").toBool();
-  if (live && std::llabs(e - s_last_push) < 180) return;
+  // Flat 30 s display-time threshold: scrubs render fluidly (any drag
+  // crosses it instantly) and the 1 Hz live clock costs one grid
+  // rebuild per half-minute.
+  if (std::llabs(e - s_last_push) < 30) return;
   s_last_push = e;
   pushToLayer();
 }

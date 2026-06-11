@@ -116,11 +116,23 @@ Item {
                     return b > a ? (modelData - a) / (b - a) : -1
                 }
                 visible: frac >= 0 && frac <= 1
-                x: plot.width * frac - 3
-                y: 2
-                width: 6; height: 6; radius: 3
-                color: "#7dd87d"
+                x: plot.width * frac - 5
+                y: 1
+                width: 10; height: 10; radius: 5
+                color: dotTap.containsMouse ? "#a8f0a8" : "#7dd87d"
                 border.color: "#1e5e1e"
+                // Click a dot to JUMP the display time to that forecast
+                // step (the only sane way to reach steps beyond the
+                // window span).
+                MouseArea {
+                    id: dotTap
+                    anchors.fill: parent
+                    anchors.margins: -4
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: TimeController.setDisplayTime(
+                                   new Date(modelData * 1000))
+                }
             }
         }
 
