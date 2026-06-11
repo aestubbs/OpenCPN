@@ -206,12 +206,25 @@ void GribContext::openFile(const QUrl& url) {
     });
     seq->start();
   }
-  // Pin the forecast steps onto the chart time bar (marks seam).
+  // Pin the forecast steps + coverage span onto the chart time bar.
   if (m_timeline) {
     QVariantList marks;
     for (qint64 t : m_step_times) marks << t;
     QMetaObject::invokeMethod(m_timeline, "setMarks",
                               Q_ARG(QVariantList, marks));
+    QMetaObject::invokeMethod(
+        m_timeline, "setSpan", Q_ARG(double, double(m_step_times.first())),
+        Q_ARG(double, double(m_step_times.last())));
+    // If the bar is outside the forecast, snap it to the first step so
+    // the loaded data is what the user is looking at.
+    const QDateTime cur =
+        m_timeline->property("displayTime").toDateTime();
+    const qint64 e = cur.isValid() ? cur.toSecsSinceEpoch() : 0;
+    if (e < m_step_times.first() || e > m_step_times.last())
+      QMetaObject::invokeMethod(
+          m_timeline, "setDisplayTime",
+          Q_ARG(QDateTime,
+                QDateTime::fromSecsSinceEpoch(m_step_times.first())));
   }
   m_status = tr("%1 records, %2 time steps")
                  .arg(m_reader->getTotalNumberOfGribRecords())
@@ -851,6 +864,18 @@ void GribContext::pushToLayer() {
       if (!std::isnan(u)) { sum += u; ++n; }
     qWarning("grib: PUSH epoch=%lld lon0=%.1f meanU=%.3f n=%d", 
              (long long)displayEpoch(), g.lon0, n ? sum / n : 0.0, n);
+  }
+  {
+    // Beyond-forecast feedback: clamped (stale) data renders dimmed.
+    qint64 raw = m_step_times.isEmpty() ? 0 : m_step_times[m_time_index];
+    if (m_timeline) {
+      const QDateTime t2 = m_timeline->property("displayTime").toDateTime();
+      if (t2.isValid()) raw = t2.toSecsSinceEpoch();
+    }
+    const bool beyond = !m_step_times.isEmpty() &&
+                        (raw < m_step_times.first() - 1800 ||
+                         raw > m_step_times.last() + 1800);
+    m_layer->setOpacity(beyond ? 0.35 : 1.0);
   }
   m_layer->setGrid(g);
   if (ownWind) {

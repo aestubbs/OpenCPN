@@ -111,6 +111,27 @@ Item {
                          ev.angleDelta.y > 0 ? 0.8 : 1.25)
         }
 
+        // Data coverage band (e.g. the loaded GRIB's span): a green wash
+        // along the axis; outside it, time-dependent data is clamped.
+        Rectangle {
+            readonly property double a:
+                TimeController.windowStart.getTime() / 1000
+            readonly property double b:
+                TimeController.windowEnd.getTime() / 1000
+            readonly property double f0:
+                b > a ? (TimeController.spanStart - a) / (b - a) : -1
+            readonly property double f1:
+                b > a ? (TimeController.spanEnd - a) / (b - a) : -1
+            visible: TimeController.spanEnd > TimeController.spanStart &&
+                     f1 > 0 && f0 < 1
+            x: plot.width * Math.max(0, f0)
+            width: plot.width * (Math.min(1, f1) - Math.max(0, f0))
+            y: 0
+            height: parent.height
+            color: "#1f7dd87d"
+            border.color: "#407dd87d"
+        }
+
         // Event marks (e.g. GRIB forecast steps): a green dot per mark
         // at its position on the panning axis.
         Repeater {

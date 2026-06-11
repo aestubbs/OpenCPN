@@ -108,11 +108,22 @@ public:
    *  GRIB's forecast steps. Set by time-aware plugins via the timeline
    *  seam; the bar draws a dot per mark. */
   Q_PROPERTY(QVariantList marks READ marks NOTIFY marksChanged)
+  // Data coverage span (epoch secs; 0,0 = none): drawn as a band on the
+  // bar so "beyond the forecast" is visible at a glance.
+  Q_PROPERTY(double spanStart READ spanStart NOTIFY marksChanged)
+  Q_PROPERTY(double spanEnd READ spanEnd NOTIFY marksChanged)
 
 public:
   QVariantList marks() const { return m_marks; }
   Q_INVOKABLE void setMarks(const QVariantList& epochsSecs) {
     m_marks = epochsSecs;
+    Q_EMIT marksChanged();
+  }
+  double spanStart() const { return m_span_start; }
+  double spanEnd() const { return m_span_end; }
+  Q_INVOKABLE void setSpan(double startSecs, double endSecs) {
+    m_span_start = startSecs;
+    m_span_end = endSecs;
     Q_EMIT marksChanged();
   }
 
@@ -133,6 +144,8 @@ Q_SIGNALS:
 private:
   void applyToGlobal();  // push m_time/m_live into model gTimeSource
   QVariantList m_marks;
+  double m_span_start = 0;
+  double m_span_end = 0;
   void enterScrub();     // leave live + play, reset the live cadence
   void onTick();         // 1 Hz live-track / 100 ms play advance
 
