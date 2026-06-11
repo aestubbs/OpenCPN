@@ -32,6 +32,19 @@ Item {
             anchors.centerIn: parent
             spacing: 5
 
+            // Master switch -- explicit, never silently toggled.
+            RowLayout {
+                spacing: 6
+                Switch {
+                    text: qsTr("Show weather")
+                    font.pointSize: 11
+                    checked: pluginContext ? pluginContext.masterEnabled : true
+                    onToggled: if (pluginContext)
+                                   pluginContext.masterEnabled = checked
+                }
+                Item { Layout.fillWidth: true }
+            }
+
             // File + step row.
             RowLayout {
                 spacing: 6

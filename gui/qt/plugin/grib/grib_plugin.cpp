@@ -855,13 +855,11 @@ bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
   if (host.registerLayer) {
     auto* layer = new ocpn::qtui::GribWindLayer();
     layer->setViewport(host.viewport);
+    layer->setVisible(true);  // recover any persisted-hidden state
     layer->setZOrder(1450);  // over charts/grid, under the nav overlays
     m_ctx->setLayer(layer);
     host.registerLayer(layer);  // compositor takes ownership
   }
-  if (host.registerHud)
-    host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/CursorReadout.qml")),
-                     m_ctx);
   if (host.registerHud)
     host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/Flyout.qml")),
                      m_ctx);
@@ -870,10 +868,9 @@ bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
         QUrl(QStringLiteral("qrc:/grib_plugin/CursorDataHud.qml")), m_ctx);
   if (host.registerToolbarAction)
     host.registerToolbarAction(
-        QStringLiteral("🌬"),
-        QStringLiteral("GRIB weather (hold for options)"),
+        QStringLiteral("🌬"), QStringLiteral("GRIB weather"),
         [this] {
-          if (m_ctx) m_ctx->setMasterEnabled(!m_ctx->masterEnabled());
+          if (m_ctx) m_ctx->setControlsVisible(!m_ctx->controlsVisible());
         },
         [this] { if (m_ctx) m_ctx->setControlsVisible(true); });
   if (host.registerSettingsPage)
