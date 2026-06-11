@@ -18,12 +18,17 @@ ColumnLayout {
     property int stagedTransparency:
         pluginContext ? pluginContext.overlayTransparency : 55
     property var stagedUnits: ({})
+    property string stagedOverlayKey:
+        pluginContext ? pluginContext.overlayKey : ""
+    property int stagedAltitude: pluginContext ? pluginContext.windAltitude : 0
     function apply() {
         if (!pluginContext) return
         pluginContext.gribDir = stagedDir
         pluginContext.particleDensity = stagedDensity
         pluginContext.interpolate = stagedInterp
         pluginContext.overlayTransparency = stagedTransparency
+        pluginContext.overlayKey = stagedOverlayKey
+        pluginContext.windAltitude = stagedAltitude
         for (const k in stagedUnits)
             pluginContext.setUnitFor(k, stagedUnits[k])
     }
@@ -89,6 +94,33 @@ ColumnLayout {
                 Layout.fillWidth: true
                 font.pointSize: 10
                 color: palette.placeholderText
+            }
+            // OverlayMap: this type is the colour wash (one at a time,
+            // wx per-type OverlayMap checkbox).
+            CheckBox {
+                visible: typeBox.key !== "pressure"
+                text: qsTr("OverlayMap (colour wash for this type)")
+                checked: prefsPage.stagedOverlayKey === typeBox.key
+                onToggled: prefsPage.stagedOverlayKey =
+                               checked ? typeBox.key : ""
+            }
+            RowLayout {
+                visible: typeBox.key === "wind"
+                spacing: 10
+                Label { text: qsTr("Wind altitude") }
+                ComboBox {
+                    implicitWidth: 110
+                    model: pluginContext ? pluginContext.altitudes : []
+                    textRole: "label"
+                    currentIndex: {
+                        for (let i = 0; i < model.length; ++i)
+                            if (model[i].hpa === prefsPage.stagedAltitude)
+                                return i
+                        return 0
+                    }
+                    onActivated: prefsPage.stagedAltitude =
+                                     model[currentIndex].hpa
+                }
             }
             RowLayout {
                 visible: typeBox.key === "wind"
