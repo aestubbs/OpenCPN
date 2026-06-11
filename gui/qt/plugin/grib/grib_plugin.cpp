@@ -69,6 +69,7 @@ GribContext::GribContext(QObject* timeline, QObject* parent)
     for (const TypeSpec& t : kTypes)
       m_type_shown[QLatin1String(t.key)] =
           st.value(QStringLiteral("show_") + t.key, false).toBool();
+    m_overlay_key = st.value(QStringLiteral("overlayKey")).toString();
   }
   // Restore the last GRIB on startup (wx parity): the timeline can
   // drive the weather immediately.
@@ -172,6 +173,15 @@ void GribContext::setTypeShown(const QString& key, bool on) {
   m_type_shown[key] = on;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
       .setValue(QStringLiteral("show_") + key, on);
+  Q_EMIT typesChanged();
+  pushToLayer();
+}
+
+void GribContext::setOverlayKey(const QString& k) {
+  if (k == m_overlay_key) return;
+  m_overlay_key = k;
+  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
+      .setValue(QStringLiteral("overlayKey"), k);
   Q_EMIT typesChanged();
   pushToLayer();
 }
@@ -320,6 +330,49 @@ void GribContext::pushToLayer() {
       m_layer->setNumbers(key, f);
     }
   }
+  // Colour-mapped overlay (tier 2): one field at a time.
+  if (m_overlay_key.isEmpty()) {
+    m_layer->clearOverlay();
+  } else if (m_overlay_key == QLatin1String("wind")) {
+    GribRecord* ru =
+        m_reader->getGribRecord(GRB_WIND_VX, LV_ABOV_GND, 10, t);
+    GribRecord* rv =
+        m_reader->getGribRecord(GRB_WIND_VY, LV_ABOV_GND, 10, t);
+    if (ru && rv && ru->isOk() && rv->isOk()) {
+      auto g = scalarFrom(ru);  // reuse geometry; recompute as speed
+      for (int j = 0; j < g.nj; ++j)
+        for (int i = 0; i < g.ni; ++i) {
+          const int k = j * g.ni + i;
+          const bool ok = ru->isDefined(i, j) && rv->isDefined(i, j);
+          g.v[k] = ok ? static_cast<float>(
+                            std::hypot(ru->getValue(i, j),
+                                       rv->getValue(i, j)))
+                      : NAN;
+        }
+      m_layer->setOverlay(g, QStringLiteral("wind"), 0);
+    } else {
+      m_layer->clearOverlay();
+    }
+  } else {
+    // Generic ramp over the chosen scalar's own range.
+    const TypeSpec* spec = nullptr;
+    for (const TypeSpec& ts : kTypes)
+      if (m_overlay_key == QLatin1String(ts.key)) spec = &ts;
+    GribRecord* r = spec ? m_reader->getGribRecord(
+                               spec->dataType, spec->levelType,
+                               spec->level, t)
+                         : nullptr;
+    if (r && r->isOk()) {
+      auto g = scalarFrom(r);
+      float mx = 0;
+      for (float v : g.v)
+        if (!std::isnan(v)) mx = qMax(mx, v);
+      m_layer->setOverlay(g, QStringLiteral("generic"), mx);
+    } else {
+      m_layer->clearOverlay();
+    }
+  }
+
   Q_EMIT typesChanged();
 
   if (!m_show_wind) {

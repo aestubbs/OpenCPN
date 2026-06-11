@@ -91,6 +91,23 @@ public:
     Q_EMIT dirty();
   }
 
+  /** The colour-mapped overlay raster (one at a time, wx OverlayMap):
+   *  the grid is rasterized at grid resolution and GPU linear filtering
+   *  smooths it across the chart. ramp: "wind" (kn ramp) | "generic"
+   *  (normalized blue->red). */
+  void setOverlay(const ScalarGrid& g, const QString& ramp, double rampMax) {
+    m_overlay = g;
+    m_overlay_ramp = ramp;
+    m_overlay_max = rampMax;
+    m_overlay_dirty = true;
+    Q_EMIT dirty();
+  }
+  void clearOverlay() {
+    m_overlay = ScalarGrid{};
+    m_overlay_dirty = true;
+    Q_EMIT dirty();
+  }
+
   /** A scalar field rendered as NUMBERS at grid points. */
   struct NumberField {
     ScalarGrid grid;
@@ -120,6 +137,11 @@ private:
   double m_last_scale = 0;
   WindGrid m_grid;
   ScalarGrid m_isobars;
+  ScalarGrid m_overlay;
+  QString m_overlay_ramp;
+  double m_overlay_max = 0;
+  bool m_overlay_dirty = false;
+  QSGNode* m_overlay_node = nullptr;
   QMap<QString, ArrowField> m_arrows;
   QMap<QString, NumberField> m_numbers;
   QHash<QString, QImage> m_label_cache;  // numbers raster cache (bounded)

@@ -49,6 +49,9 @@ class GribContext : public QObject {
   // Per-type display catalog: [{key, label, available, shown}] -- the
   // control bar builds its toggles from this (wx 13-type set, tier 1).
   Q_PROPERTY(QVariantList dataTypes READ dataTypes NOTIFY typesChanged)
+  // The colour-mapped overlay field key ("" = none; wx OverlayMap).
+  Q_PROPERTY(QString overlayKey READ overlayKey WRITE setOverlayKey NOTIFY
+                 typesChanged)
   Q_PROPERTY(QString status READ status NOTIFY gribChanged)
   // The on-canvas control bar's visibility (toolbar 🌬 toggles it).
   Q_PROPERTY(bool controlsVisible READ controlsVisible WRITE
@@ -84,6 +87,8 @@ public:
   Q_INVOKABLE QString readoutAt(double lat, double lon) const;
   QVariantList dataTypes() const;
   Q_INVOKABLE void setTypeShown(const QString& key, bool on);
+  QString overlayKey() const { return m_overlay_key; }
+  void setOverlayKey(const QString& k);
 
   /** Compose a saildocs GRIB request for the given bounds and open the
    *  user's mail client (mailto:). Returns the request body line. */
@@ -116,6 +121,7 @@ private:
   int m_time_index = 0;
   bool m_show_wind = true;
   bool m_show_pressure = true;
+  QString m_overlay_key;
   QMap<QString, bool> m_type_shown;     // persisted per-type toggles
   QMap<QString, bool> m_type_available; // present in the loaded file
   bool m_controls_visible = false;

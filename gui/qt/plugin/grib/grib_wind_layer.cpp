@@ -15,6 +15,8 @@
 
 #include <QQuickWindow>
 #include <QSGNode>
+#include <QSGSimpleTextureNode>
+#include <QSGTexture>
 
 namespace ocpn::qtui {
 
@@ -55,7 +57,51 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
     m_root = new QSGNode();
   else
     while (QSGNode* c = m_root->firstChild()) delete c;
+  m_overlay_node = nullptr;  // children just cleared
   if (!window) return m_root;
+
+  // Colour-mapped overlay UNDER everything else.
+  if (m_overlay.ni > 1 && m_overlay.nj > 1) {
+    QImage img(m_overlay.ni, m_overlay.nj, QImage::Format_ARGB32);
+    for (int j = 0; j < m_overlay.nj; ++j) {
+      QRgb* row = reinterpret_cast<QRgb*>(img.scanLine(j));
+      for (int i = 0; i < m_overlay.ni; ++i) {
+        const float v = m_overlay.v[j * m_overlay.ni + i];
+        if (std::isnan(v)) {
+          row[i] = qRgba(0, 0, 0, 0);
+          continue;
+        }
+        QColor c;
+        if (m_overlay_ramp == QLatin1String("wind")) {
+          c = windColor(v * 1.94384);  // m/s -> kn ramp
+        } else {
+          const double f =
+              m_overlay_max > 0 ? qBound(0.0, v / m_overlay_max, 1.0) : 0.0;
+          c = QColor::fromHsvF(0.66 * (1.0 - f), 0.85, 0.95);
+        }
+        c.setAlpha(110);  // translucent wash over the chart
+        row[i] = c.rgba();
+      }
+    }
+    auto* tex = window->createTextureFromImage(img);
+    tex->setFiltering(QSGTexture::Linear);
+    auto* node = new QSGSimpleTextureNode();
+    node->setTexture(tex);
+    node->setOwnsTexture(true);
+    node->setFiltering(QSGTexture::Linear);
+    // Grid points are CELL CENTRES: extend half a cell each way.
+    const double x0 = m_overlay.lon0 - m_overlay.di / 2;
+    const double x1 =
+        m_overlay.lon0 + (m_overlay.ni - 0.5) * m_overlay.di;
+    const double yTop =
+        Viewport::latToWorldY(m_overlay.lat0 - m_overlay.dj / 2);
+    const double yBot = Viewport::latToWorldY(
+        m_overlay.lat0 + (m_overlay.nj - 0.5) * m_overlay.dj);
+    node->setRect(QRectF(QPointF(qMin(x0, x1), qMin(yTop, yBot)),
+                         QPointF(qMax(x0, x1), qMax(yTop, yBot))));
+    m_root->appendChildNode(node);
+    m_overlay_node = node;
+  }
 
   SgBuilder b(m_root, window);
   b.setPencil(false);

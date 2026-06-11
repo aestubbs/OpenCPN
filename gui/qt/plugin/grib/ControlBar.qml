@@ -46,6 +46,29 @@ Item {
             color: "#8fd14f"
             font.pointSize: 10; font.bold: true
         }
+        ComboBox {
+            id: overlayBox
+            font.pointSize: 10
+            implicitWidth: 130
+            // "Overlay: none" + every available type.
+            model: {
+                const l = [{ key: "", label: qsTr("No overlay") }]
+                const types = pluginContext ? pluginContext.dataTypes : []
+                for (let i = 0; i < types.length; ++i)
+                    if (types[i].available && types[i].key !== "pressure")
+                        l.push(types[i])
+                return l
+            }
+            textRole: "label"
+            currentIndex: {
+                for (let i = 0; i < model.length; ++i)
+                    if (model[i].key === (pluginContext
+                                          ? pluginContext.overlayKey : ""))
+                        return i
+                return 0
+            }
+            onActivated: pluginContext.overlayKey = model[currentIndex].key
+        }
         Repeater {
             model: pluginContext ? pluginContext.dataTypes : []
             delegate: CheckBox {
