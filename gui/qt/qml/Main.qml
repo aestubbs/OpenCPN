@@ -498,9 +498,13 @@ ApplicationWindow {
                 drag.minimumX: 0
                 drag.maximumX: compass.parent.width - compass.width
                 drag.minimumY: 0
-                drag.maximumY: compass.parent.height - compass.height - 80
+                drag.maximumY: compass.parent.height - compass.height
+                property bool dragged: false
+                onPositionChanged: if (drag.active) dragged = true
                 onReleased: {
-                    if (!drag.active) return
+                    // drag.active can already be false here -- track moves.
+                    if (!dragged) return
+                    dragged = false
                     UIConfig.hudStatsX = compass.x /
                         Math.max(1, compass.parent.width - compass.width)
                     UIConfig.hudStatsY = compass.y /
