@@ -2253,14 +2253,14 @@ existing `followOwnShip` property before adding).
       builder (viewport-bounds GFS request via mailto) 2026-06-10.**
       Remaining for parity: precip/waves/current overlays, particle
       animation, density tuning — verify with a real GRIB file first.
-- [ ] **P4.7** **o-charts SHOP plugin (day-1 REQUIRED, user decision
-      2026-06-10):** the chart-purchase/installation flows the wx
-      o-charts_pi provides — o-charts.org account login, system
-      identification (fpr via oexserverd), listing purchased chart
-      sets, download + install (zip → chart dir + keyList placement,
-      then host.addChartDirectory). Rendering/decryption already
-      native (P2). Build against the live shop API; needs the user's
-      o-charts account for end-to-end verification.
+- [~] **P4.7** o-charts SHOP plugin — **v1 landed (2026-06-11),
+      built by default:** login2/getlist/identifySystem/assign/request
+      against the live API (parameters verified against ochartShop.cpp),
+      fingerprint via the new host.ochartsService seam, ZIP install +
+      keyList placement + auto-add to the chart library. oeRNC sets
+      listed but unsupported. **Needs the user's o-charts account for
+      end-to-end verification** (login → identify → install → charts
+      render); flip to [x] after that pass.
 - [~] **P4.6** Document the plugin API —
       [`QT_PLUGIN_API.md`](./QT_PLUGIN_API.md) drafted 2026-06-10
       (interface, contribution seams, wx-ABI mapping table, porting
