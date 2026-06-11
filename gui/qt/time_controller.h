@@ -116,6 +116,14 @@ public:
     Q_EMIT marksChanged();
   }
 
+  /** Zoom the visible window span (wheel on the bar): factor < 1 zooms
+   *  in. Clamped to [2 h, 16 days]. */
+  Q_INVOKABLE void zoomWindow(double factor) {
+    m_window_secs =
+        std::clamp(m_window_secs * factor, 2.0 * 3600.0, 16.0 * 86400.0);
+    Q_EMIT windowChanged();
+  }
+
 Q_SIGNALS:
   void marksChanged();
   void timeChanged();   // displayTime / nowFraction / time+date labels

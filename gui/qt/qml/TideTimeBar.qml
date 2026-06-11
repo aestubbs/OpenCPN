@@ -104,6 +104,13 @@ Item {
             x: plot.width * TimeController.nowFraction - 1
             width: 2; height: plot.height; color: "#ff5b5b"
         }
+        // Wheel on the bar zooms the TIME SCALE (window span), so a
+        // multi-day forecast fits one screen and dragging reaches it.
+        WheelHandler {
+            onWheel: (ev) => TimeController.zoomWindow(
+                         ev.angleDelta.y > 0 ? 0.8 : 1.25)
+        }
+
         // Event marks (e.g. GRIB forecast steps): a green dot per mark
         // at its position on the panning axis.
         Repeater {

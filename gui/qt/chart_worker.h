@@ -82,7 +82,10 @@ Q_SIGNALS:
 private:
   void loadRasterCell_(const ocpn::qtui::CellExtent& cell);
 
-public:
+  // Resume the slots section my signal insertion above terminated --
+  // setColorScheme/applyDisplaySettings are invoked by name from the
+  // canvas and silently failed as plain publics.
+public Q_SLOTS:
 
   /** Switch the S-52 colour scheme (0=day,1=dusk,2=night) on the decode
    *  thread, serialised against loadCell so it never races a decode. The
