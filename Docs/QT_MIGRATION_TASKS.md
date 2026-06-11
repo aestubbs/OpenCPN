@@ -2268,10 +2268,14 @@ existing `followOwnShip` property before adding).
          the control bar, shown only when the type is present in the
          file; flags persisted. Toolbar right-click + long-press open
          the GRIB preferences (wx parity).
-      2. *(days)* Colour-mapped OVERLAY mode (one QSGImageNode raster
-         per field, the wx OverlayMap ramps) + per-type units engine.
-      3. *(week)* Timeline play on the app time bar (play/speed lives
-         there, wx parity) + linear interpolation between timesteps.
+      2. ~~Colour-mapped OVERLAY mode~~ **DONE (2026-06-11):** one field
+         at a time as a translucent ramp wash (wind kn ramp / generic
+         normalized), grid-res raster + GPU linear smoothing, selector
+         on the control bar, persisted.
+      3. ~~Interpolation between timesteps~~ **DONE (2026-06-11):**
+         scalar + vector (Interpolated2DRecord) interpolation at the
+         exact bar time; scrub/play renders continuously. (Play/speed
+         buttons live on the app time bar already.)
       4. *(week)* Particle animation for wind/current (the wx particle
          system on the scene graph; ties into PERF ladder).
       5. *(days)* Altitude selector; GRIB DIRECTORY management (wx sets
