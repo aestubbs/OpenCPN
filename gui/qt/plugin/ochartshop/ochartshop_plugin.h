@@ -48,6 +48,9 @@ class ShopContext : public QObject {
   Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
   Q_PROPERTY(int progress READ progress NOTIFY busyChanged)
   Q_PROPERTY(QString status READ status NOTIFY statusChanged)
+  // Decryption-daemon state, proxied from the host's o-charts service.
+  Q_PROPERTY(bool daemonAvailable READ daemonAvailable NOTIFY stateChanged)
+  Q_PROPERTY(QString daemonVersion READ daemonVersion NOTIFY stateChanged)
 
 public:
   ShopContext(QObject* ochartsService,
@@ -61,6 +64,13 @@ public:
   bool busy() const { return m_busy; }
   int progress() const { return m_progress; }
   QString status() const { return m_status; }
+  bool daemonAvailable() const {
+    return m_ocharts && m_ocharts->property("daemonAvailable").toBool();
+  }
+  QString daemonVersion() const {
+    return m_ocharts ? m_ocharts->property("daemonVersion").toString()
+                     : QString();
+  }
 
   Q_INVOKABLE void login(const QString& user, const QString& password);
   Q_INVOKABLE void logout();

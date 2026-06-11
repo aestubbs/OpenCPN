@@ -42,6 +42,8 @@ ShopContext::ShopContext(QObject* ochartsService,
       m_ocharts(ochartsService),
       m_add_chart_dir(std::move(addChartDir)) {
   m_nam = new QNetworkAccessManager(this);
+  if (m_ocharts)  // live daemon-state updates
+    connect(m_ocharts, SIGNAL(changed()), this, SIGNAL(stateChanged()));
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("ochartshop"));
   m_user = st.value(QStringLiteral("username")).toString();
   m_key = st.value(QStringLiteral("key")).toString();

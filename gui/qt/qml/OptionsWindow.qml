@@ -60,6 +60,15 @@ Window {
 
     PrioritiesDialog { id: prioritiesDialog }
 
+    // The o-charts pane is FULLY plugin-provided (wx parity): no shop
+    // plugin -> no o-charts tab.
+    readonly property var ochartsShopPage: {
+        const pages = chart.pluginRegistry.settingsPages
+        for (let i = 0; i < pages.length; ++i)
+            if (pages[i].title === "o-charts shop") return pages[i]
+        return null
+    }
+
     flags: Qt.Dialog
     // macOS shows a wider window (sidebar + pane), like System Settings.
     // Other platforms get the compact top-tab layout.
@@ -561,7 +570,11 @@ Window {
                         TabButton { text: qsTr("Vector Display") }
                         TabButton { text: qsTr("Groups") }
                         TabButton { text: qsTr("Tides") }
-                        TabButton { text: qsTr("o-charts") }
+                        TabButton {
+                            text: qsTr("o-charts")
+                            visible: optionsWindow.ochartsShopPage !== null
+                            width: visible ? implicitWidth : 0
+                        }
                     }
 
                     StackLayout {
@@ -1066,77 +1079,20 @@ Window {
                             }
                         }
 
-                        // --- o-charts: shop (plugin-provided) + native decrypt ---
+                        // --- o-charts: FULLY plugin-provided (P4.7). ---
                         Flickable {
                             clip: true
-                            contentHeight: ochartsPaneCol.implicitHeight + 40
+                            contentHeight: ochartsShopLoader.implicitHeight + 40
                             ScrollBar.vertical: ScrollBar {}
-                            ColumnLayout {
-                                id: ochartsPaneCol
+                            Loader {
+                                id: ochartsShopLoader
                                 width: parent.width - 40
                                 x: 20; y: 20
-                                spacing: 8
-                                Label { text: qsTr("o-charts (encrypted)"); font.bold: true }
-                                Label {
-                                    text: OCharts.daemonAvailable
-                                        ? qsTr("Decryption helper found: ") + OCharts.daemonVersion
-                                        : qsTr("oexserverd decryption helper not found.")
-                                    wrapMode: Text.Wrap; Layout.fillWidth: true
-                                    color: OCharts.daemonAvailable ? "#34a853"
-                                                                   : palette.placeholderText
-                                }
-
-                                // The shop page contributed by the o-charts
-                                // plugin loads HERE (wx parity: the shop
-                                // lives on the Charts > o-charts panel).
-                                readonly property var shopPage: {
-                                    const pages = chart.pluginRegistry.settingsPages
-                                    for (let i = 0; i < pages.length; ++i)
-                                        if (pages[i].title === "o-charts shop")
-                                            return pages[i]
-                                    return null
-                                }
-                                MenuSeparator { Layout.fillWidth: true }
-                                Loader {
-                                    visible: ochartsPaneCol.shopPage !== null
-                                    Layout.fillWidth: true
-                                    source: ochartsPaneCol.shopPage
-                                            ? ochartsPaneCol.shopPage.component : ""
-                                    onLoaded: if (ochartsPaneCol.shopPage)
-                                        item.pluginContext = ochartsPaneCol.shopPage.context
-                                }
-
-                                MenuSeparator { Layout.fillWidth: true }
-
-                                Label { text: qsTr("Manual licensing"); font.bold: true }
-                                Label {
-                                    text: qsTr("Generate this computer's fingerprint, then upload the .fpr file at o-charts.org to licence a chart set to this machine.")
-                                    wrapMode: Text.Wrap; Layout.fillWidth: true
-                                    color: palette.placeholderText; font.pointSize: 11
-                                }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Button {
-                                        text: qsTr("Generate fingerprint")
-                                        enabled: OCharts.daemonAvailable && !OCharts.busy
-                                        onClicked: OCharts.generateFingerprint()
-                                    }
-                                    BusyIndicator {
-                                        running: OCharts.busy; visible: running
-                                        implicitWidth: 22; implicitHeight: 22
-                                    }
-                                }
-                                Label {
-                                    text: OCharts.status
-                                    visible: OCharts.status.length > 0
-                                    wrapMode: Text.Wrap; Layout.fillWidth: true
-                                    font.family: "monospace"; font.pointSize: 11
-                                }
-                                Label {
-                                    text: qsTr("Decryption + chart loading is built in; manually installed sets just need their folder added under Chart Files.")
-                                    wrapMode: Text.Wrap; Layout.fillWidth: true
-                                    color: palette.placeholderText; font.pointSize: 11
-                                }
+                                source: optionsWindow.ochartsShopPage
+                                        ? optionsWindow.ochartsShopPage.component : ""
+                                onLoaded: if (optionsWindow.ochartsShopPage)
+                                    item.pluginContext =
+                                        optionsWindow.ochartsShopPage.context
                             }
                         }
                     }
@@ -2625,7 +2581,7 @@ Window {
                     }
                     Frame {
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        Layout.preferredHeight: 240
                         padding: 2
                         ListView {
                             id: pluginList
@@ -2679,6 +2635,7 @@ Window {
                     // Plugin-contributed settings pages, stacked below.
                     Repeater {
                         model: chart.pluginRegistry.settingsPages.filter(
+                                   (p) => p.title !== "o-charts shop").filter(
                                    (p) => p.title !== "o-charts shop")
                         delegate: ColumnLayout {
                             required property var modelData

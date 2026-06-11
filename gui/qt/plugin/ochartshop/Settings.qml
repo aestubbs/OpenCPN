@@ -2,58 +2,94 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// o-charts shop (P4.7): account login -> system registration -> purchased
-// chart sets with one-click install.
+// The o-charts pane (P4.7) -- fully plugin-provided, wx o-charts_pi
+// parity: daemon status, labeled account login, system registration,
+// purchased chart sets with one-click install.
 ColumnLayout {
     property var pluginContext: null
-    spacing: 6
+    spacing: 8
 
-    // --- Account row ---
-    RowLayout {
-        Layout.fillWidth: true
+    Label { text: qsTr("o-charts (encrypted)"); font.bold: true }
+    Label {
+        text: pluginContext && pluginContext.daemonAvailable
+              ? qsTr("Decryption helper found: ") + pluginContext.daemonVersion
+              : qsTr("oexserverd decryption helper not found — charts cannot be decrypted on this machine.")
+        wrapMode: Text.Wrap; Layout.fillWidth: true
+        color: pluginContext && pluginContext.daemonAvailable
+               ? "#34a853" : "#e05060"
+    }
+
+    MenuSeparator { Layout.fillWidth: true }
+
+    // --- Account (leading-label form, macOS HIG) ---
+    GridLayout {
         visible: pluginContext && !pluginContext.loggedIn
+        columns: 2
+        columnSpacing: 10
+        Layout.fillWidth: true
+        Label {
+            text: qsTr("Email:")
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        }
         TextField {
             id: shopUser
             Layout.fillWidth: true
-            placeholderText: qsTr("o-charts.org email")
             text: pluginContext ? pluginContext.username : ""
+            inputMethodHints: Qt.ImhEmailCharactersOnly
         }
-        TextField {
-            id: shopPass
+        Label {
+            text: qsTr("Password:")
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        }
+        RowLayout {
             Layout.fillWidth: true
-            placeholderText: qsTr("Password")
-            echoMode: TextInput.Password
+            TextField {
+                id: shopPass
+                Layout.fillWidth: true
+                echoMode: TextInput.Password
+                onAccepted: loginButton.clicked()
+            }
+            Button {
+                id: loginButton
+                text: qsTr("Log in")
+                enabled: pluginContext && !pluginContext.busy &&
+                         shopUser.text.length > 0 && shopPass.text.length > 0
+                onClicked: { pluginContext.login(shopUser.text, shopPass.text)
+                             shopPass.clear() }
+            }
         }
-        Button {
-            text: qsTr("Log in")
-            enabled: pluginContext && !pluginContext.busy &&
-                     shopUser.text.length > 0 && shopPass.text.length > 0
-            onClicked: { pluginContext.login(shopUser.text, shopPass.text)
-                         shopPass.clear() }
+        Item { }
+        Label {
+            text: qsTr("Your o-charts.org shop account.")
+            font.pointSize: 10
+            color: palette.placeholderText
         }
     }
+
     RowLayout {
         Layout.fillWidth: true
         visible: pluginContext && pluginContext.loggedIn
         Label {
             text: qsTr("Account: ") + (pluginContext ? pluginContext.username : "")
             Layout.fillWidth: true
+            elide: Text.ElideRight
         }
         Label {
             text: qsTr("System: ") +
                   (pluginContext && pluginContext.systemName.length
-                   ? pluginContext.systemName : qsTr("(not identified)"))
+                   ? pluginContext.systemName : qsTr("not identified"))
             color: pluginContext && pluginContext.systemName.length
                    ? palette.windowText : "#e08030"
         }
         Button {
             visible: pluginContext && !pluginContext.systemName.length
             text: qsTr("Identify this system")
-            enabled: !pluginContext.busy
+            enabled: pluginContext && !pluginContext.busy &&
+                     pluginContext.daemonAvailable
             onClicked: pluginContext.identifySystem()
         }
         Button {
-            text: qsTr("Refresh")
+            text: qsTr("Refresh chart list")
             enabled: pluginContext && !pluginContext.busy
             onClicked: pluginContext.refreshList()
         }
@@ -63,10 +99,10 @@ ColumnLayout {
         }
     }
 
-    // --- Chart sets ---
+    // --- Purchased chart sets ---
     Frame {
         Layout.fillWidth: true
-        Layout.preferredHeight: 200
+        Layout.preferredHeight: 230
         visible: pluginContext && pluginContext.loggedIn
         padding: 2
         ListView {
@@ -118,6 +154,13 @@ ColumnLayout {
             ScrollBar.vertical: ScrollBar {}
         }
     }
+    Label {
+        visible: pluginContext && pluginContext.loggedIn &&
+                 pluginContext.charts.length === 0
+        text: qsTr("No chart sets on this account yet — purchases at o-charts.org appear here.")
+        wrapMode: Text.Wrap; Layout.fillWidth: true
+        color: palette.placeholderText
+    }
     ProgressBar {
         Layout.fillWidth: true
         visible: pluginContext && pluginContext.busy
@@ -126,6 +169,7 @@ ColumnLayout {
     }
     Label {
         text: pluginContext ? pluginContext.status : ""
+        visible: text.length > 0
         wrapMode: Text.Wrap
         Layout.fillWidth: true
         color: "#3b82f6"
