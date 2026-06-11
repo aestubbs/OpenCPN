@@ -64,6 +64,12 @@ struct OcpnQtPluginHost {
   std::function<void(const QString& dir)> addChartDirectory;
   /** Live navigation snapshots (own ship, AIS, routes...). */
   NavDataProvider* navData = nullptr;
+  /** The o-charts daemon service (nullptr if absent): a QObject exposing
+   *  Q_PROPERTY fingerprintFile/daemonAvailable/busy/status, signal
+   *  changed(), and Q_INVOKABLE generateFingerprint(). Connect/invoke by
+   *  name -- the concrete type is not part of the API. Used by the shop
+   *  plugin for system identification. */
+  QObject* ochartsService = nullptr;
   /** The decoded message tap: a QObject emitting
    *  `lineReceived(QString line, QString source)` per decoded NMEA-0183
    *  sentence / N2K PGN / SignalK message ("HH:mm:ss  <payload>" + the

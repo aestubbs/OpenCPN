@@ -56,6 +56,7 @@ public:
   PluginRegistry(std::function<void(Layer*)> registerLayer,
                  NavDataProvider* navData, QObject* navMsgTap = nullptr,
                  std::function<void(const QString&)> addChartDir = {},
+                 QObject* ochartsService = nullptr,
                  QObject* parent = nullptr);
   ~PluginRegistry() override;
 
@@ -84,6 +85,7 @@ private:
   NavDataProvider* m_nav_data = nullptr;
   QObject* m_nav_msg_tap = nullptr;
   std::function<void(const QString&)> m_add_chart_dir;
+  QObject* m_ocharts_service = nullptr;
   QList<Loaded> m_loaded;
   QVariantList m_rows;
   QVariantList m_huds;

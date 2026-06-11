@@ -267,6 +267,12 @@ if (OCPN_QT_GRIB_PLUGIN)
   add_subdirectory(plugin/grib)
 endif ()
 
+# The o-charts shop plugin (P4.7, day-1 per user decision).
+option(OCPN_QT_OCHARTSHOP_PLUGIN "Build the o-charts shop Qt plugin" ON)
+if (OCPN_QT_OCHARTSHOP_PLUGIN)
+  add_subdirectory(plugin/ochartshop)
+endif ()
+
 # libtess2: the basemap provider tessellates the land polygons.
 target_include_directories(opencpn-qt PRIVATE
   ${CMAKE_SOURCE_DIR}/libs/libtess2/Include

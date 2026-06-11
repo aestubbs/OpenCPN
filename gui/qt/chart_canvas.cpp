@@ -384,7 +384,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
           m_chart_source->addDirectory(dir);
           reloadCharts();
         }
-      });
+      },
+      &OChartsService::instance());  // shop plugin: fpr + daemon status
   m_plugin_registry->loadFrom(
       QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
       QStringLiteral("/plugins-qt"));
