@@ -149,6 +149,15 @@ void GribContext::openFile(const QUrl& url) {
     Q_EMIT gribChanged();
     return;
   }
+  // wx GRIBFile post-load fixups (GribUIDialog.cpp:2051+): rain/cloud
+  // accumulation normalization, then propagate cumulative + wave records
+  // into steps that lack them (waves often ride a coarser cadence).
+  m_reader->computeAccumulationRecords(GRB_PRECIP_TOT, LV_GND_SURF, 0);
+  m_reader->computeAccumulationRecords(GRB_PRECIP_RATE, LV_GND_SURF, 0);
+  m_reader->computeAccumulationRecords(GRB_CLOUD_TOT, LV_ATMOS_ALL, 0);
+  m_reader->copyFirstCumulativeRecord();
+  m_reader->copyMissingWaveRecords();
+
   m_file = path.section('/', -1);
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
       .setValue(QStringLiteral("lastFile"), path);

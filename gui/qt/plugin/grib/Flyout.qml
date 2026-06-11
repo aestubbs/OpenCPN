@@ -20,8 +20,8 @@ Item {
     Rectangle {
         id: flyPanel
         visible: pluginContext && pluginContext.controlsVisible
-        x: 76
-        y: 140
+        x: 76          // immediately right of the master toolbar
+        y: 16 + 5 * 46  // roughly level with the plugin tools
         width: chipCol.implicitWidth + 8
         height: chipCol.implicitHeight + 8
         radius: 6
@@ -59,7 +59,7 @@ Item {
             }
         }
 
-        ColumnLayout {
+        RowLayout {
             id: chipCol
             anchors.centerIn: parent
             spacing: 2
@@ -92,7 +92,7 @@ Item {
                 }
             }
             Rectangle {
-                Layout.fillWidth: true; height: 1
+                Layout.fillHeight: true; width: 1
                 color: Qt.rgba(0, 0, 0, 0.2)
             }
             Chip {
