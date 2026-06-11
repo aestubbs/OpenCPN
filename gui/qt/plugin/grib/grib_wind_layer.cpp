@@ -417,8 +417,15 @@ void GribWindLayer::drawIsobars(SgBuilder& b) {
     return QPointF(g.lon0 + fi * g.di,
                    Viewport::latToWorldY(g.lat0 + fj * g.dj));
   };
+  // Isobar labels (wx drawIsoLineLabels parity): the level value in a
+  // small box, repeated along each line ~160 px apart.
+  const double wpp2 = worldPerPx();
+  const double labelGapW = 160.0 * wpp2;
+  QList<QPointF> labelPts;
+  QList<double> labelVals;
   for (double level = std::ceil(lo / kStep) * kStep; level < hi;
        level += kStep) {
+    QPointF lastLabel(-1e9, -1e9);
     for (int j = 0; j + 1 < g.nj; ++j) {
       for (int i = 0; i + 1 < g.ni; ++i) {
         const float v00 = g.v[j * g.ni + i];
@@ -440,10 +447,41 @@ void GribWindLayer::drawIsobars(SgBuilder& b) {
         cross(v10, v11, i + 1, j, i + 1, j + 1);  // right
         cross(v01, v11, i, j + 1, i + 1, j + 1);  // top
         cross(v00, v01, i, j, i, j + 1);          // left
-        if (pts.size() >= 2) b.drawLine(pts[0], pts[1]);
+        if (pts.size() >= 2) {
+          b.drawLine(pts[0], pts[1]);
+          const QPointF mid = (pts[0] + pts[1]) / 2;
+          if (QLineF(mid, lastLabel).length() > labelGapW) {
+            lastLabel = mid;
+            labelPts.append(mid);
+            labelVals.append(level);
+          }
+        }
         if (pts.size() == 4) b.drawLine(pts[2], pts[3]);  // saddle
       }
     }
+  }
+  // Draw the collected labels over the lines: boxed values, wx-style.
+  for (int k = 0; k < labelPts.size(); ++k) {
+    const QString t = QString::number(qRound(labelVals[k]));
+    const QString cacheKey = QStringLiteral("isob:") + t;
+    if (!m_label_cache.contains(cacheKey)) {
+      // Render the text once; the box draws as geometry per use.
+      m_label_cache.insert(
+          cacheKey, SgBuilder::renderText(t, QColor(40, 44, 52), 9.0f));
+    }
+    const QImage img = m_label_cache.value(cacheKey);
+    if (img.isNull()) continue;
+    const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1;
+    const double w = img.width() / dpr * wpp2, h = img.height() / dpr * wpp2;
+    const QPointF c = labelPts[k];
+    b.setPen(QColor(120, 120, 140, 200), 1.0f);
+    b.setBrush(QColor(238, 238, 240, 230));
+    b.drawPolygon({QPointF(c.x() - w / 2 - 3 * wpp2, c.y() - h / 2 - 1 * wpp2),
+                   QPointF(c.x() + w / 2 + 3 * wpp2, c.y() - h / 2 - 1 * wpp2),
+                   QPointF(c.x() + w / 2 + 3 * wpp2, c.y() + h / 2 + 1 * wpp2),
+                   QPointF(c.x() - w / 2 - 3 * wpp2, c.y() + h / 2 + 1 * wpp2)});
+    b.noBrush();
+    b.drawImage(QRectF(c.x() - w / 2, c.y() - h / 2, w, h), img);
   }
 }
 
