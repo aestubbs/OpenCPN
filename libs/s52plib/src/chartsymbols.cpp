@@ -50,11 +50,14 @@
 #endif
 
 #include "chartsymbols.h"
+// s52plib.h carries Qt headers (the scene-graph emit, s52_sg.h). On
+// GTK/Linux they must precede wx/glcanvas.h, whose X11/Xlib.h defines
+// Status/None macros that break any Qt header included after it.
+#include "s52plib.h"
+
 #ifdef ocpnUSE_GL
 #include <wx/glcanvas.h>
 #endif
-
-#include "s52plib.h"
 
 //--------------------------------------------------------------------------------------
 
