@@ -1183,6 +1183,15 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       Nothing to do here; closed.
 
 - [~] **P2.25** **Chart-rendering defect sweep (specific cells).** Investigate
+      **2026-06-12 (user repros, both FIXED):** (a) blank rectangle in
+      the Needles quilt at 1:50k — oeSENC cells carried NO M_COVR in the
+      catalog (OSENC header scan ignored CELL_COVR_RECORD), so quilt
+      selection over-claimed each cell's bbox and suppressed the coarser
+      chart beneath; the scanner now parses COVR records (and the P2.17
+      clip uses them). Likely the same root cause as the parked "Poole
+      missing areas" note. (b) Guernsey only overview shapes at 1:167k —
+      the underzoom admit was tied to the OVERZOOM k; now its own
+      kUnderzoomAdmit=4.0 (wx Quilt parity, SCAMIN thins the detail).
       and fix concrete rendering issues on the user's local UK South-Coast
       charts:
       - **Yarmouth (Isle of Wight / Solent)** — **DONE 2026-06-06.** The
