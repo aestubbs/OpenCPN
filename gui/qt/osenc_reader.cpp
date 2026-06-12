@@ -131,6 +131,10 @@ bool scanOsencHeader(QIODevice& in, OsencHeader& out) {
     }
   }
   out.valid = (out.version > 0) && out.hasExtent;
+  if (qEnvironmentVariableIsSet("OCPN_OSENC_COV_DEBUG"))
+    qWarning("osenc-hdr: scanned %s covr=%lld valid=%d",
+             qPrintable(out.cellName),
+             static_cast<long long>(out.coverage.size()), out.valid ? 1 : 0);
   return out.valid;
 }
 
