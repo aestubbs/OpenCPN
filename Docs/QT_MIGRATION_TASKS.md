@@ -2288,14 +2288,28 @@ existing `followOwnShip` property before adding).
       6. ~~Request dialog matrix~~ **DONE (2026-06-11):** model/
          resolution/interval selection (GFS/ECMWF/ICON/ARPEGE/NAM),
          GFS-only params auto-limited.
-      **ALL SIX TIERS LANDED (2026-06-11).** Remaining refinements vs
-      wx: multi-file layering, per-type units dialog (kn/ms/kmh…),
-      isotachs/isotherms beyond isobars, gust-as-barbs variant,
-      cursor-data panel listing every type. Functional end-state
-      reached: file/dir open, 13-type catalog, overlay wash, barbs/
-      arrows/numbers, timeline follow + interpolation + play,
-      particles, altitude selector, request matrix — verify against
-      real forecasts and refine.
+      **ALL SIX TIERS LANDED (2026-06-11).** Since then (2026-06-12):
+      per-type **units engine** DONE (kn/m/s/km/h/mph/Bft, °C/°F,
+      m/ft, hPa/mmHg/inHg — unitOptions/setUnitFor + activeUnit applied
+      to every rendered field and the cursor panel); **cursor-data HUD**
+      DONE (its own panel listing every loaded type at chart.cursorLat/
+      Lon, toggled from the flyout); toolbar UX to wx parity DONE
+      (click = checkable weather on/off with Tides-style shading,
+      hold/right-click = MUI-style perpendicular chip flyout: per-type
+      toggles, particles, cursor panel, Open-from-folder menu,
+      settings); **3-tab Settings dialog** DONE (Data tab reshapes per
+      type, Playback, GUI + Request tab; OK/Cancel/Apply staged apply);
+      GRIB 0–360 longitude normalization (US files render); timeline
+      contract: forecast-step **marks** (clickable green dots), coverage
+      **span band**, snap-into-range on load, beyond-forecast layer
+      dimming, wheel zoom of the bar's window span.
+      Remaining refinements vs wx: **wx colormap tables**
+      (GetGraphicColor port for the overlay wash), **exact barb
+      conventions** (incl. southern-hemisphere mirroring), CursorData.cpp
+      formatting port, fixed/minimum-spacing options, isotachs/
+      isotherms beyond isobars, gust-as-barbs variant, multi-file
+      layering. Functional end-state reached — verify against real
+      forecasts and refine.
 - [~] **P4.7** o-charts SHOP plugin — **v1 landed (2026-06-11),
       built by default:** login2/getlist/identifySystem/assign/request
       against the live API (parameters verified against ochartShop.cpp),
@@ -2934,3 +2948,26 @@ symbols, chart-colour editor — stays where it is in Phase 2.)
   Data Monitor launcher → Connections page. Decisions: macOS-first (P0.5
   Linux/Windows CI is a pre-P3.11 gate); multi-canvas out of scope → new
   Phase 6 "post-migration follow-ups" (P6.1).
+- 2026-06-12 — **THE GRIB-scrub saga root-caused: split-brain QML
+  singletons.** Symptom: scrubbing the time bar never animated the GRIB
+  layer, no green step-dots/coverage band — while every programmatic
+  check passed. Root cause (proven with lldb instance-identity
+  sampling): Qt's `singletonConstructionMode()` prefers
+  default-construction over the `create()` factory whenever the class
+  is `std::is_default_constructible`, so the QML engine silently built
+  its OWN `TimeController` — the bar drove one instance, the plugins/
+  layers/self-tests another. Undetectable statically: both brains load
+  identical persisted state; only LIVE cross-boundary changes vanish.
+  Fix: constructor moved to `private:` in all 9 QML_SINGLETON classes
+  (TimeController + the Config singletons, SoundPlayer,
+  CommPrioritiesModel), forcing the factory path; SoundPlayer gained
+  the missing instance()/create() pair. Rule recorded in
+  QT_TOOLCHAIN.md: **every QML_SINGLETON declares its ctor private**.
+  Verified post-fix: a single onTick `this` address; the GRIB self-test
+  (`OCPN_GRIB_SELFTEST=1`) walked the real bar through 11 pushes with
+  changing interpolated-grid fingerprints (meanU 6.221→…→4.147), zero
+  errors. Collateral win: every live Options→C++ flow on those
+  singletons (grid toggle, tide layer, S-52 re-decode, sound device…)
+  was silently dead and is now restored — re-verify in the next manual
+  pass. Diagnostic qWarnings in TimeController/grib stay until the
+  user's hands-on scrub confirmation, then come out.
