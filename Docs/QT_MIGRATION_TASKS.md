@@ -2990,5 +2990,8 @@ symbols, chart-colour editor — stays where it is in Phase 2.)
   errors. Collateral win: every live Options→C++ flow on those
   singletons (grid toggle, tide layer, S-52 re-decode, sound device…)
   was silently dead and is now restored — re-verify in the next manual
-  pass. Diagnostic qWarnings in TimeController/grib stay until the
-  user's hands-on scrub confirmation, then come out.
+  pass. **User-verified hands-on (2026-06-12): "Timebar is now
+  working" — the scrub saga is CLOSED.** The diagnostics are retired:
+  timebar qWarnings removed; the GRIB step dump + PUSH/REBUILD meanU
+  fingerprints now gate behind OCPN_GRIB_SELFTEST (they are the
+  self-test's assertions).
