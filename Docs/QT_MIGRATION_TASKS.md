@@ -149,12 +149,18 @@ Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
 - [x] **P0.5** CI for `opencpn-qt` — **GREEN on macOS (2026-06-10, run
       27304414174):** clean-runner build of the app + toolkit + all four
       plugins + a 20 s smoke-run, after a dependency-fix iteration
-      (MPG123 et al.). Linux rides best-effort (gtk3/media dev packages
-      being iterated; continue-on-error); Windows pends the toolkit
-      export macros.
-      **Deferred by decision 2026-06-10 (macOS-first):** all development and
-      verification is on macOS for now; a Linux + Windows build/CI pass is a
-      **hard pre-P3.11 gate** (see P3.21), not near-term work.
+      (MPG123 et al.). **LINUX BUILD GREEN (2026-06-12, run
+      27426653493)** — first-ever full Linux compile of the branch,
+      after a five-fix ladder: libglew-dev; the QWebSocket
+      errorOccurred 6.5 rename guard; Qt 6.8 via install-qt-action
+      (distro 6.4 predates loadFromModule etc.); X11 macro scrubs in
+      s52_sg.h and the guard-less x11_macro_scrub.h (the fixx11h
+      pattern) for gui/qt's wx-mixing TUs. Still continue-on-error +
+      build-only (no smoke run); promote to required after a few
+      stable runs. Windows pends the toolkit export macros.
+      **Deferred by decision 2026-06-10 (macOS-first):** verification
+      stays on macOS; the Linux leg of the **pre-P3.11 gate** (P3.21)
+      is now satisfied at build level.
 - [x] **P0.6** Repo layout decided: new Qt-Quick code lives in `gui/qt/`
       (subdir of the existing `gui/` tree — closest to what it'll
       eventually replace; the legacy `gui/src/` retires in Phase 3).
