@@ -31,8 +31,10 @@
 namespace {
 constexpr char kConfigKey[] = "connections";
 
-// The message bus a connection's driver registers on, by data protocol index.
-NavAddr::Bus busForProto(int dataProto) {
+// The message bus a connection's driver registers on. Signal K has its own
+// bus; GPSD is NMEA 0183 over the wire; the rest follow the data protocol.
+NavAddr::Bus busFor(int netProto, int dataProto) {
+  if (netProto == 3) return NavAddr::Bus::Signalk;
   return dataProto == 1 ? NavAddr::Bus::N2000 : NavAddr::Bus::N0183;
 }
 
@@ -60,7 +62,12 @@ namespace ocpn::qtui {
 
 namespace {
 QString netProtoText(int p) {
-  return p == 1 ? QStringLiteral("UDP") : QStringLiteral("TCP");
+  switch (p) {
+    case 1: return QStringLiteral("UDP");
+    case 2: return QStringLiteral("GPSD");
+    case 3: return QStringLiteral("Signal K");
+    default: return QStringLiteral("TCP");
+  }
 }
 QString dataProtoText(int p) {
   return p == 1 ? QStringLiteral("NMEA 2000") : QStringLiteral("NMEA 0183");
@@ -94,8 +101,8 @@ QStringList asStringList(const QVariant& v) {
 // Build the model ConnectionParams for a connection -- shared by start (apply)
 // and stop (disable) so the driver's iface key matches exactly.
 ConnectionParams paramsFor(
-    int type, int netProto, const QString& address, int port,
-    const QString& serialPort, int baud, int dataProto, int ioSelect,
+    int type, int netProto, const QString& address, const QString& authToken,
+    int port, const QString& serialPort, int baud, int dataProto, int ioSelect,
     int inFilterType, const QStringList& inFilter, int outFilterType,
     const QStringList& outFilter, const QString& comment) {
   ConnectionParams params;
@@ -114,7 +121,21 @@ ConnectionParams paramsFor(
     params.Baudrate = baud > 0 ? baud : 4800;
   } else {  // network
     params.Type = NETWORK;
-    params.NetProtocol = (netProto == 1) ? UDP : TCP;
+    switch (netProto) {
+      case 1: params.NetProtocol = UDP; break;
+      case 2:  // gpsd watcher: NMEA 0183 over the daemon's TCP socket
+        params.NetProtocol = GPSD;
+        params.Protocol = PROTO_NMEA0183;
+        params.IOSelect = DS_TYPE_INPUT;
+        break;
+      case 3:  // Signal K websocket stream (receive-only)
+        params.NetProtocol = SIGNALK;
+        params.Protocol = PROTO_SIGNALK;
+        params.IOSelect = DS_TYPE_INPUT;
+        params.AuthToken = wxString(authToken.toUtf8().constData());
+        break;
+      default: params.NetProtocol = TCP; break;
+    }
     params.NetworkAddress = wxString(address.toUtf8().constData());
     params.NetworkPort = port;
   }
@@ -131,6 +152,7 @@ ConnectionsViewModel::Conn ConnectionsViewModel::fromMap(const QVariantMap& c) {
   x.type = c.value("type", 0).toInt();
   x.netProto = c.value("netProto", 0).toInt();
   x.address = c.value("address").toString().trimmed();
+  x.authToken = c.value("authToken").toString().trimmed();
   x.port = c.value("port", 0).toInt();
   x.serialPort = c.value("serialPort").toString().trimmed();
   x.baud = c.value("baud", 4800).toInt();
@@ -150,6 +172,7 @@ QVariantMap ConnectionsViewModel::toMap(const Conn& c) {
   m["netProto"] = c.netProto;
   m["netProtoText"] = netProtoText(c.netProto);
   m["address"] = c.address;
+  m["authToken"] = c.authToken;
   m["port"] = c.port;
   m["serialPort"] = c.serialPort;
   m["baud"] = c.baud;
@@ -173,12 +196,21 @@ QString ConnectionsViewModel::summaryOf(const Conn& c) {
     head = QStringLiteral("Serial  %1 @ %2")
                .arg(c.serialPort.isEmpty() ? QStringLiteral("?") : c.serialPort)
                .arg(c.baud);
+  else if (c.netProto == 0 && c.address.isEmpty())
+    head = QStringLiteral("TCP listen  :%1").arg(c.port);  // server mode
   else
     head = QStringLiteral("%1  %2:%3")
-               .arg(netProtoText(c.netProto), c.address)
+               .arg(netProtoText(c.netProto),
+                    c.address.isEmpty() ? QStringLiteral("localhost")
+                                        : c.address)
                .arg(c.port);
-  QString s = QStringLiteral("%1   %2  [%3]")
-                  .arg(head, dataProtoText(c.dataProto), ioText(c.ioSelect));
+  // GPSD / Signal K imply their own wire protocol + input direction --
+  // repeating the data-protocol combo's text would mislead.
+  QString s = c.type == 0 && c.netProto >= 2
+                  ? QStringLiteral("%1  [In]").arg(head)
+                  : QStringLiteral("%1   %2  [%3]")
+                        .arg(head, dataProtoText(c.dataProto),
+                             ioText(c.ioSelect));
   if (!c.inFilter.isEmpty())
     s += QStringLiteral("  in:%1%2")
              .arg(c.inFilterType == 1 ? QStringLiteral("-") : QString())
@@ -190,6 +222,9 @@ QString ConnectionsViewModel::summaryOf(const Conn& c) {
 
 bool ConnectionsViewModel::validFor(const Conn& c) const {
   if (c.type == 1) return !c.serialPort.isEmpty();
+  // TCP with a blank address is server (listen) mode; GPSD defaults to
+  // localhost. UDP and Signal K need an explicit address.
+  if (c.netProto == 0 || c.netProto == 2) return c.port > 0;
   return !c.address.isEmpty() && c.port > 0;
 }
 
@@ -205,6 +240,7 @@ void ConnectionsViewModel::load() {
     c.type = o.value("type").toInt();
     c.netProto = o.value("netProto").toInt();
     c.address = o.value("address").toString();
+    c.authToken = o.value("authToken").toString();
     c.port = o.value("port").toInt();
     c.serialPort = o.value("serialPort").toString();
     c.baud = o.value("baud").toInt(4800);
@@ -229,6 +265,7 @@ void ConnectionsViewModel::save() const {
     o["type"] = c.type;
     o["netProto"] = c.netProto;
     o["address"] = c.address;
+    o["authToken"] = c.authToken;
     o["port"] = c.port;
     o["serialPort"] = c.serialPort;
     o["baud"] = c.baud;
@@ -337,9 +374,9 @@ void ConnectionsViewModel::apply(int index) {
   CommBridge::GetInstance();
 
   ConnectionParams params =
-      paramsFor(c.type, c.netProto, c.address, c.port, c.serialPort, c.baud,
-                c.dataProto, c.ioSelect, c.inFilterType, c.inFilter,
-                c.outFilterType, c.outFilter, c.comment);
+      paramsFor(c.type, c.netProto, c.address, c.authToken, c.port,
+                c.serialPort, c.baud, c.dataProto, c.ioSelect, c.inFilterType,
+                c.inFilter, c.outFilterType, c.outFilter, c.comment);
   qInfo("Connection: opening %s", qUtf8Printable(summaryOf(c)));
   MakeCommDriver(&params);  // creates + registers + starts (async, retries)
 }
@@ -351,16 +388,16 @@ void ConnectionsViewModel::disable(int index) {
   // deactivate it -- which erases the unique_ptr and tears down the transport
   // so the feed actually stops.
   const ConnectionParams params =
-      paramsFor(c.type, c.netProto, c.address, c.port, c.serialPort, c.baud,
-                c.dataProto, c.ioSelect, c.inFilterType, c.inFilter,
-                c.outFilterType, c.outFilter, c.comment);
+      paramsFor(c.type, c.netProto, c.address, c.authToken, c.port,
+                c.serialPort, c.baud, c.dataProto, c.ioSelect, c.inFilterType,
+                c.inFilter, c.outFilterType, c.outFilter, c.comment);
   // GetStrippedDSPort() is the comm registry's own iface-key type (std::string)
   // and FindDriver() takes it directly -- a model-API boundary. Hold the key as
   // a QString and convert inline only where the model call demands it.
   const QString iface = QString::fromStdString(params.GetStrippedDSPort());
   auto& reg = CommDriverRegistry::GetInstance();
-  DriverPtr& d =
-      FindDriver(reg.GetDrivers(), iface.toStdString(), busForProto(c.dataProto));
+  DriverPtr& d = FindDriver(reg.GetDrivers(), iface.toStdString(),
+                            busFor(c.type == 0 ? c.netProto : 0, c.dataProto));
   if (d) {
     qInfo("Connection: closing %s", qUtf8Printable(iface));
     reg.Deactivate(d);

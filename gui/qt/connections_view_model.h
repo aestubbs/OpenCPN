@@ -19,11 +19,10 @@
  *
  * Parity scope (P3 Connections editor, wx `ConnectionParams`): the editor
  * covers every transport/protocol the wx-free comm framework actually wires --
- * **Serial** (NMEA 0183 / NMEA 2000) and **Network** TCP/UDP (NMEA 0183 /
- * NMEA 2000) -- plus I/O direction, input/output sentence filters and a user
- * comment. GPSD / SignalK / SocketCAN / TCP-server are deliberately *not*
- * offered: `MakeCommDriver` parks them (no driver), so exposing them would be
- * inert. They return when the framework grows the transports.
+ * **Serial** (NMEA 0183 / NMEA 2000) and **Network** TCP / TCP-listen (blank
+ * address) / UDP (NMEA 0183 / NMEA 2000), **GPSD** and **Signal K** (P1.5c/k,
+ * 2026-06-12) -- plus I/O direction, input/output sentence filters and a user
+ * comment. SocketCAN stays unoffered until P1.5g wires its transport.
  *
  * The model-touching code lives in the .cpp so model/wx headers stay out of
  * this header.
@@ -54,7 +53,8 @@ public:
   /**
    * Add / replace a connection from a QML property map. Recognised keys (all
    * optional, defaulted): `type` (0 network, 1 serial), `netProto` (0 TCP,
-   * 1 UDP), `address`, `port`, `serialPort`, `baud`, `dataProto` (0 NMEA0183,
+   * 1 UDP, 2 GPSD, 3 Signal K), `address`, `authToken` (Signal K),
+   * `port`, `serialPort`, `baud`, `dataProto` (0 NMEA0183,
    * 1 NMEA2000), `ioSelect` (dsPortType: 0 input, 1 both, 2 output),
    * `inFilterType`/`outFilterType` (0 whitelist, 1 blacklist),
    * `inFilter`/`outFilter` (QStringList or comma/space-separated string),
@@ -86,8 +86,9 @@ Q_SIGNALS:
 private:
   struct Conn {
     int type = 0;       // 0 network, 1 serial
-    int netProto = 0;   // 0 TCP, 1 UDP
+    int netProto = 0;   // 0 TCP, 1 UDP, 2 GPSD, 3 Signal K
     QString address;
+    QString authToken;  // Signal K only
     int port = 0;
     QString serialPort;
     int baud = 4800;

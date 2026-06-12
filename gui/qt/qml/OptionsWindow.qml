@@ -1180,15 +1180,21 @@ Window {
                         if (typeBox.currentIndex === 1 && serialBox.currentIndex >= 0
                                 && serialPorts.length > serialBox.currentIndex)
                             sp = serialPorts[serialBox.currentIndex].port
+                        // GPSD / Signal K imply their wire protocol and are
+                        // input-only -- the hidden combos must not leak
+                        // stale values into the record.
+                        var special = typeBox.currentIndex === 0
+                                      && netProtoBox.currentIndex >= 2
                         return {
                             type: typeBox.currentIndex,
                             netProto: netProtoBox.currentIndex,
                             address: addrField.text,
+                            authToken: tokenField.text,
                             port: parseInt(portField.text) || 0,
                             serialPort: sp,
                             baud: parseInt(baudBox.currentText) || 4800,
-                            dataProto: dataProtoBox.currentIndex,
-                            ioSelect: ioBox.currentValue,
+                            dataProto: special ? 0 : dataProtoBox.currentIndex,
+                            ioSelect: special ? 0 : ioBox.currentValue,
                             inFilterType: inFilterTypeBox.currentIndex,
                             inFilter: inFilterField.text,
                             outFilterType: outFilterTypeBox.currentIndex,
@@ -1200,6 +1206,7 @@ Window {
                         typeBox.currentIndex = c.type || 0
                         netProtoBox.currentIndex = c.netProto || 0
                         addrField.text = c.address || ""
+                        tokenField.text = c.authToken || ""
                         portField.text = c.port ? String(c.port) : ""
                         var idx = 0
                         for (var i = 0; i < serialPorts.length; ++i)
@@ -1220,6 +1227,7 @@ Window {
                         typeBox.currentIndex = 0
                         netProtoBox.currentIndex = 0
                         addrField.text = ""
+                        tokenField.text = ""
                         portField.text = ""
                         serialBox.currentIndex = 0
                         var bi = baudBox.find("4800")
@@ -1321,7 +1329,7 @@ Window {
                             id: netProtoBox
                             visible: typeBox.currentIndex === 0
                             Layout.fillWidth: true
-                            model: ["TCP", "UDP"]
+                            model: ["TCP", "UDP", "GPSD", "Signal K"]
                         }
                         Label {
                             text: qsTr("Address / host:")
@@ -1332,7 +1340,14 @@ Window {
                             id: addrField
                             visible: typeBox.currentIndex === 0
                             Layout.fillWidth: true
-                            placeholderText: qsTr("e.g. 192.168.1.10 (TCP) or 0.0.0.0 (UDP listen)")
+                            placeholderText: {
+                                switch (netProtoBox.currentIndex) {
+                                case 1: return qsTr("e.g. 0.0.0.0 (listen) or a multicast group")
+                                case 2: return qsTr("blank = localhost (the gpsd host)")
+                                case 3: return qsTr("the Signal K server, e.g. 192.168.1.10")
+                                default: return qsTr("e.g. 192.168.1.10 — blank = accept incoming (listen)")
+                                }
+                            }
                             selectByMouse: true
                         }
                         Label {
@@ -1344,9 +1359,27 @@ Window {
                             id: portField
                             visible: typeBox.currentIndex === 0
                             Layout.fillWidth: true
-                            placeholderText: qsTr("e.g. 2000 / 60001")
+                            placeholderText: netProtoBox.currentIndex === 2
+                                ? qsTr("gpsd default 2947")
+                                : netProtoBox.currentIndex === 3
+                                  ? qsTr("Signal K default 3000")
+                                  : qsTr("e.g. 2000 / 60001")
                             inputMethodHints: Qt.ImhDigitsOnly
                             validator: IntValidator { bottom: 1; top: 65535 }
+                            selectByMouse: true
+                        }
+                        Label {
+                            text: qsTr("Auth token:")
+                            visible: typeBox.currentIndex === 0
+                                     && netProtoBox.currentIndex === 3
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        TextField {
+                            id: tokenField
+                            visible: typeBox.currentIndex === 0
+                                     && netProtoBox.currentIndex === 3
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("optional Signal K access token")
                             selectByMouse: true
                         }
 
@@ -1390,22 +1423,32 @@ Window {
                             }
                         }
 
-                        // --- Common rows ---
+                        // --- Common rows. GPSD / Signal K fix the wire
+                        // protocol and direction (input), and Signal K's
+                        // JSON stream has no NMEA sentences to filter. ---
                         Label {
                             text: qsTr("Data protocol:")
+                            visible: !(typeBox.currentIndex === 0
+                                       && netProtoBox.currentIndex >= 2)
                             Layout.alignment: Qt.AlignRight
                         }
                         ComboBox {
                             id: dataProtoBox
+                            visible: !(typeBox.currentIndex === 0
+                                       && netProtoBox.currentIndex >= 2)
                             Layout.fillWidth: true
                             model: ["NMEA 0183", "NMEA 2000"]
                         }
                         Label {
                             text: qsTr("Direction:")
+                            visible: !(typeBox.currentIndex === 0
+                                       && netProtoBox.currentIndex >= 2)
                             Layout.alignment: Qt.AlignRight
                         }
                         ComboBox {
                             id: ioBox
+                            visible: !(typeBox.currentIndex === 0
+                                       && netProtoBox.currentIndex >= 2)
                             Layout.fillWidth: true
                             textRole: "text"
                             valueRole: "value"
@@ -1415,9 +1458,13 @@ Window {
                         }
                         Label {
                             text: qsTr("Input filter:")
+                            visible: !(typeBox.currentIndex === 0
+                                       && netProtoBox.currentIndex === 3)
                             Layout.alignment: Qt.AlignRight
                         }
                         RowLayout {
+                            visible: !(typeBox.currentIndex === 0
+                                       && netProtoBox.currentIndex === 3)
                             Layout.fillWidth: true
                             spacing: 6
                             ComboBox {
@@ -1434,9 +1481,13 @@ Window {
                         }
                         Label {
                             text: qsTr("Output filter:")
+                            visible: !(typeBox.currentIndex === 0
+                                       && netProtoBox.currentIndex >= 2)
                             Layout.alignment: Qt.AlignRight
                         }
                         RowLayout {
+                            visible: !(typeBox.currentIndex === 0
+                                       && netProtoBox.currentIndex >= 2)
                             Layout.fillWidth: true
                             spacing: 6
                             ComboBox {
@@ -1469,7 +1520,11 @@ Window {
                                 text: connTab.editIndex >= 0 ? qsTr("Save") : qsTr("Add")
                                 enabled: typeBox.currentIndex === 1
                                     ? connTab.serialPorts.length > 0
-                                    : (addrField.text.length > 0 && portField.text.length > 0)
+                                    : (portField.text.length > 0
+                                       && (addrField.text.length > 0
+                                           // TCP listen + GPSD default host
+                                           || netProtoBox.currentIndex === 0
+                                           || netProtoBox.currentIndex === 2))
                                 onClicked: {
                                     if (connTab.editIndex >= 0)
                                         chart.connections.updateConnection(
@@ -1487,7 +1542,7 @@ Window {
                         }
                     }
                     Label {
-                        text: qsTr("Enabling a connection opens the transport and switches to live data. Serial and TCP/UDP (NMEA 0183 / NMEA 2000) are supported.")
+                        text: qsTr("Enabling a connection opens the transport and switches to live data. Serial and TCP/UDP carry NMEA 0183 / NMEA 2000; a blank TCP address accepts incoming feeders; GPSD and Signal K connect to their servers.")
                         wrapMode: Text.Wrap; Layout.fillWidth: true
                         color: palette.placeholderText; font.pointSize: 11
                     }
