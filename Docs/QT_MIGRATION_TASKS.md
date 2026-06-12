@@ -2311,9 +2311,14 @@ existing `followOwnShip` property before adding).
       overlay wash both colour through it; barbs are the exact wx
       LineBuffer shapes — 14 speed buckets, calm circle, centred 26 px
       staff, integer petite/grande/pennant geometry, southern-
-      hemisphere mirroring, 50 px wx spacing. Remaining refinements vs
-      wx: CursorData.cpp formatting port, fixed/minimum-spacing
-      options, isotachs/isotherms beyond isobars, gust-as-barbs
+      hemisphere mirroring, 50 px wx spacing. ~~CursorData.cpp
+      formatting port~~ **DONE (2026-06-12):** the cursor panel samples
+      the time-interpolated records and carries the full wx tracking
+      set (wind speed+bf+dir at altitude, gust, pressure, waves
+      h-period-dir, current flow-dir, rain/cloud/temps/CAPE/refl/
+      humidity, geopotential altitude aloft) at wx precisions through
+      the units engine. Remaining refinements vs wx: fixed/minimum-
+      spacing options, isotachs/isotherms beyond isobars, gust-as-barbs
       variant, multi-file layering. Functional end-state reached —
       verify against real forecasts and refine.
 - [~] **P4.7** o-charts SHOP plugin — **v1 landed (2026-06-11),
