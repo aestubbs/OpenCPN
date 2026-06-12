@@ -1338,7 +1338,12 @@ direction: all six are wanted eventually.**
       1,339 images → 1 page / 1,276 → 2 pages (~1,300 GPU textures per
       dense cell → 1–2). Verified visually via the new
       `OCPN_QT_GRAB=<png>[:delay]` window-grab hook (passive,
-      window-only — the headless verify loop's eyes).
+      window-only — the headless verify loop's eyes). **Regression
+      found by the user same-day and FIXED:** the atlas blit used the
+      drawImage POINT overload, which honours the labels'
+      devicePixelRatio — every billboarded label rendered at HALF size
+      (gotcha: explicit target rect required when packing DPR-tagged
+      images by device-pixel coordinates).
 - [x] **PERF-5** ~~Dirty-flag split~~ — **CLOSED OBSOLETE by
       measurement (2026-06-12).** With PERF-3/4 landed, the new
       OCPN_QT_PAN_TEST exerciser + QSG_RENDER_TIMING shows a steady pan
