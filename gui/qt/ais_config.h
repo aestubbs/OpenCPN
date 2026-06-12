@@ -87,6 +87,15 @@ class AisConfig : public QObject {
   Q_PROPERTY(bool cpaAlert READ cpaAlert WRITE setCpaAlert NOTIFY changed)
   Q_PROPERTY(bool cpaAlertSound READ cpaAlertSound WRITE setCpaAlertSound
                  NOTIFY changed)
+  // wx menu parity (P3.23): master AIS visibility, the moored filter
+  // (g_bHideMoored; threshold = suppressAnchoredSpeedMax) and target
+  // tracks (g_bAISShowTracks).
+  Q_PROPERTY(bool showTargets READ showTargets WRITE setShowTargets NOTIFY
+                 changed)
+  Q_PROPERTY(
+      bool hideMoored READ hideMoored WRITE setHideMoored NOTIFY changed)
+  Q_PROPERTY(bool showTargetTracks READ showTargetTracks WRITE
+                 setShowTargetTracks NOTIFY changed)
   Q_PROPERTY(bool suppressMooredAlerts READ suppressMooredAlerts WRITE
                  setSuppressMooredAlerts NOTIFY changed)
   Q_PROPERTY(double ackTimeoutMin READ ackTimeoutMin WRITE setAckTimeoutMin
@@ -146,6 +155,12 @@ public:
   void setCpaAlert(bool v);
   bool cpaAlertSound() const { return m_cpa_alert_sound; }
   void setCpaAlertSound(bool v);
+  bool showTargets() const { return m_show_targets; }
+  void setShowTargets(bool v);
+  bool hideMoored() const { return m_hide_moored; }
+  void setHideMoored(bool v);
+  bool showTargetTracks() const { return m_show_target_tracks; }
+  void setShowTargetTracks(bool v);
   bool suppressMooredAlerts() const { return m_suppress_moored; }
   void setSuppressMooredAlerts(bool v);
   double ackTimeoutMin() const { return m_ack_timeout; }
@@ -189,6 +204,9 @@ private:
 
   bool m_cpa_alert = true;
   bool m_cpa_alert_sound = false;
+  bool m_show_targets = true;
+  bool m_hide_moored = false;
+  bool m_show_target_tracks = true;
   bool m_suppress_moored = true;
   double m_ack_timeout = 10.0;
 };

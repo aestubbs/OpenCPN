@@ -48,6 +48,10 @@ AisConfig::AisConfig() {
   m_rollover_cpatcpa = c.getBool("ais/rolloverCpaTcpa", m_rollover_cpatcpa);
   m_cpa_alert = c.getBool("ais/cpaAlert", m_cpa_alert);
   m_cpa_alert_sound = c.getBool("ais/cpaAlertSound", m_cpa_alert_sound);
+  m_show_targets = c.getBool("ais/showTargets", m_show_targets);
+  m_hide_moored = c.getBool("ais/hideMoored", m_hide_moored);
+  m_show_target_tracks =
+      c.getBool("ais/showTargetTracks", m_show_target_tracks);
   m_suppress_moored = c.getBool("ais/suppressMoored", m_suppress_moored);
   m_ack_timeout = c.getDouble("ais/ackTimeout", m_ack_timeout);
 }
@@ -125,6 +129,18 @@ void AisConfig::setCpaAlertSound(bool v) {
 }
 void AisConfig::setSuppressMooredAlerts(bool v) {
   OCPN_AIS_SET(m_suppress_moored, v, "ais/suppressMoored", setBool)
+}
+
+void AisConfig::setShowTargets(bool v) {
+  OCPN_AIS_SET(m_show_targets, v, "ais/showTargets", setBool)
+}
+
+void AisConfig::setHideMoored(bool v) {
+  OCPN_AIS_SET(m_hide_moored, v, "ais/hideMoored", setBool)
+}
+
+void AisConfig::setShowTargetTracks(bool v) {
+  OCPN_AIS_SET(m_show_target_tracks, v, "ais/showTargetTracks", setBool)
 }
 void AisConfig::setAckTimeoutMin(double v) {
   OCPN_AIS_SET(m_ack_timeout, v, "ais/ackTimeout", setDouble)

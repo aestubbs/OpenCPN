@@ -15,9 +15,8 @@ import opencpn.qt
 // Qt.labs.platform renders the NATIVE menu bar (the macOS global bar),
 // matching the wx app's Navigate / View / AIS / Tools / Help tree. Items
 // bind two-way onto the same seams the toolbars and Options dialog use.
-// wx items without a Qt seam yet are omitted (quilting is always-on by
-// design; larger/smaller-scale chart, ENC anchoring info, and the AIS
-// target/moored/track toggles pend their seams -- tracked in P3.23).
+// The one omitted wx item is the quilting toggle: the Qt provider is
+// always-quilted by design.
 Platform.MenuBar {
     id: menuBar
 
@@ -79,6 +78,17 @@ Platform.MenuBar {
             shortcut: "Alt+-"
             onTriggered: menuBar.chart.zoomOut()
         }
+        Platform.MenuSeparator { }
+        Platform.MenuItem {
+            text: qsTr("Larger Scale Chart")
+            shortcut: "Ctrl+Left"
+            onTriggered: menuBar.chart.scaleChartStep(1)
+        }
+        Platform.MenuItem {
+            text: qsTr("Smaller Scale Chart")
+            shortcut: "Ctrl+Right"
+            onTriggered: menuBar.chart.scaleChartStep(-1)
+        }
     }
 
     Platform.Menu {
@@ -118,6 +128,13 @@ Platform.MenuBar {
             checkable: true
             checked: menuBar.chart ? menuBar.chart.showSoundings : false
             onTriggered: menuBar.chart.showSoundings = checked
+        }
+        Platform.MenuItem {
+            text: qsTr("Show ENC Anchoring Info")
+            shortcut: "Alt+A"
+            checkable: true
+            checked: menuBar.chart ? menuBar.chart.showEncAnchoring : true
+            onTriggered: menuBar.chart.showEncAnchoring = checked
         }
         Platform.MenuItem {
             text: qsTr("Show ENC Data Quality")
@@ -162,6 +179,25 @@ Platform.MenuBar {
 
     Platform.Menu {
         title: qsTr("&AIS")
+        Platform.MenuItem {
+            text: qsTr("Show AIS Targets")
+            checkable: true
+            checked: AisConfig.showTargets
+            onTriggered: AisConfig.showTargets = checked
+        }
+        Platform.MenuItem {
+            text: qsTr("Hide Moored AIS Targets")
+            checkable: true
+            checked: AisConfig.hideMoored
+            onTriggered: AisConfig.hideMoored = checked
+        }
+        Platform.MenuItem {
+            text: qsTr("Show AIS Target Tracks")
+            checkable: true
+            checked: AisConfig.showTargetTracks
+            onTriggered: AisConfig.showTargetTracks = checked
+        }
+        Platform.MenuSeparator { }
         Platform.MenuItem {
             text: qsTr("Show CPA Alert Dialogs")
             checkable: true

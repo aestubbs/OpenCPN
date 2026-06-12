@@ -185,6 +185,8 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_hidden_classes = m_layer_config->value("display/hiddenClasses")
                          .toString()
                          .split(',', Qt::SkipEmptyParts);
+  m_show_enc_anchoring =
+      m_layer_config->value("display/showEncAnchoring", true).toBool();
   // Per-MMSI AIS handling (P3.6): populate the decoder's properties array
   // from the persisted set before any AIS traffic arrives.
   loadMmsiProperties();
@@ -2360,6 +2362,58 @@ void ChartCanvas::setDisplayCategory(int cat) {
     if (it.value().provider) it.value().provider->setDisplayCategory(cat);
   if (m_layer_config) m_layer_config->setValue("display/category", cat);
   Q_EMIT displayCategoryChanged();
+  update();
+}
+
+// The wx SetAnchorOn category set (s52plib.cpp:11270).
+static const char* kAnchorClasses[] = {"ACHBRT", "ACHARE", "CBLSUB",
+                                       "PIPARE", "PIPSOL", "TUNNEL",
+                                       "SBDARE"};
+
+void ChartCanvas::setShowEncAnchoring(bool on) {
+  if (on == m_show_enc_anchoring) return;
+  m_show_enc_anchoring = on;
+  QStringList classes = m_hidden_classes;
+  for (const char* c : kAnchorClasses) {
+    if (on)
+      classes.removeAll(QLatin1String(c));
+    else if (!classes.contains(QLatin1String(c)))
+      classes.append(QLatin1String(c));
+  }
+  if (m_layer_config)
+    m_layer_config->setValue("display/showEncAnchoring", on);
+  setHiddenObjectClasses(classes);  // re-renders + notifies
+}
+
+void ChartCanvas::scaleChartStep(int dir) {
+  if (!m_viewport || dir == 0) return;
+  const double clat = m_viewport->centerLat();
+  const double clon = m_viewport->centerLon();
+  const double curN = displayScaleN(m_viewport->scale(), clat);
+  // Distinct native scales of catalogued cells charting the view centre.
+  QList<int> scales;
+  for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
+    const CellExtent& c = it.value();
+    if (c.nativeScale > 0 && c.navFeatures > 0 && c.covers(clat, clon) &&
+        !scales.contains(c.nativeScale))
+      scales.append(c.nativeScale);
+  }
+  if (scales.isEmpty()) return;
+  std::sort(scales.begin(), scales.end());
+  int target = 0;
+  if (dir > 0) {  // larger scale = finer = smaller 1:N
+    for (int i = scales.size() - 1; i >= 0; --i)
+      if (scales[i] < curN * 0.9) { target = scales[i]; break; }
+  } else {  // smaller scale = coarser = bigger 1:N
+    for (int i = 0; i < scales.size(); ++i)
+      if (scales[i] > curN * 1.1) { target = scales[i]; break; }
+  }
+  if (target <= 0) return;
+  // Same autoscale math as selectChart (scale = K*cos(lat)/N).
+  constexpr double kK = 111320.0 * 3.78 * 1000.0;
+  const double cl = std::max(0.05, std::cos(clat * M_PI / 180.0));
+  m_viewport->setScale(kK * cl / target);
+  Q_EMIT viewChanged();
   update();
 }
 

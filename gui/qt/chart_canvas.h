@@ -113,6 +113,10 @@ class ChartCanvas : public QQuickItem {
   // Standard) -- the wx "User Standard Objects" per-class filter (P3.6).
   Q_PROPERTY(QStringList hiddenObjectClasses READ hiddenObjectClasses
                  WRITE setHiddenObjectClasses NOTIFY hiddenObjectClassesChanged)
+  // wx menu parity (ID_MENU_ENC_ANCHOR): show/hide the anchoring-info
+  // classes (the wx SetAnchorOn set) on top of the user's own hidden set.
+  Q_PROPERTY(bool showEncAnchoring READ showEncAnchoring WRITE
+                 setShowEncAnchoring NOTIFY hiddenObjectClassesChanged)
 
   // S-52 viewing-group toggles (soundings, text). Bound from QML controls;
   // forwarded to every loaded vector provider as a post-decode filter.
@@ -362,6 +366,11 @@ public:
 
   // --- "User Standard Objects" per-class filter (P3.6) ---
   QStringList hiddenObjectClasses() const { return m_hidden_classes; }
+  bool showEncAnchoring() const { return m_show_enc_anchoring; }
+  void setShowEncAnchoring(bool on);
+  /** wx menu parity (ID_MENU_SCALE_IN/OUT): jump the view to the next
+   *  finer (+1) / coarser (-1) chart scale available at the centre. */
+  Q_INVOKABLE void scaleChartStep(int dir);
   void setHiddenObjectClasses(const QStringList& classes);
   // The full S-57 class catalogue for the checklist UI: a list of
   // {acronym, description} maps, sorted by acronym.
@@ -819,6 +828,7 @@ private:
   bool m_route_build_mode = false;
   bool m_route_edit_mode = false;  // selected route is editable (P3.7)
   QStringList m_hidden_classes;    // Mariner's Standard hidden classes (P3.6)
+  bool m_show_enc_anchoring = true;
   QSet<QString> m_visible_routes;  // route GUIDs with the visibility eye on
   int m_route_vis_rev = 0;         // bumps on any eye change (QML re-eval)
   bool m_track_recording = false;

@@ -272,8 +272,20 @@ QSGNode* AisLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* window) {
   const bool scale_changed = (currentScale() != m_built_scale);
   m_built_scale = currentScale();
 
-  const QList<AisTarget> targets =
+  QList<AisTarget> targets =
       provider() ? provider()->aisTargets() : QList<AisTarget>();
+
+  // wx menu parity: master visibility and the moored filter. A filtered
+  // target simply never lands in `seen`, so the drop pass below removes
+  // its node (and its trail ages out with it).
+  const AisConfig& acfg = AisConfig::instance();
+  if (!acfg.showTargets()) targets.clear();
+  if (acfg.hideMoored()) {
+    const double kts = acfg.suppressAnchoredSpeedMax();
+    targets.removeIf([kts](const AisTarget& t) {
+      return t.sog >= 0.0 && t.sog <= kts;
+    });
+  }
 
   QSet<int> seen;
   seen.reserve(targets.size());
@@ -299,7 +311,17 @@ QSGNode* AisLayer::updateSubtree(QSGNode* /*old*/, QQuickWindow* window) {
     it = m_nodes.erase(it);
   }
 
-  updateTrails(targets, QDateTime::currentMSecsSinceEpoch());
+  if (acfg.showTargetTracks()) {
+    updateTrails(targets, QDateTime::currentMSecsSinceEpoch());
+  } else if (!m_trails.isEmpty()) {
+    for (auto it = m_trails.begin(); it != m_trails.end(); ++it) {
+      if (it.value().node) {
+        m_root->removeChildNode(it.value().node);
+        delete it.value().node;
+      }
+    }
+    m_trails.clear();
+  }
   return m_root;
 }
 
