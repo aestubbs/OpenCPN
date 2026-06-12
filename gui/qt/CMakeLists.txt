@@ -37,6 +37,7 @@ qt_add_qml_module(opencpn-qt
   URI opencpn.qt
   VERSION 1.0
   QML_FILES
+    qml/AppMenuBar.qml
     qml/Main.qml
     qml/FloatToolbar.qml
     qml/MuiBar.qml

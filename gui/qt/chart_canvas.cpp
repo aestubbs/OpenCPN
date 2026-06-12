@@ -2104,6 +2104,45 @@ void ChartCanvas::dropMarkHere(const QString& name, const QString& comment,
   update();
 }
 
+// Instant menu-driven drops (wx parity): default icon, dated name; the
+// mark dialog renames/re-icons afterwards if wanted.
+static QString datedMarkName() {
+  return QDateTime::currentDateTime().toString(
+      QStringLiteral("MMddhhmmss"));
+}
+
+void ChartCanvas::dropMarkAtCursor() {
+  if (!m_nav_provider) return;
+  const QString guid =
+      m_nav_provider->dropMark(m_cursor_pos_lat, m_cursor_pos_lon,
+                               datedMarkName(), QString(),
+                               QStringLiteral("circle"));
+  if (!guid.isEmpty()) {
+    UndoOp op;
+    op.created = true;
+    op.guid = guid;
+    op.snap = snapshotMark(guid);
+    pushUndo(op);
+  }
+  update();
+}
+
+void ChartCanvas::dropMarkAtBoat() {
+  if (!m_nav_provider) return;
+  const OwnShipState s = m_nav_provider->ownShip();
+  if (!s.valid) return;
+  const QString guid = m_nav_provider->dropMark(
+      s.lat, s.lon, datedMarkName(), QString(), QStringLiteral("circle"));
+  if (!guid.isEmpty()) {
+    UndoOp op;
+    op.created = true;
+    op.guid = guid;
+    op.snap = snapshotMark(guid);
+    pushUndo(op);
+  }
+  update();
+}
+
 void ChartCanvas::dropMob() {
   if (!m_nav_provider) return;
   // Drop the MOB mark at the live own-ship fix; fall back to the view centre

@@ -191,6 +191,19 @@ ApplicationWindow {
     //     stream with pause + per-source filter.
     DataMonitorWindow { id: dataMonitorWindow }
 
+    // --- Application menu bar (P3.23, wx RegisterGlobalMenuItems parity):
+    //     the NATIVE macOS/global menu, bound to the same seams as the
+    //     toolbars and Options.
+    AppMenuBar {
+        chart: root.activeChart
+        rootWindow: root
+        optionsWin: optionsWindow
+        aisTargetList: aisTargetListWindow
+        dataMonitor: dataMonitorWindow
+        aboutWin: aboutWindow
+        drawerRef: routeDrawer
+    }
+
     // --- Central: world-anchored + display-anchored scene-graph subtrees,
     //     both inside the ChartCanvas QQuickItem.
     // P6.1 focused-canvas: which pane toolbar/zoom actions act on. Follows

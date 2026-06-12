@@ -460,6 +460,10 @@ public:
   // the dialog can show it.
   Q_INVOKABLE void dropMarkHere(const QString& name, const QString& comment,
                                 const QString& icon);
+  /** wx menu parity (ID_MENU_MARK_CURSOR / ID_MENU_MARK_BOAT): instant
+   *  drops with a dated default name -- no dialog; edit to rename. */
+  Q_INVOKABLE void dropMarkAtCursor();
+  Q_INVOKABLE void dropMarkAtBoat();
   /** Auto-anchor mark (wx parity): drop an anchor-icon mark at the given
    *  position, named by drop time. Used when the anchor watch is set. */
   Q_INVOKABLE void dropAnchorMark(double lat, double lon);
