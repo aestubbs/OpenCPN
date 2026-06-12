@@ -1005,7 +1005,7 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
         `m_lsindex` edge list, so the boundary comes from the `OGRPolygon`
         rings — `getExteriorRing` + `getInteriorRing(k)` (geographic lon/lat)
         → `RenderLineToSG`. Verified rendering at Santa Barbara US5.
-- [~] **P2.16** Wire the **built-but-inert chart-dialog vector options** to the
+- [x] **P2.16** Wire the **built-but-inert chart-dialog vector options** to the
       renderer + **de-duplicate the dialog vs wx**. **Mostly done 2026-05-30.**
       First pass set the s52plib flags via `applyDisplaySettings` but they had
       **no visible effect** — the *scene-graph emit path never consulted them*
@@ -1042,7 +1042,9 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
         (Qt-specific)" sub-heading. Build: `opencpn-qt` links clean, 0 errors.
       The 3 *new* display controls once bundled here are split to **P2.20**
       (Show Grid + Show Depth Units — new render paths; Smooth Pan/Zoom N/A).
-      Remaining for [x]: P2.23 (declutter + super-SCAMIN). *(was: severity high)*
+      ~~Remaining for [x]: P2.23 (declutter + super-SCAMIN)~~ — both landed
+      (P2.23a 2026-05-31, P2.23b 2026-05-31); closed in the 2026-06-12
+      tracker audit. *(was: severity high)*
 - [x] **P2.17** **M_COVR polygon render clip** — **implemented
       (2026-06-10):** the per-cell `QSGClipNode` geometry is now the
       tessellated M_COVR coverage union (libtess2, NONZERO winding —
