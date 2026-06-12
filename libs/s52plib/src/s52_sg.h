@@ -34,6 +34,48 @@
 #ifndef _S52_SG_H_
 #define _S52_SG_H_
 
+// X11 macro hygiene (GTK/Linux): s52plib TUs often include GL headers
+// (which drag in X11/Xlib.h) before this one, and Xlib's object-like
+// macros break the Qt headers below (qdatastream's Status guard,
+// qnamespace enumerators). Scrub them here so EVERY consumer compiles
+// regardless of include order; nothing in s52plib uses these macros.
+#ifdef Status
+#undef Status
+#endif
+#ifdef Bool
+#undef Bool
+#endif
+#ifdef None
+#undef None
+#endif
+#ifdef CursorShape
+#undef CursorShape
+#endif
+#ifdef KeyPress
+#undef KeyPress
+#endif
+#ifdef KeyRelease
+#undef KeyRelease
+#endif
+#ifdef FocusIn
+#undef FocusIn
+#endif
+#ifdef FocusOut
+#undef FocusOut
+#endif
+#ifdef FontChange
+#undef FontChange
+#endif
+#ifdef Expose
+#undef Expose
+#endif
+#ifdef Unsorted
+#undef Unsorted
+#endif
+#ifdef GrayScale
+#undef GrayScale
+#endif
+
 #include <QColor>
 #include <QHash>
 #include <QImage>
