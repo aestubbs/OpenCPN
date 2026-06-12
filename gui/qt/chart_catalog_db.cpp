@@ -93,10 +93,14 @@ bool ChartCatalogCache::get(const QString& path, qint64 mtime,
     // A NULL coverage column is a pre-coverage row: treat it as a miss so the
     // caller re-scans the cell and back-fills its M_COVR polygons (without
     // them the quilt falls back to the bbox -- the cause of fine cells blanking
-    // out the rest of their bounding box).
+    // out the rest of their bounding box). An EMPTY coverage blob is treated
+    // the same: OSENC scans predating the CELL_COVR_RECORD parser stored
+    // empty lists, and a rescan back-fills them (a genuinely coverage-less
+    // cell just rescans -- the header-only scan is cheap).
     if (sqlite3_step(st) == SQLITE_ROW &&
         sqlite3_column_int64(st, 0) == mtime &&
-        sqlite3_column_type(st, 9) != SQLITE_NULL) {
+        sqlite3_column_type(st, 9) != SQLITE_NULL &&
+        sqlite3_column_bytes(st, 9) > 8) {
       out.path = path;
       out.name = QString::fromUtf8(
           reinterpret_cast<const char*>(sqlite3_column_text(st, 1)));

@@ -66,6 +66,8 @@ bool scanOsencHeader(QIODevice& in, OsencHeader& out) {
     // numeric threshold, since CELL_EXTENT_RECORD (100) / coverage (98,99) sit
     // before the features yet have higher type codes than FEATURE_ID (64).
     if (type == FEATURE_ID_RECORD) break;
+    if (qEnvironmentVariableIsSet("OCPN_OSENC_COV_DEBUG"))
+      qWarning("osenc-hdr: type=%u len=%u", type, length);
 
     QByteArray payload;
     if (plen) {
@@ -85,6 +87,30 @@ bool scanOsencHeader(QIODevice& in, OsencHeader& out) {
       case HEADER_CELL_NATIVESCALE:
         if (plen >= 4)
           out.nativeScale = static_cast<int>(le32(payload.constData()));
+        break;
+      case CELL_COVR_RECORD:
+        // uint32 point_count + point_count * (lat, lon) float pairs (the
+        // wx COVR-table convention; see o_senc.cpp CELL_COVR_RECORD).
+        if (plen >= 4) {
+          const uint32_t npts = le32(payload.constData());
+          if (npts >= 3 && plen >= 4 + npts * 2 * sizeof(float)) {
+            QPolygonF poly;
+            poly.reserve(static_cast<int>(npts));
+            const char* fp = payload.constData() + 4;
+            for (uint32_t i = 0; i < npts; ++i) {
+              float latf, lonf;
+              std::memcpy(&latf, fp + (i * 2 + 0) * sizeof(float),
+                          sizeof(float));
+              std::memcpy(&lonf, fp + (i * 2 + 1) * sizeof(float),
+                          sizeof(float));
+              poly << QPointF(lonf, latf);  // (lon, lat)
+            }
+            out.coverage.append(poly);
+            if (qEnvironmentVariableIsSet("OCPN_OSENC_COV_DEBUG"))
+              qWarning("osenc-hdr: COVR %u pts, first=(lat %.4f, lon %.4f)",
+                       npts, poly.first().y(), poly.first().x());
+          }
+        }
         break;
       case CELL_EXTENT_RECORD:
         if (plen >= 8 * sizeof(double)) {

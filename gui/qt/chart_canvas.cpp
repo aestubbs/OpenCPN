@@ -1056,11 +1056,19 @@ void ChartCanvas::updateVisibleCells() {
   // tiers coarser; ENC cells are unaffected.
   const double cm93_bias =
       std::pow(3.0, ChartConfig::instance().cm93Detail() / 2.5);
+  // Underzoom admit (wx Quilt parity): a cell joins the quilt while the
+  // display is no more than ~4x coarser than its native scale -- wx shows
+  // a 1:45k island chart at a 1:170k view and lets SCAMIN/declutter thin
+  // it. The OVERZOOM factor k is a different knob (how far past native
+  // you may zoom IN before the hatch) and stays out of this bound; tying
+  // them left islands rendering only overview shapes until the view was
+  // nearly at chart scale.
+  constexpr double kUnderzoomAdmit = 4.0;
   const auto eligible = [&](const CellExtent* c) {
     if (c->nativeScale <= 0) return false;
     const bool is_cm93 = c->name.startsWith(QLatin1String("CM93-"));
     const double eff = c->nativeScale * (is_cm93 ? cm93_bias : 1.0);
-    return displayN <= eff * k;
+    return displayN <= eff * kUnderzoomAdmit;
   };
 
   // Candidates finest -> coarsest.

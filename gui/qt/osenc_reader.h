@@ -35,6 +35,8 @@
 #include <cstdint>
 
 #include <QByteArray>
+#include <QList>
+#include <QPolygonF>
 #include <QString>
 
 class QIODevice;
@@ -73,6 +75,11 @@ struct OsencHeader {
   // Cell extent (degrees). north/south/east/west.
   double north = 0.0, south = 0.0, east = 0.0, west = 0.0;
   bool hasExtent = false;
+  // Data-coverage polygons (CELL_COVR_RECORD), in (lon, lat) -- the
+  // CellExtent.coverage convention. A cell's bbox is often much larger
+  // than its charted area; without these the quilt over-claims the bbox
+  // and blanks the rest of it (no chart selected underneath).
+  QList<QPolygonF> coverage;
 };
 
 /**

@@ -62,6 +62,9 @@ CellExtent extentFromOsenc(const OsencHeader& h, const QString& path) {
   ce.nativeScale = h.nativeScale;
   ce.band = CellExtent::bandFromName(ce.name);
   ce.navFeatures = 1;  // OSENC headers don't carry a feature count; include it
+  // M_COVR coverage: the quilt selects -- and P2.17 clips -- against the
+  // cell's TRUE charted area instead of its (often far larger) bbox.
+  ce.coverage = h.coverage;
   return ce;
 }
 }  // namespace
