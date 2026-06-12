@@ -63,6 +63,11 @@ public:
   int compare(const QSGMaterial* other) const override;
 
   QColor color = QColor(0, 0, 0);
+  // compare() runs O(n^2)-ish inside prepareAlphaBatches with thousands
+  // of chart-line elements (the measured pan hitch); it reads this
+  // cached key, NOT QColor::rgba() (which alone was ~half the cost).
+  // Keep it in sync when setting `color`.
+  QRgb rgbaKey = 0xff000000;
   float widthPx = 1.0f;     // logical px
   float dashOnPx = 0.0f;    // 0 -> solid
   float dashOffPx = 0.0f;

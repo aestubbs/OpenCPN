@@ -1197,8 +1197,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
         lminx = std::min(lminx, wx); lmaxx = std::max(lmaxx, wx);
         lminy = std::min(lminy, wy); lmaxy = std::max(lmaxy, wy);
       }
-      QSGNode* parent = tileParent(lineTiles, lineUnderlay, lineGrid, lminx,
-                                   lminy, lmaxx, lmaxy);
+      // Lines deliberately SKIP the cull tiles: thin lines cost almost
+      // no fill-rate off-screen, and a constant parent lets the PERF-3
+      // run-merge collapse a cell's lines to ~one node per style --
+      // prepareAlphaBatches scans alpha elements quasi-quadratically
+      // (the measured pan hitch), so alpha-element COUNT is what hurts.
+      QSGNode* parent = lineUnderlay;
+      Q_UNUSED(lineTiles);
+      Q_UNUSED(lineGrid);
       if (lr.parent != parent || lr.scamin != prim.scamin ||
           lr.rgba != prim.color.rgba() || lr.widthPx != widthPx ||
           lr.dashOn != dashOn || lr.dashOff != dashOff)

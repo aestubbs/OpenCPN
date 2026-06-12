@@ -134,8 +134,7 @@ QSGMaterialShader* AaLineMaterial::createShader(
 
 int AaLineMaterial::compare(const QSGMaterial* other) const {
   const auto* o = static_cast<const AaLineMaterial*>(other);
-  if (color.rgba() != o->color.rgba())
-    return color.rgba() < o->color.rgba() ? -1 : 1;
+  if (rgbaKey != o->rgbaKey) return rgbaKey < o->rgbaKey ? -1 : 1;
   if (widthPx != o->widthPx) return widthPx < o->widthPx ? -1 : 1;
   if (dashOnPx != o->dashOnPx) return dashOnPx < o->dashOnPx ? -1 : 1;
   if (dashOffPx != o->dashOffPx) return dashOffPx < o->dashOffPx ? -1 : 1;
@@ -207,6 +206,7 @@ QSGGeometryNode* finishAaNode(QSGGeometry* geo, const QColor& color,
                               float dash_off_px, float pencil) {
   auto* mat = new AaLineMaterial();
   mat->color = color;
+  mat->rgbaKey = color.rgba();
   mat->widthPx = width_px;
   mat->dashOnPx = dash_on_px;
   mat->dashOffPx = dash_off_px;
