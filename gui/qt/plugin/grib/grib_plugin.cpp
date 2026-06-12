@@ -166,16 +166,18 @@ void GribContext::openFile(const QUrl& url) {
     m_steps.append(QDateTime::fromSecsSinceEpoch(t)
                        .toString(QStringLiteral("ddd dd MMM hh:mm")));
   }
-  for (int i = 0; i < m_step_times.size(); ++i) {
-    GribRecord* r = m_reader->getGribRecord(
-        GRB_WIND_VX, LV_ABOV_GND, 10,
-        static_cast<time_t>(m_step_times[i]));
-    qWarning("grib: step %d (%s) u[0]=%s lon0=%.1f", i,
-             qPrintable(m_steps[i]),
-             r && r->isOk() ? qPrintable(QString::number(r->getValue(0, 0), 'f', 2))
-                            : "n/a",
-             r && r->isOk() ? r->getX(0) : 0.0);
-  }
+  if (qEnvironmentVariableIsSet("OCPN_GRIB_SELFTEST"))
+    for (int i = 0; i < m_step_times.size(); ++i) {
+      GribRecord* r = m_reader->getGribRecord(
+          GRB_WIND_VX, LV_ABOV_GND, 10,
+          static_cast<time_t>(m_step_times[i]));
+      qWarning("grib: step %d (%s) u[0]=%s lon0=%.1f", i,
+               qPrintable(m_steps[i]),
+               r && r->isOk()
+                   ? qPrintable(QString::number(r->getValue(0, 0), 'f', 2))
+                   : "n/a",
+               r && r->isOk() ? r->getX(0) : 0.0);
+    }
   if (qEnvironmentVariableIsSet("OCPN_GRIB_SELFTEST") && m_timeline &&
       m_step_times.size() >= 2) {
     // Drive the REAL timeline (the same path a user scrub takes)
@@ -973,12 +975,14 @@ void GribContext::pushToLayer() {
                                    : NAN;
     }
   }
-  {
+  // Self-test fingerprint: the interpolated grid's mean U proves each
+  // timeline move pushes genuinely different data (the scrub-saga proof).
+  if (qEnvironmentVariableIsSet("OCPN_GRIB_SELFTEST")) {
     double sum = 0;
     int n = 0;
     for (float u : g.u)
       if (!std::isnan(u)) { sum += u; ++n; }
-    qWarning("grib: PUSH epoch=%lld lon0=%.1f meanU=%.3f n=%d", 
+    qWarning("grib: PUSH epoch=%lld lon0=%.1f meanU=%.3f n=%d",
              (long long)displayEpoch(), g.lon0, n ? sum / n : 0.0, n);
   }
   {

@@ -194,7 +194,8 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
   const double cellPx = std::fabs(m_grid.di) / wpp;
   const int step =
       cellPx > 0 ? qMax(1, qCeil(50.0 / cellPx)) : qMax(1, m_grid.ni / 48);
-  {
+  // Self-test fingerprint (matches the PUSH log on the plugin side).
+  if (qEnvironmentVariableIsSet("OCPN_GRIB_SELFTEST")) {
     double sum = 0;
     int n = 0;
     for (float u : m_grid.u)

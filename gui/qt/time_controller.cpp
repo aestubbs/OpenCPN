@@ -82,8 +82,6 @@ void TimeController::goLive() {
 }
 
 void TimeController::setDisplayTime(const QDateTime& t) {
-  qWarning("timebar: setDisplayTime %s",
-           qPrintable(t.toString(Qt::ISODate)));
   if (!t.isValid()) {
     goLive();
     return;
@@ -96,9 +94,6 @@ void TimeController::setDisplayTime(const QDateTime& t) {
 }
 
 void TimeController::panSeconds(double secs) {
-  static int s_n = 0;
-  if (++s_n % 8 == 1)
-    qWarning("timebar: panSeconds #%d (%.0f s)", s_n, secs);
   enterScrub();
   m_time = m_time.addSecs(static_cast<qint64>(std::llround(secs)));
   applyToGlobal();
