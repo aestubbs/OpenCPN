@@ -1192,6 +1192,14 @@ TX/TE labels, LC complex lines and soundings. The genuine remaining gaps:
       missing areas" note. (b) Guernsey only overview shapes at 1:167k —
       the underzoom admit was tied to the OVERZOOM k; now its own
       kUnderzoomAdmit=4.0 (wx Quilt parity, SCAMIN thins the detail).
+      Post-fix verification at four user repros (Needles 1:50k, Guernsey
+      1:167k + St Peter Port 1:4.7k, Hamble 1:12k): correct cells
+      selected, full detail, no spurious overscale. NOTE the coverage
+      fix forces a ONE-TIME rescan of every o-charts cell (FIFO decrypt
+      each, ~5 min for 826 cells) — mid-scan the quilt is sparse; the
+      back-filled coverage persists in the catalog DB so it never
+      recurs. The afternoon's "charts not brought in" reports were this
+      transitional state, repeatedly restarted by short test launches.
       and fix concrete rendering issues on the user's local UK South-Coast
       charts:
       - **Yarmouth (Isle of Wight / Solent)** — **DONE 2026-06-06.** The
