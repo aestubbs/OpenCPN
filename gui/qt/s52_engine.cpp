@@ -47,6 +47,7 @@
 #include "s52plib.h"
 #include "s52s57.h"        // S57Obj, ObjRazRules, LUPrec
 #include "s52utils.h"      // S52_setMarinerParam, S52_MAR_* (depth shading)
+#include "x11_macro_scrub.h"  // the wx/GL headers above define Status & co.
 
 // OGR S-57 driver (libs/s57-charts) -- reads a .000 cell into OGR
 // features with assembled lon/lat geometry (P2.8d).

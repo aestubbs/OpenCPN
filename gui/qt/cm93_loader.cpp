@@ -18,6 +18,7 @@
 #include "mygeom.h"
 #include "s52plib.h"
 #include "s52s57.h"
+#include "x11_macro_scrub.h"  // the wx/GL headers above define Status & co.
 
 #include "cm93_cell_reader.h"
 #include "cm93_dictionary.h"

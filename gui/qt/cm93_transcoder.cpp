@@ -25,6 +25,7 @@
 #include "bbox.h"            // LLBBox (mygeom.h dependency)
 #include "mygeom.h"          // Extended_Geometry, PolyTessGeo (libs/s52plib)
 #include "s52s57.h"          // S57Obj, S57attVal, OGR_* value types
+#include "x11_macro_scrub.h"  // the wx/GL headers above define Status & co.
 #include "model/georef.h"    // DEGREE, mercator_k0, WGS84 axis
 #include "model/ocpn_types.h"    // CHART_TYPE_CM93 (auxParm3 tag)
 #include "model/wx_qt_string.h"  // QString_to_wxString
