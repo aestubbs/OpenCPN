@@ -242,12 +242,17 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         cases; the factory creates no driver for them (logs a message).
         The legacy `CommDriverN0183Net` is kept in the tree but is no
         longer reachable. See **P1.5k** to review whether to restore them.
-  - [ ] **P1.5k** *(review / deferred)* Decide whether NMEA 0183 network
-        **TCP server-mode** and **GPSD** are worth supporting. If yes:
-        server-mode is a `TcpServerTransport` (`QTcpServer`) and GPSD is a
-        TCP transport with a `?WATCH` connect-greeting option — both at the
-        transport layer, then the legacy `CommDriverN0183Net` can be
-        deleted. If no, delete `comm_drv_n0183_net.{h,cpp}` outright.
+  - [x] **P1.5k** TCP server-mode + GPSD — **DONE (2026-06-12), both
+        supported** (GPSD is standard on Linux nav boxes; server-mode is
+        a wx-parity feature): `TcpServerTransport` (`QTcpServer`;
+        multi-client — reads aggregate, writes broadcast; legacy served
+        one) and a connect-greeting option on `TcpClientTransport`
+        carrying the legacy `?WATCH` subscription verbatim. The legacy
+        `comm_drv_n0183_net.{h,cpp}` is **deleted**. Collateral fix:
+        Multiplexer's echo path downcast to the legacy CommDriverN0183
+        (assert/null-deref with framework drivers) — now
+        ConnectionParamsProvider, like the P1.5j-1 output-path fix; the
+        route-upload connect-wait polls DriverStats.available.
   - [x] **P1.5d** `n2k_serial` on the framework — N2K serial-gateway
         connections run on the generic `CommDriver` (`SerialTransport` +
         new `N2kGatewayFramer` + new `N2kDecoder`, 13 unit tests). The
