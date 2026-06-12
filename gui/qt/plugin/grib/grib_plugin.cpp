@@ -81,18 +81,31 @@ GribContext::GribContext(QObject* timeline, QObject* parent)
     for (const QString& uk : unitKeys)
       m_units[uk] = st.value(QStringLiteral("unit_") + uk).toString();
   }
-  // Restore the last GRIB on startup (wx parity): the timeline can
-  // drive the weather immediately.
-  QString last =
-      QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
-          .value(QStringLiteral("lastFile"))
-          .toString();
-  if (qEnvironmentVariableIsSet("OCPN_GRIB_FILE"))
-    last = qEnvironmentVariable("OCPN_GRIB_FILE");
-  if (!last.isEmpty() && QFile::exists(last))
-    QMetaObject::invokeMethod(
-        this, [this, last] { openFile(QUrl::fromLocalFile(last)); },
-        Qt::QueuedConnection);
+  // Restore the last GRIB set on startup (wx parity): the timeline can
+  // drive the weather immediately. lastFiles carries the merged set;
+  // lastFile is the pre-multi-file key, kept as the fallback.
+  {
+    QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"));
+    QStringList last = st.value(QStringLiteral("lastFiles")).toStringList();
+    if (last.isEmpty()) {
+      const QString single = st.value(QStringLiteral("lastFile")).toString();
+      if (!single.isEmpty()) last << single;
+    }
+    if (qEnvironmentVariableIsSet("OCPN_GRIB_FILE"))  // ';' = merge list
+      last = qEnvironmentVariable("OCPN_GRIB_FILE")
+                 .split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    QStringList existing;
+    for (const QString& p : last)
+      if (!p.isEmpty() && QFile::exists(p)) existing << p;
+    if (!existing.isEmpty())
+      QMetaObject::invokeMethod(
+          this,
+          [this, existing] {
+            m_paths = existing;
+            reload();
+          },
+          Qt::QueuedConnection);
+  }
   // Follow the app time bar (wx parity: the GRIB rides the chart
   // timeline, not its own slider).
   if (m_timeline)
@@ -137,30 +150,66 @@ GribContext::~GribContext() { delete m_reader; }
 void GribContext::openFile(const QUrl& url) {
   const QString path = url.toLocalFile();
   if (path.isEmpty()) return;
+  m_paths = QStringList{path};
+  reload();
+}
+
+void GribContext::addFile(const QUrl& url) {
+  const QString path = url.toLocalFile();
+  if (path.isEmpty() || m_paths.contains(path)) return;
+  if (m_paths.isEmpty()) {  // nothing loaded: plain open
+    openFile(url);
+    return;
+  }
+  m_paths.append(path);
+  reload();
+}
+
+void GribContext::reload() {
   delete m_reader;
-  m_reader = new GribReader(wxString(path.toStdString()));
+  // wx GRIBFile parity: ONE GribReader fed every file -- openFile
+  // accumulates records across calls (clean_all_vectors stays off), so
+  // a wave file layers over a wind file into one record set.
+  m_reader = new GribReader();
+  bool any_ok = false;
+  for (const QString& p : m_paths) {
+    m_reader->openFile(wxString(p.toStdString()));
+    if (m_reader->isOk()) any_ok = true;
+    if (qEnvironmentVariableIsSet("OCPN_GRIB_SELFTEST"))
+      qWarning("grib: reload %s ok=%d total=%d", qPrintable(p),
+               m_reader->isOk() ? 1 : 0,
+               m_reader->getTotalNumberOfGribRecords());
+  }
   m_steps.clear();
   m_step_times.clear();
   m_time_index = 0;
-  if (!m_reader->isOk() || m_reader->getTotalNumberOfGribRecords() == 0) {
-    m_status = tr("Not a readable GRIB file");
+  if (!any_ok || m_reader->getTotalNumberOfGribRecords() == 0) {
+    m_status = m_paths.size() > 1 ? tr("No readable GRIB files")
+                                  : tr("Not a readable GRIB file");
     m_file.clear();
+    m_paths.clear();
     if (m_layer) m_layer->clearGrid();
     Q_EMIT gribChanged();
     return;
   }
   // wx GRIBFile post-load fixups (GribUIDialog.cpp:2051+): rain/cloud
   // accumulation normalization, then propagate cumulative + wave records
-  // into steps that lack them (waves often ride a coarser cadence).
+  // into steps that lack them (waves often ride a coarser cadence). Run
+  // ONCE over the merged set, after every file is in (wx order).
   m_reader->computeAccumulationRecords(GRB_PRECIP_TOT, LV_GND_SURF, 0);
   m_reader->computeAccumulationRecords(GRB_PRECIP_RATE, LV_GND_SURF, 0);
   m_reader->computeAccumulationRecords(GRB_CLOUD_TOT, LV_ATMOS_ALL, 0);
   m_reader->copyFirstCumulativeRecord();
   m_reader->copyMissingWaveRecords();
 
-  m_file = path.section('/', -1);
-  QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
-      .setValue(QStringLiteral("lastFile"), path);
+  m_file = m_paths.first().section('/', -1);
+  if (m_paths.size() > 1)
+    m_file += tr(" +%1").arg(m_paths.size() - 1);
+  {
+    QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"));
+    st.setValue(QStringLiteral("lastFiles"), m_paths);
+    st.setValue(QStringLiteral("lastFile"), m_paths.first());
+  }
   for (time_t t : m_reader->getListDates()) {
     m_step_times.append(static_cast<long long>(t));
     m_steps.append(QDateTime::fromSecsSinceEpoch(t)

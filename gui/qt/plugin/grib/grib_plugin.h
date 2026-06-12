@@ -95,6 +95,11 @@ public:
   QString status() const { return m_status; }
 
   Q_INVOKABLE void openFile(const QUrl& url);
+  /** Layer another GRIB over the loaded one(s) -- wx multi-file parity:
+   *  all files merge into one record set (e.g. waves riding a separate
+   *  file from wind). The whole set reloads so the post-load fixups run
+   *  exactly once, as the wx GRIBFile ctor does. */
+  Q_INVOKABLE void addFile(const QUrl& url);
   /** Move the APP TIME BAR to the adjacent GRIB timestep (the bar is the
    *  single time source; weather follows it). */
   Q_INVOKABLE void stepTimeline(int delta);
@@ -168,6 +173,7 @@ private Q_SLOTS:
 
 private:
   void pushToLayer();
+  void reload();  // (re)build the reader from m_paths
   // Records at the exact display time: linear interpolation between the
   // bracketing timesteps (tier 3). *owned=true -> caller deletes.
   GribRecord* recordAt(int dataType, int levelType, int level,
@@ -179,6 +185,7 @@ private:
   GribReader* m_reader = nullptr;
   ocpn::qtui::GribWindLayer* m_layer = nullptr;  // compositor-owned
   QString m_file;
+  QStringList m_paths;  // the loaded file set (merged in order)
   QStringList m_steps;
   QList<long long> m_step_times;
   int m_time_index = 0;

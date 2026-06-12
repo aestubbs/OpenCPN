@@ -116,11 +116,31 @@ Item {
                     Instantiator {
                         model: pluginContext ? pluginContext.dirFiles : []
                         delegate: MenuItem {
+                            id: fileItem
                             required property var modelData
                             text: modelData.name + "   " + modelData.date
                             onTriggered: {
                                 pluginContext.openFile(modelData.path)
                                 pluginContext.controlsVisible = false
+                            }
+                            // Layer this file OVER the loaded forecast
+                            // (wx multi-file: e.g. waves + wind files
+                            // merge into one record set).
+                            ToolButton {
+                                anchors.right: parent.right
+                                anchors.rightMargin: 6
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 26; height: 26
+                                text: "+"
+                                visible: pluginContext
+                                         && pluginContext.fileName.length > 0
+                                ToolTip.text: qsTr("Add to loaded forecast")
+                                ToolTip.visible: hovered
+                                onClicked: {
+                                    flyDirMenu.close()
+                                    pluginContext.addFile(fileItem.modelData.path)
+                                    pluginContext.controlsVisible = false
+                                }
                             }
                         }
                         onObjectAdded: (i, o) => flyDirMenu.insertItem(i, o)
