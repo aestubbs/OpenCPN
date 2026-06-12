@@ -31,6 +31,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QLocale>
 #include <QString>
 #include <QSurfaceFormat>
@@ -253,6 +254,26 @@ int main(int argc, char* argv[]) {
     });
   }
 #endif
+
+  // OCPN_QT_GRAB=<file.png>[:delay_s] -- save a one-shot grab of the app
+  // window after the delay (default 8 s) and keep running. The headless
+  // verification loop's eyes: captures ONLY this window via the scene
+  // graph, no window-manager interaction, works while obscured.
+  if (const QByteArray grab = qgetenv("OCPN_QT_GRAB"); !grab.isEmpty()) {
+    if (auto* win =
+            qobject_cast<QQuickWindow*>(engine.rootObjects().first())) {
+      const QList<QByteArray> parts = grab.split(':');
+      const QString path = QString::fromLocal8Bit(parts[0]);
+      const int delayS =
+          parts.size() > 1 ? qMax(1, parts[1].toInt()) : 8;
+      QTimer::singleShot(delayS * 1000, win, [win, path]() {
+        const QImage img = win->grabWindow();
+        qWarning("grab: %s %dx%d -> %s",
+                 img.save(path) ? "saved" : "FAILED", img.width(),
+                 img.height(), qPrintable(path));
+      });
+    }
+  }
 
   return app.exec();
 }

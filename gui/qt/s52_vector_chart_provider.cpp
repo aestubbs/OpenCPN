@@ -1323,16 +1323,22 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
 
   // Billboarded point items: one QSGTransformNode (placed at the world
   // anchor, counter-scaled per viewport) wrapping a textured quad. Built
-  // once with their textures; the per-frame passes only touch the transform.
+  // once; the per-frame passes only touch the transform. PERF-4: texture
+  // assignment is DEFERRED -- images collect in `atlasPending` and are
+  // shelf-packed into shared atlas pages after the loops, so a cell
+  // carries a handful of textures instead of one per label/symbol.
   m_billboards.clear();
+  struct PendingAtlasImage {
+    QSGImageNode* node;
+    QImage image;
+  };
+  QList<PendingAtlasImage> atlasPending;
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
                           QPointF pivotPx, int scamin, BbKind kind,
                           float depth, double rotationDeg = 0.0,
                           int viewGroup = 0, bool upright = false,
                           const QString& text = QString()) {
     if (image.isNull() || !window) return;
-    QSGTexture* tex = root->texture(image);  // cache-owned, deduped by name
-    if (!tex) return;
     const qreal dpr = image.devicePixelRatio() > 0 ? image.devicePixelRatio()
                                                     : 1.0;
     const qreal w = image.width() / dpr;
@@ -1344,8 +1350,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     // offset is baked straight into the rect and the glyph rotates with chart.
     const QPointF centreOff(w / 2.0 - pivotPx.x(), h / 2.0 - pivotPx.y());
     auto* img = window->createImageNode();
-    img->setTexture(tex);
     img->setOwnsTexture(false);  // TextureCacheNode (root) owns it
+    atlasPending.append({img, image});
     if (upright)
       img->setRect(QRectF(-w / 2.0, -h / 2.0, w, h));  // centred; offset in mtx
     else
@@ -1464,6 +1470,77 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                  lab.isSounding ? BbKind::Sounding : BbKind::Label, lab.depth,
                  /*rotationDeg=*/0.0, lab.viewGroup, /*upright=*/true,
                  lab.isSounding ? QString() : lab.text);
+  }
+
+  // PERF-4: pack the deferred billboard images into shared atlas pages.
+  // Shelf packing, 2 px transparent gutter against linear-filter bleed;
+  // dedup by QImage cacheKey (same dedup the per-image cache applied).
+  // Oversized images (bigger than a page) keep a dedicated texture.
+  {
+    constexpr int kAtlasDim = 2048;  // device px per page side
+    constexpr int kPad = 2;
+    struct Placement {
+      int page;
+      QRect rect;  // device px within the page
+    };
+    QHash<qint64, Placement> placed;
+    QList<QImage> pages;
+    int cx = 0, cy = 0, rowH = 0;  // shelf cursor on the last page
+    auto place = [&](const QImage& im) -> Placement {
+      const int w = im.width(), h = im.height();
+      if (!pages.isEmpty() && cx + w > kAtlasDim) {  // next shelf
+        cx = 0;
+        cy += rowH + kPad;
+        rowH = 0;
+      }
+      if (pages.isEmpty() || cy + h > kAtlasDim) {  // next page
+        pages.append(QImage(kAtlasDim, kAtlasDim,
+                            QImage::Format_ARGB32_Premultiplied));
+        pages.last().fill(Qt::transparent);
+        cx = 0;
+        cy = 0;
+        rowH = 0;
+      }
+      const Placement p{static_cast<int>(pages.size()) - 1,
+                        QRect(cx, cy, w, h)};
+      QPainter painter(&pages[p.page]);
+      painter.setCompositionMode(QPainter::CompositionMode_Source);
+      painter.drawImage(p.rect.topLeft(), im);
+      painter.end();
+      cx += w + kPad;
+      rowH = std::max(rowH, h);
+      return p;
+    };
+    int oversized = 0;
+    for (const PendingAtlasImage& p : atlasPending) {
+      if (p.image.width() > kAtlasDim || p.image.height() > kAtlasDim) {
+        ++oversized;
+        continue;
+      }
+      const qint64 key = p.image.cacheKey();
+      if (!placed.contains(key)) placed.insert(key, place(p.image));
+    }
+    QVarLengthArray<QSGTexture*, 4> pageTex;
+    for (const QImage& pg : pages) pageTex.append(root->texture(pg));
+    for (const PendingAtlasImage& p : atlasPending) {
+      const auto it = placed.constFind(p.image.cacheKey());
+      QSGTexture* tex = it != placed.cend() ? pageTex[it->page]
+                                            : root->texture(p.image);
+      if (Q_UNLIKELY(!tex)) {  // creation failed: draw nothing
+        p.node->setRect(QRectF());
+        continue;
+      }
+      // Order matters: setTexture may reset the source rect to the full
+      // texture, so the sub-rect is applied after it.
+      p.node->setTexture(tex);
+      if (it != placed.cend()) p.node->setSourceRect(QRectF(it->rect));
+    }
+    if (qEnvironmentVariableIsSet("OCPN_QT_SG_STATS"))
+      qInfo("provider: PERF-4 atlas -- %lld billboard images "
+            "(%lld unique) -> %lld pages, %d oversized",
+            static_cast<long long>(atlasPending.size()),
+            static_cast<long long>(placed.size()),
+            static_cast<long long>(pages.size()), oversized);
   }
 
   // Initial layout: declutter (sets `kept` + counter-scale on every kept
