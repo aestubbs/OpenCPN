@@ -44,6 +44,16 @@ class SoundPlayer : public QObject {
                  outputDeviceChanged)
 
 public:
+  static SoundPlayer& instance() {
+    static SoundPlayer inst;
+    return inst;
+  }
+  static SoundPlayer* create(QQmlEngine*, QJSEngine*) {
+    SoundPlayer* p = &instance();
+    QJSEngine::setObjectOwnership(p, QJSEngine::CppOwnership);
+    return p;
+  }
+
   ~SoundPlayer() override;
 
   bool playing() const;
