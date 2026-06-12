@@ -3010,3 +3010,16 @@ symbols, chart-colour editor — stays where it is in Phase 2.)
   timebar qWarnings removed; the GRIB step dump + PUSH/REBUILD meanU
   fingerprints now gate behind OCPN_GRIB_SELFTEST (they are the
   self-test's assertions).
+- 2026-06-12 — **CI repair + wx-workflow deletion (user direction: "don't
+  need the wx builds anymore in GH").** Every push was flooding failure
+  email: `test-clang-format` (an upstream wx-era check over model/gui/
+  plugins) failed on all 20 pushes, and the `opencpn-qt` macOS job had
+  been failing **since 2026-06-10** — the dashboard plugin was gated off
+  (built-in HUD supersedes it) but the workflow still built its target.
+  All wx-era workflows are deleted (clang-format-check, linux, MacOS,
+  windows, doxygen, zulip); `opencpn-qt.yml` is the fork's CI, its
+  plugin-target list now matches the default-ON set (+ o-charts shop),
+  and the best-effort Linux job gains libglew-dev. Process note: my
+  background run-watches had a wrapper bug that swallowed exit codes, so
+  earlier "CI green" reports today were WRONG — verification now uses
+  the bare `gh run watch --exit-status` + a `gh run list` cross-check.
