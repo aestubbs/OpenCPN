@@ -84,6 +84,18 @@ QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
                                 bool closed = false, float dash_on_px = 0.0f,
                                 float dash_off_px = 0.0f, float pencil = 0.0f);
 
+/**
+ * Many polylines of the SAME style in one geometry node (PERF-3): each
+ * polyline renders exactly as a separate node would (independent segment
+ * quads; the dash phase restarts per polyline), but the scene graph
+ * carries one node instead of hundreds. Polylines with < 2 points are
+ * skipped; returns nullptr if none remain.
+ */
+QSGGeometryNode* makeAaLineNode(const QList<QList<QPointF>>& polylines,
+                                const QColor& color, float width_px,
+                                float dash_on_px = 0.0f,
+                                float dash_off_px = 0.0f);
+
 }  // namespace ocpn::qtui
 
 #endif  // OCPN_QT_AA_LINE_H_

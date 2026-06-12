@@ -1119,16 +1119,60 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     }
   };
 
+  // PERF-3: merge CONSECUTIVE prims sharing a draw bucket -- (tile parent,
+  // SCAMIN, colour) for fills, + (width, dash) for lines -- into ONE
+  // geometry node each. Prims arrive stable-sorted by S-52 priority and a
+  // run never crosses a key change, so the draw order is exactly the
+  // per-prim path's; only the node count drops (a dense cell's hundreds of
+  // same-shade depth fills / contour lines collapse to a handful).
+  struct FillRun {
+    QSGNode* parent = nullptr;
+    int scamin = 0;
+    QRgb rgba = 0;
+    QList<QSGGeometry::Point2D> tris;
+  } fr;
+  int nFillPrims = 0, nFillNodes = 0, nLinePrims = 0, nLineNodes = 0;
+  auto flushFills = [&] {
+    if (fr.parent && !fr.tris.isEmpty()) {
+      auto* node =
+          sg::makeFlatColorNode(QColor::fromRgba(fr.rgba),
+                                QSGGeometry::DrawTriangles,
+                                static_cast<int>(fr.tris.size()));
+      QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
+      std::copy(fr.tris.cbegin(), fr.tris.cend(), v);
+      appendMaybeScamin(fr.parent, node, fr.scamin);
+      ++nFillNodes;
+    }
+    fr = FillRun{};
+  };
+  struct LineRun {
+    QSGNode* parent = nullptr;
+    int scamin = 0;
+    QRgb rgba = 0;
+    float widthPx = 0, dashOn = 0, dashOff = 0;
+    QList<QList<QPointF>> strips;
+  } lr;
+  auto flushLines = [&] {
+    if (lr.parent && !lr.strips.isEmpty()) {
+      if (auto* node = makeAaLineNode(lr.strips, QColor::fromRgba(lr.rgba),
+                                      lr.widthPx, lr.dashOn, lr.dashOff)) {
+        appendMaybeScamin(lr.parent, node, lr.scamin);
+        ++nLineNodes;
+      }
+    }
+    lr = LineRun{};
+  };
+
   for (const s52sg::Prim& prim : m_buffer.prims) {
     if (prim.verts.isEmpty()) continue;
     if (catCulled(prim.dispCat, prim.classIdx)) continue;  // category/class
 
-    // Line features: one anti-aliased line through the shared AA-line shader
+    // Line features: anti-aliased lines through the shared AA-line shader
     // (aa_line.h). Width is the physical S-52 pen width in logical px, kept
     // screen-fixed by the shader -- no per-zoom rebuild, no parallel strips.
     if (prim.type == s52sg::PrimType::LineStrip) {
-      const double widthPx =
-          std::max(1.0, prim.width * kS52PenWidthMM * m_screen_ppmm);
+      const float widthPx = static_cast<float>(
+          std::max(1.0, prim.width * kS52PenWidthMM * m_screen_ppmm));
       // S-52 dash, mm -> logical px (the AA-line shader runs it along the
       // screen arc length, so it stays a constant physical size at any zoom).
       const float dashOn =
@@ -1144,33 +1188,54 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
         lminx = std::min(lminx, wx); lmaxx = std::max(lmaxx, wx);
         lminy = std::min(lminy, wy); lmaxy = std::max(lmaxy, wy);
       }
-      if (auto* node = makeAaLineNode(world, prim.color,
-                                      static_cast<float>(widthPx),
-                                      /*closed=*/false, dashOn, dashOff))
-        appendMaybeScamin(tileParent(lineTiles, lineUnderlay, lineGrid, lminx,
-                                     lminy, lmaxx, lmaxy),
-                          node, prim.scamin);
+      QSGNode* parent = tileParent(lineTiles, lineUnderlay, lineGrid, lminx,
+                                   lminy, lmaxx, lmaxy);
+      if (lr.parent != parent || lr.scamin != prim.scamin ||
+          lr.rgba != prim.color.rgba() || lr.widthPx != widthPx ||
+          lr.dashOn != dashOn || lr.dashOff != dashOff)
+        flushLines();
+      if (!lr.parent) {
+        lr.parent = parent;
+        lr.scamin = prim.scamin;
+        lr.rgba = prim.color.rgba();
+        lr.widthPx = widthPx;
+        lr.dashOn = dashOn;
+        lr.dashOff = dashOff;
+      }
+      lr.strips.append(std::move(world));
+      ++nLinePrims;
       continue;
     }
 
     QList<QSGGeometry::Point2D> tris = expandToTriangles(prim);
     if (tris.isEmpty()) continue;
 
-    auto* node = sg::makeFlatColorNode(prim.color, QSGGeometry::DrawTriangles,
-                                       static_cast<int>(tris.size()));
-    QSGGeometry::Point2D* v = node->geometry()->vertexDataAsPoint2D();
     double fminx = 1e18, fminy = 1e18, fmaxx = -1e18, fmaxy = -1e18;
     for (qsizetype i = 0; i < tris.size(); ++i) {
-      v[i] = tris[i];
       fminx = std::min<double>(fminx, tris[i].x);
       fmaxx = std::max<double>(fmaxx, tris[i].x);
       fminy = std::min<double>(fminy, tris[i].y);
       fmaxy = std::max<double>(fmaxy, tris[i].y);
     }
-    appendMaybeScamin(tileParent(fillTiles, fillUnderlay, fillGrid, fminx, fminy,
-                                 fmaxx, fmaxy),
-                      node, prim.scamin);
+    QSGNode* parent = tileParent(fillTiles, fillUnderlay, fillGrid, fminx,
+                                 fminy, fmaxx, fmaxy);
+    if (fr.parent != parent || fr.scamin != prim.scamin ||
+        fr.rgba != prim.color.rgba())
+      flushFills();
+    if (!fr.parent) {
+      fr.parent = parent;
+      fr.scamin = prim.scamin;
+      fr.rgba = prim.color.rgba();
+    }
+    fr.tris.append(tris);
+    ++nFillPrims;
   }
+  flushFills();
+  flushLines();
+  if (qEnvironmentVariableIsSet("OCPN_QT_SG_STATS"))
+    qInfo("provider: PERF-3 merge -- %d fill prims -> %d nodes, "
+          "%d line prims -> %d nodes",
+          nFillPrims, nFillNodes, nLinePrims, nLineNodes);
 
   // Coastline land-shade REMOVED: the inland gradient band followed the LNDARE
   // ring, but that ring is clipped to the ENC cell, so the band also drew

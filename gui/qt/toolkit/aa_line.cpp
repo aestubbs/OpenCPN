@@ -145,26 +145,20 @@ int AaLineMaterial::compare(const QSGMaterial* other) const {
 
 // ---- builder --------------------------------------------------------------
 
-QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
-                                const QColor& color, float width_px,
-                                bool closed, float dash_on_px,
-                                float dash_off_px, float pencil) {
-  const int n = static_cast<int>(world_pts.size());
-  if (n < 2) return nullptr;
+namespace {
 
-  // Each segment is an INDEPENDENT quad using its own segment normal (not an
-  // averaged bisector). The old bisector normalised the averaged normal and
-  // extruded by exactly halfWidth, so an acute turn pinched the line to
-  // halfWidth*sin(half-angle) -- thin/invisible at sharp angles. Per-segment
-  // normals draw each segment at full width; the shader's square cap (extend
-  // halfWidth along the tangent at both ends) makes consecutive segments
-  // overlap at the joints so there is no gap or pinch. Square caps now; round
-  // joins/caps can come later.
-  const int count = closed ? n + 1 : n;  // repeat first point to close
-  QList<QPointF> pts;
-  pts.reserve(count);
-  for (int i = 0; i < n; ++i) pts.append(world_pts[i]);
-  if (closed) pts.append(world_pts[0]);
+// Append one polyline's segment quads into `v` starting at index `k`;
+// returns the next free index. Each segment is an INDEPENDENT quad using
+// its own segment normal (not an averaged bisector). The old bisector
+// normalised the averaged normal and extruded by exactly halfWidth, so an
+// acute turn pinched the line to halfWidth*sin(half-angle) --
+// thin/invisible at sharp angles. Per-segment normals draw each segment at
+// full width; the shader's square cap (extend halfWidth along the tangent
+// at both ends) makes consecutive segments overlap at the joints so there
+// is no gap or pinch. Square caps now; round joins/caps can come later.
+// The dash arc length restarts per polyline.
+int appendPolylineQuads(AaVertex* v, int k, const QList<QPointF>& pts) {
+  const int count = static_cast<int>(pts.size());
 
   // Cumulative arc length per point (world units) for the dash phase.
   QList<float> arc;
@@ -177,14 +171,6 @@ QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
     arc.append(acc);
   }
 
-  // Two triangles per segment from the 4 corner vertices (DrawTriangles --
-  // robust on every RHI backend, unlike triangle strips/fans).
-  const int segs = count - 1;
-  auto* geo = new QSGGeometry(aaAttributeSet(), segs * 6);
-  geo->setDrawingMode(QSGGeometry::DrawTriangles);
-  auto* v = static_cast<AaVertex*>(geo->vertexData());
-
-  int k = 0;
   const auto put = [&](const QPointF& c, const QPointF& nrm, const QPointF& tan,
                        float side, float cap, float al) {
     v[k].cx = static_cast<float>(c.x());
@@ -198,7 +184,7 @@ QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
     v[k].cap = cap;
     ++k;
   };
-  for (int i = 0; i < segs; ++i) {
+  for (int i = 0; i + 1 < count; ++i) {
     const double dx = pts[i + 1].x() - pts[i].x();
     const double dy = pts[i + 1].y() - pts[i].y();
     const double len = std::hypot(dx, dy);
@@ -213,7 +199,12 @@ QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
     put(pts[i + 1], nrm, t, -1.0f, +1.0f, arc[i + 1]);
     put(pts[i], nrm, t, -1.0f, -1.0f, arc[i]);
   }
+  return k;
+}
 
+QSGGeometryNode* finishAaNode(QSGGeometry* geo, const QColor& color,
+                              float width_px, float dash_on_px,
+                              float dash_off_px, float pencil) {
   auto* mat = new AaLineMaterial();
   mat->color = color;
   mat->widthPx = width_px;
@@ -227,6 +218,54 @@ QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
   node->setMaterial(mat);
   node->setFlag(QSGNode::OwnsMaterial);
   return node;
+}
+
+}  // namespace
+
+QSGGeometryNode* makeAaLineNode(const QList<QPointF>& world_pts,
+                                const QColor& color, float width_px,
+                                bool closed, float dash_on_px,
+                                float dash_off_px, float pencil) {
+  const int n = static_cast<int>(world_pts.size());
+  if (n < 2) return nullptr;
+
+  const int count = closed ? n + 1 : n;  // repeat first point to close
+  QList<QPointF> pts;
+  pts.reserve(count);
+  for (int i = 0; i < n; ++i) pts.append(world_pts[i]);
+  if (closed) pts.append(world_pts[0]);
+
+  // Two triangles per segment from the 4 corner vertices (DrawTriangles --
+  // robust on every RHI backend, unlike triangle strips/fans).
+  const int segs = count - 1;
+  auto* geo = new QSGGeometry(aaAttributeSet(), segs * 6);
+  geo->setDrawingMode(QSGGeometry::DrawTriangles);
+  auto* v = static_cast<AaVertex*>(geo->vertexData());
+  appendPolylineQuads(v, 0, pts);
+
+  return finishAaNode(geo, color, width_px, dash_on_px, dash_off_px, pencil);
+}
+
+QSGGeometryNode* makeAaLineNode(const QList<QList<QPointF>>& polylines,
+                                const QColor& color, float width_px,
+                                float dash_on_px, float dash_off_px) {
+  // PERF-3: many same-styled polylines (e.g. a cell's depth contours of
+  // one colour) in ONE geometry node. Segments are independent quads, so
+  // concatenation is exact; the dash phase restarts per polyline, same as
+  // per-node rendering did.
+  int segs = 0;
+  for (const QList<QPointF>& pts : polylines)
+    if (pts.size() >= 2) segs += static_cast<int>(pts.size()) - 1;
+  if (segs == 0) return nullptr;
+
+  auto* geo = new QSGGeometry(aaAttributeSet(), segs * 6);
+  geo->setDrawingMode(QSGGeometry::DrawTriangles);
+  auto* v = static_cast<AaVertex*>(geo->vertexData());
+  int k = 0;
+  for (const QList<QPointF>& pts : polylines)
+    if (pts.size() >= 2) k = appendPolylineQuads(v, k, pts);
+
+  return finishAaNode(geo, color, width_px, dash_on_px, dash_off_px, 0.0f);
 }
 
 }  // namespace ocpn::qtui
