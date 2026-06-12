@@ -205,6 +205,7 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_basemap =
       new ShapefileBasemapProvider(QString::fromUtf8(OCPN_QT_BASEMAP_SHP));
   auto* world = m_basemap;
+  m_basemap->setViewport(m_viewport.get());  // PERF-6: visible-tile submit
   m_basemap->setNoDataMode(DisplayConfig::instance().showNoData());  // B (ECDIS)
   auto* world_layer = new ChartLayer(world, m_viewport.get());
   world_layer->setZOrder(-1000);

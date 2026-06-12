@@ -70,6 +70,19 @@ inline bool isGridEdge(const QPointF& a, const QPointF& b) {
     return true;
   return false;
 }
+
+// PERF-6 tile grid: 15-degree columns x 12 Mercator-Y rows.
+constexpr int kTilesX = 24;
+constexpr int kTilesY = 12;
+inline int tileIndex(const QPointF& w) {
+  const double yTop = Viewport::latToWorldY(90.0);
+  const double yBot = Viewport::latToWorldY(-90.0);
+  const int tx = qBound(0, int((w.x() + 180.0) / (360.0 / kTilesX)),
+                        kTilesX - 1);
+  const int ty =
+      qBound(0, int((w.y() - yTop) / ((yBot - yTop) / kTilesY)), kTilesY - 1);
+  return ty * kTilesX + tx;
+}
 }  // namespace
 
 ShapefileBasemapProvider::ShapefileBasemapProvider(const QString& shp_path,
@@ -207,16 +220,80 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
   }
 
   m_loaded = !m_land_tris.isEmpty();
-  qWarning("Basemap: %d rings, %lld triangles in %lld ms", rings,
-           (long long)(m_land_tris.size() / 3), (long long)timer.elapsed());
+
+  // PERF-6: bucket the geometry into a 15-degree tile grid so a rebuild
+  // submits only the visible tiles. Triangles bucket by centroid;
+  // coast segments by midpoint (grid clip edges dropped here -- neither
+  // the outline nor the shade ever draws them).
+  for (int i = 0; i + 2 < m_land_tris.size(); i += 3) {
+    const QPointF c = (m_land_tris[i] + m_land_tris[i + 1] +
+                       m_land_tris[i + 2]) / 3.0;
+    QList<QPointF>& bucket = m_tile_tris[tileIndex(c)];
+    bucket.append(m_land_tris[i]);
+    bucket.append(m_land_tris[i + 1]);
+    bucket.append(m_land_tris[i + 2]);
+  }
+  for (const auto& loop : m_coastlines) {
+    const int n = loop.size();
+    for (int i = 0; i < n; ++i) {
+      const QPointF& a = loop[i];
+      const QPointF& b = loop[(i + 1) % n];
+      if (isGridEdge(a, b)) continue;
+      QList<QPointF>& bucket = m_tile_coast_segs[tileIndex((a + b) / 2.0)];
+      bucket.append(a);
+      bucket.append(b);
+    }
+  }
+
+  qWarning("Basemap: %d rings, %lld triangles in %lld ms (%lld tiles)",
+           rings, (long long)(m_land_tris.size() / 3),
+           (long long)timer.elapsed(), (long long)m_tile_tris.size());
+}
+
+void ShapefileBasemapProvider::setViewport(const Viewport* vp) {
+  m_vp = vp;
+  if (!m_vp) return;
+  connect(m_vp, &Viewport::changed, this, [this] {
+    // Re-render only when the VISIBLE TILE SET changes (a pan within the
+    // same tiles costs nothing; the world-anchored transform pans).
+    if (visibleTiles() != m_attached) Q_EMIT changed();
+  });
+}
+
+QSet<int> ShapefileBasemapProvider::visibleTiles() const {
+  QSet<int> out;
+  if (!m_vp) {  // no viewport wired: everything (the old behaviour)
+    for (auto it = m_tile_tris.cbegin(); it != m_tile_tris.cend(); ++it)
+      out.insert(it.key());
+    return out;
+  }
+  const QRectF r = m_vp->visibleWorldBounds(/*marginPx=*/512.0);
+  if (r.isEmpty()) return out;
+  const double yTop = Viewport::latToWorldY(90.0);
+  const double yBot = Viewport::latToWorldY(-90.0);
+  const double tileW = 360.0 / kTilesX;
+  const double tileH = (yBot - yTop) / kTilesY;
+  const int tx0 = qBound(0, int((r.left() + 180.0) / tileW), kTilesX - 1);
+  const int tx1 = qBound(0, int((r.right() + 180.0) / tileW), kTilesX - 1);
+  const int ty0 = qBound(0, int((r.top() - yTop) / tileH), kTilesY - 1);
+  const int ty1 = qBound(0, int((r.bottom() - yTop) / tileH), kTilesY - 1);
+  for (int ty = ty0; ty <= ty1; ++ty)
+    for (int tx = tx0; tx <= tx1; ++tx) out.insert(ty * kTilesX + tx);
+  return out;
 }
 
 QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
                                                const Viewport& /*viewport*/,
                                                QQuickWindow* /*window*/) {
-  // Static geometry -- build once; the viewport transform reprojects it.
-  if (old_subtree) return old_subtree;
+  // Geometry is static, but the SUBMITTED SUBSET follows the view: only
+  // the visible 15-degree tiles' vertices enter the scene graph, so the
+  // batch renderer's full rebuilds (every scene change) stop re-copying
+  // ~3M world vertices -- the measured ~1 s pan-into-new-cell hitch.
+  // setViewport's tile-set watcher re-dirties this layer when panning
+  // crosses a tile boundary; within a tile set old_subtree is reused.
+  if (old_subtree && visibleTiles() == m_attached) return old_subtree;
   if (!m_loaded) return nullptr;
+  m_attached = visibleTiles();
 
   auto* root = new QSGNode();
 
@@ -240,15 +317,20 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
     root->appendChildNode(sea);
   }
 
-  // 2. Land fill: the tessellated triangle list.
+  // 2. Land fill: the visible tiles' tessellated triangles.
   {
-    auto* land = sg::makeFlatColorNode(landCol, QSGGeometry::DrawTriangles,
-                                       m_land_tris.size());
-    QSGGeometry::Point2D* v = land->geometry()->vertexDataAsPoint2D();
-    for (int i = 0; i < m_land_tris.size(); ++i)
-      v[i].set(static_cast<float>(m_land_tris[i].x()),
-               static_cast<float>(m_land_tris[i].y()));
-    root->appendChildNode(land);
+    int nv = 0;
+    for (int t : m_attached) nv += m_tile_tris.value(t).size();
+    if (nv > 0) {
+      auto* land =
+          sg::makeFlatColorNode(landCol, QSGGeometry::DrawTriangles, nv);
+      QSGGeometry::Point2D* v = land->geometry()->vertexDataAsPoint2D();
+      int k = 0;
+      for (int t : m_attached)
+        for (const QPointF& p : m_tile_tris.value(t))
+          v[k++].set(static_cast<float>(p.x()), static_cast<float>(p.y()));
+      root->appendChildNode(land);
+    }
   }
 
   // 3. Inland shade: a soft gradient band just inside the coast (darkening
@@ -257,29 +339,27 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
   //    coastal edge sits exactly on the land/sea boundary. Skip grid clip
   //    edges so the tile boundaries aren't shaded. Suppressed in NODATA mode --
   //    the backdrop is a flat no-coverage grey, not a cartographic shoreline.
-  if (!m_nodata)
+  if (!m_nodata) {
+    const QSet<int>& vis = m_attached;
     if (auto* shade = makeCoastShadeNode(
             m_coastlines, QColor(0, 0, 0), /*width_px=*/6.0f,
-            /*max_alpha=*/0.38f,
-            [](const QPointF& a, const QPointF& b) { return !isGridEdge(a, b); }))
+            /*max_alpha=*/0.38f, [&vis](const QPointF& a, const QPointF& b) {
+              return !isGridEdge(a, b) &&
+                     vis.contains(tileIndex((a + b) / 2.0));
+            }))
       root->appendChildNode(shade);
+  }
 
   // 4. Coastline outline: real-coast segments only (grid clip edges skipped),
   //    so the basemap shows a clean coast and no tile grid.
   {
     std::vector<QSGGeometry::Point2D> seg;
-    for (const auto& c : m_coastlines) {
-      const int n = c.size();
-      if (n < 2) continue;
-      for (int i = 0; i < n; ++i) {
-        const QPointF& a = c[i];
-        const QPointF& b = c[(i + 1) % n];  // wrap to close
-        if (isGridEdge(a, b)) continue;     // skip tile-grid clip edges
-        QSGGeometry::Point2D pa, pb;
-        pa.set(static_cast<float>(a.x()), static_cast<float>(a.y()));
-        pb.set(static_cast<float>(b.x()), static_cast<float>(b.y()));
-        seg.push_back(pa);
-        seg.push_back(pb);
+    for (int t : m_attached) {
+      const QList<QPointF>& pts = m_tile_coast_segs.value(t);
+      for (const QPointF& p : pts) {
+        QSGGeometry::Point2D q;
+        q.set(static_cast<float>(p.x()), static_cast<float>(p.y()));
+        seg.push_back(q);
       }
     }
     if (!seg.empty()) {

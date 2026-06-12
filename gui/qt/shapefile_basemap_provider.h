@@ -30,8 +30,10 @@
 #define OCPN_QT_SHAPEFILE_BASEMAP_PROVIDER_H_
 
 #include <QColor>
+#include <QHash>
 #include <QList>
 #include <QPointF>
+#include <QSet>
 #include <QString>
 
 #include "chart_provider.h"
@@ -77,11 +79,26 @@ public:
    *  the inland-shade pass. */
   const QList<QList<QPointF>>& coastlines() const { return m_coastlines; }
 
+  /** Wire the viewport: the basemap submits only VIEW-INTERSECTING 15-deg
+   *  tiles of its (multi-million-vertex) world geometry, and re-emits
+   *  changed() when panning crosses a tile boundary. Without this, every
+   *  scene change made Qt's batch renderer re-copy ~3M world vertices --
+   *  the ~1 s pan-into-new-cell hitch (PERF-6 measurement). */
+  void setViewport(const Viewport* vp);
+
 private:
   void load(const QString& shp_path);
+  QSet<int> visibleTiles() const;  // tile indices intersecting the view
 
   QList<QPointF> m_land_tris;            // (x=lon, y=-lat) triangle list
   QList<QList<QPointF>> m_coastlines;    // fill-boundary loops, world coords
+  // PERF-6: per-tile buckets of the world geometry (15-deg grid, index
+  // ty*kTilesX+tx). Built once at load; renderChart concatenates only the
+  // visible tiles' buckets.
+  QHash<int, QList<QPointF>> m_tile_tris;
+  QHash<int, QList<QPointF>> m_tile_coast_segs;  // flattened (a,b) pairs
+  const Viewport* m_vp = nullptr;
+  QSet<int> m_attached;  // tile set of the last build
   QColor m_sea{170, 195, 220};
   QColor m_land{225, 213, 180};
   QColor m_coast{120, 110, 90};
