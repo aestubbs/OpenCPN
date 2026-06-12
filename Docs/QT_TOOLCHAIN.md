@@ -61,3 +61,18 @@ Android is **dropped for the migration** (P1.5f; `QT_MIGRATION.md` §1,
 X.4) — mobile returns natively via QtQuick post-migration. Embedded
 (Phase 5) targets boot-to-app eglfs/Wayland with RHI Vulkan/GLES;
 untouched until Phase 5 opens.
+
+## QML_SINGLETON: the constructor MUST be private
+
+Qt selects how to build a QML singleton in `singletonConstructionMode()`
+(qqmlprivate.h) and checks `std::is_default_constructible` BEFORE looking
+for the `static T* create(QQmlEngine*, QJSEngine*)` factory. A public (or
+implicit) default constructor therefore makes the engine default-construct
+its OWN instance and silently ignore `create()` — splitting the singleton
+into a QML brain and a C++ brain. Because both brains load the same
+persisted ConfigStore at construction, static state matches and only LIVE
+cross-boundary updates vanish, which makes the bug nearly undetectable.
+Diagnosed by sampling `this` in lldb on a periodic method (two addresses).
+Rule: every `QML_SINGLETON` class declares its constructor `private:`
+(instance()'s static local may still call it). See the 2026-06-12 fix
+commit for the nine affected classes.
