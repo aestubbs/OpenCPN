@@ -1283,13 +1283,17 @@ direction: all six are wanted eventually.**
       (`s52_vector_chart_provider.cpp` m_zoom_timer). If large cells
       stutter at 60 ms, consider the preview-declutter variant (SCAMIN
       only during gesture, full pass on settle).
-- [ ] **PERF-3** Merge same-colour chart prims into one geometry node.
-      Today each fill/line prim is its own QSGGeometryNode (1000+ nodes,
-      one flat-colour material each → batch breaks per colour). Group by
-      (colour, scamin, dispCat) at build time and emit merged nodes.
-      Gain 5–15 ms on dense cells; ~1 week; MEDIUM risk (draw order must
-      respect S-52 priority — group within priority bands).
-      `s52_vector_chart_provider.cpp` build path (~line 1122).
+- [x] **PERF-3** Merge same-colour chart prims into one geometry node —
+      **DONE (2026-06-12).** Implemented as a zero-reorder RUN merge:
+      consecutive prims sharing (tile parent, SCAMIN, colour) for fills
+      — plus (width, dash) for AA lines — emit one node per run. Prims
+      are already stable-sorted by S-52 priority and a run never
+      crosses a key change, so draw order is bit-identical to the
+      per-prim path. aa_line gained a multi-polyline makeAaLineNode
+      (independent segment quads concatenate exactly; dash phase
+      restarts per strip). Measured (OCPN_QT_SG_STATS=1): 30,703 fill
+      prims → 2,531 nodes / 15,207 → 834 (up to 18× fewer nodes);
+      lines 820 → 332.
 - [ ] **PERF-4** Label/sounding texture atlas. Each unique label is one
       GPU texture (TextureCacheNode dedups identical text only). Pack a
       cell's labels/soundings into 1–2 atlas textures with UV rects.
