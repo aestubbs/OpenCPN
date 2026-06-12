@@ -144,6 +144,28 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   m_viewport->setCenter((kTestNorth + kTestSouth) / 2.0,
                         (kTestWest + kTestEast) / 2.0);
 
+  // wx parity: reopen on the same view (position + zoom) the app was
+  // closed at. Saved DEBOUNCED on every viewport change rather than at
+  // exit, so it survives a crash or kill; restored where the initial
+  // chart fit would otherwise run (see m_world_fitted).
+  {
+    auto* save = new QTimer(this);
+    save->setSingleShot(true);
+    save->setInterval(2000);
+    connect(m_viewport.get(), &Viewport::changed, save,
+            QOverload<>::of(&QTimer::start));
+    connect(save, &QTimer::timeout, this, [this] {
+      // Only the visible canvas persists -- the hidden split-view pane
+      // (P6.1) has its own viewport and must not overwrite the user's
+      // view. (Both panes visible: last change wins, like wx's primary.)
+      if (!isVisible()) return;
+      ConfigStore& c = ConfigStore::instance();
+      c.setDouble("view/lat", m_viewport->centerLat());
+      c.setDouble("view/lon", m_viewport->centerLon());
+      c.setDouble("view/scale", m_viewport->scale());
+    });
+  }
+
   m_compositor = std::make_unique<LayerCompositor>();
 
   // Per-Layer state store (visible/zOrder/opacity), an INI file under the
@@ -858,10 +880,20 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
     // DEBUG: open at a fixed view (OCPN_QT_VIEW_LAT/LON/SCALE) to reproduce a
     // specific location/zoom for diagnosis without manual navigation.
     const QByteArray dvlat = qgetenv("OCPN_QT_VIEW_LAT");
+    const double saved_scale =
+        ConfigStore::instance().getDouble("view/scale", 0.0);
     if (!dvlat.isEmpty()) {
       m_viewport->setCenter(dvlat.toDouble(),
                             qgetenv("OCPN_QT_VIEW_LON").toDouble());
       m_viewport->setScale(qgetenv("OCPN_QT_VIEW_SCALE").toDouble());
+    } else if (saved_scale > 0.0) {
+      // wx parity: reopen exactly where the app was closed (the saved
+      // view wins over the whole-library fit), and don't yank to the
+      // first GPS fix -- follow mode does that when asked.
+      m_viewport->setCenter(ConfigStore::instance().getDouble("view/lat", 0.0),
+                            ConfigStore::instance().getDouble("view/lon", 0.0));
+      m_viewport->setScale(saved_scale);
+      m_live_centered = true;
     } else {
       m_viewport->setCenter((n + s) / 2.0, (e + w) / 2.0);
       const double fit =
