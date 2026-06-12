@@ -312,8 +312,14 @@ WebSocketTransport::WebSocketTransport(const QUrl& url,
           &WebSocketTransport::OnTextMessage);
   connect(m_ws, &QWebSocket::binaryMessageReceived, this,
           &WebSocketTransport::OnBinaryMessage);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   connect(m_ws, &QWebSocket::errorOccurred, this,
           &WebSocketTransport::OnError);
+#else  // renamed from the overloaded error() signal in Qt 6.5
+  connect(m_ws,
+          QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error),
+          this, &WebSocketTransport::OnError);
+#endif
 #ifndef QT_NO_SSL
   // Boat-LAN servers run self-signed certificates; the legacy driver
   // disabled certificate validation, so this transport does too.
