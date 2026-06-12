@@ -1730,10 +1730,13 @@ toggles stay on `chart` (ChartCanvas).
       full **edit-in-place** of an existing connection (re-keys the running
       driver). Persisted as JSON via `ConfigStore`. (`connections_view_model.*`,
       `Main.qml` Connections tab.)
-- [—] GPSD, Garmin, SignalK, SocketCAN, TCP-server: deliberately **not** in the
-      editor — `MakeCommDriver` parks them (no driver), so exposing them would
-      be inert. They return when the comm framework grows those transports
-      (see `comm_drv_factory.cpp`).
+- [x] ~~GPSD, SignalK, TCP-server deliberately not in the editor~~ —
+      **exposed (2026-06-12)** the same day P1.5c/P1.5k un-parked them:
+      transport combo gains GPSD + Signal K (wire protocol/direction
+      fixed, NMEA filters hidden for Signal K, auth-token field), and a
+      blank TCP address is listen mode ("TCP listen :port" summary).
+      Still out: Garmin (dropped from scope, P1.5j-1) and SocketCAN
+      (returns with P1.5g).
 - [x] Per-connection **priorities** — **landed 2026-06-10**
       (CommPrioritiesModel + PrioritiesDialog over CommBridge's five
       priority maps; re-rank with Move up/down, active source marked,
