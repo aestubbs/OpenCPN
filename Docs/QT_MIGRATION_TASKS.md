@@ -1339,18 +1339,23 @@ direction: all six are wanted eventually.**
       dense cell → 1–2). Verified visually via the new
       `OCPN_QT_GRAB=<png>[:delay]` window-grab hook (passive,
       window-only — the headless verify loop's eyes).
-- [ ] **PERF-5** Dirty-flag split (geometry vs visibility) so pure pan
-      touches no layer code at all: Layer::DirtyFlag {Geometry,
-      Visibility}; the compositor skips structure reconciliation for
-      visibility-only changes. Gain: pan frame 15 ms → 3–5 ms total;
-      2–3 weeks; MED-HIGH risk (missed-dirty staleness).
-      `layer_compositor.cpp:140–198`.
-- [ ] **PERF-6** Chunked cell builds: spread the 50–150 ms main-thread
-      scene-graph construction of a big cell over 3–4 frames (state
-      machine in the provider: clip+fills → lines → billboards), so
-      panning into a new area renders progressively instead of hitching.
-      2–3 weeks; MEDIUM risk (partial subtrees must stay coherent).
-      `s52_vector_chart_provider.cpp` renderChart.
+- [x] **PERF-5** ~~Dirty-flag split~~ — **CLOSED OBSOLETE by
+      measurement (2026-06-12).** With PERF-3/4 landed, the new
+      OCPN_QT_PAN_TEST exerciser + QSG_RENDER_TIMING shows a steady pan
+      over the dense Solent quilt locked at 60 fps with sync=0 ms,
+      preprocess=0 ms, polish=0 ms — no per-pan layer cost remains to
+      split.
+- [ ] **PERF-6** Pan-into-new-area hitch — **RE-SCOPED by measurement
+      (2026-06-12).** The hitch is real (~1.06 s frames as cells join
+      mid-pan) but NOT where assumed: the provider build measures only
+      15–29 ms (atlas 1–4 ms, declutter ~1 ms; per-phase timing under
+      OCPN_QT_SG_STATS) and the stall is render=1064 ms on the RENDER
+      thread inside the RHI — batch rebuild / texture upload / Metal
+      pipeline compilation as the new cell's nodes enter the scene.
+      Chunking OUR build (the old plan) would not touch it. Next:
+      QSG_RHI_PROFILE / Instruments to split batch-build vs upload vs
+      PSO compile, then target that (pipeline warm-up, staged node
+      attachment). Exerciser: OCPN_QT_PAN_TEST=<s>.
 - [ ] **PERF-0** (cross-cutting) Instrumentation before each step:
       per-layer updateSubtree timing, declutter phase timing,
       QSG_RENDER_TIMING, texture-cache hit rate — measure, don't assume.
