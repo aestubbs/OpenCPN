@@ -1015,7 +1015,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     }
   }
 
-  // Logical pixels per millimetre, for both physical-size line widths and
+  // Logical pixels per millimetre, for physical-size dash patterns and
   // the SCAMIN scale denominator. logicalDotsPerInch gives a consistent
   // physical scale independent of raw pixel density (Qt applies the device
   // pixel ratio on top).
@@ -1023,8 +1023,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       window->screen()->logicalDotsPerInch() > 1.0) {
     m_screen_ppmm = window->screen()->logicalDotsPerInch() / 25.4;
   }
-  // S-52 pen unit ~0.32mm -> logical px.
-  constexpr double kS52PenWidthMM = 0.32;
+  // LS pen width: wx's GL path draws the S-52 width number as DEVICE
+  // pixels (s52plib glLineWidth), so a width-2 dashed boundary is one
+  // LOGICAL pixel on a 2x display. The earlier 0.32mm-physical reading
+  // doubled that -- the magenta dashed area boundaries dominated the
+  // chart (user feedback 2026-06-12). Match the wx convention.
+  const double dpr = window && window->effectiveDevicePixelRatio() > 0
+                         ? window->effectiveDevicePixelRatio()
+                         : 1.0;
 
   // Route a static fill/line node into the tree (P2.14). If it carries a real
   // S-52 SCAMIN, wrap it in an opacity node so updateScaminNodes can hide it by
@@ -1172,7 +1178,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     // screen-fixed by the shader -- no per-zoom rebuild, no parallel strips.
     if (prim.type == s52sg::PrimType::LineStrip) {
       const float widthPx = static_cast<float>(
-          std::max(1.0, prim.width * kS52PenWidthMM * m_screen_ppmm));
+          std::max(0.75, prim.width / dpr));
       // S-52 dash, mm -> logical px (the AA-line shader runs it along the
       // screen arc length, so it stays a constant physical size at any zoom).
       const float dashOn =
