@@ -1352,10 +1352,19 @@ direction: all six are wanted eventually.**
       OCPN_QT_SG_STATS) and the stall is render=1064 ms on the RENDER
       thread inside the RHI — batch rebuild / texture upload / Metal
       pipeline compilation as the new cell's nodes enter the scene.
-      Chunking OUR build (the old plan) would not touch it. Next:
-      QSG_RHI_PROFILE / Instruments to split batch-build vs upload vs
-      PSO compile, then target that (pipeline warm-up, staged node
-      attachment). Exerciser: OCPN_QT_PAN_TEST=<s>.
+      Chunking OUR build (the old plan) would not touch it.
+      **Investigation log (2026-06-12):** QSG_RENDERER_DEBUG exposed the
+      world basemap as single 1.86M + 1.18M-vertex nodes re-copied on
+      every 'rebuild: full' → the basemap now tiles into a 24x12 grid
+      and submits only view-intersecting tiles (landed; seamless at all
+      zooms; big scene-size win). The hitch PERSISTS though
+      (render=1021 ms, preprocess=0, updates=0, no node >10k verts
+      left): the second is inside the RHI batch build/record phase with
+      ~15k small elements. NEXT: an Instruments time-profile of the
+      render thread during OCPN_QT_PAN_TEST to attribute it (batch
+      partitioning? per-batch Metal buffer churn from the ~400 unmerged
+      NoBatching AA-line batches? opaque overlap sort?), then target
+      that. Exerciser: OCPN_QT_PAN_TEST=<s>.
 - [ ] **PERF-0** (cross-cutting) Instrumentation before each step:
       per-layer updateSubtree timing, declutter phase timing,
       QSG_RENDER_TIMING, texture-cache hit rate — measure, don't assume.
