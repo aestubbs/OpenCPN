@@ -36,6 +36,8 @@
 
 #include <ixwebsocket/IXNetSystem.h>
 
+#include <QUrl>
+
 #include "model/comm_util.h"
 #include "model/comm_drv_generic.h"
 #include "model/comm_drv_loopback.h"
@@ -45,11 +47,13 @@
 #include "model/comm_n2k_gateway_mgr.h"
 #include "model/comm_navmsg_bus.h"
 #include "model/comm_drv_registry.h"
+#include "model/comm_signalk_decoder.h"
 #include "model/ds_porttype.h"
 
-// SignalK (comm_drv_signalk*) and SocketCAN (comm_drv_n2k_socketcan) are
-// parked: their source stays in the tree but is not built and the factory
-// no longer creates them. See P1.5m in QT_MIGRATION_TASKS.md.
+// SocketCAN (comm_drv_n2k_socketcan) is parked: its source stays in the
+// tree but is not built and the factory no longer creates it. See P1.5m
+// in QT_MIGRATION_TASKS.md. SignalK runs on the comms framework (P1.5c);
+// the legacy comm_drv_signalk* sources await deletion under P1.5m.
 
 class N0183Listener : public DriverListener {
 public:
@@ -121,6 +125,52 @@ static DriverPtr MakeN0183NetDriver(const ConnectionParams* params,
   driver->attributes["netPort"] = std::to_string(params->NetworkPort);
   driver->attributes["userComment"] = params->UserComment.ToStdString();
   driver->attributes["ioDirection"] = DsPortTypeToString(params->IOSelect);
+  return driver;
+}
+
+/**
+ * Build a SignalK driver on the comms framework (P1.5c) -- a generic
+ * CommDriver wrapping a WebSocketTransport + PassThroughFramer +
+ * SignalKDecoder. Replaces the legacy IXWebSocket-threaded
+ * CommDriverSignalKNet.
+ *
+ * The stream URL is the SignalK v1 firehose subscription; an auth token
+ * rides as a query parameter when configured. The transport alternates
+ * ws:// <-> wss:// on error, as the legacy driver did (one divergence:
+ * the first attempt is plain ws://, the common boat-server case, where
+ * legacy started with wss://).
+ */
+static DriverPtr MakeSignalKDriver(const ConnectionParams* params,
+                                   DriverListener& listener) {
+  const QString host = QString::fromStdString(
+      params->NetworkAddress.ToStdString());
+  const int port = params->NetworkPort;
+  QString query =
+      QStringLiteral("subscribe=all&sendCachedValues=false");
+  const std::string token = params->AuthToken.ToStdString();
+  if (!token.empty())
+    query += QStringLiteral("&token=") + QString::fromStdString(token);
+  const QString path = QStringLiteral("/signalk/v1/stream?") + query;
+  const QUrl ws(QStringLiteral("ws://%1:%2%3").arg(host).arg(port).arg(path));
+  const QUrl wss(
+      QStringLiteral("wss://%1:%2%3").arg(host).arg(port).arg(path));
+
+  // Interface tag for produced messages: the part after the proto prefix
+  // (legacy HandleSkSentence stripped GetStrippedDSPort the same way).
+  std::string iface = params->GetStrippedDSPort();
+  const auto colon = iface.find(':');
+  const std::string comm_iface =
+      colon != std::string::npos ? iface.substr(colon + 1) : iface;
+
+  auto driver = std::make_unique<CommDriver>(
+      NavAddr::Bus::Signalk, params->GetStrippedDSPort(), *params,
+      std::make_unique<WebSocketTransport>(ws, wss),
+      std::make_unique<PassThroughFramer>(),
+      std::make_unique<SignalKDecoder>(comm_iface), listener);
+  driver->attributes["netAddress"] = host.toStdString();
+  driver->attributes["netPort"] = std::to_string(port);
+  driver->attributes["userComment"] = params->UserComment.ToStdString();
+  driver->attributes["ioDirection"] = std::string("IN");
   return driver;
 }
 
@@ -210,11 +260,7 @@ void MakeCommDriver(const ConnectionParams* params) {
     case NETWORK:
       switch (params->NetProtocol) {
         case SIGNALK: {
-          // Parked -- the SignalK driver is not built. See P1.5m.
-          wxLogMessage(
-              "MakeCommDriver: SignalK is out of scope -- no driver "
-              "created for %s",
-              params->GetDSPort().c_str());
+          registry.Activate(MakeSignalKDriver(params, listener));
           break;
         }
         default: {

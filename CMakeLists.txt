@@ -110,7 +110,7 @@ if (NOT QT_ANDROID)
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/qt")
   endif ()
   find_package(Qt6 REQUIRED COMPONENTS Core Gui Network SerialPort
-                                       Quick Qml QuickControls2)
+                                       WebSockets Quick Qml QuickControls2)
   message(STATUS "Found Qt ${Qt6_VERSION}")
   # qt_standard_project_setup() (Qt 6.3+) wires up qt_add_executable /
   # qt_add_qml_module / qt_add_resources etc. used by the new gui/qt/ tree.

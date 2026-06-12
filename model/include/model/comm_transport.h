@@ -37,10 +37,13 @@
 #include <QByteArray>
 #include <QObject>
 #include <QString>
+#include <QUrl>
 
 class QSerialPort;
 class QTcpSocket;
+class QTimer;
 class QUdpSocket;
+class QWebSocket;
 
 /**
  * Abstract media adaptor.
@@ -175,6 +178,48 @@ private:
   const quint16 m_port;
   const bool m_multicast;
   QUdpSocket* m_socket;  ///< owned via QObject parenting to this transport
+};
+
+/**
+ * WebSocket transport (QWebSocket). Frame-native: every received text or
+ * binary message is exactly one DataReceived chunk -- pair it with the
+ * PassThroughFramer.
+ *
+ * An optional alternate URL is switched to on error, flip-flopping between
+ * the two on every failure -- the wss:// <-> ws:// dance SignalK servers
+ * need (the caller does not know which scheme a server speaks). TLS
+ * certificate errors are ignored: boat-LAN servers run self-signed certs,
+ * matching the legacy driver's disabled validation. A 30 s ping keeps
+ * NAT / proxy paths alive.
+ */
+class WebSocketTransport : public CommTransport {
+  Q_OBJECT
+
+public:
+  WebSocketTransport(const QUrl& url, const QUrl& alternate_url = QUrl(),
+                     QObject* parent = nullptr);
+  ~WebSocketTransport() override;
+
+  bool Open() override;
+  void Close() override;
+  bool IsOpen() const override;
+
+  /** Sends data as one websocket TEXT message (the JSON protocols). */
+  bool Write(const QByteArray& data) override;
+
+private Q_SLOTS:
+  void OnConnected();
+  void OnDisconnected();
+  void OnTextMessage(const QString& message);
+  void OnBinaryMessage(const QByteArray& message);
+  void OnError();
+
+private:
+  const QUrl m_url;
+  const QUrl m_alternate;
+  bool m_use_alternate = false;
+  QWebSocket* m_ws;      ///< owned via QObject parenting to this transport
+  QTimer* m_ping_timer;  ///< 30 s keepalive while connected
 };
 
 #endif  // COMM_TRANSPORT_H

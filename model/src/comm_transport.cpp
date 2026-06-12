@@ -25,7 +25,9 @@
 #include <QNetworkDatagram>
 #include <QSerialPort>
 #include <QTcpSocket>
+#include <QTimer>
 #include <QUdpSocket>
+#include <QWebSocket>
 
 #include "model/comm_transport.h"
 
@@ -218,4 +220,90 @@ void UdpTransport::OnReadyRead() {
 
 void UdpTransport::OnError() {
   Q_EMIT ErrorOccurred(m_socket->errorString());
+}
+
+// ---------------------------------------------------------------------------
+// WebSocketTransport
+// ---------------------------------------------------------------------------
+
+WebSocketTransport::WebSocketTransport(const QUrl& url,
+                                       const QUrl& alternate_url,
+                                       QObject* parent)
+    : CommTransport(parent),
+      m_url(url),
+      m_alternate(alternate_url),
+      m_ws(new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this)),
+      m_ping_timer(new QTimer(this)) {
+  connect(m_ws, &QWebSocket::connected, this,
+          &WebSocketTransport::OnConnected);
+  connect(m_ws, &QWebSocket::disconnected, this,
+          &WebSocketTransport::OnDisconnected);
+  connect(m_ws, &QWebSocket::textMessageReceived, this,
+          &WebSocketTransport::OnTextMessage);
+  connect(m_ws, &QWebSocket::binaryMessageReceived, this,
+          &WebSocketTransport::OnBinaryMessage);
+  connect(m_ws, &QWebSocket::errorOccurred, this,
+          &WebSocketTransport::OnError);
+#ifndef QT_NO_SSL
+  // Boat-LAN servers run self-signed certificates; the legacy driver
+  // disabled certificate validation, so this transport does too.
+  connect(m_ws, &QWebSocket::sslErrors, this,
+          [this](const QList<QSslError>&) { m_ws->ignoreSslErrors(); });
+#endif
+  m_ping_timer->setInterval(30 * 1000);
+  connect(m_ping_timer, &QTimer::timeout, this,
+          [this] { m_ws->ping(); });
+}
+
+WebSocketTransport::~WebSocketTransport() { WebSocketTransport::Close(); }
+
+bool WebSocketTransport::Open() {
+  const QUrl& url =
+      m_use_alternate && m_alternate.isValid() ? m_alternate : m_url;
+  // Connects asynchronously; Connected() is emitted from OnConnected().
+  m_ws->open(url);
+  return true;
+}
+
+void WebSocketTransport::Close() {
+  m_ping_timer->stop();
+  if (m_ws->state() != QAbstractSocket::UnconnectedState) m_ws->close();
+}
+
+bool WebSocketTransport::IsOpen() const {
+  return m_ws->state() == QAbstractSocket::ConnectedState;
+}
+
+bool WebSocketTransport::Write(const QByteArray& data) {
+  if (!IsOpen()) return false;
+  return m_ws->sendTextMessage(QString::fromUtf8(data)) > 0;
+}
+
+void WebSocketTransport::OnConnected() {
+  m_ping_timer->start();
+  Q_EMIT Connected();
+}
+
+void WebSocketTransport::OnDisconnected() {
+  m_ping_timer->stop();
+  Q_EMIT Disconnected();
+}
+
+void WebSocketTransport::OnTextMessage(const QString& message) {
+  Q_EMIT DataReceived(message.toUtf8());
+}
+
+void WebSocketTransport::OnBinaryMessage(const QByteArray& message) {
+  if (!message.isEmpty()) Q_EMIT DataReceived(message);
+}
+
+void WebSocketTransport::OnError() {
+  // Flip to the other URL for the next attempt (the wss <-> ws dance).
+  if (m_alternate.isValid()) m_use_alternate = !m_use_alternate;
+  Q_EMIT ErrorOccurred(m_ws->errorString());
+  // A failed CONNECT attempt never emits disconnected(), so the generic
+  // driver's reconnect timer would not be armed -- emit it here when the
+  // socket is not connected. OnDisconnected handles the connected case.
+  if (m_ws->state() == QAbstractSocket::UnconnectedState)
+    Q_EMIT Disconnected();
 }

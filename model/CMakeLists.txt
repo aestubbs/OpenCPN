@@ -68,6 +68,7 @@ set(
   ${MODEL_HDR_DIR}/comm_navmsg.h
   ${MODEL_HDR_DIR}/comm_out_queue.h
   ${MODEL_HDR_DIR}/comm_protocol_decoder.h
+  ${MODEL_HDR_DIR}/comm_signalk_decoder.h
   ${MODEL_HDR_DIR}/comm_transport.h
   ${MODEL_HDR_DIR}/comm_util.h
   ${MODEL_HDR_DIR}/comm_vars.h
@@ -183,6 +184,7 @@ set(SRC
   ${MODEL_SRC_DIR}/comm_navmsg.cpp
   ${MODEL_SRC_DIR}/comm_navmsg.cpp
   ${MODEL_SRC_DIR}/comm_out_queue.cpp
+  ${MODEL_SRC_DIR}/comm_signalk_decoder.cpp
   ${MODEL_SRC_DIR}/comm_transport.cpp
   ${MODEL_SRC_DIR}/comm_util.cpp
   ${MODEL_SRC_DIR}/comm_vars.cpp
@@ -292,7 +294,8 @@ target_link_libraries(_model_src PUBLIC _OCPN_MODEL)
 # AUTOMOC runs moc on it, and the Qt socket/core libraries are linked in.
 if (NOT QT_ANDROID)
   set_target_properties(_model_src PROPERTIES AUTOMOC ON)
-  target_link_libraries(_model_src PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::SerialPort)
+  target_link_libraries(_model_src PUBLIC Qt6::Core Qt6::Gui Qt6::Network
+                                        Qt6::SerialPort Qt6::WebSockets)
 endif ()
 
 # P1.10: Qt 6 file-I/O headers (QFile/QDir/QFileInfo) expose
