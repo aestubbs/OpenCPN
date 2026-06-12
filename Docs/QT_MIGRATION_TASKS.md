@@ -2348,10 +2348,14 @@ existing `followOwnShip` property before adding).
       set (wind speed+bf+dir at altitude, gust, pressure, waves
       h-period-dir, current flow-dir, rain/cloud/temps/CAPE/refl/
       humidity, geopotential altitude aloft) at wx precisions through
-      the units engine. Remaining refinements vs wx: fixed/minimum-
-      spacing options, isotachs/isotherms beyond isobars, gust-as-barbs
-      variant, multi-file layering. Functional end-state reached —
-      verify against real forecasts and refine.
+      the units engine. ~~Multi-file layering~~ **DONE (2026-06-12):**
+      one GribReader fed every file (the wx GRIBFile merge), fixups
+      once over the merged set, date-union steps; addFile() + a '+'
+      per file in the flyout's Open menu; the set persists/restores
+      (lastFiles); OCPN_GRIB_FILE takes a ;-separated list. Remaining
+      refinements vs wx: fixed/minimum-spacing options, isotachs/
+      isotherms beyond isobars, gust-as-barbs variant. Functional
+      end-state reached — verify against real forecasts and refine.
 - [~] **P4.7** o-charts SHOP plugin — **v1 landed (2026-06-11),
       built by default:** login2/getlist/identifySystem/assign/request
       against the live API (parameters verified against ochartShop.cpp),
