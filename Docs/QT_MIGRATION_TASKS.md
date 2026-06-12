@@ -1360,11 +1360,18 @@ direction: all six are wanted eventually.**
       zooms; big scene-size win). The hitch PERSISTS though
       (render=1021 ms, preprocess=0, updates=0, no node >10k verts
       left): the second is inside the RHI batch build/record phase with
-      ~15k small elements. NEXT: an Instruments time-profile of the
-      render thread during OCPN_QT_PAN_TEST to attribute it (batch
-      partitioning? per-batch Metal buffer churn from the ~400 unmerged
-      NoBatching AA-line batches? opaque overlap sort?), then target
-      that. Exerciser: OCPN_QT_PAN_TEST=<s>.
+      ~15k small elements. **RESOLVED in substance (2026-06-12):** a
+      `sample` profile pinned it — QSGBatchRenderer::prepareAlphaBatches
+      scans translucent elements quasi-quadratically calling material
+      compare(), and AaLineMaterial::compare()'s four un-inlined
+      QColor::rgba() calls were ~half the render-thread time. Fixed:
+      compare() reads a cached POD rgbaKey, and chart LS lines skip the
+      cull tiles so the PERF-3 run-merge collapses the alpha-element
+      count (thin lines cost ~nothing off-screen). Measured: worst pan
+      frame 1047 ms → ~217 ms typical / 480 ms once; steady pan still
+      60 fps; visuals identical. The remaining ~0.2 s tail is genuine
+      batch building — chase only if it still registers in real use.
+      Exerciser: OCPN_QT_PAN_TEST=<s>.
 - [ ] **PERF-0** (cross-cutting) Instrumentation before each step:
       per-layer updateSubtree timing, declutter phase timing,
       QSG_RENDER_TIMING, texture-cache hit rate — measure, don't assume.
