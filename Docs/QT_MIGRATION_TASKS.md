@@ -2156,16 +2156,18 @@ Phase 6). New scope found untracked:
       full-screen via a window-level `Shortcut`. Remaining: Ctrl-Z/Y once
       undo exists (P3.18 tier 4); any further wx hotkeys (`hotkeys_dlg`
       audit) as needed; P3.13's route-build keys fold in when both land.
-- [~] **P3.23** **Application menu bar (wx RegisterGlobalMenuItems
-      parity) — landed 2026-06-12.** `AppMenuBar.qml` via Qt.labs.platform
+- [x] **P3.23** **Application menu bar (wx RegisterGlobalMenuItems
+      parity) — DONE 2026-06-12.** `AppMenuBar.qml` via Qt.labs.platform
       (the NATIVE macOS global bar): Navigate / View / AIS / Tools / Help
       with the wx items, shortcuts and check states, bound two-way onto
-      the existing seams; new dropMarkAtCursor/AtBoat canvas invokables
-      (instant dated drops, undo-able). Remaining for [x]: the wx items
-      pending seams — larger/smaller-scale chart step, ENC anchoring
-      info toggle, AIS show-targets/hide-moored/target-tracks toggles
-      (quilting toggle omitted by design: the Qt provider is
-      always-quilted). User visual pass pends.
+      the same seams as the toolbars/Options. New seams built for the
+      full set: dropMarkAtCursor/AtBoat (instant dated drops,
+      undo-able), scaleChartStep (Ctrl-Left/Right next finer/coarser
+      native scale at centre), showEncAnchoring (the wx SetAnchorOn
+      class set through the hidden-classes pipeline), and AisConfig
+      showTargets/hideMoored/showTargetTracks filtering AisLayer. The
+      ONLY omitted wx item is the quilting toggle (Qt provider is
+      always-quilted by design). User visual pass pends.
 - [ ] **P3.21** **wx-retirement acceptance checklist — gates P3.11.** P3.11
       ("remove the parallel wx build") executes only when all of these hold:
       1. ~~P3.18 canvas context menus — tiers 1–2 minimum~~ **DONE** (all
