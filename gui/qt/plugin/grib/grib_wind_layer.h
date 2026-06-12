@@ -30,6 +30,8 @@
 #include "sg_builder.h"  // opencpn_qt_toolkit
 #include "viewport.h"    // opencpn_qt_toolkit
 
+#include "grib_color_maps.h"
+
 namespace ocpn::qtui {
 
 class GribWindLayer : public Layer {
@@ -94,11 +96,15 @@ public:
 
   /** The colour-mapped overlay raster (one at a time, wx OverlayMap):
    *  the grid is rasterized at grid resolution and GPU linear filtering
-   *  smooths it across the chart. ramp: "wind" (kn ramp) | "generic"
-   *  (normalized blue->red). */
-  void setOverlay(const ScalarGrid& g, const QString& ramp, double rampMax) {
+   *  smooths it across the chart. Colours come from the wx grib_pi
+   *  palettes -- `map` picks the ramp, [rampMin, rampMax] the value
+   *  range it spans (the type's wx GetMin/GetMax, in the grid's own
+   *  units). */
+  void setOverlay(const ScalarGrid& g, gribmaps::Map map, double rampMin,
+                  double rampMax) {
     m_overlay = g;
-    m_overlay_ramp = ramp;
+    m_overlay_map = map;
+    m_overlay_min = rampMin;
     m_overlay_max = rampMax;
     m_overlay_dirty = true;
     Q_EMIT dirty();
@@ -154,7 +160,8 @@ private:
   WindGrid m_grid;
   ScalarGrid m_isobars;
   ScalarGrid m_overlay;
-  QString m_overlay_ramp;
+  gribmaps::Map m_overlay_map = gribmaps::Generic;
+  double m_overlay_min = 0;
   double m_overlay_max = 0;
   bool m_overlay_dirty = false;
   QSGNode* m_overlay_node = nullptr;

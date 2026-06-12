@@ -10,6 +10,8 @@ qt_add_plugin(opencpn-qt-grib-plugin
   grib_plugin.cpp
   grib_wind_layer.h
   grib_wind_layer.cpp
+  grib_color_maps.h
+  grib_color_maps.cpp
   ${GRIB_SRC}/GribRecord.cpp
   ${GRIB_SRC}/GribV1Record.cpp
   ${GRIB_SRC}/GribV2Record.cpp

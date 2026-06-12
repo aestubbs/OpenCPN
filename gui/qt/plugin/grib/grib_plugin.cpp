@@ -50,11 +50,9 @@ const TypeSpec kTypes[] = {
     {"cloud", "Cloud", GRB_CLOUD_TOT, LV_ATMOS_ALL, 0, TypeSpec::Numbers,
      QColor(120, 120, 130), " %", 1.0, 0.0, 0},
     {"airtemp", "Air temp", GRB_TEMP, LV_ABOV_GND, 2, TypeSpec::Numbers,
-     QColor(200, 60, 60), QStringLiteral("°").toUtf8().constData(), 1.0,
-     -273.15, 0},
+     QColor(200, 60, 60), "\xC2\xB0", 1.0, -273.15, 0},
     {"seatemp", "Sea temp", GRB_TEMP, LV_GND_SURF, 0, TypeSpec::Numbers,
-     QColor(40, 140, 120), QStringLiteral("°").toUtf8().constData(), 1.0,
-     -273.15, 0},
+     QColor(40, 140, 120), "\xC2\xB0", 1.0, -273.15, 0},
     {"cape", "CAPE", GRB_CAPE, LV_GND_SURF, 0, TypeSpec::Numbers,
      QColor(160, 60, 180), "", 1.0, 0.0, 0},
     {"refl", "Reflectivity", GRB_COMP_REFL, LV_ATMOS_ALL, 0,
@@ -795,13 +793,13 @@ void GribContext::pushToLayer() {
                                        rv->getValue(i, j)))
                       : NAN;
         }
-      m_layer->setOverlay(g, QStringLiteral("wind"), 0);
+      m_layer->setOverlay(g, ocpn::qtui::gribmaps::Wind, 0, 40);  // m/s
       if (ownW) { delete ru; delete rv; }
     } else {
       m_layer->clearOverlay();
     }
   } else {
-    // Generic ramp over the chosen scalar's own range.
+    // The type's wx palette + normalization range (grib_color_maps).
     const TypeSpec* spec = nullptr;
     for (const TypeSpec& ts : kTypes)
       if (m_overlay_key == QLatin1String(ts.key)) spec = &ts;
@@ -811,10 +809,16 @@ void GribContext::pushToLayer() {
              : nullptr;
     if (r && r->isOk()) {
       auto g = scalarFrom(r);
-      float mx = 0;
-      for (float v : g.v)
-        if (!std::isnan(v)) mx = qMax(mx, v);
-      m_layer->setOverlay(g, QStringLiteral("generic"), mx);
+      ocpn::qtui::gribmaps::Map map = ocpn::qtui::gribmaps::Generic;
+      double mn = 0, mx = 0;
+      if (!ocpn::qtui::gribmaps::rampForKey(m_overlay_key, &map, &mn, &mx)) {
+        // Unknown key: generic ramp over the field's own range.
+        float top = 0;
+        for (float v : g.v)
+          if (!std::isnan(v)) top = qMax(top, v);
+        mx = top;
+      }
+      m_layer->setOverlay(g, map, mn, mx);
     } else {
       m_layer->clearOverlay();
     }

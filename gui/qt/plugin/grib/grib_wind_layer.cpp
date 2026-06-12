@@ -13,6 +13,7 @@
 
 #include <QtMath>
 
+#include <QLineF>
 #include <QQuickWindow>
 #include <QSGNode>
 #include <QSGSimpleTextureNode>
@@ -21,16 +22,95 @@
 namespace ocpn::qtui {
 
 namespace {
-// Speed (kn) -> arrow colour: calm green through gale red/violet.
-QColor windColor(double kn) {
-  if (kn < 7) return QColor(80, 180, 90);
-  if (kn < 14) return QColor(150, 190, 60);
-  if (kn < 21) return QColor(220, 180, 40);
-  if (kn < 28) return QColor(235, 130, 40);
-  if (kn < 34) return QColor(230, 70, 50);
-  if (kn < 48) return QColor(200, 40, 90);
-  return QColor(150, 30, 160);
+
+// The wx wind-arrow cache, ported exactly (GribOverlayFactory.cpp:241+):
+// 14 speed buckets of line segments in arrow-local px (staff centred on
+// the grid point, head downwind at -x, barbules raking upwind at +x).
+// Bucket 0 is the calm circle; integer arithmetic kept so the shapes are
+// identical to wx's.
+struct BarbSet {
+  QVector<QLineF> b[14];
+};
+
+const BarbSet& barbCache() {
+  static const BarbSet s = [] {
+    BarbSet c;
+    const int size = 26;           // wx desktop windArrowSize
+    const int dec = -size / 2;     // staff start (the head end)
+    const int pointer = size / 3;  // arrowhead length
+    const int feather = size / 6;  // barbule pitch along the staff
+    const int lpetite = size / 5;  // half-barb length
+    const int lgrande = lpetite * 2;
+    const int b1 = dec + size - feather;  // first barbule, < 10 kn
+    const int b2 = dec + size;            // first barbule, >= 10 kn
+    const double r = 5;                   // calm circle radius
+    const double step = 2 * M_PI / 10.;
+    for (double a = 0; a < 2 * M_PI; a += step)
+      c.b[0].append(QLineF(r * std::sin(a), r * std::cos(a),
+                           r * std::sin(a + step), r * std::cos(a + step)));
+    for (int i = 1; i < 14; ++i) {
+      c.b[i].append(QLineF(dec, 0, dec + size, 0));               // staff
+      c.b[i].append(QLineF(dec, 0, dec + pointer, pointer / 2));  // head
+      c.b[i].append(QLineF(dec, 0, dec + pointer, -pointer / 2));
+    }
+    auto petite = [&](int i, int pos) {
+      c.b[i].append(QLineF(pos, 0, pos + lpetite * 100 / 250, -lpetite));
+    };
+    auto grande = [&](int i, int pos) {
+      c.b[i].append(QLineF(pos, 0, pos + lgrande * 100 / 250, -lgrande));
+    };
+    auto pennant = [&](int i, int pos) {
+      const int dim = lgrande * 100 / 250;
+      c.b[i].append(QLineF(pos, 0, pos + dim, -lgrande));
+      c.b[i].append(QLineF(pos + dim * 2, 0, pos + dim, -lgrande));
+    };
+    petite(1, b1);  // 5 kn
+    grande(2, b2);  // 10
+    grande(3, b2);  // 15
+    petite(3, b2 - feather);
+    grande(4, b2);  // 20
+    grande(4, b2 - feather);
+    grande(5, b2);  // 25
+    grande(5, b2 - feather);
+    petite(5, b2 - feather * 2);
+    grande(6, b2);  // 30
+    grande(6, b2 - feather);
+    grande(6, b2 - feather * 2);
+    grande(7, b2);  // 35
+    grande(7, b2 - feather);
+    grande(7, b2 - feather * 2);
+    petite(7, b2 - feather * 3);
+    grande(8, b2);  // 40
+    grande(8, b2 - feather);
+    grande(8, b2 - feather * 2);
+    grande(8, b2 - feather * 3);
+    pennant(9, b1 - feather);   // 50
+    pennant(10, b1 - feather);  // 60
+    grande(10, b1 - feather * 2);
+    pennant(11, b1 - feather);  // 70
+    grande(11, b1 - feather * 2);
+    grande(11, b1 - feather * 3);
+    pennant(12, b1 - feather);  // 80
+    grande(12, b1 - feather * 2);
+    grande(12, b1 - feather * 3);
+    grande(12, b1 - feather * 4);
+    pennant(13, b1 - feather);  // >= 90
+    pennant(13, b1 - feather * 3);
+    return c;
+  }();
+  return s;
 }
+
+// wx drawWindArrowWithBarbs bucket selection (speed rounded to 5 kn
+// steps below 40, 10 kn steps to 90, one bucket beyond).
+int barbIndex(double vkn) {
+  if (vkn < 1) return 0;
+  if (vkn < 2.5) return 1;
+  if (vkn < 40) return static_cast<int>(vkn + 2.5) / 5;
+  if (vkn < 90) return static_cast<int>(vkn + 5) / 10 + 4;
+  return 13;
+}
+
 }  // namespace
 
 void GribWindLayer::setViewport(const Viewport* vp) {
@@ -71,14 +151,9 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
           row[i] = qRgba(0, 0, 0, 0);
           continue;
         }
-        QColor c;
-        if (m_overlay_ramp == QLatin1String("wind")) {
-          c = windColor(v * 1.94384);  // m/s -> kn ramp
-        } else {
-          const double f =
-              m_overlay_max > 0 ? qBound(0.0, v / m_overlay_max, 1.0) : 0.0;
-          c = QColor::fromHsvF(0.66 * (1.0 - f), 0.85, 0.95);
-        }
+        const double span = m_overlay_max - m_overlay_min;
+        const double f = span > 0 ? (v - m_overlay_min) / span : 0.0;
+        QColor c = QColor::fromRgb(gribmaps::color(m_overlay_map, f));
         c.setAlpha(m_overlay_alpha);  // user transparency
         row[i] = c.rgba();
       }
@@ -112,12 +187,13 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
   if (m_label_cache.size() > 1200) m_label_cache.clear();
   if (m_grid.ni <= 1 || m_grid.nj <= 1) return m_root;
 
-  // Screen-fixed sizing: barbs are ~42 px regardless of zoom; the grid
-  // decimates so barbs sit >= ~60 px apart (PERF: rebuilds only on zoom).
+  // Screen-fixed sizing: barbs are wx's 26 px regardless of zoom; the
+  // grid decimates so barbs sit >= 50 px apart (the wx default barbed-
+  // arrow spacing). PERF: rebuilds only on zoom.
   const double wpp = worldPerPx();
   const double cellPx = std::fabs(m_grid.di) / wpp;
   const int step =
-      cellPx > 0 ? qMax(1, qCeil(60.0 / cellPx)) : qMax(1, m_grid.ni / 48);
+      cellPx > 0 ? qMax(1, qCeil(50.0 / cellPx)) : qMax(1, m_grid.ni / 48);
   {
     double sum = 0;
     int n = 0;
@@ -129,62 +205,39 @@ QSGNode* GribWindLayer::updateSubtree(QSGNode* /*old*/,
              visible() ? 1 : 0, n ? sum / n : 0.0);
   }
 
+  const BarbSet& cache = barbCache();
   for (int j = 0; j < m_grid.nj; j += step) {
     for (int i = 0; i < m_grid.ni; i += step) {
       const float u = m_grid.u[j * m_grid.ni + i];
       const float v = m_grid.v[j * m_grid.ni + i];
       if (std::isnan(u) || std::isnan(v)) continue;
       const double spd_ms = std::hypot(u, v);
-      const double kn = spd_ms * 1.94384;
-      if (kn < 0.5) continue;
+      const double kn = spd_ms * 3.6 / 1.852;
       const double lon = m_grid.lon0 + i * m_grid.di;
       const double lat = m_grid.lat0 + j * m_grid.dj;
       const QPointF w(lon, Viewport::latToWorldY(lat));
 
-      // Meteorological wind barb (wx GRIB presentation parity): the
-      // staff points INTO the wind (towards where it comes from); half
-      // barbs = 5 kn, full barbs = 10 kn, pennants = 50 kn, on the
-      // clockwise side (northern-hemisphere convention).
-      const double len = 42.0 * wpp;  // ~42 px staff, zoom-independent
-      const double n = std::hypot(u, v);
-      // Flow direction in world coords; the staff runs opposite it.
-      const QPointF flow(u / n, -v / n);
-      const QPointF staff(-flow.x(), -flow.y());
-      const QPointF perp(-staff.y(), staff.x());
-      const QPointF tip = w + QPointF(staff.x() * len, staff.y() * len);
-      b.setPen(windColor(kn), 1.4f);
+      // Meteorological wind barb, the exact wx transform
+      // (drawLineBuffer): staff rotated to ang = atan2(v, -u) so the
+      // head points downwind; south of the equator the barbule side
+      // mirrors (barbs face low pressure in both hemispheres). World y
+      // grows southward like wx screen y, so the formula ports as-is.
+      const bool south = lat < 0;
+      const double six = std::sin(std::atan2(v, -u));
+      const double cox = std::cos(std::atan2(v, -u));
+      const double siy = south ? -six : six;
+      const double coy = south ? -cox : cox;
+      // Speed-graded colour: the zyGrib wind palette over wx's 0-40 m/s
+      // range (the wx barbed-arrows "controlled colours" option).
+      b.setPen(QColor::fromRgb(
+                   gribmaps::color(gribmaps::Wind, spd_ms / 40.0)),
+               2.0f);
       b.noBrush();
-      b.drawLine(w, tip);
-
-      int rem = static_cast<int>(std::round(kn / 5.0)) * 5;
-      double along = 1.0;             // fraction of the staff, outer end first
-      const double spacing = 0.16;    // staff fractions between barbs
-      const double bl = len * 0.42;   // full-barb length
-      auto at = [&](double f) {
-        return w + QPointF(staff.x() * len * f, staff.y() * len * f);
-      };
-      while (rem >= 50) {
-        const QPointF p0 = at(along), p1 = at(along - spacing);
-        const QPointF apex = p0 + QPointF(perp.x() * bl, perp.y() * bl);
-        b.setBrush(windColor(kn));
-        b.drawPolygon({p0, apex, p1});
-        b.noBrush();
-        rem -= 50;
-        along -= spacing * 1.4;
-      }
-      while (rem >= 10) {
-        const QPointF p0 = at(along);
-        b.drawLine(p0, p0 + QPointF((perp.x() + staff.x() * 0.35) * bl,
-                                    (perp.y() + staff.y() * 0.35) * bl));
-        rem -= 10;
-        along -= spacing;
-      }
-      if (rem >= 5) {
-        if (along > 0.95) along = 0.85;  // a lone half barb sits inboard
-        const QPointF p0 = at(along);
-        b.drawLine(p0,
-                   p0 + QPointF((perp.x() + staff.x() * 0.35) * bl * 0.5,
-                                (perp.y() + staff.y() * 0.35) * bl * 0.5));
+      for (const QLineF& l : cache.b[barbIndex(kn)]) {
+        b.drawLine(w + QPointF((l.x1() * cox + l.y1() * siy) * wpp,
+                               (l.x1() * six - l.y1() * coy) * wpp),
+                   w + QPointF((l.x2() * cox + l.y2() * siy) * wpp,
+                               (l.x2() * six - l.y2() * coy) * wpp));
       }
     }
   }
