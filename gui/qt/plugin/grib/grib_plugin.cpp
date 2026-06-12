@@ -11,6 +11,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <tuple>
 
 #include <QDateTime>
 #include <QFile>
@@ -483,38 +484,149 @@ void GribContext::setMasterEnabled(bool on) {
 }
 
 QStringList GribContext::cursorRows(double lat, double lon) const {
+  // wx CursorData::UpdateTrackingControls port: every loaded type,
+  // sampled at the cursor from the TIME-INTERPOLATED records (the same
+  // ones the layer renders), formatted with the wx precisions through
+  // the per-type units engine.
   QStringList rows;
   if (!m_reader || m_step_times.isEmpty()) return rows;
-  const time_t t = static_cast<time_t>(m_step_times[m_time_index]);
-  auto val = [&](int dt, int lt, int lv) -> double {
-    GribRecord* r = m_reader->getGribRecord(dt, lt, lv, t);
-    if (!r || !r->isOk()) return GRIB_NOTDEF;
-    const double qlon =
-        (r->getX(0) >= 180.0 && lon < 0) ? lon + 360.0 : lon;
-    return r->getInterpolatedValue(qlon, lat, true);
+  auto* self = const_cast<GribContext*>(this);
+
+  auto qlon = [&](const GribRecord* r) {  // 0-360-grid query longitude
+    return (r->getX(0) >= 180.0 && lon < 0) ? lon + 360.0 : lon;
   };
-  const double u = val(GRB_WIND_VX, LV_ABOV_GND, 10);
-  const double v = val(GRB_WIND_VY, LV_ABOV_GND, 10);
-  if (u != GRIB_NOTDEF && v != GRIB_NOTDEF) {
-    double dir = std::atan2(-u, -v) * 180.0 / M_PI;
-    if (dir < 0) dir += 360.0;
-    rows << tr("Wind\t%1°  %2 kn")
-                .arg(qRound(dir))
-                .arg(std::hypot(u, v) * 1.94384, 0, 'f', 1);
+  auto deg = [](double a) {  // wx "%03d°"
+    int d = static_cast<int>(a) % 360;
+    if (d < 0) d += 360;
+    return QString::asprintf("%03d\xC2\xB0", d);
+  };
+  auto unit = [&](const char* key) {
+    double f = 1, o = 0;
+    QString s;
+    activeUnit(QLatin1String(key), m_units.value(QLatin1String(key)), &f, &o,
+               &s);
+    return std::make_tuple(f, o, s);
+  };
+  // wx GetmstobfFactor thresholds (m/s upper bound per Beaufort force).
+  auto beaufort = [](double ms) {
+    static constexpr double kTop[] = {0.5,  2.1,  3.6,  5.7,  8.7,  11.3,
+                                      14.4, 17.5, 21.1, 24.7, 28.8, 32.9};
+    for (int b = 0; b < 12; ++b)
+      if (ms < kTop[b]) return b;
+    return 12;
+  };
+  auto scalar = [&](int dt, int lt, int lv, bool dir = false) -> double {
+    bool own = false;
+    GribRecord* r = self->recordAt(dt, lt, lv, &own, dir);
+    if (!r || !r->isOk()) {
+      if (own) delete r;
+      return GRIB_NOTDEF;
+    }
+    const double v = r->getInterpolatedValue(qlon(r), lat, true, dir);
+    if (own) delete r;
+    return v;
+  };
+
+  // Wind at the selected altitude: speed + Beaufort + FROM-direction.
+  {
+    bool own = false;
+    GribRecord* rx = nullptr;
+    GribRecord* ry = nullptr;
+    const int lt = m_wind_altitude > 0 ? LV_ISOBARIC : LV_ABOV_GND;
+    const int lv = m_wind_altitude > 0 ? m_wind_altitude : 10;
+    self->recordPairAt(GRB_WIND_VX, GRB_WIND_VY, lt, lv, &rx, &ry, &own);
+    double vms = 0, ang = 0;
+    if (rx && ry &&
+        GribRecord::getInterpolatedValues(vms, ang, rx, ry, qlon(rx), lat)) {
+      auto [f, o, s] = unit("wind");
+      rows << tr("Wind\t%1%2 - %3 bf  %4")
+                  .arg(qRound(vms * f + o))
+                  .arg(s)
+                  .arg(beaufort(vms))
+                  .arg(deg(ang));
+    }
+    if (own) {
+      delete rx;
+      delete ry;
+    }
   }
-  const double gust = val(GRB_WIND_GUST, LV_GND_SURF, 0);
-  if (gust != GRIB_NOTDEF)
-    rows << tr("Gust\t%1 kn").arg(gust * 1.94384, 0, 'f', 1);
-  const double pa = val(GRB_PRESSURE, LV_MSL, 0);
-  if (pa != GRIB_NOTDEF)
-    rows << tr("Pressure\t%1 hPa").arg(pa / 100.0, 0, 'f', 0);
-  const double hs = val(GRB_HTSGW, LV_GND_SURF, 0);
-  if (hs != GRIB_NOTDEF) rows << tr("Waves\t%1 m").arg(hs, 0, 'f', 1);
-  const double rn = val(GRB_PRECIP_TOT, LV_GND_SURF, 0);
-  if (rn != GRIB_NOTDEF) rows << tr("Rain\t%1 mm").arg(rn, 0, 'f', 1);
-  const double at = val(GRB_TEMP, LV_ABOV_GND, 2);
-  if (at != GRIB_NOTDEF)
-    rows << tr("Air\t%1 °C").arg(at - 273.15, 0, 'f', 0);
+  const double gust = scalar(GRB_WIND_GUST, LV_GND_SURF, 0);
+  if (gust != GRIB_NOTDEF) {
+    auto [f, o, s] = unit("gust");
+    rows << tr("Gust\t%1%2").arg(qRound(gust * f + o)).arg(s);
+  }
+  const double pa = scalar(GRB_PRESSURE, LV_MSL, 0);
+  if (pa != GRIB_NOTDEF) {
+    auto [f, o, s] = unit("pressure");
+    rows << tr("Pressure\t%1%2")
+                .arg(pa * f + o, 0, 'f', s.contains("inHg") ? 2 : 1)
+                .arg(s);
+  }
+  // Waves: height, " - <period>s" when present, direction.
+  const double hs = scalar(GRB_HTSGW, LV_GND_SURF, 0);
+  if (hs != GRIB_NOTDEF) {
+    auto [f, o, s] = unit("waves");
+    QString w = tr("%1%2").arg(hs * f + o, 0, 'f', 1).arg(s);
+    const double per = scalar(GRB_WVPER, LV_GND_SURF, 0);
+    if (per != GRIB_NOTDEF) w += tr(" - %1s").arg(qRound(per));
+    const double wdir = scalar(GRB_WVDIR, LV_GND_SURF, 0, true);
+    if (wdir != GRIB_NOTDEF) w += QStringLiteral("  ") + deg(wdir);
+    rows << tr("Waves\t") + w;
+  }
+  // Current: speed + flow (TO) direction -- wx flips the wind
+  // convention by 180 degrees.
+  {
+    bool own = false;
+    GribRecord* rx = nullptr;
+    GribRecord* ry = nullptr;
+    self->recordPairAt(GRB_UOGRD, GRB_VOGRD, LV_GND_SURF, 0, &rx, &ry, &own);
+    double vms = 0, ang = 0;
+    if (rx && ry &&
+        GribRecord::getInterpolatedValues(vms, ang, rx, ry, qlon(rx), lat)) {
+      ang += 180;
+      if (ang >= 360) ang -= 360;
+      auto [f, o, s] = unit("current");
+      rows << tr("Current\t%1%2  %3")
+                  .arg(vms * f + o, 0, 'f', 1)
+                  .arg(s)
+                  .arg(deg(ang));
+    }
+    if (own) {
+      delete rx;
+      delete ry;
+    }
+  }
+  const double rn = scalar(GRB_PRECIP_TOT, LV_GND_SURF, 0);
+  if (rn != GRIB_NOTDEF)  // wx precision: 2 below 10, 1 below 100, else 0
+    rows << tr("Rain\t%1 mm").arg(rn, 0, 'f', rn < 10 ? 2 : rn < 100 ? 1 : 0);
+  const double cl = scalar(GRB_CLOUD_TOT, LV_ATMOS_ALL, 0);
+  if (cl != GRIB_NOTDEF) rows << tr("Cloud\t%1 %").arg(cl, 0, 'f', 0);
+  const double at = scalar(GRB_TEMP, LV_ABOV_GND, 2);
+  if (at != GRIB_NOTDEF) {
+    auto [f, o, s] = unit("airtemp");
+    rows << tr("Air temp\t%1%2").arg(at * f + o, 0, 'f', 1).arg(s);
+  }
+  const double st = scalar(GRB_TEMP, LV_GND_SURF, 0);
+  if (st != GRIB_NOTDEF) {
+    auto [f, o, s] = unit("seatemp");
+    rows << tr("Sea temp\t%1%2").arg(st * f + o, 0, 'f', 1).arg(s);
+  }
+  const double cape = scalar(GRB_CAPE, LV_GND_SURF, 0);
+  if (cape != GRIB_NOTDEF)
+    rows << tr("CAPE\t%1 J/kg").arg(cape, 0, 'f', 0);
+  const double refl = scalar(GRB_COMP_REFL, LV_ATMOS_ALL, 0);
+  if (refl != GRIB_NOTDEF)
+    rows << tr("Reflectivity\t%1 dBZ").arg(refl, 0, 'f', 0);
+  const double hu = scalar(GRB_HUMID_REL, LV_ABOV_GND, 2);
+  if (hu != GRIB_NOTDEF) rows << tr("Humidity\t%1 %").arg(hu, 0, 'f', 0);
+  // Geopotential altitude of the selected isobaric level (wx shows the
+  // altitude extras only when flying above the surface).
+  if (m_wind_altitude > 0) {
+    const double gp =
+        scalar(GRB_GEOPOT_HGT, LV_ISOBARIC, m_wind_altitude);
+    if (gp != GRIB_NOTDEF)
+      rows << tr("Altitude\t%1 m").arg(gp, 0, 'f', 0);
+  }
   return rows;
 }
 
