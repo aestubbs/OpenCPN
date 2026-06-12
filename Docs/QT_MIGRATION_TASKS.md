@@ -2303,13 +2303,19 @@ existing `followOwnShip` property before adding).
       contract: forecast-step **marks** (clickable green dots), coverage
       **span band**, snap-into-range on load, beyond-forecast layer
       dimming, wheel zoom of the bar's window span.
-      Remaining refinements vs wx: **wx colormap tables**
-      (GetGraphicColor port for the overlay wash), **exact barb
-      conventions** (incl. southern-hemisphere mirroring), CursorData.cpp
-      formatting port, fixed/minimum-spacing options, isotachs/
-      isotherms beyond isobars, gust-as-barbs variant, multi-file
-      layering. Functional end-state reached — verify against real
-      forecasts and refine.
+      ~~wx colormap tables~~ + ~~exact barb conventions~~ **DONE
+      (2026-06-12):** `grib_color_maps.{h,cpp}` ports all 10
+      GetGraphicColor palettes verbatim (gradual interpolation,
+      per-type GetMin/GetMax normalization; reflectivity gets the REFC
+      radar palette wx ships but never defaults to) — barbs and the
+      overlay wash both colour through it; barbs are the exact wx
+      LineBuffer shapes — 14 speed buckets, calm circle, centred 26 px
+      staff, integer petite/grande/pennant geometry, southern-
+      hemisphere mirroring, 50 px wx spacing. Remaining refinements vs
+      wx: CursorData.cpp formatting port, fixed/minimum-spacing
+      options, isotachs/isotherms beyond isobars, gust-as-barbs
+      variant, multi-file layering. Functional end-state reached —
+      verify against real forecasts and refine.
 - [~] **P4.7** o-charts SHOP plugin — **v1 landed (2026-06-11),
       built by default:** login2/getlist/identifySystem/assign/request
       against the live API (parameters verified against ochartShop.cpp),
