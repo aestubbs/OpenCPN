@@ -122,7 +122,6 @@
 #include "model/ais_decoder.h"
 #include "model/ais_target_data.h"
 #include "model/catalog_handler.h"
-#include "model/comm_drv_n0183_net.h"
 #include "model/comm_drv_n2k.h"
 #include "model/comm_drv_registry.h"
 #include "model/comm_navmsg_bus.h"

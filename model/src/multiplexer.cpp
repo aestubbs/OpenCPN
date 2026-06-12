@@ -43,9 +43,9 @@
 #include "model/config_vars.h"
 #include "model/conn_params.h"
 #include "model/comm_drv_registry.h"
-#include "model/comm_drv_n0183_net.h"
 #include "model/comm_navmsg_bus.h"
 #include "model/nmea_log.h"
+#include "model/ocpn_utils.h"
 
 Multiplexer *g_pMUX;
 
@@ -242,12 +242,15 @@ void Multiplexer::HandleN0183(
   for (auto &driver : CommDriverRegistry::GetInstance().GetDrivers()) {
     if (!driver) continue;
     if (driver->bus == NavAddr::Bus::N0183) {
-      auto *drv_n0183 = dynamic_cast<CommDriverN0183 *>(driver.get());
-      assert(drv_n0183);
+      // Any driver carrying connection params (framework CommDriver or a
+      // legacy class) can be echoed to; downcasting to the legacy
+      // CommDriverN0183 would skip every framework driver.
+      auto *cpp = dynamic_cast<ConnectionParamsProvider *>(driver.get());
+      if (!cpp) continue;
 
       bool passes_input_filter = n0183_msg->state != NavMsg::State::kFiltered;
 
-      ConnectionParams params_ = drv_n0183->GetParams();
+      ConnectionParams params_ = cpp->GetConnectionParams();
       std::shared_ptr<const Nmea0183Msg> msg = n0183_msg;
       if ((m_legacy_input_filter_behaviour && !passes_input_filter) ||
           passes_input_filter) {

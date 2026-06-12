@@ -44,7 +44,6 @@
 #include "model/wx_qt_string.h"
 #include "model/comm_appmsg.h"
 #include "model/comm_drv_loopback.h"
-#include "model/comm_drv_n0183_net.h"
 #include "model/comm_drv_n2k.h"
 #include "model/comm_drv_registry.h"
 #include "model/comm_navmsg_bus.h"

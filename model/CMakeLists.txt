@@ -55,7 +55,6 @@ set(
   ${MODEL_HDR_DIR}/comm_drv_internal.h
   ${MODEL_HDR_DIR}/comm_drv_loopback.h
   ${MODEL_HDR_DIR}/comm_drv_n0183.h
-  ${MODEL_HDR_DIR}/comm_drv_n0183_net.h
   ${MODEL_HDR_DIR}/comm_drv_n2k.h
   ${MODEL_HDR_DIR}/comm_drv_n2k_net.h
   ${MODEL_HDR_DIR}/comm_drv_registry.h
@@ -171,7 +170,6 @@ set(SRC
   ${MODEL_SRC_DIR}/comm_drv_internal.cpp
   ${MODEL_SRC_DIR}/comm_drv_loopback.cpp
   ${MODEL_SRC_DIR}/comm_drv_n0183.cpp
-  ${MODEL_SRC_DIR}/comm_drv_n0183_net.cpp
   ${MODEL_SRC_DIR}/comm_drv_n2k.cpp
   ${MODEL_SRC_DIR}/comm_drv_n2k_net.cpp
   ${MODEL_SRC_DIR}/comm_drv_registry.cpp

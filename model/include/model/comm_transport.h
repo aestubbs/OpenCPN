@@ -39,7 +39,10 @@
 #include <QString>
 #include <QUrl>
 
+#include <QList>
+
 class QSerialPort;
+class QTcpServer;
 class QTcpSocket;
 class QTimer;
 class QUdpSocket;
@@ -122,13 +125,18 @@ private:
 /**
  * TCP client transport (QTcpSocket). Connects asynchronously -- Open()
  * starts the attempt and Connected() fires when it succeeds.
+ *
+ * An optional connect greeting is written on every (re)connect before
+ * Connected() is emitted -- the gpsd `?WATCH` subscription that switches
+ * the daemon into NMEA streaming mode is the canonical use.
  */
 class TcpClientTransport : public CommTransport {
   Q_OBJECT
 
 public:
   TcpClientTransport(const QString& host, quint16 port,
-                     QObject* parent = nullptr);
+                     QObject* parent = nullptr,
+                     const QByteArray& connect_greeting = QByteArray());
   ~TcpClientTransport() override;
 
   bool Open() override;
@@ -145,7 +153,41 @@ private Q_SLOTS:
 private:
   const QString m_host;
   const quint16 m_port;
+  const QByteArray m_greeting;
   QTcpSocket* m_socket;  ///< owned via QObject parenting to this transport
+};
+
+/**
+ * TCP server transport (QTcpServer): the "0.0.0.0 listen address"
+ * connection mode -- OpenCPN accepts inbound connections instead of
+ * dialling out. Reads aggregate from every connected client; writes
+ * broadcast to all of them (the legacy wx driver handled a single
+ * client; serving several is a strict superset). Connected() is emitted
+ * when the listen succeeds, mirroring UdpTransport's bind semantics.
+ *
+ * Caveat: bytes from all clients feed one Framer, so partial lines from
+ * two clients sending simultaneously could interleave; NMEA talkers
+ * write whole lines per segment, so this is theoretical in practice.
+ */
+class TcpServerTransport : public CommTransport {
+  Q_OBJECT
+
+public:
+  explicit TcpServerTransport(quint16 port, QObject* parent = nullptr);
+  ~TcpServerTransport() override;
+
+  bool Open() override;
+  void Close() override;
+  bool IsOpen() const override;
+  bool Write(const QByteArray& data) override;
+
+private Q_SLOTS:
+  void OnNewConnection();
+
+private:
+  const quint16 m_port;
+  QTcpServer* m_server;          ///< owned via QObject parenting
+  QList<QTcpSocket*> m_clients;  ///< owned via QObject parenting to m_server
 };
 
 /**

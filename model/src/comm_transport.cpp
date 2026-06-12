@@ -24,6 +24,7 @@
 #include <QHostAddress>
 #include <QNetworkDatagram>
 #include <QSerialPort>
+#include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
 #include <QUdpSocket>
@@ -108,8 +109,13 @@ void SerialTransport::OnError() {
 // ---------------------------------------------------------------------------
 
 TcpClientTransport::TcpClientTransport(const QString& host, quint16 port,
-                                       QObject* parent)
-    : CommTransport(parent), m_host(host), m_port(port), m_socket(nullptr) {}
+                                       QObject* parent,
+                                       const QByteArray& connect_greeting)
+    : CommTransport(parent),
+      m_host(host),
+      m_port(port),
+      m_greeting(connect_greeting),
+      m_socket(nullptr) {}
 
 TcpClientTransport::~TcpClientTransport() { TcpClientTransport::Close(); }
 
@@ -149,12 +155,76 @@ void TcpClientTransport::OnReadyRead() {
   if (!chunk.isEmpty()) Q_EMIT DataReceived(chunk);
 }
 
-void TcpClientTransport::OnConnected() { Q_EMIT Connected(); }
+void TcpClientTransport::OnConnected() {
+  // The greeting (e.g. gpsd's ?WATCH subscription) goes out on every
+  // (re)connect, before consumers learn the link is up.
+  if (!m_greeting.isEmpty()) m_socket->write(m_greeting);
+  Q_EMIT Connected();
+}
 
 void TcpClientTransport::OnDisconnected() { Q_EMIT Disconnected(); }
 
 void TcpClientTransport::OnError() {
   Q_EMIT ErrorOccurred(m_socket->errorString());
+}
+
+// ---------------------------------------------------------------------------
+// TcpServerTransport
+// ---------------------------------------------------------------------------
+
+TcpServerTransport::TcpServerTransport(quint16 port, QObject* parent)
+    : CommTransport(parent), m_port(port), m_server(nullptr) {}
+
+TcpServerTransport::~TcpServerTransport() { TcpServerTransport::Close(); }
+
+bool TcpServerTransport::Open() {
+  if (!m_server) {
+    m_server = new QTcpServer(this);
+    connect(m_server, &QTcpServer::newConnection, this,
+            &TcpServerTransport::OnNewConnection);
+  }
+  if (m_server->isListening()) return true;
+  if (!m_server->listen(QHostAddress::Any, m_port)) {
+    Q_EMIT ErrorOccurred(m_server->errorString());
+    return false;
+  }
+  // Like UdpTransport's bind: the transport is usable once listening --
+  // clients come and go without changing the driver's lifecycle.
+  Q_EMIT Connected();
+  return true;
+}
+
+void TcpServerTransport::Close() {
+  if (!m_server) return;
+  for (QTcpSocket* c : m_clients) c->abort();
+  m_clients.clear();
+  if (m_server->isListening()) m_server->close();
+}
+
+bool TcpServerTransport::IsOpen() const {
+  return m_server && m_server->isListening();
+}
+
+bool TcpServerTransport::Write(const QByteArray& data) {
+  bool any = false;
+  for (QTcpSocket* c : m_clients)
+    if (c->state() == QAbstractSocket::ConnectedState)
+      any = c->write(data) >= 0 || any;
+  return any;
+}
+
+void TcpServerTransport::OnNewConnection() {
+  while (QTcpSocket* client = m_server->nextPendingConnection()) {
+    m_clients.append(client);
+    connect(client, &QTcpSocket::readyRead, this, [this, client] {
+      const QByteArray chunk = client->readAll();
+      if (!chunk.isEmpty()) Q_EMIT DataReceived(chunk);
+    });
+    connect(client, &QTcpSocket::disconnected, this, [this, client] {
+      m_clients.removeAll(client);
+      client->deleteLater();
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

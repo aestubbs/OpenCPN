@@ -36,8 +36,8 @@
 
 #include "model/comm_driver.h"
 #include "model/comm_drv_factory.h"
-#include "model/comm_drv_n0183_net.h"
 #include "model/comm_drv_registry.h"
+#include "model/comm_drv_stats.h"
 #include "model/comm_n0183_output.h"
 #include "model/config_vars.h"
 #include "model/conn_params.h"
@@ -168,7 +168,6 @@ bool CreateOutputConnection(const wxString& com_name,
     }
   } else if (com_name.Lower().StartsWith("udp") ||
              com_name.Lower().StartsWith("tcp")) {
-    CommDriverN0183Net* drv_net_n0183(nullptr);
     driver =
         FindDriver(drivers, com_name.ToStdString(), NavAddr::Bus::N0183).get();
 
@@ -195,20 +194,21 @@ bool CreateOutputConnection(const wxString& com_name,
       driver = me.get();
       btempStream = true;
     }
-    drv_net_n0183 = dynamic_cast<CommDriverN0183Net*>(driver);
 
     if (com_name.Lower().StartsWith("tcp")) {
-      // new tcp connections must wait for connect
+      // New TCP connections must wait for connect. The framework driver
+      // reports link state through DriverStats.available (the legacy
+      // path polled the wxSocket directly).
       std::string msg(_("Connecting to "));
       msg += com_name;
       dlg_ctx.set_message(msg);
       dlg_ctx.pulse();
 
-      if (drv_net_n0183) {
+      if (auto* stats = dynamic_cast<DriverStatsProvider*>(driver)) {
         int loopCount = 10;  // seconds
         bool bconnected;
         for (bconnected = false; !bconnected && (loopCount > 0); loopCount--) {
-          if (drv_net_n0183->GetSock()->IsConnected()) {
+          if (stats->GetDriverStats().available) {
             bconnected = true;
             break;
           }

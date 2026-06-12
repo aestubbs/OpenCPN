@@ -83,17 +83,15 @@ static bool IsMulticastAddr(const std::string& host) {
 }
 
 /**
- * Build an NMEA 0183 network driver.
+ * Build an NMEA 0183 network driver (P1.5b + P1.5k).
  *
- * TCP-client and UDP connections run on the P1.5i comms framework -- a
- * generic CommDriver wrapping a transport + LineFramer + Nmea0183Decoder.
- *
- * TCP server-mode (a 0.0.0.0 listen address) and GPSD are out of scope:
- * they are treated as edge cases and produce no driver. The legacy
- * CommDriverN0183Net implementation is kept in the tree but is no longer
- * reachable from the factory. See QT_MIGRATION_TASKS.md (P1.5b follow-up)
- * for the review note -- restoring them means a TcpServerTransport and a
- * GPSD handshake option at the transport layer.
+ * All four connection modes run on the P1.5i comms framework -- a generic
+ * CommDriver wrapping a transport + LineFramer + Nmea0183Decoder:
+ * TCP client, TCP server (a 0.0.0.0 / empty listen address accepts
+ * inbound feeders), UDP (incl. multicast), and GPSD (a TCP client whose
+ * connect greeting subscribes the daemon's NMEA watcher mode; gpsd's
+ * own JSON lines fail NMEA parsing and land in the dropped-message
+ * stream, as they did with the legacy driver).
  */
 static DriverPtr MakeN0183NetDriver(const ConnectionParams* params,
                                     DriverListener& listener) {
@@ -102,20 +100,23 @@ static DriverPtr MakeN0183NetDriver(const ConnectionParams* params,
   const auto port = static_cast<quint16>(params->NetworkPort);
 
   std::unique_ptr<CommTransport> transport;
-  if (params->NetProtocol == TCP && !is_server)
+  if (params->NetProtocol == GPSD) {
+    // The legacy driver's watcher subscription, verbatim. SIRF devices
+    // are converted by gpsd into pseudo-NMEA.
+    static const char kWatch[] = R"--(?WATCH={"class":"WATCH", "nmea":true})--";
+    transport = std::make_unique<TcpClientTransport>(
+        QString::fromStdString(host.empty() ? std::string("localhost") : host),
+        port, nullptr, QByteArray(kWatch));
+  } else if (params->NetProtocol == TCP && is_server)
+    transport = std::make_unique<TcpServerTransport>(port);
+  else if (params->NetProtocol == TCP)
     transport =
         std::make_unique<TcpClientTransport>(QString::fromStdString(host), port);
   else if (params->NetProtocol == UDP)
     transport = std::make_unique<UdpTransport>(QString::fromStdString(host),
                                                port, IsMulticastAddr(host));
-  else {
-    wxLogMessage(
-        "MakeCommDriver: NMEA 0183 network %s mode is out of scope -- "
-        "no driver created for %s",
-        params->NetProtocol == GPSD ? "GPSD" : "TCP server",
-        params->GetDSPort().c_str());
+  else
     return nullptr;
-  }
 
   auto driver = std::make_unique<CommDriver>(
       NavAddr::Bus::N0183, params->GetStrippedDSPort(), *params,
