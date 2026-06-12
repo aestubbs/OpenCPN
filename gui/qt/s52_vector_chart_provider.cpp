@@ -1526,7 +1526,13 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                         QRect(cx, cy, w, h)};
       QPainter painter(&pages[p.page]);
       painter.setCompositionMode(QPainter::CompositionMode_Source);
-      painter.drawImage(p.rect.topLeft(), im);
+      // Explicit target rect: label images carry devicePixelRatio (2 on
+      // retina) and the point-overload draws at LOGICAL size -- half the
+      // device pixels the placement rect (im.width/height) records. That
+      // halved every billboarded label/symbol on screen (user report:
+      // soundings needed +5 scale). The rect overload fills the recorded
+      // device-pixel rect 1:1.
+      painter.drawImage(QRectF(p.rect), im);
       painter.end();
       cx += w + kPad;
       rowH = std::max(rowH, h);
