@@ -23,6 +23,7 @@
 #include <QFontMetrics>
 #include <QImage>
 #include <QMatrix4x4>
+#include <QElapsedTimer>
 #include <QPainter>
 #include <QHash>
 #include <QSet>
@@ -1040,6 +1041,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // is preserved.
   constexpr double kScaminUnset = 1.0e8;
 
+  QElapsedTimer buildTimer;
+  buildTimer.start();
   // --- Spatial cull grid (perf): bucket fills & lines into a grid of tiles over
   // the cell so applyPrimCull() can drop whole off-screen tiles (not batched,
   // not drawn) -- the fill/line analogue of the billboard frustum cull. This is
@@ -1478,6 +1481,12 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
                  lab.isSounding ? QString() : lab.text);
   }
 
+  // PERF-0 phase timing: where a first build's sync-thread time goes
+  // (billboards above are the label-rasterization phase).
+  if (qEnvironmentVariableIsSet("OCPN_QT_SG_STATS"))
+    qInfo("provider: build phases -- prims+fills %lld ms (atlas next)",
+          static_cast<long long>(buildTimer.elapsed()));
+
   // PERF-4: pack the deferred billboard images into shared atlas pages.
   // Shelf packing, 2 px transparent gutter against linear-filter bleed;
   // dedup by QImage cacheKey (same dedup the per-image cache applied).
@@ -1549,6 +1558,9 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
             static_cast<long long>(pages.size()), oversized);
   }
 
+  if (qEnvironmentVariableIsSet("OCPN_QT_SG_STATS"))
+    qInfo("provider: build phases -- total-with-atlas %lld ms (declutter next)",
+          static_cast<long long>(buildTimer.elapsed()));
   // Initial layout: declutter (sets `kept` + counter-scale on every kept
   // billboard) then view-cull to the current view. m_emit_scale is seeded so the
   // first viewport change after this build is correctly classified as pan vs zoom.
@@ -1559,6 +1571,9 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     applyBillboardVisibility(viewport.scale(), viewport.rotation(), worldView);
     applyPrimCull(worldView);
   }
+  if (qEnvironmentVariableIsSet("OCPN_QT_SG_STATS"))
+    qInfo("provider: build phases -- grand total %lld ms",
+          static_cast<long long>(buildTimer.elapsed()));
   m_emit_scale = viewport.scale();
   m_built = true;
   return root;

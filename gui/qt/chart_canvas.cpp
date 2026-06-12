@@ -289,6 +289,32 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
     m_goto_guid.clear();
   });
 
+  // OCPN_QT_PAN_TEST=<seconds>: drive a continuous synthetic pan on the
+  // visible canvas -- the deterministic exerciser behind the PERF-0
+  // measurements (pair with QSG_RENDER_TIMING=1). Sweeps east/west,
+  // flipping every 3 s.
+  if (qEnvironmentVariableIsSet("OCPN_QT_PAN_TEST")) {
+    const int secs = qMax(1, qEnvironmentVariable("OCPN_QT_PAN_TEST").toInt());
+    auto* pan = new QTimer(this);
+    pan->setInterval(16);
+    auto t0 = std::make_shared<qint64>(0);
+    connect(pan, &QTimer::timeout, this, [this, pan, t0, secs] {
+      if (!isVisible()) return;
+      if (*t0 == 0) *t0 = QDateTime::currentMSecsSinceEpoch();
+      const qint64 el = QDateTime::currentMSecsSinceEpoch() - *t0;
+      if (el > secs * 1000) {
+        qWarning("pan-test: DONE (%d s)", secs);
+        pan->stop();
+        pan->deleteLater();
+        return;
+      }
+      const double dir = ((el / 3000) % 2) ? 1.0 : -1.0;
+      m_viewport->panBy(dir * 6.0, 0.0);
+      update();
+    });
+    pan->start();
+  }
+
   // Demo (Hakefjord replay) is opt-in: read the persisted choice (default
   // off). The app otherwise boots into the live setup.
   m_demo_mode = ConfigStore::instance().getBool("display/demoMode", false);
