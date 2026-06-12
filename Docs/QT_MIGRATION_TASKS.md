@@ -1294,12 +1294,16 @@ direction: all six are wanted eventually.**
       restarts per strip). Measured (OCPN_QT_SG_STATS=1): 30,703 fill
       prims → 2,531 nodes / 15,207 → 834 (up to 18× fewer nodes);
       lines 820 → 332.
-- [ ] **PERF-4** Label/sounding texture atlas. Each unique label is one
-      GPU texture (TextureCacheNode dedups identical text only). Pack a
-      cell's labels/soundings into 1–2 atlas textures with UV rects.
-      Gain 2–8 ms/cell + large VRAM cut; ~1 week; MEDIUM risk (atlas
-      size limits, declutter-driven re-atlas). `sg_texture_cache.h` +
-      provider billboard build.
+- [x] **PERF-4** Label/sounding texture atlas — **DONE (2026-06-12).**
+      Billboard texture assignment is deferred at build: images
+      shelf-pack into shared 2048² atlas pages (2 px gutter vs linear
+      bleed, cacheKey dedup, oversized→dedicated fallback); image
+      nodes sample via setSourceRect. Declutter/counter-scale touch
+      only transforms — unaffected (no re-atlas needed). Measured:
+      1,339 images → 1 page / 1,276 → 2 pages (~1,300 GPU textures per
+      dense cell → 1–2). Verified visually via the new
+      `OCPN_QT_GRAB=<png>[:delay]` window-grab hook (passive,
+      window-only — the headless verify loop's eyes).
 - [ ] **PERF-5** Dirty-flag split (geometry vs visibility) so pure pan
       touches no layer code at all: Layer::DirtyFlag {Geometry,
       Visibility}; the compositor skips structure reconciliation for
