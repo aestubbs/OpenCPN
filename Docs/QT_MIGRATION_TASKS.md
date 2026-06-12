@@ -260,19 +260,26 @@ Core stays buildable/testable against the **existing wx GUI** throughout.
         loops. `SetTXPGN` moved up to `AbstractCommDriver` so callers
         (`plugin_api`, `autopilot_output`) need no driver-type downcast.
         `libs/serial` stays — still used by `ser_ports.cpp` et al (P1.5h).
-  - [~] **P1.5c** *(parked — see P1.5m)* `signalk_net` on the framework —
-        `WebSocketTransport` (`QWebSocket`) + `PassThroughFramer` +
-        `SignalKDecoder`; retires the vendored `IXWebSocket` for this driver.
+  - [x] **P1.5c** `signalk_net` on the framework — **DONE (2026-06-12).**
+        `WebSocketTransport` (`QWebSocket`; frame-native messages, 30 s
+        keepalive ping, self-signed-cert tolerance, ws↔wss alternation
+        on error, failed-connect → Disconnected so reconnect arms) +
+        `PassThroughFramer` + new `SignalKDecoder` (rapidjson
+        validation, stateful self/context tracking ported from
+        `HandleSkSentence`; receive-only; 7 unit tests). SignalK input
+        WORKS AGAIN in opencpn-qt — the parked state produced no driver
+        at all. Qt6::WebSockets linked; Linux CI dep added. The legacy
+        IXWebSocket driver stays in-tree pending P1.5m deletion.
   - [~] **P1.5g** *(parked — see P1.5m)* `n2k_socketcan` on the framework —
         `CanTransport` (`QCanBusDevice`) + `PassThroughFramer` + `N2kDecoder`.
         Replaces the raw `PF_CAN` socket / `ioctl` / `Worker` thread. Backend
         by name — `socketcan` (Linux, real HW) or `virtualcan` (macOS).
-  - [ ] **P1.5m** *(revisit)* Un-park SignalK and SocketCAN. Both legacy
-        drivers (`comm_drv_signalk{,_net}.{h,cpp}`, `comm_drv_n2k_socketcan
-        .{h,cpp}`) are kept in the tree but **excluded from the build** and
-        unreachable from the factory — NMEA 0183 + NMEA 2000 (serial &
-        net) cover current needs. Revisit deletes the parked sources once
-        P1.5c and P1.5g land, or sooner if either protocol is needed.
+  - [ ] **P1.5m** *(revisit)* ~~Un-park SignalK~~ (P1.5c landed
+        2026-06-12) and SocketCAN. Remaining: delete the parked legacy
+        sources — `comm_drv_signalk{,_net}.{h,cpp}` (+ the
+        `ocpn::ixwebsocket` model link and the wx-app
+        init/uninitIXNetSystem calls) and `comm_drv_n2k_socketcan
+        .{h,cpp}` — once P1.5g lands or with the P3.11 source deletion.
   - [x] **P1.5h** `ser_ports.cpp` serial-port enumeration → `QSerialPortInfo`.
         Five platform implementations (sysfs scan, libudev, Win32 SetupAPI,
         macOS IOKit, vendored libserial) behind an `#ifdef` maze collapse to
