@@ -44,7 +44,6 @@ class SoundPlayer : public QObject {
                  outputDeviceChanged)
 
 public:
-  explicit SoundPlayer(QObject* parent = nullptr);
   ~SoundPlayer() override;
 
   bool playing() const;
@@ -64,6 +63,15 @@ Q_SIGNALS:
   void playingChanged();
 
 private:
+  // Constructor is PRIVATE so the QML engine cannot default-
+  // construct a second instance: Qt picks the Constructor mode
+  // over the create() factory whenever the type is default-
+  // constructible (qqmlprivate.h singletonConstructionMode),
+  // which split every singleton into a C++ brain and a QML
+  // brain. Private ctor => Factory mode => create() => the
+  // ONE shared instance().
+  explicit SoundPlayer(QObject* parent = nullptr);
+
   void ensurePlayer();  // lazily build the QMediaPlayer on first use
   void applyDevice();   // point m_output at the chosen audio device
 

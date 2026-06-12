@@ -35,8 +35,6 @@ class CommPrioritiesModel : public QObject {
   QML_SINGLETON
 
 public:
-  explicit CommPrioritiesModel(QObject* parent = nullptr);
-
   static CommPrioritiesModel& instance() {
     static CommPrioritiesModel inst;
     return inst;
@@ -62,6 +60,11 @@ public:
 
 Q_SIGNALS:
   void changed();
+
+private:
+  // Private so the QML engine cannot default-construct a second
+  // instance (see the singletonConstructionMode note in ui_config.h).
+  explicit CommPrioritiesModel(QObject* parent = nullptr);
 };
 
 }  // namespace ocpn::qtui

@@ -124,7 +124,15 @@ Q_SIGNALS:
   void changed();
 
 private:
+  // Constructor is PRIVATE so the QML engine cannot default-
+  // construct a second instance: Qt picks the Constructor mode
+  // over the create() factory whenever the type is default-
+  // constructible (qqmlprivate.h singletonConstructionMode),
+  // which split every singleton into a C++ brain and a QML
+  // brain. Private ctor => Factory mode => create() => the
+  // ONE shared instance().
   OwnShipConfig();  // loads from the config store
+
   QString m_name;
   QString m_mmsi;
 

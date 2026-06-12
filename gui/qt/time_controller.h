@@ -58,7 +58,6 @@ class TimeController : public QObject {
   Q_PROPERTY(QString dateLabel READ dateLabel NOTIFY timeChanged)  // "ddd dd MMM"
 
 public:
-  explicit TimeController(QObject* parent = nullptr);
   ~TimeController() override;
 
   /** The shared C++ instance -- also what QML's singleton resolves to. */
@@ -142,6 +141,15 @@ Q_SIGNALS:
   void windowChanged(); // window edges / fraction / span
 
 private:
+  // Private so the QML engine cannot default-construct a SECOND
+  // TimeController: Qt's singletonConstructionMode() prefers default-
+  // construction over the create() factory, which split the timeline
+  // into a C++ brain (instance(): plugins, tide layer, canvas) and a
+  // QML brain (the time bar) -- scrubs never reached the weather, and
+  // marks/span set from C++ never reached the bar. Private ctor =>
+  // Factory mode => create() => one shared object. (Proven by lldb:
+  // two onTick this-pointers before, one after.)
+  explicit TimeController(QObject* parent = nullptr);
   void applyToGlobal();  // push m_time/m_live into model gTimeSource
   QVariantList m_marks;
   double m_span_start = 0;
