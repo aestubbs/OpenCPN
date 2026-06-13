@@ -1106,33 +1106,10 @@ if (NOT MSVC AND NOT APPLE)
 endif ()
 endif ()  # OCPN_BUILD_WX_APP -- end of the wx-only GUI_HDRS/GUI_SRC assembly
 
-if (OCPN_BUILD_WX_APP)
-  set(SRCS ${GUI_SRC})
-  set(HDRS ${GUI_HDRS})
-else ()
-  # P3.11 (wx retirement): the gui/src + gui/include trees are deleted. Keep
-  # the OpenCPN target DEFINED (the scattered target_link_libraries(
-  # ${PACKAGE_NAME} ...) calls and the _opencpn plugin alias still reference
-  # it) but compile only a stub. The target is EXCLUDE_FROM_ALL (set below),
-  # so the stub is never built in a default (Qt) build.
-  set(SRCS ${CMAKE_SOURCE_DIR}/cmake/wx_app_retired_stub.cpp)
-  set(HDRS "")
-endif ()
-if (APPLE)
-  add_executable(${PACKAGE_NAME} MACOSX_BUNDLE ${HDRS} ${SRCS})
-elseif (WIN32)
-  add_executable(${PACKAGE_NAME} WIN32 ${HDRS} ${SRCS})
-elseif (QT_ANDROID)
-  set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
-  add_library(${PACKAGE_NAME} SHARED ${HDRS} ${SRCS})
-else ()
-  add_executable(${PACKAGE_NAME} ${HDRS} ${SRCS})
-endif ()
-
-if (NOT OCPN_BUILD_WX_APP)
-  # Deprecated: excluded from the default build (P3.11 increment 1).
-  set_target_properties(${PACKAGE_NAME} PROPERTIES EXCLUDE_FROM_ALL ON)
-endif ()
+# P3.11: the wx OpenCPN application target is fully retired and removed (its
+# gui/src + gui/include sources were deleted). The QtQuick application is
+# opencpn-qt (gui/qt/). The OCPN_BUILD_WX_APP option and the wx-only build
+# blocks are removed with it below.
 
 if (QT_ANDROID)
   include(libs/AndroidLibs.cmake)
@@ -1144,57 +1121,18 @@ endif ()
 # without changing the project-wide CMAKE_OSX_DEPLOYMENT_TARGET (10.13).
 # Qt 6 itself already requires >=10.15 to link, so this is consistent.
 if (APPLE)
-  target_compile_options(${PACKAGE_NAME} PRIVATE -mmacosx-version-min=10.15)
 endif ()
 
-add_library(_opencpn INTERFACE) # plugin link target.
-target_link_libraries(_opencpn INTERFACE ${PACKAGE_NAME})
-target_include_directories(
-  _opencpn BEFORE
-  INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/model/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources
-            ${CMAKE_CURRENT_SOURCE_DIR}/gui/src/mbtiles
-)
-if (MSVC)
-  target_include_directories(_opencpn INTERFACE ${CMAKE_SOURCE_DIR}/buildwin)
-elseif (APPLE)
-  target_include_directories(
-    _opencpn INTERFACE ${CMAKE_SOURCE_DIR}/buildosx/include
-  )
-elseif (QT_ANDROID)
-  target_include_directories(_opencpn INTERFACE ${CMAKE_SOURCE_DIR}/android)
-  target_link_libraries(${PACKAGE_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/_deps/lunasvg-build/liblunasvg.a")
-  target_link_libraries(${PACKAGE_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/_deps/lunasvg-build/plutovg/libplutovg.a")
-endif ()
-add_library(ocpn::opencpn ALIAS _opencpn)
+# P3.11: _opencpn / ocpn::opencpn was the wx-plugin link interface (backed by
+# the retired wx OpenCPN target). The wx plugins are retired; Qt plugins build
+# under gui/qt/plugin/. Removed.
 
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang|GNU" AND NOT OCPN_PEDANTIC)
-  target_compile_options(
-    ${PACKAGE_NAME} PUBLIC -Werror -Wno-unknown-warning-option
-  )
 endif ()
 
-set_target_properties(
-  ${PACKAGE_NAME}
-  PROPERTIES ENABLE_EXPORTS 1
-             OUTPUT_NAME ${PACKAGE_NAME}
-             ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
 
-target_include_directories(
-  ${PACKAGE_NAME} BEFORE
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui/include/gui
-          ${CMAKE_CURRENT_SOURCE_DIR}/include
-          ${CMAKE_CURRENT_SOURCE_DIR}/resources
-          ${CMAKE_CURRENT_SOURCE_DIR}/gui/src/mbtiles
-          ${CMAKE_CURRENT_SOURCE_DIR}/gui/src/s57/include
-)
 
 if (QT_ANDROID)
-  target_include_directories(
-    ${PACKAGE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/android
-  )
 endif ()
 
 if (MSVC AND NOT OCPN_CI_BUILD)
@@ -1203,26 +1141,10 @@ if (MSVC AND NOT OCPN_CI_BUILD)
     DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     PROPERTY VS_STARTUP_PROJECT ${PACKAGE_NAME}
   )
-  set_target_properties(
-    ${PACKAGE_NAME}
-    PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY
-               "$<TARGET_FILE_DIR:${PACKAGE_NAME}>"
-               VS_DEBUGGER_COMMAND_ARGUMENTS "-p"
-  )
 endif ()
 
 if (APPLE)
-  target_include_directories(
-    ${PACKAGE_NAME} PRIVATE /usr/X11/include /usr/X11/include/GL
-  )
   if (OCPN_USE_DEPS_BUNDLE)
-    target_include_directories(
-      ${PACKAGE_NAME} PRIVATE "${OCPN_DEPS_BUNDLE_PATH}/include"
-    )
-    set_target_properties(${PACKAGE_NAME} PROPERTIES
-      BUILD_RPATH "${OCPN_DEPS_BUNDLE_PATH}/lib"
-      INSTALL_RPATH "${OCPN_DEPS_BUNDLE_PATH}/lib"
-  )
   endif ()
 endif ()
 
@@ -1237,13 +1159,11 @@ endif ()
 if (LINUX)
   find_package(LIBUDEV)
   if (LIBUDEV_FOUND)
-    target_link_libraries(${PACKAGE_NAME} INTERFACE ocpn::libudev)
     set(HAVE_LIBUDEV 1)
   endif ()
 endif ()
 
 add_subdirectory(libs/ssl_sha1)
-target_link_libraries(${PACKAGE_NAME} PRIVATE ssl::sha1)
 
 if (OCPN_USE_SYSFS_PORTS)
   set(USE_SYSFS_PORTS 1)
@@ -1257,7 +1177,6 @@ if (wxWidgets_VERSION_STRING VERSION_LESS "3.1.6"
         AND NOT QT_ANDROID)
   find_package(PANGO)
   if (PANGO_FOUND)
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::pango)
     set(HAVE_PANGO 1)
   endif ()
 endif ()
@@ -1290,7 +1209,6 @@ endif ()
 # nor Pango. Gate alongside the (retired) wx app.
 if (LINUX AND OCPN_BUILD_WX_APP)
   include(OcpnFindGtk)
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::gtk)
 endif ()
 
 # Search for opengles, short of running a program to test the speed of
@@ -1334,7 +1252,6 @@ if ((NOT OPENGLES_FOUND) AND (NOT QT_ANDROID))
 
   if (OPENGL_FOUND)
     list(APPEND wxwidgets_FIND_COMPONENTS gl)
-    target_include_directories(${PACKAGE_NAME} PRIVATE ${OPENGL_INCLUDE_DIR})
 
     message(STATUS "Found OpenGL....")
     if (OCPN_VERBOSE)
@@ -1344,38 +1261,20 @@ if ((NOT OPENGLES_FOUND) AND (NOT QT_ANDROID))
 
     set(wxWidgets_USE_LIBS gl ${wxWidgets_USE_LIBS})
     add_definitions(-DocpnUSE_GL)
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ${OPENGL_gl_LIBRARIES})
-    target_include_directories(${PACKAGE_NAME} PRIVATE ${OPENGL_INCLUDE_DIR})
   else ()
     message(STATUS "OpenGL not found...")
   endif ()
 endif ()
 
 if (MSVC)
-  target_include_directories(
-    ${PACKAGE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/buildwin
-  )
 elseif (APPLE)
-  target_include_directories(
-    ${PACKAGE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/buildosx/include
-  )
 elseif (QT_ANDROID)
-  target_include_directories(
-    ${PACKAGE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/android
-  )
 endif ()
 
 if (OCPN_USE_CRASHREPORT)
   message(STATUS "Crash reporting enabled")
   if (MSVC)
     message(STATUS "Using Windows CrashRpt")
-    target_include_directories(
-      ${PACKAGE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/buildwin/crashrpt
-    )
-    target_link_libraries(
-      ${PACKAGE_NAME}
-      PRIVATE ${CMAKE_SOURCE_DIR}/buildwin/crashrpt/CrashRpt1403.lib
-    )
     set(CMAKE_EXE_LINKER_FLAGS "/DEBUG /Release ${CMAKE_EXE_LINKER_FLAGS}")
   elseif (LINUX AND CMAKE_BUILD_TYPE MATCHES "Rel*")
     message(STATUS "Using Linux crash reporting")
@@ -1383,19 +1282,15 @@ if (OCPN_USE_CRASHREPORT)
 endif ()
 
 add_subdirectory("libs/SQLiteCpp")
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::sqlite_cpp)
 
 add_subdirectory("libs/shapelib")
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::shapelib)
 
 add_subdirectory("libs/ShapefileCpp")
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::shapefile_cpp)
 # target_include_directories(${PACKAGE_NAME} PRIVATE ${SHAPEFILECPP_INCLUDE_DIR})
 # target_include_directories(${PACKAGE_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/libs/gdal/include/gdal)
 
 if (NOT QT_ANDROID)
   add_subdirectory("libs/libdnet")
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::dnet)
 endif ()
 
 # P3.11: this whole block links system libs (BZip2, ZLIB, X11, TinyXML and,
@@ -1413,13 +1308,8 @@ endif ()
 if (UNIX)
   if (NOT QT_ANDROID AND OCPN_BUILD_WX_APP)
     find_package(BZip2 REQUIRED)
-    target_include_directories(${PACKAGE_NAME} PRIVATE ${BZIP2_INCLUDE_DIR})
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ${BZIP2_LIBRARIES})
-    target_include_directories(${PACKAGE_NAME} PRIVATE ${ZLIB_INCLUDE_DIR})
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ${ZLIB_LIBRARY})
     find_package(X11)
     if (X11_FOUND AND NOT APPLE)
-      target_link_libraries(${PACKAGE_NAME} PRIVATE ${X11_LIBRARIES} ${X11_Xrandr_LIB})
       set(OCPN_HAVE_X11 ON) # => config.h
     endif ()
     if (NOT APPLE)
@@ -1432,16 +1322,11 @@ if (UNIX)
         # Only needed if we build with wxSVG implementation of SVG support
         message(STATUS "Building with wxSVG support")
         find_package(Freetype REQUIRED)
-        target_link_libraries(${PACKAGE_NAME} PRIVATE Freetype::Freetype)
         find_package(Fontconfig REQUIRED)
-        target_link_libraries(${PACKAGE_NAME} PRIVATE Fontconfig::Fontconfig)
         find_package(PNG REQUIRED)
-        target_link_libraries(${PACKAGE_NAME} PRIVATE PNG::PNG)
         find_package(Pixman REQUIRED)
-        target_link_libraries(${PACKAGE_NAME} PRIVATE Pixman::Pixman)
       endif ()
       find_package(ZSTD REQUIRED)
-      target_link_libraries(${PACKAGE_NAME} PRIVATE zstd::zstd)
     endif ()
   endif ()
 endif ()
@@ -1455,9 +1340,6 @@ if (CMAKE_HOST_WIN32)
 endif ()
 
 if (QT_ANDROID)
-  target_include_directories(
-    ${PACKAGE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/buildandroid/libexpat/include
-  )
 endif ()
 
 if (OCPN_USE_SVG)
@@ -1488,12 +1370,7 @@ if (OCPN_USE_SVG)
         # Include(OcpnFindFmpeg)  -- FFMPEG is not enabled currently.
         # target_link_libraries(${PACKAGE_NAME} ocpn::ffmpeg)
         include(FindEXIF)
-        target_link_libraries(
-          ${PACKAGE_NAME} PRIVATE ${EXIF_LIBRARIES} ${GTK_LIBRARIES}
-        )
-        target_include_directories(${PACKAGE_NAME} PRIVATE ${EXIF_INCLUDE_DIRS})
       endif ()
-      target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::cairo ocpn::expat)
 
       add_definitions(-DocpnUSE_SVG) # Goes into config.h, leave as global
 
@@ -1508,7 +1385,6 @@ if (OCPN_USE_SVG)
       else ()
         add_subdirectory("libs/wxsvg")
       endif ()
-      target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::wxsvg)
     else ()
       add_definitions(-DocpnUSE_SVG)
       include_directories(${CMAKE_SOURCE_DIR}/libs/wxsvg/include/wxSVG)
@@ -1521,7 +1397,6 @@ endif ()
 
 if (OCPN_USE_NEWSERIAL)
   add_subdirectory("libs/serial")
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::serial)
   message(STATUS "Using new serial library...")
 endif ()
 
@@ -1545,17 +1420,6 @@ endif ()
 if (OPENGL_FOUND AND OCPN_BUILD_WX_APP)
   # P3.11: these are gui/src + gui/include (deleted with the wx app). Only the
   # wx OpenCPN target uses them, so gate alongside OCPN_BUILD_WX_APP.
-  target_sources(
-    ${PACKAGE_NAME}
-    PRIVATE ${GUI_HDR_DIR}/gl_chart_canvas.h
-            ${GUI_HDR_DIR}/gl_texture_descr.h
-            ${GUI_HDR_DIR}/gl_tex_cache.h
-            ${GUI_HDR_DIR}/gl_texture_mgr.h
-            ${GUI_SRC_DIR}/gl_texture_descr.cpp
-            ${GUI_SRC_DIR}/gl_tex_cache.cpp
-            ${GUI_SRC_DIR}/gl_chart_canvas.cpp
-            ${GUI_SRC_DIR}/gl_texture_mgr.cpp
-  )
 endif ()
 
 # Building for QT_ANDROID involves a cross-building environment, So the include
@@ -1577,7 +1441,6 @@ find_package(OcpnLibarchive)
 if (NOT TARGET ocpn::libarchive)
   message(FATAL_ERROR "No libarchive!!!")
 endif ()
-target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::libarchive)
 if (APPLE AND OCPN_USE_SYSTEM_LIBARCHIVE)
   # If we use system libarchive, we do not bundle the dylib and need to comment
   # it out from the pkg project file
@@ -1586,30 +1449,23 @@ if (APPLE AND OCPN_USE_SYSTEM_LIBARCHIVE)
 endif ()
 
 # Add android and windows extra, bundled GL headers
-target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::gl-headers)
 
 # Ensure we have ghc::filesystem if std::filesystem is missing.
 add_subdirectory(libs/std_filesystem)
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::filesystem)
 
 message(STATUS "    Adding local LIBTESS2")
 add_subdirectory(libs/libtess2)
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::tess2)
 
 add_subdirectory(libs/tinyxml)
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::tinyxml)
 
 message(STATUS "    Adding local wxserverdisc")
 add_subdirectory(libs/wxservdisc)
 
 add_subdirectory(libs/manual)
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::manual)
 
 add_subdirectory(libs/s57-charts)
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::s57-charts)
 
 add_subdirectory(libs/gui)
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::guilib)
 
 # New Qt-Quick chart-canvas prototype. Builds as a sibling executable
 # (opencpn-qt) to the legacy wx-based OpenCPN target. P0.4 / P2.1 of the
@@ -1622,8 +1478,6 @@ if (NOT QT_ANDROID)
   # PlugInManager (gui/include/gui/pluginmanager.h) is a Q_OBJECT class for the
   # QNAM-based download wiring (P1.13). AUTOMOC runs moc over the GUI headers
   # so its vtable gets emitted.
-  set_target_properties(${PACKAGE_NAME} PROPERTIES AUTOMOC ON)
-  target_link_libraries(${PACKAGE_NAME} PRIVATE Qt6::Core Qt6::Network)
 endif ()
 
 if (MSVC)
@@ -1635,7 +1489,6 @@ message(STATUS "S57 ENC support: enabled")
 
 if (OCPN_USE_GARMINHOST)
   add_subdirectory("libs/garmin")
-  target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::garminhost)
   set(USE_GARMINHOST 1)  # -> config.h (relocated from the wx GUI assembly;
                          #    model/comm_n0183_output.cpp depends on it). This
                          #    block is ungated + runs before config.h is
@@ -1648,10 +1501,8 @@ endif ()
 # Compile texcompression support library
 if (OPENGL_FOUND)
   add_subdirectory("libs/texcmp")
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::texcmp)
 
   add_subdirectory("libs/mipmap")
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::mipmap)
 endif ()
 
 pkg_search_module(LZ4 liblz4 lz4)
@@ -1662,11 +1513,9 @@ if (LZ4_FOUND AND NOT USE_BUNDLED_LZ4)
   if (OCPN_USE_GL)
     target_link_directories(TEXCMP PRIVATE ${LZ4_LIBRARY_DIRS})
   endif ()
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ${LZ4_LIBRARIES})
 else ()
   message(STATUS "Building with bundled lz4")
   add_subdirectory("libs/lz4")
-  target_link_libraries(${PACKAGE_NAME} PRIVATE LZ4)
 endif ()
 
 # Finalize config.h setup and deploy it.
@@ -1686,25 +1535,15 @@ configure_file(
 include_directories(BEFORE "${CMAKE_BINARY_DIR}/include")
 
 if (NOT APPLE AND NOT QT_ANDROID)
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ${wxWidgets_LIBRARIES})
 endif ()
 
 if (CMAKE_HOST_WIN32)
-  target_link_libraries(
-    ${PACKAGE_NAME} PRIVATE setupapi.lib "GLU_static" psapi.lib
-                            iphlpapi.lib # glu32.lib
-  )
   # use gdi plus only on MSVC, it is not a free library
   if (MSVC)
-    target_link_libraries(${PACKAGE_NAME} PRIVATE gdiplus.lib)
-    target_link_libraries(${PACKAGE_NAME} PRIVATE Shcore.lib)
   endif ()
 endif ()
 
 if (UNIX)
-  target_link_libraries(
-    ${PACKAGE_NAME} PRIVATE ${OPENGL_LIBRARIES} ${GETTEXT_LIBRARY} SQLITE_CPP
-  )
   if (NOT APPLE AND NOT QT_ANDROID AND NOT WIN32 AND NOT X11_FOUND)
     message(STATUS "Did not find x11 libraries")
     message(
@@ -1716,7 +1555,6 @@ endif ()
 # If we build for windows systems, we also include the resource file containing
 # the manifest, icon and other resources
 if (MSVC)
-  target_sources(${PACKAGE_NAME} PRIVATE ${CMAKE_BINARY_DIR}/opencpn.rc)
 endif ()
 
 if (OCPN_BUNDLE_GSHHS)
@@ -1825,12 +1663,9 @@ if (xAPPLE)
   pkg_search_module(GOBJECT REQUIRED gobject-2.0)
   # MESSAGE (STATUS "    GOBJECT: " ${GOBJECT_LDFLAGS})
 
-  target_compile_definitions(${PACKAGE_NAME} PRIVATE ${GOBJECT_LDFLAGS})
-  target_link_libraries(${PACKAGE_NAME} PUBLIC "iconv")
 endif ()
 
 if (WIN32)
-  target_sources(${PACKAGE_NAME} PRIVATE app.manifest)
 endif ()
 
 if (APPLE)
@@ -1890,9 +1725,6 @@ if (APPLE)
   install(FILES ${CMAKE_SOURCE_DIR}/data/ocpn-plugins.xml
           DESTINATION ${PREFIX_PKGDATA}
   )
-  target_sources(
-    ${PACKAGE_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/data/ocpn-plugins.xml
-  )
 
   # Known, downloadable plugin icons
   file(GLOB PLUGIN_ICONS ${CMAKE_SOURCE_DIR}/plugins/icons/*)
@@ -1903,7 +1735,6 @@ if (APPLE)
     )
   endforeach ()
   install(DIRECTORY plugins/icons/ DESTINATION ${PREFIX_PKGDATA}/uidata/plugins)
-  target_sources(${PACKAGE_NAME} PRIVATE ${PLUGIN_ICONS})
 
   file(GLOB SOUND_FILES ${CMAKE_SOURCE_DIR}/data/sounds/*)
   foreach (_currentSoundFile ${SOUND_FILES})
@@ -2029,56 +1860,17 @@ if (APPLE)
     set(DOC_FILES data/doc/help_web.html)
   endif ()
 
-  target_sources(
-    ${PACKAGE_NAME}
-    PRIVATE ${gshhs}
-            ${basemap_shp}
-            ${ssfnData}
-            ${uiData}
-            ${filters}
-            ${s57data}
-            ${tcData}
-            data/license.html
-            data/opencpn.png
-            data/ocpn-plugins.xml
-            data/CoC-909_2013-InlandECDIS_20170308s.pdf
-            data/CoC-1973_2018-InlandECDIS_20220912.pdf
-            ${SOUND_FILES}
-            buildosx/opencpn.icns
-            buildosx/MainMenu.xib
-            ${TRADITIONAL_SVG_FILES}
-            ${JOURNEYMAN_SVG_FILES}
-            ${JOURNEYMAN_FLAT_SVG_FILES}
-            ${DEFAULT_ICON_SVG_FILES}
-            ${MUI_FLAT_SVG_FILES}
-            ${DOC_FILES}
-            ${CONFIG_FILES}
-            ${CMAKE_SOURCE_DIR}/data/authors.html
-  )
-  install(TARGETS ${PACKAGE_NAME} BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ${wxWidgets_LIBRARIES})
-  set_target_properties(
-    ${PACKAGE_NAME} PROPERTIES MACOSX_BUNDLE_INFO_PLIST
-                               "${CMAKE_SOURCE_DIR}/buildosx/Info.plist.in"
-                               XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
-  )
 endif ()
 
 if (QT_ANDROID)
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ${wxWidgets_LIBRARIES})
-  target_link_libraries(${PACKAGE_NAME} PRIVATE GLESv2 EGL z)
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ${OPENGL_LIBRARIES})
-  target_link_libraries(${PACKAGE_NAME} PRIVATE NMEA0183)
 endif ()
 
 # Sanitizers, part 2/2
 if (NOT "${ENABLE_SANITIZER}" MATCHES "none")
-  target_link_libraries(${PACKAGE_NAME} PRIVATE -fsanitize=${ENABLE_SANITIZER})
 endif ()
 
 if (LIBLZMA_FOUND)
-  target_link_libraries(${PACKAGE_NAME} PRIVATE ${LIBLZMA_LIBRARY})
 endif ()
 
 # Add targets used elsewhere, notably by model
@@ -2127,10 +1919,8 @@ if (NOT APPLE)
     set(PREFIX_PKGDATA ".")
   endif ()
   if (WIN32)
-    install(TARGETS ${PACKAGE_NAME} RUNTIME DESTINATION ".")
   endif ()
   if (LINUX)
-    install(TARGETS ${PACKAGE_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES LINUX_DEVICES.md DESTINATION ${PREFIX_DATA}/${PACKAGE_NAME})
   endif ()
 
@@ -2368,9 +2158,7 @@ if (GETTEXT_MSGFMT_EXECUTABLE)
   gettext_build_mo(po/opencpn_en_GB.po en_GB)
 
   add_custom_target( i18n COMMENT "i18n: Done." DEPENDS ${_gmoFiles})
-  if (NOT QT_ANDROID)
-    add_dependencies(${PACKAGE_NAME} i18n)
-  endif ()
+  # P3.11: the wx .mo catalogs no longer hang off the (removed) wx app target.
 endif ()
 
 #
@@ -2512,7 +2300,6 @@ if (APPLE)
   else ()
     find_library(MPG123 NAMES libmpg3 mpg123 REQUIRED)
   endif ()
-  target_link_libraries(${PACKAGE_NAME} PUBLIC ${MPG123})
   message(STATUS "MPG123: ${MPG123}")
   if (OCPN_USE_DEPS_BUNDLE)
     find_library(
@@ -2524,7 +2311,6 @@ if (APPLE)
   else ()
     find_library(MP3LAME NAMES mp3lame lame REQUIRED)
   endif ()
-  target_link_libraries(${PACKAGE_NAME} PUBLIC ${MP3LAME})
   message(STATUS "MP3LAME: ${MP3LAME}")
 endif ()
 
@@ -2894,7 +2680,6 @@ if (NOT TARGET uninstall)
 endif ()
 
 add_subdirectory(model)
-target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::model-src ocpn::model)
 # libs/s52plib used to ride along on ocpn::model's link line via a
 # backwards model->s52plib dependency (model only needed s52plib for
 # the ColorScheme enum in color_types.h). That dep was inverted as
@@ -2902,7 +2687,6 @@ target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::model-src ocpn::model)
 # target now links s52plib directly. ColorScheme moved to
 # model/color_scheme.h; the remaining s52plib headers are still used
 # by gui/include/gui/chartbase.h, pluginmanager.h, etc.
-target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::s52plib)
 
 if ("${ENABLE_SANITIZER}" STREQUAL "none")
   if (MSVC)
@@ -2939,15 +2723,4 @@ else ()
 endif ()
 
 if (QT_ANDROID)
-  target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::java-jvm)
-  target_include_directories(
-    ${PACKAGE_NAME}
-    PRIVATE ${CMAKE_SOURCE_DIR}/buildandroid/libopenssl/${ARCH}/openssl/include
-  )
-  target_link_libraries(
-    ${PACKAGE_NAME}
-    PRIVATE
-      ${CMAKE_SOURCE_DIR}/buildandroid/libopenssl/${ARCH}/openssl/lib/libssl.a
-      ${CMAKE_SOURCE_DIR}/buildandroid/libopenssl/${ARCH}/openssl/lib/libcrypto.a
-  )
 endif ()
