@@ -1501,61 +1501,33 @@ direction: all six are wanted eventually.**
       About box) that never existed in wx.
       Remaining: those new-string translations (community/lupdate workflow)
       and any hard-coded strings still missing `qsTr()`.
-- [~] **P3.11** Remove the parallel wx build path —
-      **increment 1 (2026-06-10):** OCPN_BUILD_WX_APP (default OFF) makes the
-      wx app EXCLUDE_FROM_ALL and excludes the wx-era opencpn-cmd.
-      **increment 2 — wx GUI DELETED (2026-06-13, gate now satisfied via
-      P3.21 sign-off):** removed **gui/src (135) + gui/include (146) = 281
-      files**, the entire legacy wxWidgets GUI. The OpenCPN target is kept
-      DEFINED but compiles only `cmake/wx_app_retired_stub.cpp` when
-      OCPN_BUILD_WX_APP=OFF (the ~50 scattered
-      `target_link_libraries(${PACKAGE_NAME} ...)` + the `_opencpn` alias
-      still reference it); the `OPENGL_FOUND` gl_* `target_sources` block was
-      gated; the wx `add_subdirectory(plugins)` was dropped. Verified: clean
-      reconfigure (generate done) + `make opencpn-qt` links + app runs/renders.
-      **Remaining:**
-      (a) `plugins/` is NOT yet deletable — the Qt plugins (gui/qt/plugin/)
-          reuse legacy plugin *computation* sources (e.g.
-          `plugins/grib_pi/src/GribRecord.cpp`); needs the Qt plugins to
-          vendor their own copies first.
-      (b) **DONE (2026-06-13):** the `GUI_SRC`/`GUI_HDRS` list-assembly
-          (CMakeLists ~810–1102) is now gated behind `OCPN_BUILD_WX_APP`. The
-          one shared bit it carried — `set(USE_GARMINHOST 1)` → config.h, which
-          `model/comm_n0183_output.cpp` needs — was relocated to the ungated
-          `OCPN_USE_GARMINHOST` block (runs before config.h gen); the dead
-          `list(APPEND MODEL_SRC garmin_wrapper.cpp)` beside it was dropped
-          (`model/CMakeLists.txt` builds it). Verified: `make opencpn-qt` +
-          `make tests` build, `#define USE_GARMINHOST` still in config.h.
-      (c) final cleanup: remove the stub `OpenCPN` target + all its scattered
-          refs + the `OCPN_BUILD_WX_APP` option.
-          **Approach: incremental IS workable, but each slice must first
-          relocate/preserve the shared bits it touches** — proven by (b)
-          (relocate one config var → gate succeeds) and by two reverted
-          over-reaches (gating the assembly wholesale broke the model;
-          `git rm -r cli` broke the **test suite**, which compiles
-          `cli/api_shim.cpp` as a shared shim — so cli's *console.cpp/target*
-          can go but `api_shim.cpp` must stay). Remaining shared bits to map
-          before removing the stub target: the ~50 scattered
-          `target_link_libraries(${PACKAGE_NAME} …)` (harmless once the target
-          goes), the `_opencpn`/`ocpn::opencpn` plugin alias, and the
-          wx-bundle staging/fixup. **Important:** this is pure build *hygiene*
-          — the default Qt build is complete, correct, and shipping-capable
-          (mac/Linux/arm/Pi) with the machinery inert; removing it changes
-          nothing that builds or
-          ships.
-      **Dependency rework (2026-06-13, follow-on):** with the wx GUI gone,
-      gated the build deps that only existed to link the wx target behind
-      `OCPN_BUILD_WX_APP`, so the default (Qt) build no longer requires them:
-      **GTK** (+ dropped `libgtk-3-dev`), **Gettext** (the wx .po/.mo build;
-      Qt uses lrelease — + dropped `gettext`), Pango, X11, BZip2, TinyXML,
-      ZSTD-on-mac, and the old-wx wxSVG font stack (Freetype/Fontconfig/PNG/
-      Pixman — already inert on wx ≥ 3.1.6, matching the "no per-element
-      fonts" decision). **KEPT** (genuine Qt deps): **ZLIB** (Qt grib plugin
-      links `ZLIB::ZLIB` — an over-gate here broke the grib build, caught +
-      fixed) and **GLEW** (`libs/s52plib` uses it). `libmpg123`/`libmp3lame`/
-      `libexif`/`libzstd`/`libusb` left in place — genuine deps of kept libs
-      (`o_sound`, `garmin`, `libarchive`). All verified green on macOS +
-      Linux + arm64 CI.
+- [x] **P3.11** Remove the parallel wx build path — **DONE (2026-06-13).**
+      The wx OpenCPN application is fully retired:
+      **increment 1 (2026-06-10):** OCPN_BUILD_WX_APP (default OFF) →
+      EXCLUDE_FROM_ALL + excludes opencpn-cmd.
+      **increment 2:** deleted **gui/src (135) + gui/include (146) = 281
+      files** (the entire wx GUI).
+      **dependency rework:** gated/removed the wx-only deps (GTK + Gettext +
+      the Freetype/Fontconfig/PNG/Pixman font stack + Pango/X11/BZip2/TinyXML/
+      ZSTD); dropped `libgtk-3-dev` + `gettext` from CI + Pi. Kept ZLIB (grib
+      plugin) + GLEW (s52plib).
+      **increment 3 — target + option removed:** removed the `OpenCPN` target
+      and all ~93 of its references (a scripted, reviewed strip + the
+      add_executable block), the `_opencpn`/`ocpn::opencpn` plugin alias, the
+      `OCPN_BUILD_WX_APP` option, the `GUI_HDRS/GUI_SRC` assembly, and all the
+      wx-only gated blocks (328 lines). `USE_GARMINHOST` was relocated to the
+      ungated Garmin block. Each step was caught-and-corrected by the build
+      where it touched shared wiring (ZLIB, the grib plugin, USE_GARMINHOST,
+      the cli/api_shim test shim) — no broken state shipped.
+      Verified green on macOS + Linux + arm64 CI; `make opencpn-qt` +
+      `make tests` build, app runs/renders.
+      **Note — `plugins/` source tree remains** (NOT a build path: it is no
+      longer `add_subdirectory`'d): the Qt plugins (gui/qt/plugin/) reuse its
+      *computation* sources (e.g. `plugins/grib_pi/src/GribRecord.cpp`) +
+      `cli/api_shim.cpp` is a shared test shim. Deleting those files needs the
+      Qt plugins/tests to vendor their own copies — a separate cleanup, not a
+      parallel build path. wxWidgets is still LINKED for the model's residual
+      Phase-1 boundaries → P3.12.
 - [ ] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
       `slots` / `emit` keywords. **Blocked (not by P3.11 directly):** the
       `model/` layer still links wxWidgets at its deliberate Phase-1
