@@ -2273,8 +2273,11 @@ Phase 6). New scope found untracked:
       — an executable per-area sign-off sheet. Its top section is
       pre-verified headlessly (clean launch, vector-chart render of the
       Solent o-charts cells, `de` catalog loads, viewport restore, arm64
-      CI link); the manual rows (charts/nav/AIS/routes/tides/comms/UI/
-      o-charts) need the user's eyes to close item 7 and unblock P3.11.
+      CI link).
+      **SIGNED OFF (user, 2026-06-13): acceptance pass PASS + day-1 plugin
+      set confirmed; any issues with either to be handled later as defects.
+      Items 5 AND 7 now closed → P3.21 SATISFIED → P3.11 wx removal is
+      UNBLOCKED and may proceed.**
 - [x] **P3.22** **Data Monitor launcher → Connections page. DONE
       (2026-06-10).** The 📡 toolbar slot is removed; a "Data monitor…"
       button on Options > Connections opens the window
