@@ -806,13 +806,13 @@ message(STATUS "*** Staging to build ${PACKAGE_NAME}  ***")
 message(STATUS "*** Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "*** Will install to ${CMAKE_INSTALL_PREFIX}  ***")
 
-# NOTE (P3.11): this GUI_HDRS/GUI_SRC list names the now-deleted gui/src +
-# gui/include trees and feeds only the wx OpenCPN target. It is left in place
-# (harmless: it just builds unused list variables) because it interleaves
-# shared config.h variable-setting the Qt build needs -- e.g. the
-# OCPN_USE_GARMINHOST block below sets USE_GARMINHOST (model/comm_n0183_output
-# depends on it). Removing this list belongs with the full wx-target teardown,
-# where those config vars get relocated. Do NOT gate it wholesale.
+# P3.11: GUI_HDRS/GUI_SRC names the deleted gui/src + gui/include trees and
+# feeds only the wx OpenCPN target, so gate it with the retired wx app. The
+# one shared bit this range used to carry -- set(USE_GARMINHOST 1) -> config.h,
+# which the model needs -- has been relocated to the ungated Garmin block
+# (search OCPN_USE_GARMINHOST below), so this is now pure GUI list-building and
+# is correctly skipped in the default (Qt) build.
+if (OCPN_BUILD_WX_APP)
 set(GUI_HDR_DIR ${CMAKE_SOURCE_DIR}/gui/include/gui)
 set(GUI_HDRS
     ${GUI_HDR_DIR}/about_frame.h
@@ -1087,11 +1087,8 @@ if (OCPN_USE_GL)
   list(APPEND GUI_SRC ${GUI_SRC_DIR}/shaders.cpp)
 endif()
 
-if (OCPN_USE_GARMINHOST)
-  message(STATUS "GarminHost is enabled.")
-  set(USE_GARMINHOST 1) # -> config.h
-  list(APPEND MODEL_SRC ${MODEL_SRC_DIR}/garmin_wrapper.cpp)
-endif ()
+# (USE_GARMINHOST relocated below to the ungated Garmin block; the MODEL_SRC
+#  append here was dead -- model/CMakeLists.txt builds garmin_wrapper.cpp.)
 
 if (LINUX AND OCPN_USE_CRASHREPORT)
   list(APPEND GUI_HDRS ${GUI_HDR_DIR}/crashprint.h)
@@ -1107,6 +1104,7 @@ if (NOT MSVC AND NOT APPLE)
   list(APPEND GUI_HDRS ${GUI_HDR_DIR}/ocpn_fontdlg.h)
   list(APPEND GUI_SRC ${GUI_SRC_DIR}/ocpn_fontdlg.cpp)
 endif ()
+endif ()  # OCPN_BUILD_WX_APP -- end of the wx-only GUI_HDRS/GUI_SRC assembly
 
 if (OCPN_BUILD_WX_APP)
   set(SRCS ${GUI_SRC})
@@ -1638,6 +1636,10 @@ message(STATUS "S57 ENC support: enabled")
 if (OCPN_USE_GARMINHOST)
   add_subdirectory("libs/garmin")
   target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::garminhost)
+  set(USE_GARMINHOST 1)  # -> config.h (relocated from the wx GUI assembly;
+                         #    model/comm_n0183_output.cpp depends on it). This
+                         #    block is ungated + runs before config.h is
+                         #    generated, so the Qt build keeps the define.
   message(STATUS "Garmin Host Mode support: enabled")
 else ()
   message(STATUS "Garmin Host Mode support: disabled")
