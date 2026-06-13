@@ -192,13 +192,16 @@ Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
       vs Pi OS Bookworm's apt **Qt 6.4** — handled via aqt's prebuilt
       arm64 Qt. **Done:** `build-linux-arm64` CI job (best-effort, like
       the x86 Linux job — proves compile+link; GLES runtime needs real
-      hardware) + `Docs/QT_RASPBERRY_PI_BUILD.md` (build on hardware;
+      hardware) — **GREEN 2026-06-13 (run 27473991118): 552/552, linked
+      `gui/qt/opencpn-qt` on aarch64 with Qt 6.11** — plus `pibuild.sh`
+      (one-shot Pi build script) + `Docs/QT_RASPBERRY_PI_BUILD.md`
+      (build on hardware;
       **Wayland is the headline path** since Bookworm defaults to a
       Wayland compositor — native `wayland`/qtwayland, XWayland fallback,
       eglfs kiosk; V3D MSAA tuning; ARM `oexserverd` note for o-charts).
-      Remaining: confirm the arm64 CI job goes green; runtime verification
-      on a real Pi (needs hardware + eyes); optional `loadFromModule`
-      fallback to also build on distro Qt 6.4.
+      Remaining: runtime verification on a real Pi — GLES on V3D (needs
+      hardware + eyes; the build itself is CI-green); optional
+      `loadFromModule` fallback to also build on distro Qt 6.4.
 - [x] **P0.6** Repo layout decided: new Qt-Quick code lives in `gui/qt/`
       (subdir of the existing `gui/` tree — closest to what it'll
       eventually replace; the legacy `gui/src/` retires in Phase 3).
