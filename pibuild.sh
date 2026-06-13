@@ -54,7 +54,15 @@ fi
 
 # ---- 1. system dependencies (apt) -----------------------------------------
 log "Installing system build dependencies (apt)"
-$SUDO apt-get update
+if ! $SUDO apt-get update; then
+  warn "apt-get update failed -- this is almost always a broken THIRD-PARTY"
+  warn "apt repo unrelated to OpenCPN (e.g. an old NodeSource 'node_20.x'"
+  warn "list whose Release file was retired). Find and remove the stale source:"
+  warn "  grep -rl nodesource /etc/apt/sources.list /etc/apt/sources.list.d/"
+  warn "  sudo rm /etc/apt/sources.list.d/nodesource.list   # if that's the one"
+  warn "then re-run ./pibuild.sh. (Refusing to build against a stale package index.)"
+  exit 1
+fi
 $SUDO apt-get install -y --no-install-recommends \
   cmake ninja-build g++ git python3 python3-venv python3-pip \
   libwxgtk3.2-dev libgdal-dev libarchive-dev libglew-dev \
