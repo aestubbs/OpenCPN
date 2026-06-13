@@ -1523,6 +1523,19 @@ direction: all six are wanted eventually.**
           removed for clarity.
       (c) final cleanup: remove the stub `OpenCPN` target + all its scattered
           refs + the `OCPN_BUILD_WX_APP` option once (a)/(b) are done.
+      **Dependency rework (2026-06-13, follow-on):** with the wx GUI gone,
+      gated the build deps that only existed to link the wx target behind
+      `OCPN_BUILD_WX_APP`, so the default (Qt) build no longer requires them:
+      **GTK** (+ dropped `libgtk-3-dev`), **Gettext** (the wx .po/.mo build;
+      Qt uses lrelease — + dropped `gettext`), Pango, X11, BZip2, TinyXML,
+      ZSTD-on-mac, and the old-wx wxSVG font stack (Freetype/Fontconfig/PNG/
+      Pixman — already inert on wx ≥ 3.1.6, matching the "no per-element
+      fonts" decision). **KEPT** (genuine Qt deps): **ZLIB** (Qt grib plugin
+      links `ZLIB::ZLIB` — an over-gate here broke the grib build, caught +
+      fixed) and **GLEW** (`libs/s52plib` uses it). `libmpg123`/`libmp3lame`/
+      `libexif`/`libzstd`/`libusb` left in place — genuine deps of kept libs
+      (`o_sound`, `garmin`, `libarchive`). All verified green on macOS +
+      Linux + arm64 CI.
 - [ ] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
       `slots` / `emit` keywords. **Blocked (not by P3.11 directly):** the
       `model/` layer still links wxWidgets at its deliberate Phase-1
