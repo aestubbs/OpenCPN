@@ -101,8 +101,6 @@ option(OCPN_USE_QT_GUI "Build the Qt/QtQuick GUI instead of wxWidgets" OFF)
 # application and its plugins are opt-in. The target is still CONFIGURED
 # (shared libraries and staging reference it) but no longer builds by
 # default; full configure-time removal completes P3.11.
-option(OCPN_BUILD_WX_APP
-       "Build the deprecated wxWidgets application + plugins" OFF)
 
 if (NOT QT_ANDROID)
   # Homebrew installs Qt keg-only; add its prefix so find_package can see it.
@@ -806,310 +804,13 @@ message(STATUS "*** Staging to build ${PACKAGE_NAME}  ***")
 message(STATUS "*** Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "*** Will install to ${CMAKE_INSTALL_PREFIX}  ***")
 
-# P3.11: GUI_HDRS/GUI_SRC names the deleted gui/src + gui/include trees and
-# feeds only the wx OpenCPN target, so gate it with the retired wx app. The
-# one shared bit this range used to carry -- set(USE_GARMINHOST 1) -> config.h,
-# which the model needs -- has been relocated to the ungated Garmin block
-# (search OCPN_USE_GARMINHOST below), so this is now pure GUI list-building and
-# is correctly skipped in the default (Qt) build.
-if (OCPN_BUILD_WX_APP)
-set(GUI_HDR_DIR ${CMAKE_SOURCE_DIR}/gui/include/gui)
-set(GUI_HDRS
-    ${GUI_HDR_DIR}/about_frame.h
-    ${GUI_HDR_DIR}/about_frame_impl.h
-    ${GUI_HDR_DIR}/about.h
-    ${GUI_HDR_DIR}/abstract_chart.h
-    ${GUI_HDR_DIR}/abstract_chart_canv.h
-    ${GUI_HDR_DIR}/ais.h
-    ${GUI_HDR_DIR}/ais_info_gui.h
-    ${GUI_HDR_DIR}/ais_target_alert_dlg.h
-    ${GUI_HDR_DIR}/ais_target_list_dlg.h
-    ${GUI_HDR_DIR}/ais_target_query_dlg.h
-    ${GUI_HDR_DIR}/canvas_config.h
-    ${GUI_HDR_DIR}/canvas_menu.h
-    ${GUI_HDR_DIR}/canvas_options.h
-    ${GUI_HDR_DIR}/catalog_mgr.h
-    ${GUI_HDR_DIR}/cat_settings.h
-    ${GUI_HDR_DIR}/chartbase.h
-    ${GUI_HDR_DIR}/chart_ctx_factory.h
-    ${GUI_HDR_DIR}/chartdb.h
-    ${GUI_HDR_DIR}/chartdb_thread.h
-    ${GUI_HDR_DIR}/chartdbs.h
-    ${GUI_HDR_DIR}/chartimg.h
-    ${GUI_HDR_DIR}/chcanv.h
-    ${GUI_HDR_DIR}/ch_info_win.h
-    ${GUI_HDR_DIR}/color_handler.h
-    ${GUI_HDR_DIR}/compass.h
-    ${GUI_HDR_DIR}/concanv.h
-    ${GUI_HDR_DIR}/config_mgr.h
-    ${GUI_HDR_DIR}/connection_edit.h
-    ${GUI_HDR_DIR}/connections_dlg.h
-    ${GUI_HDR_DIR}/conn_params_panel.h
-    ${GUI_HDR_DIR}/data_monitor.h
-    ${GUI_HDR_DIR}/detail_slider.h
-    ${GUI_HDR_DIR}/displays.h
-    ${GUI_HDR_DIR}/download_mgr.h
-    ${GUI_HDR_DIR}/dychart.h
-    ${GUI_HDR_DIR}/emboss_data.h
-    ${GUI_HDR_DIR}/flex_hash.h
-    ${GUI_HDR_DIR}/font_desc.h
-    ${GUI_HDR_DIR}/font_mgr.h
-    ${GUI_HDR_DIR}/go_to_position_dlg.h
-    ${GUI_HDR_DIR}/gshhs.h
-    ${GUI_HDR_DIR}/gui_lib.h
-    ${GUI_HDR_DIR}/hotkeys_dlg.h
-    ${GUI_HDR_DIR}/idx_entry.h
-    ${GUI_HDR_DIR}/ienc_toolbar.h
-    ${GUI_HDR_DIR}/kml.h
-    ${GUI_HDR_DIR}/layer.h
-    ${GUI_HDR_DIR}/link_prop_dlg.h
-    ${GUI_HDR_DIR}/load_errors_dlg.h
-    ${GUI_HDR_DIR}/mark_info.h
-    ${GUI_HDR_DIR}/mbtiles.h
-    ${GUI_HDR_DIR}/mui_bar.h
-    ${GUI_HDR_DIR}/n0183_ctx_factory.h
-    ${GUI_HDR_DIR}/navutil.h
-    ${GUI_HDR_DIR}/notification_manager_gui.h
-    ${GUI_HDR_DIR}/ocp_cursor.h
-    ${GUI_HDR_DIR}/ocpndc.h
-    ${GUI_HDR_DIR}/ocpn_app.h
-    ${GUI_HDR_DIR}/ocpn_frame.h
-    ${GUI_HDR_DIR}/ocpn_gl_options.h
-    ${GUI_HDR_DIR}/ocpn_list_ctrl.h
-    ${GUI_HDR_DIR}/ocpn_pixel.h
-    ${GUI_HDR_DIR}/ocpn_platform.h
-    ${GUI_HDR_DIR}/ocpn_aui_manager.h
-    ${GUI_HDR_DIR}/ocpn_region.h
-    ${GUI_HDR_DIR}/options.h
-    ${GUI_HDR_DIR}/piano.h
-    ${GUI_HDR_DIR}/peer_client_dlg.h
-    ${GUI_HDR_DIR}/pluginmanager.h
-    ${GUI_HDR_DIR}/print_dialog.h
-    ${GUI_HDR_DIR}/printout_base.h
-    ${GUI_HDR_DIR}/printout_chart.h
-    ${GUI_HDR_DIR}/printtable.h
-    ${GUI_HDR_DIR}/priority_gui.h
-    ${GUI_HDR_DIR}/quilt.h
-    ${GUI_HDR_DIR}/rest_server_gui.h
-    ${GUI_HDR_DIR}/rollover_win.h
-    ${GUI_HDR_DIR}/route_ctx_factory.h
-    ${GUI_HDR_DIR}/route_gui.h
-    ${GUI_HDR_DIR}/routemanagerdialog.h
-    ${GUI_HDR_DIR}/routeman_gui.h
-    ${GUI_HDR_DIR}/route_point_gui.h
-    ${GUI_HDR_DIR}/route_printout.h
-    ${GUI_HDR_DIR}/route_validator.h
-    ${GUI_HDR_DIR}/route_prop_dlg.h
-    ${GUI_HDR_DIR}/route_prop_dlg_impl.h
-    ${GUI_HDR_DIR}/s57chart.h
-    ${GUI_HDR_DIR}/s57_light.h
-    ${GUI_HDR_DIR}/s57_object_desc.h
-    ${GUI_HDR_DIR}/s57_ocpn_utils.h
-    ${GUI_HDR_DIR}/s57_query_dlg.h
-    ${GUI_HDR_DIR}/s57_sector.h
-    ${GUI_HDR_DIR}/safe_mode_gui.h
-    ${GUI_HDR_DIR}/send_to_gps_dlg.h
-    ${GUI_HDR_DIR}/send_to_peer_dlg.h
-    ${GUI_HDR_DIR}/station_data.h
-    ${GUI_HDR_DIR}/styles.h
-    ${GUI_HDR_DIR}/tc_data_factory.h
-    ${GUI_HDR_DIR}/tc_data_source.h
-    ${GUI_HDR_DIR}/tcds_ascii_harmonic.h
-    ${GUI_HDR_DIR}/tcds_binary_harmonic.h
-    ${GUI_HDR_DIR}/tc_error_code.h
-    ${GUI_HDR_DIR}/tcmgr.h
-    ${GUI_HDR_DIR}/tc_win.h
-    ${GUI_HDR_DIR}/thumbwin.h
-    ${GUI_HDR_DIR}/tide_time.h
-    ${GUI_HDR_DIR}/timers.h
-    ${GUI_HDR_DIR}/time_textbox.h
-    ${GUI_HDR_DIR}/toolbar.h
-    ${GUI_HDR_DIR}/track_gui.h
-    ${GUI_HDR_DIR}/track_printout.h
-    ${GUI_HDR_DIR}/track_prop_dlg.h
-    ${GUI_HDR_DIR}/tty_scroll.h
-    ${GUI_HDR_DIR}/udev_rule_mgr.h
-    ${GUI_HDR_DIR}/undo.h
-    ${GUI_HDR_DIR}/tooltip.h
-    ${GUI_HDR_DIR}/update_mgr.h
-    ${GUI_HDR_DIR}/usb_devices.h
-    ${GUI_HDR_DIR}/user_colors.h
-    ${GUI_HDR_DIR}/user_colors_dlg.h
-    ${GUI_HDR_DIR}/viewport.h
-    ${GUI_HDR_DIR}/waypointman_gui.h
-    ${GUI_HDR_DIR}/qt_event_bridge.h
-)
-
-set(GUI_SRC_DIR ${CMAKE_SOURCE_DIR}/gui/src)
-set(GUI_SRC
-    ${GUI_SRC_DIR}/about.cpp
-    ${GUI_SRC_DIR}/about_frame.cpp
-    ${GUI_SRC_DIR}/about_frame_impl.cpp
-    ${GUI_SRC_DIR}/ais.cpp
-    ${GUI_SRC_DIR}/ais_info_gui.cpp
-    ${GUI_SRC_DIR}/ais_target_alert_dlg.cpp
-    ${GUI_SRC_DIR}/ais_target_list_dlg.cpp
-    ${GUI_SRC_DIR}/ais_target_query_dlg.cpp
-    ${GUI_SRC_DIR}/api_121.cpp
-    ${GUI_SRC_DIR}/api_122.cpp
-    ${GUI_SRC_DIR}/canvas_config.cpp
-    ${GUI_SRC_DIR}/canvas_menu.cpp
-    ${GUI_SRC_DIR}/canvas_options.cpp
-    ${GUI_SRC_DIR}/catalog_mgr.cpp
-    ${GUI_SRC_DIR}/cat_settings.cpp
-    ${GUI_SRC_DIR}/chartdb.cpp
-    ${GUI_SRC_DIR}/chartdb_thread.cpp
-    ${GUI_SRC_DIR}/chartdbs.cpp
-    ${GUI_SRC_DIR}/chartimg.cpp
-    ${GUI_SRC_DIR}/chcanv.cpp
-    ${GUI_SRC_DIR}/ch_info_win.cpp
-    ${GUI_SRC_DIR}/cm93.cpp
-    ${GUI_SRC_DIR}/color_handler.cpp
-    ${GUI_SRC_DIR}/compass.cpp
-    ${GUI_SRC_DIR}/concanv.cpp
-    ${GUI_SRC_DIR}/config_mgr.cpp
-    ${GUI_SRC_DIR}/connection_edit.cpp
-    ${GUI_SRC_DIR}/connections_dlg.cpp
-    ${GUI_SRC_DIR}/conn_params_panel.cpp
-    ${GUI_SRC_DIR}/data_monitor.cpp
-    ${GUI_SRC_DIR}/detail_slider.cpp
-    ${GUI_SRC_DIR}/displays.cpp
-    ${GUI_SRC_DIR}/download_mgr.cpp
-    ${GUI_SRC_DIR}/filter_dlg.cpp
-    ${GUI_SRC_DIR}/flex_hash.cpp
-    ${GUI_SRC_DIR}/font_desc.cpp
-    ${GUI_SRC_DIR}/font_mgr.cpp
-    ${GUI_SRC_DIR}/go_to_position_dlg.cpp
-    ${GUI_SRC_DIR}/gshhs.cpp
-    ${GUI_SRC_DIR}/gui_lib.cpp
-    ${GUI_SRC_DIR}/hotkeys_dlg.cpp
-    ${GUI_SRC_DIR}/idx_entry.cpp
-    ${GUI_SRC_DIR}/ienc_toolbar.cpp
-    ${GUI_SRC_DIR}/kml.cpp
-    ${GUI_SRC_DIR}/layer.cpp
-    ${GUI_SRC_DIR}/link_prop_dlg.cpp
-    ${GUI_SRC_DIR}/load_errors_dlg.cpp
-    ${GUI_SRC_DIR}/mark_info.cpp
-    ${GUI_SRC_DIR}/mbtiles/mbtiles.cpp
-    ${GUI_SRC_DIR}/mbtiles/tile_thread.cpp
-    ${GUI_SRC_DIR}/mbtiles/tile_thread.h
-    ${GUI_SRC_DIR}/mbtiles/tile_queue.h
-    ${GUI_SRC_DIR}/mbtiles/tile_descr.h
-    ${GUI_SRC_DIR}/mbtiles/tile_cache.h
-    ${GUI_SRC_DIR}/mbtiles/tile_cache.cpp
-    ${GUI_SRC_DIR}/mui_bar.cpp
-    ${GUI_SRC_DIR}/navutil.cpp
-    ${GUI_SRC_DIR}/notification_manager_gui.cpp
-    ${GUI_SRC_DIR}/ocp_cursor.cpp
-    ${GUI_SRC_DIR}/ocpn_app.cpp
-    ${GUI_SRC_DIR}/qt_event_bridge.cpp
-    ${GUI_SRC_DIR}/ocpn_plugin_gui.cpp
-    ${GUI_SRC_DIR}/ocpn_aui_manager.cpp
-    ${GUI_SRC_DIR}/ocpndc.cpp
-    ${GUI_SRC_DIR}/ocpn_frame.cpp
-    ${GUI_SRC_DIR}/ocpn_list_ctrl.cpp
-    ${GUI_SRC_DIR}/ocpn_pixel.cpp
-    ${GUI_SRC_DIR}/ocpn_platform.cpp
-    ${GUI_SRC_DIR}/ocpn_region.cpp
-    ${GUI_SRC_DIR}/ocpn_gl_options.cpp
-    ${GUI_SRC_DIR}/options.cpp
-    ${GUI_SRC_DIR}/o_senc.cpp
-    ${GUI_SRC_DIR}/peer_client_dlg.cpp
-    ${GUI_SRC_DIR}/piano.cpp
-    ${GUI_SRC_DIR}/pluginmanager.cpp
-    ${GUI_SRC_DIR}/print_dialog.cpp
-    ${GUI_SRC_DIR}/printout_base.cpp
-    ${GUI_SRC_DIR}/printout_chart.cpp
-    ${GUI_SRC_DIR}/printtable.cpp
-    ${GUI_SRC_DIR}/priority_gui.cpp
-    ${GUI_SRC_DIR}/quilt.cpp
-    ${GUI_SRC_DIR}/rest_server_gui.cpp
-    ${GUI_SRC_DIR}/rollover_win.cpp
-    ${GUI_SRC_DIR}/route_gui.cpp
-    ${GUI_SRC_DIR}/routemanagerdialog.cpp
-    ${GUI_SRC_DIR}/routeman_gui.cpp
-    ${GUI_SRC_DIR}/route_point_gui.cpp
-    ${GUI_SRC_DIR}/route_printout.cpp
-    ${GUI_SRC_DIR}/route_validator.cpp
-    ${GUI_SRC_DIR}/route_prop_dlg.cpp
-    ${GUI_SRC_DIR}/route_prop_dlg_impl.cpp
-    ${GUI_SRC_DIR}/s57_load.cpp
-    # s57obj.cpp moved to libs/s52plib/src/s57obj.cpp in P2.8.0b -- it
-    # is the S57Obj class implementation, declared in s52s57.h, and
-    # belongs alongside the rest of the S-52 engine.
-    ${GUI_SRC_DIR}/s57chart.cpp
-    ${GUI_SRC_DIR}/s57_query_dlg.cpp
-    ${GUI_SRC_DIR}/safe_mode_gui.cpp
-    ${GUI_SRC_DIR}/senc_manager.cpp
-    ${GUI_SRC_DIR}/send_to_gps_dlg.cpp
-    ${GUI_SRC_DIR}/send_to_peer_dlg.cpp
-    ${GUI_SRC_DIR}/shapefile_basemap.cpp
-    ${GUI_SRC_DIR}/station_data.cpp
-    ${GUI_SRC_DIR}/styles.cpp
-    ${GUI_SRC_DIR}/svg_icons.cpp
-    ${GUI_SRC_DIR}/tc_data_factory.cpp
-    ${GUI_SRC_DIR}/tc_data_source.cpp
-    ${GUI_SRC_DIR}/tcds_ascii_harmonic.cpp
-    ${GUI_SRC_DIR}/tcds_binary_harmonic.cpp
-    ${GUI_SRC_DIR}/tcmgr.cpp
-    ${GUI_SRC_DIR}/tc_win.cpp
-    ${GUI_SRC_DIR}/thumbwin.cpp
-    ${GUI_SRC_DIR}/toolbar.cpp
-    ${GUI_SRC_DIR}/track_gui.cpp
-    ${GUI_SRC_DIR}/track_printout.cpp
-    ${GUI_SRC_DIR}/track_prop_dlg.cpp
-    ${GUI_SRC_DIR}/tty_scroll.cpp
-    ${GUI_SRC_DIR}/udev_rule_mgr.cpp
-    ${GUI_SRC_DIR}/undo.cpp
-    ${GUI_SRC_DIR}/tooltip.cpp
-    ${GUI_SRC_DIR}/top_frame.cpp
-    ${GUI_SRC_DIR}/update_mgr.cpp
-    ${GUI_SRC_DIR}/user_colors_dlg.cpp
-    ${GUI_SRC_DIR}/user_colors.cpp
-    ${GUI_SRC_DIR}/viewport.cpp
-    ${GUI_SRC_DIR}/waypointman_gui.cpp
-
-)
-
-if (NOT QT_ANDROID)
-  list(APPEND GUI_HDRS
-          ${GUI_HDR_DIR}/wiz_ui_proto.h
-          ${GUI_HDR_DIR}/wiz_ui.h
-          )
-  list(APPEND GUI_SRC
-          ${GUI_SRC_DIR}/initwiz/wiz_ui_proto.cpp
-          ${GUI_SRC_DIR}/initwiz/wiz_ui.cpp
-          )
-endif ()
-
-if (OCPN_USE_GL)
-  list(APPEND GUI_HDRS${GUI_HDR_DIR}/shaders.h)
-  list(APPEND GUI_SRC ${GUI_SRC_DIR}/shaders.cpp)
-endif()
-
-# (USE_GARMINHOST relocated below to the ungated Garmin block; the MODEL_SRC
-#  append here was dead -- model/CMakeLists.txt builds garmin_wrapper.cpp.)
-
-if (LINUX AND OCPN_USE_CRASHREPORT)
-  list(APPEND GUI_HDRS ${GUI_HDR_DIR}/crashprint.h)
-  list(APPEND GUI_SRC ${GUI_SRC_DIR}/crashprint.cpp)
-endif ()
-
-if (QT_ANDROID)
-  list(APPEND GUI_HDRS android/androidUTIL.h)
-  list(APPEND GUI_SRC ${CMAKE_SOURCE_DIR}/android/androidUTIL.cpp)
-endif ()
-
-if (NOT MSVC AND NOT APPLE)
-  list(APPEND GUI_HDRS ${GUI_HDR_DIR}/ocpn_fontdlg.h)
-  list(APPEND GUI_SRC ${GUI_SRC_DIR}/ocpn_fontdlg.cpp)
-endif ()
-endif ()  # OCPN_BUILD_WX_APP -- end of the wx-only GUI_HDRS/GUI_SRC assembly
-
-# P3.11: the wx OpenCPN application target is fully retired and removed (its
-# gui/src + gui/include sources were deleted). The QtQuick application is
-# opencpn-qt (gui/qt/). The OCPN_BUILD_WX_APP option and the wx-only build
-# blocks are removed with it below.
+# P3.11 COMPLETE: the wx OpenCPN application is fully retired. Removed: its
+# gui/src + gui/include sources, the OpenCPN target + all its references, the
+# GUI_HDRS/GUI_SRC assembly, the _opencpn/ocpn::opencpn plugin alias, the
+# OCPN_BUILD_WX_APP option, and the wx-only build/dep blocks (GTK, Gettext,
+# BZip2/X11/TinyXML/font stack). The QtQuick application is opencpn-qt
+# (gui/qt/). USE_GARMINHOST moved to the ungated Garmin block. wxWidgets is
+# still LINKED for the model's residual Phase-1 boundaries (-> P3.12).
 
 if (QT_ANDROID)
   include(libs/AndroidLibs.cmake)
@@ -1153,9 +854,6 @@ endif ()
 # find_package(Qt6 ... LinguistTools)), so the default build needs no system
 # gettext. All the gettext targets below are guarded by GETTEXT_*_EXECUTABLE,
 # which stay unset when this is gated, so they self-skip.
-if (OCPN_BUILD_WX_APP)
-  find_package(Gettext REQUIRED)
-endif ()
 if (LINUX)
   find_package(LIBUDEV)
   if (LIBUDEV_FOUND)
@@ -1207,9 +905,6 @@ endif ()
 # P3.11: GTK is the wx GUI's Linux toolkit. The Qt app uses the Fusion
 # QtQuick Controls style + Qt's own xcb platform, so it needs neither GTK
 # nor Pango. Gate alongside the (retired) wx app.
-if (LINUX AND OCPN_BUILD_WX_APP)
-  include(OcpnFindGtk)
-endif ()
 
 # Search for opengles, short of running a program to test the speed of
 # acceleration, I simply use gles on "native linux" arm systems
@@ -1306,29 +1001,6 @@ if (UNIX AND NOT QT_ANDROID)
   find_package(ZLIB REQUIRED)
 endif ()
 if (UNIX)
-  if (NOT QT_ANDROID AND OCPN_BUILD_WX_APP)
-    find_package(BZip2 REQUIRED)
-    find_package(X11)
-    if (X11_FOUND AND NOT APPLE)
-      set(OCPN_HAVE_X11 ON) # => config.h
-    endif ()
-    if (NOT APPLE)
-      # TinyXML from Homebrew is not good enough for our GpxDocument needs We
-      # should probably replace it with pugixml completely anyway...
-      find_package(TinyXML)
-    endif ()
-    if (APPLE)
-      if (wxWidgets_VERSION_STRING VERSION_LESS "3.1.6")
-        # Only needed if we build with wxSVG implementation of SVG support
-        message(STATUS "Building with wxSVG support")
-        find_package(Freetype REQUIRED)
-        find_package(Fontconfig REQUIRED)
-        find_package(PNG REQUIRED)
-        find_package(Pixman REQUIRED)
-      endif ()
-      find_package(ZSTD REQUIRED)
-    endif ()
-  endif ()
 endif ()
 
 # check for lzma support for reading compressed charts
@@ -1417,10 +1089,6 @@ if (ARCH MATCHES "arm*" AND (NOT QT_ANDROID) AND OCPN_USE_GLES_SHIM)
   endif ()
 endif ()
 
-if (OPENGL_FOUND AND OCPN_BUILD_WX_APP)
-  # P3.11: these are gui/src + gui/include (deleted with the wx app). Only the
-  # wx OpenCPN target uses them, so gate alongside OCPN_BUILD_WX_APP.
-endif ()
 
 # Building for QT_ANDROID involves a cross-building environment, So the include
 # directories, flags, etc must be stated explicitly without trying to locate
