@@ -117,3 +117,60 @@ jobs:
 
       - name: Build opencpn-qt
         run: cmake --build build --target opencpn-qt -j 3
+
+  build-linux-arm64:
+    # Raspberry Pi proxy: a Pi (4/5) is aarch64 Linux rendering through
+    # OpenGL ES (Mesa V3D). GitHub's free arm64 runner builds the SAME
+    # aarch64 target on the same Debian-family toolchain, so a green build
+    # here proves the Pi *compile + link* (the GLES *runtime* still needs
+    # real hardware -- CI has no GPU). The custom .qsb shaders already bake
+    # a "GLSL 100 es" variant, there are no x86 intrinsics, and main.cpp
+    # never forces a desktop-GL profile, so nothing here is x86-only.
+    # See Docs/QT_RASPBERRY_PI_BUILD.md for building on an actual Pi.
+    name: Linux arm64 / Raspberry Pi (best effort)
+    runs-on: ubuntu-24.04-arm
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        # Same system-lib + wx set as the x86 Linux job; all present in
+        # Ubuntu 24.04 arm64 (and, by extension, Raspberry Pi OS Bookworm).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ \
+            libwxgtk3.2-dev libgdal-dev libarchive-dev libglew-dev \
+            libgtk-3-dev libgl1-mesa-dev libglu1-mesa-dev libgles2-mesa-dev \
+            libcurl4-openssl-dev libssl-dev liblz4-dev libzstd-dev \
+            libmpg123-dev libmp3lame-dev libsndfile1-dev libexif-dev \
+            libusb-1.0-0-dev libudev-dev gettext \
+            libxkbcommon-dev libxcb-cursor0
+
+      - name: Install Qt (arm64)
+        # Qt ships linux_arm64 desktop binaries from 6.7+; aqt's arch id is
+        # linux_gcc_arm64 (host linux_arm64). This sidesteps Pi OS / Ubuntu
+        # 24.04's distro Qt 6.4, which predates loadFromModule (main.cpp).
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'linux_arm64'
+          arch: 'linux_gcc_arm64'
+          # qtwayland gives the native `wayland` QPA plugin -- Raspberry Pi
+          # OS Bookworm defaults to a Wayland compositor (labwc). Without it
+          # Qt still runs via XWayland (the xcb plugin), but native Wayland
+          # is the preferred path; install it so a future Wayland smoke-run
+          # has the plugin. See Docs/QT_RASPBERRY_PI_BUILD.md.
+          modules: 'qtserialport qtwebsockets qtshadertools qtmultimedia qtwayland'
+          cache: true
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DOCPN_QT_EXAMPLE_PLUGIN=ON
+
+      - name: Build opencpn-qt
+        run: cmake --build build --target opencpn-qt -j 4
