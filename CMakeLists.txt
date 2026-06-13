@@ -1101,8 +1101,18 @@ if (NOT MSVC AND NOT APPLE)
   list(APPEND GUI_SRC ${GUI_SRC_DIR}/ocpn_fontdlg.cpp)
 endif ()
 
-set(SRCS ${GUI_SRC})
-set(HDRS ${GUI_HDRS})
+if (OCPN_BUILD_WX_APP)
+  set(SRCS ${GUI_SRC})
+  set(HDRS ${GUI_HDRS})
+else ()
+  # P3.11 (wx retirement): the gui/src + gui/include trees are deleted. Keep
+  # the OpenCPN target DEFINED (the scattered target_link_libraries(
+  # ${PACKAGE_NAME} ...) calls and the _opencpn plugin alias still reference
+  # it) but compile only a stub. The target is EXCLUDE_FROM_ALL (set below),
+  # so the stub is never built in a default (Qt) build.
+  set(SRCS ${CMAKE_SOURCE_DIR}/cmake/wx_app_retired_stub.cpp)
+  set(HDRS "")
+endif ()
 if (APPLE)
   add_executable(${PACKAGE_NAME} MACOSX_BUNDLE ${HDRS} ${SRCS})
 elseif (WIN32)
@@ -1506,7 +1516,9 @@ if (ARCH MATCHES "arm*" AND (NOT QT_ANDROID) AND OCPN_USE_GLES_SHIM)
   endif ()
 endif ()
 
-if (OPENGL_FOUND)
+if (OPENGL_FOUND AND OCPN_BUILD_WX_APP)
+  # P3.11: these are gui/src + gui/include (deleted with the wx app). Only the
+  # wx OpenCPN target uses them, so gate alongside OCPN_BUILD_WX_APP.
   target_sources(
     ${PACKAGE_NAME}
     PRIVATE ${GUI_HDR_DIR}/gl_chart_canvas.h
@@ -2512,11 +2524,8 @@ if (MSVC AND OCPN_USE_GL)
   )
 endif ()
 
-if (NOT SKIP_PLUGINS)
-  if (OCPN_BUILD_WX_APP)
-    add_subdirectory(plugins)
-  endif ()
-endif ()
+# P3.11 (wx retirement): the legacy wx plugins/ tree is deleted. The Qt
+# plugins live under gui/qt/plugin/ and build with the opencpn-qt target.
 
 #
 # Prepare CPACK configuration
