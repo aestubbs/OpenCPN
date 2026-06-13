@@ -39,11 +39,14 @@ ShopContext::ShopContext(QObject* ochartsService,
                          std::function<void(const QString&)> addChartDir,
                          QObject* parent)
     : QObject(parent),
-      m_ocharts(ochartsService),
+      m_ocharts(ochartsService),  // may be null in odd hosts; see ctor log
       m_add_chart_dir(std::move(addChartDir)) {
   m_nam = new QNetworkAccessManager(this);
   if (m_ocharts)  // live daemon-state updates
     connect(m_ocharts, SIGNAL(changed()), this, SIGNAL(stateChanged()));
+  qInfo("ochartshop: service=%p daemonAvailable=%d version=%s",
+        static_cast<void*>(m_ocharts), daemonAvailable() ? 1 : 0,
+        qPrintable(daemonVersion()));
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("ochartshop"));
   m_user = st.value(QStringLiteral("username")).toString();
   m_key = st.value(QStringLiteral("key")).toString();
@@ -51,8 +54,21 @@ ShopContext::ShopContext(QObject* ochartsService,
 }
 
 QString ShopContext::versionParam() const {
-  // wx sends g_systemOS + plugin version; identify ourselves honestly.
-  return QSysInfo::productType() + QStringLiteral("-opencpn-qt-1.0");
+  // The server VALIDATES this against the o-charts_pi release stream and
+  // rejects unknown strings with result 5 ("plugin version obsolete") --
+  // the user's login failure. wx sends g_systemOS + plugin version,
+  // e.g. "d.2.1.17" on macOS ("w."/"l." on Windows/Linux). Verified
+  // differentially against the live API (2026-06-12): our old invented
+  // string -> result 5; this string -> result 4/6 (real credential
+  // checking). Bump alongside o-charts_pi releases if the server ages
+  // this version out.
+#if defined(Q_OS_MACOS)
+  return QStringLiteral("d.2.1.17");
+#elif defined(Q_OS_WIN)
+  return QStringLiteral("w.2.1.17");
+#else
+  return QStringLiteral("l.2.1.17");
+#endif
 }
 
 void ShopContext::setBusy(bool b, int progress) {
