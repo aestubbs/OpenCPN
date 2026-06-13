@@ -289,10 +289,10 @@ public:
    * slot HandleServerMessage is connected via Qt::QueuedConnection so the
    * dispatch runs on the GUI thread.
    */
-Q_SIGNALS:
+signals:
   void IoEventReceived(int id, RestIoEvtDataPtr evt_data);
 
-private Q_SLOTS:
+private slots:
   void HandleServerMessage(int id, RestIoEvtDataPtr evt_data);
 
 private:

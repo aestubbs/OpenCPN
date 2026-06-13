@@ -117,13 +117,13 @@ void ShapefileBasemapProvider::setColorScheme(int scheme) {
       m_nodata_coast = QColor(150, 150, 150);
       break;
   }
-  Q_EMIT changed();
+  emit changed();
 }
 
 void ShapefileBasemapProvider::setNoDataMode(bool on) {
   if (on == m_nodata) return;
   m_nodata = on;
-  Q_EMIT changed();  // forces a rebuild (renderChart re-tints the backdrop)
+  emit changed();  // forces a rebuild (renderChart re-tints the backdrop)
 }
 
 void ShapefileBasemapProvider::load(const QString& shp_path) {
@@ -256,7 +256,7 @@ void ShapefileBasemapProvider::setViewport(const Viewport* vp) {
   connect(m_vp, &Viewport::changed, this, [this] {
     // Re-render only when the VISIBLE TILE SET changes (a pan within the
     // same tiles costs nothing; the world-anchored transform pans).
-    if (visibleTiles() != m_attached) Q_EMIT changed();
+    if (visibleTiles() != m_attached) emit changed();
   });
 }
 

@@ -100,7 +100,7 @@ public:
                    QSGTransformNode* display_root,
                    QQuickWindow* window);
 
-Q_SIGNALS:
+signals:
   /** Emitted when any Layer dirties or composition changes; ChartCanvas
    *  connects this to QQuickItem::update(). */
   void changed();

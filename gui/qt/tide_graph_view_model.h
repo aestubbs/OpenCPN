@@ -73,7 +73,7 @@ public:
   Q_INVOKABLE QVariantList currentArrows(double startMs, double endMs,
                                          double stepMins) const;
 
-Q_SIGNALS:
+signals:
   void changed();        // station / unit / value range
   void markerChanged();  // value under the display-time marker
 

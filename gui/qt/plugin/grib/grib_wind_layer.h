@@ -53,11 +53,11 @@ public:
   };
   void setGrid(const WindGrid& g) {
     m_grid = g;
-    Q_EMIT dirty();
+    emit dirty();
   }
   void clearGrid() {
     m_grid = WindGrid{};
-    Q_EMIT dirty();
+    emit dirty();
   }
 
   /** Scalar field grid (pressure, gust, rain...). */
@@ -68,11 +68,11 @@ public:
   };
   void setIsobars(const ScalarGrid& g) {
     m_isobars = g;
-    Q_EMIT dirty();
+    emit dirty();
   }
   void clearIsobars() {
     m_isobars = ScalarGrid{};
-    Q_EMIT dirty();
+    emit dirty();
   }
 
   /** A direction-arrow vector field (waves, current): either u/v
@@ -87,11 +87,11 @@ public:
   };
   void setArrows(const QString& key, const ArrowField& f) {
     m_arrows[key] = f;
-    Q_EMIT dirty();
+    emit dirty();
   }
   void clearArrows(const QString& key) {
     m_arrows.remove(key);
-    Q_EMIT dirty();
+    emit dirty();
   }
 
   /** The colour-mapped overlay raster (one at a time, wx OverlayMap):
@@ -107,12 +107,12 @@ public:
     m_overlay_min = rampMin;
     m_overlay_max = rampMax;
     m_overlay_dirty = true;
-    Q_EMIT dirty();
+    emit dirty();
   }
   void clearOverlay() {
     m_overlay = ScalarGrid{};
     m_overlay_dirty = true;
-    Q_EMIT dirty();
+    emit dirty();
   }
 
   /** A scalar field rendered as NUMBERS at grid points. */
@@ -126,11 +126,11 @@ public:
   };
   void setNumbers(const QString& key, const NumberField& f) {
     m_numbers[key] = f;
-    Q_EMIT dirty();
+    emit dirty();
   }
   void clearNumbers(const QString& key) {
     m_numbers.remove(key);
-    Q_EMIT dirty();
+    emit dirty();
   }
 
   QSGNode* updateSubtree(QSGNode* old, QQuickWindow* window) override;
@@ -143,11 +143,11 @@ public:
   void setParticleDensity(int d) {  // 1..10 -> 150..1500 particles
     m_particle_count = 150 * qBound(1, d, 10);
     m_particles.clear();
-    Q_EMIT dirty();
+    emit dirty();
   }
   void setOverlayAlpha(int a) {
     m_overlay_alpha = qBound(0, a, 255);
-    Q_EMIT dirty();
+    emit dirty();
   }
 
 private:

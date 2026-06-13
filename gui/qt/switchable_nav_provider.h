@@ -50,13 +50,13 @@ public:
     for (NavDataProvider* p : {m_demo, m_live}) {
       if (!p) continue;
       connect(p, &NavDataProvider::dynamicChanged, this, [this, p]() {
-        if (current() == p) Q_EMIT dynamicChanged();
+        if (current() == p) emit dynamicChanged();
       });
       // The live provider's staticChanged means the model routes/tracks
       // changed (e.g. a fresh fix grew the active track) -- forward it in
       // both modes so the model-backed overlays refresh.
       connect(p, &NavDataProvider::staticChanged, this,
-              [this]() { Q_EMIT staticChanged(); });
+              [this]() { emit staticChanged(); });
     }
   }
 
@@ -64,8 +64,8 @@ public:
   void setLive(bool live) {
     if (live == m_use_live) return;
     m_use_live = live;
-    Q_EMIT dynamicChanged();
-    Q_EMIT staticChanged();
+    emit dynamicChanged();
+    emit staticChanged();
   }
   bool isLive() const { return m_use_live; }
 
@@ -80,7 +80,7 @@ public:
     m_has_rubber = false;
     m_draft = NavRoute{};
     m_draft.name = QStringLiteral("Route %1").arg(++m_route_seq);
-    Q_EMIT editChanged();
+    emit editChanged();
   }
   /** Append a vertex (degrees) to the draft route (or, in append mode, to
    *  the model route being extended). */
@@ -90,7 +90,7 @@ public:
     if (!m_building) return;
     m_rubber = QPointF(lon, lat);
     m_has_rubber = true;
-    Q_EMIT editChanged();  // cheap route-only redraw, no waypoint relabel
+    emit editChanged();  // cheap route-only redraw, no waypoint relabel
   }
   /** Commit the draft (>=2 points) as a model Route + persist. True if kept. */
   bool finishRoute();
@@ -119,7 +119,7 @@ public:
     m_building = false;
     m_has_rubber = false;
     m_draft = NavRoute{};
-    Q_EMIT editChanged();
+    emit editChanged();
   }
 
   // --- Route editing (#31): operates on the model routes (pRouteList), in

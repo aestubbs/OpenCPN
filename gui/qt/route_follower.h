@@ -101,7 +101,7 @@ public:
    *  provider's dynamicChanged() so it runs once per own-ship tick. */
   void update();
 
-Q_SIGNALS:
+signals:
   void changed();
   /** A waypoint was reached and the route advanced to the next one. */
   void arrived(const QString& waypointName);

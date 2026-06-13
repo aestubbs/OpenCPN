@@ -43,7 +43,7 @@ AnchorWatchLayer::AnchorWatchLayer(const AlertEngine* engine, QObject* parent)
   // Reposition / resize on a watch change, recolour on a breach change.
   auto bump = [this]() {
     m_dirty = true;
-    Q_EMIT dirty();
+    emit dirty();
   };
   connect(m_engine, &AlertEngine::anchorChanged, this, bump);
   connect(m_engine, &AlertEngine::changed, this, bump);

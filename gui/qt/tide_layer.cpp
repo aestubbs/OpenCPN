@@ -74,7 +74,7 @@ void TideLayer::onTimeChanged() {
   m_rebuild_pending = true;
   QTimer::singleShot(60, this, [this]() {
     m_rebuild_pending = false;
-    Q_EMIT dirty();
+    emit dirty();
   });
 }
 

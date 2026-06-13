@@ -72,7 +72,7 @@ void DashboardContext::setInstrumentEnabled(const QString& key, bool on) {
   if (!on) m_enabled.removeAll(key);
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"));
   st.setValue(QStringLiteral("enabled"), m_enabled);
-  Q_EMIT enabledChanged();
+  emit enabledChanged();
 }
 
 void DashboardContext::setGauges(bool on) {
@@ -80,7 +80,7 @@ void DashboardContext::setGauges(bool on) {
   m_gauges = on;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"))
       .setValue(QStringLiteral("gauges"), on);
-  Q_EMIT enabledChanged();
+  emit enabledChanged();
 }
 
 void DashboardContext::setCorner(const QString& c) {
@@ -88,7 +88,7 @@ void DashboardContext::setCorner(const QString& c) {
   m_corner = c;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"))
       .setValue(QStringLiteral("corner"), c);
-  Q_EMIT enabledChanged();
+  emit enabledChanged();
 }
 
 void DashboardContext::setVertical(bool on) {
@@ -96,7 +96,7 @@ void DashboardContext::setVertical(bool on) {
   m_vertical = on;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("dashboard-plugin"))
       .setValue(QStringLiteral("vertical"), on);
-  Q_EMIT enabledChanged();
+  emit enabledChanged();
 }
 
 void DashboardContext::onNavMsg(const QString& line,
@@ -116,7 +116,7 @@ void DashboardContext::onNavMsg(const QString& line,
     m_wtemp = m.captured(1) + QStringLiteral(" °C");
     changed = true;
   }
-  if (changed) Q_EMIT navChanged();
+  if (changed) emit navChanged();
 }
 
 void DashboardContext::refresh() {
@@ -135,7 +135,7 @@ void DashboardContext::refresh() {
               : QStringLiteral("--");
   m_pos = s.valid ? ddm(s.lat, true) + QStringLiteral("  ") + ddm(s.lon, false)
                   : QStringLiteral("--");
-  Q_EMIT navChanged();
+  emit navChanged();
 }
 
 bool DashboardPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {

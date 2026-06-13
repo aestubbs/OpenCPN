@@ -47,8 +47,8 @@ void GpsUploadController::finish(int result) {
       break;
   }
   m_sending = false;
-  Q_EMIT sendingChanged();
-  Q_EMIT statusChanged();
+  emit sendingChanged();
+  emit statusChanged();
 }
 
 bool GpsUploadController::sendRoute(int routeIndex, const QString& port,
@@ -62,8 +62,8 @@ bool GpsUploadController::sendRoute(int routeIndex, const QString& port,
   m_sending = true;
   m_progress = 0;
   m_status = tr("Sending…");
-  Q_EMIT sendingChanged();
-  Q_EMIT statusChanged();
+  emit sendingChanged();
+  emit statusChanged();
 
   N0183DlgCtx ctx;
   ctx.set_range = [this](int range) {
@@ -72,7 +72,7 @@ bool GpsUploadController::sendRoute(int routeIndex, const QString& port,
   // (set_range stores the denominator; set_value converts to 0-100.)
   ctx.set_value = [this](int v) {
     m_progress = m_progress_range > 0 ? (100 * v) / m_progress_range : 0;
-    Q_EMIT progressChanged();
+    emit progressChanged();
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   };
   ctx.confirm_overwrite = []() { return true; };
@@ -93,8 +93,8 @@ bool GpsUploadController::sendMark(const QString& guid, const QString& port) {
   m_sending = true;
   m_progress = 0;
   m_status = tr("Sending…");
-  Q_EMIT sendingChanged();
-  Q_EMIT statusChanged();
+  emit sendingChanged();
+  emit statusChanged();
 
   N0183DlgCtx ctx;
   ctx.confirm_overwrite = []() { return true; };

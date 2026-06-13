@@ -18,7 +18,7 @@ ExamplePluginContext::ExamplePluginContext(QObject* parent)
   m_timer.setInterval(1000);
   connect(&m_timer, &QTimer::timeout, this, [this]() {
     m_text = QTime::currentTime().toString(QStringLiteral("HH:mm:ss"));
-    Q_EMIT clockChanged();
+    emit clockChanged();
   });
   m_timer.start();
 }

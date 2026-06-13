@@ -87,24 +87,24 @@ public:
   void setVisible(bool v) {
     if (m_visible == v) return;
     m_visible = v;
-    Q_EMIT visibleChanged();
-    Q_EMIT dirty();
+    emit visibleChanged();
+    emit dirty();
   }
 
   int zOrder() const { return m_z_order; }
   void setZOrder(int z) {
     if (m_z_order == z) return;
     m_z_order = z;
-    Q_EMIT zOrderChanged();
-    Q_EMIT dirty();
+    emit zOrderChanged();
+    emit dirty();
   }
 
   qreal opacity() const { return m_opacity; }
   void setOpacity(qreal o) {
     if (m_opacity == o) return;
     m_opacity = o;
-    Q_EMIT opacityChanged();
-    Q_EMIT dirty();
+    emit opacityChanged();
+    emit dirty();
   }
 
   /** Owner tag -- core subsystem name (e.g. "core.ais", "core.routes") or
@@ -119,7 +119,7 @@ public:
    *  to false so they don't clutter config or fight their computed state. */
   virtual bool persistState() const { return true; }
 
-Q_SIGNALS:
+signals:
   /** Emit when the subtree needs rebuilding (data changed, properties
    *  changed). The compositor connects and schedules an update. */
   void dirty();

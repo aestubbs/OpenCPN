@@ -81,7 +81,7 @@ void SimShipController::setActive(bool on) {
     m_timer->stop();
     m_running = false;
   }
-  Q_EMIT changed();
+  emit changed();
 }
 
 void SimShipController::place(double lat, double lon) {
@@ -90,14 +90,14 @@ void SimShipController::place(double lat, double lon) {
   m_placed = true;
   if (!m_active) setActive(true);  // placing implies we want the test ship live
   writeGlobals();
-  Q_EMIT changed();
-  Q_EMIT ticked();  // let the canvas recentre / repaint on the new fix
+  emit changed();
+  emit ticked();  // let the canvas recentre / repaint on the new fix
 }
 
 void SimShipController::setCourse(double deg) {
   m_course = wrap360(deg);
   if (m_active) writeGlobals();
-  Q_EMIT changed();
+  emit changed();
 }
 
 void SimShipController::steer(double delta_deg) { setCourse(m_course + delta_deg); }
@@ -105,7 +105,7 @@ void SimShipController::steer(double delta_deg) { setCourse(m_course + delta_deg
 void SimShipController::setSpeed(double knots) {
   m_speed = std::clamp(knots, 0.0, kMaxSpeed);
   if (m_active) writeGlobals();
-  Q_EMIT changed();
+  emit changed();
 }
 
 void SimShipController::throttle(double delta_knots) {
@@ -118,7 +118,7 @@ void SimShipController::setRunning(bool on) {
   // Reset the integration clock so a long pause doesn't jump the position.
   m_last_ms = m_clock.isValid() ? m_clock.elapsed() : 0;
   if (m_active) writeGlobals();
-  Q_EMIT changed();
+  emit changed();
 }
 
 void SimShipController::tick() {
@@ -131,8 +131,8 @@ void SimShipController::tick() {
     advance(m_lat, m_lon, m_course, m_speed, dt);
 
   writeGlobals();
-  Q_EMIT ticked();
-  if (m_running) Q_EMIT changed();  // position/HUD moved
+  emit ticked();
+  if (m_running) emit changed();  // position/HUD moved
 }
 
 }  // namespace ocpn::qtui

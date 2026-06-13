@@ -76,7 +76,7 @@ public:
   QString cogText() const;
   QString hdgText() const;
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

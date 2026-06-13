@@ -273,7 +273,7 @@ void ModelNavDataProvider::onWorkerUpdated() {
 }
 
 void ModelNavDataProvider::emitChanges() {
-  Q_EMIT dynamicChanged();
+  emit dynamicChanged();
 
   // Cheap static change-detect: route/waypoint/track counts (+ the live
   // own-ship track length, so it re-renders as it grows a point at a time).
@@ -286,7 +286,7 @@ void ModelNavDataProvider::emitChanges() {
       (g_pActiveTrack ? g_pActiveTrack->GetnPoints() : 0);
   if (sig != m_last_static_sig) {
     m_last_static_sig = sig;
-    Q_EMIT staticChanged();
+    emit staticChanged();
   }
 }
 

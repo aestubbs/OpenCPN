@@ -59,11 +59,11 @@ NmeaMonitorModel::NmeaMonitorModel(QObject* parent) : QObject(parent) {
         if (!m_sources.contains(source)) {
           m_sources.append(source);
           m_sources.sort();
-          Q_EMIT sourcesChanged();
+          emit sourcesChanged();
         }
         if (m_paused) return;
         const QString line = formatMsg(msg);
-        if (!line.isEmpty()) Q_EMIT lineReceived(line, source);
+        if (!line.isEmpty()) emit lineReceived(line, source);
       });
 }
 
@@ -72,7 +72,7 @@ NmeaMonitorModel::~NmeaMonitorModel() = default;
 void NmeaMonitorModel::setPaused(bool on) {
   if (on == m_paused) return;
   m_paused = on;
-  Q_EMIT pausedChanged();
+  emit pausedChanged();
 }
 
 }  // namespace ocpn::qtui

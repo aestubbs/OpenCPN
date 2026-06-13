@@ -57,7 +57,7 @@ public:
     return {};
   }
 
-Q_SIGNALS:
+signals:
   /** High-frequency data changed (AIS targets / own ship moving). The
    *  dynamic, retained overlays (AisLayer, OwnShipLayer) connect to this and
    *  update transforms cheaply. */

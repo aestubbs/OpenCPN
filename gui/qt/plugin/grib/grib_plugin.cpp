@@ -130,7 +130,7 @@ void GribContext::onTimelineChanged() {
   }
   if (best != m_time_index) {
     m_time_index = best;  // label tracking; push happens below anyway
-    Q_EMIT timeChanged();
+    emit timeChanged();
   }
   // Tier 3: scrubs re-render with interpolation. Throttled: a full grid
   // push per 1 s live tick is wasted work -- re-push only when display
@@ -189,7 +189,7 @@ void GribContext::reload() {
     m_file.clear();
     m_paths.clear();
     if (m_layer) m_layer->clearGrid();
-    Q_EMIT gribChanged();
+    emit gribChanged();
     return;
   }
   // wx GRIBFile post-load fixups (GribUIDialog.cpp:2051+): rain/cloud
@@ -279,7 +279,7 @@ void GribContext::reload() {
   m_status = tr("%1 records, %2 time steps")
                  .arg(m_reader->getTotalNumberOfGribRecords())
                  .arg(m_steps.size());
-  Q_EMIT gribChanged();
+  emit gribChanged();
   pushToLayer();
 }
 
@@ -307,18 +307,18 @@ QVariantList GribContext::dataTypes() const {
 void GribContext::setTypeShown(const QString& key, bool on) {
   if (key == QLatin1String("wind")) {
     setShowWind(on);
-    Q_EMIT typesChanged();
+    emit typesChanged();
     return;
   }
   if (key == QLatin1String("pressure")) {
     setShowPressure(on);
-    Q_EMIT typesChanged();
+    emit typesChanged();
     return;
   }
   m_type_shown[key] = on;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
       .setValue(QStringLiteral("show_") + key, on);
-  Q_EMIT typesChanged();
+  emit typesChanged();
   pushToLayer();
 }
 
@@ -413,7 +413,7 @@ void GribContext::setOverlayKey(const QString& k) {
   m_overlay_key = k;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
       .setValue(QStringLiteral("overlayKey"), k);
-  Q_EMIT typesChanged();
+  emit typesChanged();
   pushToLayer();
 }
 
@@ -492,7 +492,7 @@ void GribContext::setUnitFor(const QString& key, const QString& unit) {
   QSettings st(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"));
   st.setValue(QStringLiteral("unit_") + key, unit);
   st.setValue(QStringLiteral("unitKeys"), QStringList(m_units.keys()));
-  Q_EMIT typesChanged();
+  emit typesChanged();
   pushToLayer();
 }
 
@@ -503,7 +503,7 @@ void GribContext::setParticleDensity(int d) {
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
       .setValue(QStringLiteral("particleDensity"), d);
   if (m_layer) m_layer->setParticleDensity(d);
-  Q_EMIT typesChanged();
+  emit typesChanged();
 }
 
 void GribContext::setInterpolate(bool on) {
@@ -511,7 +511,7 @@ void GribContext::setInterpolate(bool on) {
   m_interpolate = on;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
       .setValue(QStringLiteral("interpolate"), on);
-  Q_EMIT typesChanged();
+  emit typesChanged();
   pushToLayer();
 }
 
@@ -522,7 +522,7 @@ void GribContext::setOverlayTransparency(int pct) {
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
       .setValue(QStringLiteral("overlayTransparency"), pct);
   if (m_layer) m_layer->setOverlayAlpha(255 * (100 - pct) / 100 / 2);
-  Q_EMIT typesChanged();
+  emit typesChanged();
   pushToLayer();
 }
 
@@ -531,7 +531,7 @@ void GribContext::setMasterEnabled(bool on) {
   m_master_enabled = on;
   if (m_layer) m_layer->setVisible(on);
   if (notifyToolbar) notifyToolbar();
-  Q_EMIT controlsChanged();
+  emit controlsChanged();
 }
 
 QStringList GribContext::cursorRows(double lat, double lon) const {
@@ -697,7 +697,7 @@ void GribContext::setGribDir(const QUrl& d) {
   m_grib_dir = d;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("grib-plugin"))
       .setValue(QStringLiteral("gribDir"), d);
-  Q_EMIT gribChanged();
+  emit gribChanged();
 }
 
 QVariantList GribContext::dirFiles() const {
@@ -747,34 +747,34 @@ void GribContext::setParticles(bool on) {
   if (on == m_particles) return;
   m_particles = on;
   if (m_layer) m_layer->setParticlesEnabled(on);
-  Q_EMIT typesChanged();
+  emit typesChanged();
 }
 
 void GribContext::setWindAltitude(int hpa) {
   if (hpa == m_wind_altitude) return;
   m_wind_altitude = hpa;
-  Q_EMIT typesChanged();
+  emit typesChanged();
   pushToLayer();
 }
 
 void GribContext::setTimeIndex(int i) {
   if (i == m_time_index || i < 0 || i >= m_step_times.size()) return;
   m_time_index = i;
-  Q_EMIT timeChanged();
+  emit timeChanged();
   pushToLayer();
 }
 
 void GribContext::setShowWind(bool on) {
   if (on == m_show_wind) return;
   m_show_wind = on;
-  Q_EMIT timeChanged();
+  emit timeChanged();
   pushToLayer();
 }
 
 void GribContext::setShowPressure(bool on) {
   if (on == m_show_pressure) return;
   m_show_pressure = on;
-  Q_EMIT timeChanged();
+  emit timeChanged();
   pushToLayer();
 }
 
@@ -988,7 +988,7 @@ void GribContext::pushToLayer() {
     if (ownO) delete r;
   }
 
-  Q_EMIT typesChanged();
+  emit typesChanged();
 
   if (!m_show_wind) {
     m_layer->clearGrid();

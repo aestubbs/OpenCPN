@@ -189,7 +189,7 @@ public:
   CellExtent scanOneCellExtent(const QString& path_000,
                                const QString& s57data_dir);
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

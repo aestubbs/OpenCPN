@@ -51,7 +51,7 @@ void RouteListViewModel::refresh() {
   m_routes.clear();
   m_waypoints.clear();
   if (!m_provider) {
-    Q_EMIT changed();
+    emit changed();
     return;
   }
 
@@ -142,7 +142,7 @@ void RouteListViewModel::refresh() {
                      mb.value("startTimeMs").toLongLong();
             });
   m_track_count = static_cast<int>(tks.size());
-  Q_EMIT changed();
+  emit changed();
 }
 
 void RouteListViewModel::setMarkSortMode(int mode) {

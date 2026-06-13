@@ -67,7 +67,7 @@ bool RouteFollower::activateFrom(int routeIndex, int wpIndex) {
   ConfigStore::instance().setString("routes/activeGuid", r->GetGUID());
 
   update();  // compute the first solution immediately
-  Q_EMIT activeRouteChanged();
+  emit activeRouteChanged();
   return true;
 }
 
@@ -76,8 +76,8 @@ void RouteFollower::deactivate() {
     g_pRouteMan->DeactivateRoute(false);  // user-initiated, not an arrival
     ConfigStore::instance().setString("routes/activeGuid", QString());
     snapshot();
-    Q_EMIT activeRouteChanged();
-    Q_EMIT changed();
+    emit activeRouteChanged();
+    emit changed();
   }
 }
 
@@ -106,10 +106,10 @@ void RouteFollower::skip() {
     const QString name = r ? r->GetName() : QString();
     g_pRouteMan->DeactivateRoute(true);
     snapshot();
-    Q_EMIT activeRouteChanged();
-    Q_EMIT ended(name);
+    emit activeRouteChanged();
+    emit ended(name);
   }
-  Q_EMIT changed();
+  emit changed();
 }
 
 void RouteFollower::zeroXte() {
@@ -135,17 +135,17 @@ void RouteFollower::update() {
   RoutePoint* now_wp = g_pRouteMan->GetpActivePoint();
 
   snapshot();
-  Q_EMIT changed();
+  emit changed();
 
   if (was_active && !now_active) {
     // The route deactivated itself during the tick -> reached the end. Don't
     // restore a completed route next launch.
     ConfigStore::instance().setString("routes/activeGuid", QString());
-    Q_EMIT activeRouteChanged();
-    Q_EMIT ended(prev_route_name);
+    emit activeRouteChanged();
+    emit ended(prev_route_name);
   } else if (was_active && now_active && now_wp != prev_wp) {
     // Advanced to the next waypoint.
-    Q_EMIT arrived(prev_wp_name);
+    emit arrived(prev_wp_name);
   }
 }
 

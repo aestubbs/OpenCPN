@@ -51,16 +51,16 @@ void CommPrioritiesModel::move(int category, int index, int delta) {
   items.swapItemsAt(index, to);
   maps[category] = items.join('|').toStdString();
   CommBridge::GetInstance().UpdateAndApplyMaps(maps);
-  Q_EMIT changed();
+  emit changed();
 }
 
 void CommPrioritiesModel::clearAll() {
   // wx PriorityDlg::OnClearClick: apply five empty maps; the bridge
   // relearns sources as data arrives.
   CommBridge::GetInstance().UpdateAndApplyMaps({"", "", "", "", ""});
-  Q_EMIT changed();
+  emit changed();
 }
 
-void CommPrioritiesModel::refresh() { Q_EMIT changed(); }
+void CommPrioritiesModel::refresh() { emit changed(); }
 
 }  // namespace ocpn::qtui

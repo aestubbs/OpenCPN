@@ -34,7 +34,7 @@ class ExamplePluginContext : public QObject {
 public:
   explicit ExamplePluginContext(QObject* parent = nullptr);
   QString clockText() const { return m_text; }
-Q_SIGNALS:
+signals:
   void clockChanged();
 private:
   QString m_text;

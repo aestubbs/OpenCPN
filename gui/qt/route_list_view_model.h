@@ -50,7 +50,7 @@ public:
   QVariantList tracks() const { return m_tracks; }
   int trackCount() const { return m_track_count; }
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

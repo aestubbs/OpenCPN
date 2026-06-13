@@ -65,7 +65,7 @@ public:
   Q_INVOKABLE void providePin(const QString& pin);
   Q_INVOKABLE void cancelPin();
 
-Q_SIGNALS:
+signals:
   void peersChanged();
   void scanningChanged();
   void sendingChanged();

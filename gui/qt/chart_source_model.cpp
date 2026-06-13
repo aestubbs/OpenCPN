@@ -121,7 +121,7 @@ int ChartSourceModel::addGroup(const QString& name) {
   g.name = n;
   m_groups.append(g);
   save();
-  Q_EMIT groupsChanged();
+  emit groupsChanged();
   return m_groups.size() - 1;
 }
 
@@ -136,10 +136,10 @@ void ChartSourceModel::removeGroup(int index) {
     --m_active_group;
   }
   save();
-  Q_EMIT groupsChanged();
+  emit groupsChanged();
   if (active_changed) {
-    Q_EMIT activeGroupChanged();
-    Q_EMIT rescanRequested();
+    emit activeGroupChanged();
+    emit rescanRequested();
   }
 }
 
@@ -149,7 +149,7 @@ void ChartSourceModel::renameGroup(int index, const QString& name) {
   if (n.isEmpty() || n == m_groups[index].name) return;
   m_groups[index].name = n;
   save();
-  Q_EMIT groupsChanged();
+  emit groupsChanged();
 }
 
 void ChartSourceModel::setDirInGroup(int groupIndex, const QString& dir,
@@ -164,8 +164,8 @@ void ChartSourceModel::setDirInGroup(int groupIndex, const QString& dir,
   else
     return;  // no change
   save();
-  Q_EMIT groupsChanged();
-  if (groupIndex == m_active_group) Q_EMIT rescanRequested();
+  emit groupsChanged();
+  if (groupIndex == m_active_group) emit rescanRequested();
 }
 
 void ChartSourceModel::setActiveGroup(int index) {
@@ -173,8 +173,8 @@ void ChartSourceModel::setActiveGroup(int index) {
   if (n == m_active_group) return;
   m_active_group = n;
   save();
-  Q_EMIT activeGroupChanged();
-  Q_EMIT rescanRequested();
+  emit activeGroupChanged();
+  emit rescanRequested();
 }
 
 void ChartSourceModel::addDirectory(const QString& path) {
@@ -186,8 +186,8 @@ void ChartSourceModel::addDirectory(const QString& path) {
   if (p.isEmpty() || m_dirs.contains(p)) return;
   m_dirs << p;
   save();
-  Q_EMIT changed();
-  Q_EMIT rescanRequested();
+  emit changed();
+  emit rescanRequested();
 }
 
 void ChartSourceModel::removeDirectory(int index) {
@@ -197,25 +197,25 @@ void ChartSourceModel::removeDirectory(int index) {
   for (Group& g : m_groups)
     if (g.dirs.removeAll(removed) > 0) groups_touched = true;
   save();
-  Q_EMIT changed();
-  if (groups_touched) Q_EMIT groupsChanged();
-  Q_EMIT rescanRequested();
+  emit changed();
+  if (groups_touched) emit groupsChanged();
+  emit rescanRequested();
 }
 
-void ChartSourceModel::rescan() { Q_EMIT rescanRequested(); }
+void ChartSourceModel::rescan() { emit rescanRequested(); }
 
 void ChartSourceModel::setStatus(const QString& text, bool scanning) {
   if (m_status == text && m_scanning == scanning) return;
   m_status = text;
   m_scanning = scanning;
-  Q_EMIT statusChanged();
+  emit statusChanged();
 }
 
 void ChartSourceModel::seedIfEmpty(const QString& path) {
   if (!m_dirs.isEmpty() || path.isEmpty()) return;
   m_dirs << path;
   save();
-  Q_EMIT changed();
+  emit changed();
 }
 
 }  // namespace ocpn::qtui

@@ -74,7 +74,7 @@ public:
   Q_INVOKABLE void setRunning(bool on);
   Q_INVOKABLE void toggleRun() { setRunning(!m_running); }
 
-Q_SIGNALS:
+signals:
   void changed();
   /** Emitted each tick after the globals are written, so the canvas can drive
    *  the route follower + repaint in lock-step with the simulated fix. */

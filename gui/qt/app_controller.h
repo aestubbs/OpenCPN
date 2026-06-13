@@ -39,7 +39,7 @@ public:
   void setHudExpanded(bool on) {
     if (on == m_hud_expanded) return;
     m_hud_expanded = on;
-    Q_EMIT hudExpandedChanged();
+    emit hudExpandedChanged();
   }
   Q_INVOKABLE void toggleHud() { setHudExpanded(!m_hud_expanded); }
 
@@ -47,10 +47,10 @@ public:
   void setTitlebarToggle(bool on) {
     if (on == m_titlebar_toggle) return;
     m_titlebar_toggle = on;
-    Q_EMIT titlebarToggleChanged();
+    emit titlebarToggleChanged();
   }
 
-Q_SIGNALS:
+signals:
   void hudExpandedChanged();
   void titlebarToggleChanged();
 

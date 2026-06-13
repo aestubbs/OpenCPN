@@ -182,7 +182,7 @@ public:
   QString dscSoundFile() const { return m_dsc_file; }
   void setDscSoundFile(const QString& v);
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

@@ -76,7 +76,7 @@ public:
   static bool DiscoverSkServer(const std::string& service_ident, wxString& ip,
                                int& port, int tSec);
 
-private Q_SLOTS:
+private slots:
   /** Handle a SignalK JSON payload posted from the I/O thread. */
   void HandleSkSentence(const QString& payload);
 

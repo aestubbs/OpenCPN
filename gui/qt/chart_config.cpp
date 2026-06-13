@@ -53,7 +53,7 @@ ChartConfig::ChartConfig() {
   if ((member) == (value)) return;              \
   (member) = (value);                           \
   ConfigStore::instance().putter(key, value);   \
-  Q_EMIT changed();
+  emit changed();
 
 void ChartConfig::setChartInfoObjects(bool v) {
   OCPN_VC_SET(m_chart_info, v, "vchart/chartInfo", setBool)

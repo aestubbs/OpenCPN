@@ -115,8 +115,8 @@ void DemoNavDataProvider::seedAround(double lat, double lon) {
   t.points = {P(-0.10, -0.15), P(-0.05, -0.10), P(0.0, -0.05), P(0.02, 0.0)};
   m_tracks = {t};
 
-  Q_EMIT dynamicChanged();
-  Q_EMIT staticChanged();
+  emit dynamicChanged();
+  emit staticChanged();
 }
 
 void DemoNavDataProvider::setRunning(bool run) {
@@ -146,7 +146,7 @@ void DemoNavDataProvider::tick() {
 
   // Only the dynamic data moves; the demo route/track/waypoints are static,
   // so we never emit staticChanged() (those layers build once).
-  Q_EMIT dynamicChanged();
+  emit dynamicChanged();
 }
 
 }  // namespace ocpn::qtui

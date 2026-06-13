@@ -86,7 +86,7 @@ public:
    *  from the build-time OCPN_QT_TEST_ENC). Does not trigger a rescan. */
   void seedIfEmpty(const QString& path);
 
-Q_SIGNALS:
+signals:
   void changed();          // the directory list changed (persist + reload)
   void groupsChanged();    // a group's name / membership / set changed
   void activeGroupChanged(); // the active-group selection changed

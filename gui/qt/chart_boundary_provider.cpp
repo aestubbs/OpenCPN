@@ -40,13 +40,13 @@ void ChartBoundaryProvider::setExtents(const QList<CellExtent>& extents) {
     if (c.east > m_east) m_east = c.east;
     if (c.west < m_west) m_west = c.west;
   }
-  Q_EMIT changed();
+  emit changed();
 }
 
 void ChartBoundaryProvider::setHighlight(const QString& cell_name) {
   if (cell_name == m_highlight) return;
   m_highlight = cell_name;
-  Q_EMIT changed();
+  emit changed();
 }
 
 QSGNode* ChartBoundaryProvider::renderChart(QSGNode* old_subtree,

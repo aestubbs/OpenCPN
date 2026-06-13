@@ -31,7 +31,7 @@
  * matching reply (delivered through the CommDriver's raw frame tap)
  * advances the queue. See docs/QT_MIGRATION_COMMS_ARCH.md (task P1.5d).
  *
- * The build defines QT_NO_KEYWORDS (task P1.5a) so Q_SLOTS is used.
+ * The build defines QT_NO_KEYWORDS (task P1.5a) so slots is used.
  */
 
 #ifndef COMM_N2K_GATEWAY_MGR_H
@@ -75,7 +75,7 @@ public:
    */
   int RequestTxPgn(int pgn);
 
-private Q_SLOTS:
+private slots:
   void OnTransportConnected();  ///< (re)run the init handshake
   void OnRequestTimeout();      ///< no response -- retry or give up
 

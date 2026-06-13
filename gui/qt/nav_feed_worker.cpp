@@ -135,7 +135,7 @@ void NavFeedWorker::tick() {
   if (m_own && m_own_state.valid && finitePos(m_own_state.lat, m_own_state.lon))
     m_own->set(m_own_state);
 
-  Q_EMIT updated();  // one coalesced wake-up per tick
+  emit updated();  // one coalesced wake-up per tick
 }
 
 }  // namespace ocpn::qtui

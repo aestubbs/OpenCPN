@@ -129,7 +129,7 @@ void AlertEngine::evaluateAis(const QList<AisTarget>& targets) {
         f = ui.dscSoundFile();
       else if (!distress && ais.cpaAlertSound())
         f = ui.aisSoundFile();
-      if (!f.isEmpty()) Q_EMIT soundRequested(f);
+      if (!f.isEmpty()) emit soundRequested(f);
     }
   }
 
@@ -141,7 +141,7 @@ void AlertEngine::evaluateAis(const QList<AisTarget>& targets) {
   if (active_now != m_ais_active || text != m_ais_text) {
     m_ais_active = active_now;
     m_ais_text = text;
-    Q_EMIT changed();
+    emit changed();
   }
 }
 
@@ -153,7 +153,7 @@ void AlertEngine::evaluateAnchor(const OwnShipState& own) {
   if (!m_anchor_set || !own.valid) {
     m_anchor_breached = false;
     m_anchor_active = false;
-    if (was_active || was_breach) Q_EMIT changed();
+    if (was_active || was_breach) emit changed();
     return;
   }
 
@@ -176,14 +176,14 @@ void AlertEngine::evaluateAnchor(const OwnShipState& own) {
               .arg(m_anchor_radius_m, 0, 'f', 0);
       if (!m_anchor_sounded && UIConfig::instance().anchorAlarmSound()) {
         const QString f = UIConfig::instance().anchorSoundFile();
-        if (!f.isEmpty()) Q_EMIT soundRequested(f);
+        if (!f.isEmpty()) emit soundRequested(f);
         m_anchor_sounded = true;
       }
     }
   }
 
   if (m_anchor_active != was_active || m_anchor_breached != was_breach)
-    Q_EMIT changed();
+    emit changed();
 }
 
 void AlertEngine::noteRouteEvent(const QString& text, bool sound) {
@@ -192,9 +192,9 @@ void AlertEngine::noteRouteEvent(const QString& text, bool sound) {
   if (sound) {
     // Ring the ship's bell on arrival -- a guaranteed-present bundled sample,
     // so route feedback never depends on a user sound being configured.
-    Q_EMIT soundRequested(QStringLiteral(OCPN_QT_SOUNDS_DIR "/1bells.wav"));
+    emit soundRequested(QStringLiteral(OCPN_QT_SOUNDS_DIR "/1bells.wav"));
   }
-  Q_EMIT changed();
+  emit changed();
 }
 
 void AlertEngine::acknowledge() {
@@ -223,7 +223,7 @@ void AlertEngine::acknowledge() {
     m_anchor_active = false;
     any = true;
   }
-  if (any) Q_EMIT changed();
+  if (any) emit changed();
 }
 
 void AlertEngine::dropAnchor() {
@@ -236,8 +236,8 @@ void AlertEngine::dropAnchor() {
   m_anchor_breached = false;
   m_anchor_active = false;
   persistAnchor();
-  Q_EMIT anchorChanged();
-  Q_EMIT changed();
+  emit anchorChanged();
+  emit changed();
 }
 
 void AlertEngine::raiseAnchor() {
@@ -248,8 +248,8 @@ void AlertEngine::raiseAnchor() {
   m_anchor_acked = false;
   m_anchor_sounded = false;
   persistAnchor();
-  Q_EMIT anchorChanged();
-  Q_EMIT changed();
+  emit anchorChanged();
+  emit changed();
 }
 
 void AlertEngine::setAnchorRadiusM(double metres) {
@@ -257,7 +257,7 @@ void AlertEngine::setAnchorRadiusM(double metres) {
   if (qFuzzyCompare(metres, m_anchor_radius_m)) return;
   m_anchor_radius_m = metres;
   persistAnchor();
-  Q_EMIT anchorChanged();  // the watch circle resizes; breach re-evals next tick
+  emit anchorChanged();  // the watch circle resizes; breach re-evals next tick
 }
 
 void AlertEngine::scheduleNextBell() {
@@ -295,11 +295,11 @@ void AlertEngine::ringBells(int count) {
   int slot = 0;
   for (int i = 0; i < pairs; ++i, ++slot) {
     QTimer::singleShot(slot * 1600, this,
-                       [this, two]() { Q_EMIT soundRequested(two); });
+                       [this, two]() { emit soundRequested(two); });
   }
   if (single) {
     QTimer::singleShot(slot * 1600, this,
-                       [this, one]() { Q_EMIT soundRequested(one); });
+                       [this, one]() { emit soundRequested(one); });
   }
 }
 

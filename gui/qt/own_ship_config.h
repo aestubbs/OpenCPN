@@ -120,7 +120,7 @@ public:
   double hdtPredictorNm() const { return m_hdt_predictor_nm; }
   void setHdtPredictorNm(double v);
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

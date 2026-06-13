@@ -96,9 +96,9 @@ public:
                    std::shared_ptr<const NavAddr> addr) override;
 
   // The build defines QT_NO_KEYWORDS (task P1.5a) so the signals/slots/emit
-  // macros are off and cannot collide with wx/system headers; Q_SIGNALS /
-  // Q_SLOTS / Q_EMIT are used instead. Reverted by task P3.12.
-Q_SIGNALS:
+  // macros are off and cannot collide with wx/system headers; signals /
+  // slots / emit are used instead. Reverted by task P3.12.
+signals:
   /**
    * Emitted from the read path with one decoded N2K payload. Connected to
    * HandleN2kPayload with Qt::QueuedConnection so the payload is dispatched
@@ -107,7 +107,7 @@ Q_SIGNALS:
    */
   void N2kMsgReceived(CommDriverN2KNet::N2kPayloadPtr payload);
 
-private Q_SLOTS:
+private slots:
   void OnRxSocketData();        ///< QTcpSocket/QUdpSocket readyRead
   void OnSocketConnected();     ///< QTcpSocket connected
   void OnSocketDisconnected();  ///< QTcpSocket disconnected / error

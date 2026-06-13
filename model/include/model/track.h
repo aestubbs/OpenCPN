@@ -243,7 +243,7 @@ public:
 
   void AdjustCurrentTrackPoint(TrackPoint *prototype);
 
-private Q_SLOTS:
+private slots:
   void OnTimerTrack();
 
 private:

@@ -67,7 +67,7 @@ void TimeController::enterScrub() {
   }
   const bool was_live = m_live;
   m_live = false;
-  if (was_live) Q_EMIT modeChanged();  // playing already cleared above
+  if (was_live) emit modeChanged();  // playing already cleared above
 }
 
 void TimeController::goLive() {
@@ -76,9 +76,9 @@ void TimeController::goLive() {
   m_live = true;
   m_time = QDateTime::currentDateTime();
   applyToGlobal();
-  Q_EMIT modeChanged();
-  Q_EMIT timeChanged();
-  Q_EMIT windowChanged();
+  emit modeChanged();
+  emit timeChanged();
+  emit windowChanged();
 }
 
 void TimeController::setDisplayTime(const QDateTime& t) {
@@ -89,16 +89,16 @@ void TimeController::setDisplayTime(const QDateTime& t) {
   enterScrub();
   m_time = t;
   applyToGlobal();
-  Q_EMIT timeChanged();
-  Q_EMIT windowChanged();
+  emit timeChanged();
+  emit windowChanged();
 }
 
 void TimeController::panSeconds(double secs) {
   enterScrub();
   m_time = m_time.addSecs(static_cast<qint64>(std::llround(secs)));
   applyToGlobal();
-  Q_EMIT timeChanged();
-  Q_EMIT windowChanged();
+  emit timeChanged();
+  emit windowChanged();
 }
 
 void TimeController::panPixels(double dx, double widthPx) {
@@ -122,14 +122,14 @@ void TimeController::play() {
   m_playing = true;
   if (m_timer) m_timer->setInterval(100);  // smooth animation while playing
   applyToGlobal();
-  Q_EMIT modeChanged();
+  emit modeChanged();
 }
 
 void TimeController::pause() {
   if (!m_playing) return;
   m_playing = false;
   if (m_timer) m_timer->setInterval(1000);  // back to the 1 Hz live tick
-  Q_EMIT modeChanged();
+  emit modeChanged();
 }
 
 void TimeController::togglePlay() { m_playing ? pause() : play(); }
@@ -138,12 +138,12 @@ void TimeController::onTick() {
   if (m_playing) {
     m_time = m_time.addSecs(static_cast<qint64>(m_play_minutes_per_tick) * 60);
     applyToGlobal();
-    Q_EMIT timeChanged();
-    Q_EMIT windowChanged();  // window scrolls forward with displayTime
+    emit timeChanged();
+    emit windowChanged();  // window scrolls forward with displayTime
   } else if (m_live) {
     m_time = QDateTime::currentDateTime();
-    Q_EMIT timeChanged();
-    Q_EMIT windowChanged();  // gTimeSource stays invalid while live
+    emit timeChanged();
+    emit windowChanged();  // gTimeSource stays invalid while live
   }
 }
 

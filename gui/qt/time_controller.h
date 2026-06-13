@@ -116,14 +116,14 @@ public:
   QVariantList marks() const { return m_marks; }
   Q_INVOKABLE void setMarks(const QVariantList& epochsSecs) {
     m_marks = epochsSecs;
-    Q_EMIT marksChanged();
+    emit marksChanged();
   }
   double spanStart() const { return m_span_start; }
   double spanEnd() const { return m_span_end; }
   Q_INVOKABLE void setSpan(double startSecs, double endSecs) {
     m_span_start = startSecs;
     m_span_end = endSecs;
-    Q_EMIT marksChanged();
+    emit marksChanged();
   }
 
   /** Zoom the visible window span (wheel on the bar): factor < 1 zooms
@@ -131,10 +131,10 @@ public:
   Q_INVOKABLE void zoomWindow(double factor) {
     m_window_secs =
         std::clamp(m_window_secs * factor, 2.0 * 3600.0, 16.0 * 86400.0);
-    Q_EMIT windowChanged();
+    emit windowChanged();
   }
 
-Q_SIGNALS:
+signals:
   void marksChanged();
   void timeChanged();   // displayTime / nowFraction / time+date labels
   void modeChanged();   // live / playing

@@ -55,7 +55,7 @@ std::string AutoKey() {
 
 ObsNotifier::ObsNotifier(QObject* parent) : QObject(parent) {}
 
-void ObsNotifier::Notify(const ObsData& data) { Q_EMIT Notified(data); }
+void ObsNotifier::Notify(const ObsData& data) { emit Notified(data); }
 
 /* ObsRegistry ------------------------------------------------------------ */
 

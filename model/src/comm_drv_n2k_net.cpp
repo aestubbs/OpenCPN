@@ -505,7 +505,7 @@ void CommDriverN2KNet::HandleCanFrameInput(can_frame frame) {
     if (HandleMgntMsg(header.pgn, vec)) return;
 
     // Message is ready -- hand it to the listener via the queued signal.
-    Q_EMIT N2kMsgReceived(std::make_shared<std::vector<unsigned char>>(vec));
+    emit N2kMsgReceived(std::make_shared<std::vector<unsigned char>>(vec));
   }
 }
 
@@ -610,7 +610,7 @@ bool CommDriverN2KNet::ProcessActisense_N2K(std::vector<unsigned char> packet) {
             o_payload.push_back(0x55);  // CRC dummy, not checked
 
             // Message is ready -- hand it to the listener (queued signal).
-            Q_EMIT N2kMsgReceived(
+            emit N2kMsgReceived(
                 std::make_shared<std::vector<unsigned char>>(o_payload));
           }
 
@@ -751,7 +751,7 @@ bool CommDriverN2KNet::ProcessActisense_NGT(std::vector<unsigned char> packet) {
           bGotESC = false;
         } else if (next_byte == ENDOFTEXT) {
           // Process packet -- hand it to the listener (queued signal).
-          Q_EMIT N2kMsgReceived(
+          emit N2kMsgReceived(
               std::make_shared<std::vector<unsigned char>>(data));
 
           // reset for next packet
@@ -911,7 +911,7 @@ bool CommDriverN2KNet::ProcessActisense_ASCII_N2K(
       if (HandleMgntMsg(PGN, o_payload)) return false;
 
       // Message is ready -- hand it to the listener (queued signal).
-      Q_EMIT N2kMsgReceived(
+      emit N2kMsgReceived(
           std::make_shared<std::vector<unsigned char>>(o_payload));
     }
   }
@@ -980,7 +980,7 @@ bool CommDriverN2KNet::ProcessSeaSmart(std::vector<unsigned char> packet) {
       if (HandleMgntMsg(PGN, o_payload)) return false;
 
       // Message is ready -- hand it to the listener (queued signal).
-      Q_EMIT N2kMsgReceived(
+      emit N2kMsgReceived(
           std::make_shared<std::vector<unsigned char>>(o_payload));
     }
   }

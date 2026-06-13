@@ -61,10 +61,10 @@ bool SerialTransport::Open() {
   m_port->setFlowControl(QSerialPort::NoFlowControl);
 
   if (!m_port->open(QIODevice::ReadWrite)) {
-    Q_EMIT ErrorOccurred(m_port->errorString());
+    emit ErrorOccurred(m_port->errorString());
     return false;
   }
-  Q_EMIT Connected();
+  emit Connected();
   return true;
 }
 
@@ -83,14 +83,14 @@ bool SerialTransport::Write(const QByteArray& data) {
 
 void SerialTransport::OnReadyRead() {
   const QByteArray chunk = m_port->readAll();
-  if (!chunk.isEmpty()) Q_EMIT DataReceived(chunk);
+  if (!chunk.isEmpty()) emit DataReceived(chunk);
 }
 
 void SerialTransport::OnError() {
   const QSerialPort::SerialPortError err = m_port->error();
   if (err == QSerialPort::NoError) return;
 
-  Q_EMIT ErrorOccurred(m_port->errorString());
+  emit ErrorOccurred(m_port->errorString());
 
   // A device that disappears (USB adaptor unplugged, port lost) -- close it
   // so the owning CommDriver's reconnect timer can retry from a clean state.
@@ -99,7 +99,7 @@ void SerialTransport::OnError() {
       err == QSerialPort::DeviceNotFoundError ||
       err == QSerialPort::OpenError) {
     if (m_port->isOpen()) m_port->close();
-    Q_EMIT Disconnected();
+    emit Disconnected();
   }
   m_port->clearError();
 }
@@ -152,20 +152,20 @@ bool TcpClientTransport::Write(const QByteArray& data) {
 
 void TcpClientTransport::OnReadyRead() {
   const QByteArray chunk = m_socket->readAll();
-  if (!chunk.isEmpty()) Q_EMIT DataReceived(chunk);
+  if (!chunk.isEmpty()) emit DataReceived(chunk);
 }
 
 void TcpClientTransport::OnConnected() {
   // The greeting (e.g. gpsd's ?WATCH subscription) goes out on every
   // (re)connect, before consumers learn the link is up.
   if (!m_greeting.isEmpty()) m_socket->write(m_greeting);
-  Q_EMIT Connected();
+  emit Connected();
 }
 
-void TcpClientTransport::OnDisconnected() { Q_EMIT Disconnected(); }
+void TcpClientTransport::OnDisconnected() { emit Disconnected(); }
 
 void TcpClientTransport::OnError() {
-  Q_EMIT ErrorOccurred(m_socket->errorString());
+  emit ErrorOccurred(m_socket->errorString());
 }
 
 // ---------------------------------------------------------------------------
@@ -185,12 +185,12 @@ bool TcpServerTransport::Open() {
   }
   if (m_server->isListening()) return true;
   if (!m_server->listen(QHostAddress::Any, m_port)) {
-    Q_EMIT ErrorOccurred(m_server->errorString());
+    emit ErrorOccurred(m_server->errorString());
     return false;
   }
   // Like UdpTransport's bind: the transport is usable once listening --
   // clients come and go without changing the driver's lifecycle.
-  Q_EMIT Connected();
+  emit Connected();
   return true;
 }
 
@@ -218,7 +218,7 @@ void TcpServerTransport::OnNewConnection() {
     m_clients.append(client);
     connect(client, &QTcpSocket::readyRead, this, [this, client] {
       const QByteArray chunk = client->readAll();
-      if (!chunk.isEmpty()) Q_EMIT DataReceived(chunk);
+      if (!chunk.isEmpty()) emit DataReceived(chunk);
     });
     connect(client, &QTcpSocket::disconnected, this, [this, client] {
       m_clients.removeAll(client);
@@ -255,14 +255,14 @@ bool UdpTransport::Open() {
   const QUdpSocket::BindMode mode =
       QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint;
   if (!m_socket->bind(QHostAddress::AnyIPv4, m_port, mode)) {
-    Q_EMIT ErrorOccurred(m_socket->errorString());
+    emit ErrorOccurred(m_socket->errorString());
     return false;
   }
   if (m_multicast && !m_socket->joinMulticastGroup(QHostAddress(m_host))) {
-    Q_EMIT ErrorOccurred(m_socket->errorString());
+    emit ErrorOccurred(m_socket->errorString());
     return false;
   }
-  Q_EMIT Connected();
+  emit Connected();
   return true;
 }
 
@@ -284,12 +284,12 @@ bool UdpTransport::Write(const QByteArray& data) {
 void UdpTransport::OnReadyRead() {
   while (m_socket->hasPendingDatagrams()) {
     const QNetworkDatagram dg = m_socket->receiveDatagram();
-    if (!dg.data().isEmpty()) Q_EMIT DataReceived(dg.data());
+    if (!dg.data().isEmpty()) emit DataReceived(dg.data());
   }
 }
 
 void UdpTransport::OnError() {
-  Q_EMIT ErrorOccurred(m_socket->errorString());
+  emit ErrorOccurred(m_socket->errorString());
 }
 
 // ---------------------------------------------------------------------------
@@ -357,29 +357,29 @@ bool WebSocketTransport::Write(const QByteArray& data) {
 
 void WebSocketTransport::OnConnected() {
   m_ping_timer->start();
-  Q_EMIT Connected();
+  emit Connected();
 }
 
 void WebSocketTransport::OnDisconnected() {
   m_ping_timer->stop();
-  Q_EMIT Disconnected();
+  emit Disconnected();
 }
 
 void WebSocketTransport::OnTextMessage(const QString& message) {
-  Q_EMIT DataReceived(message.toUtf8());
+  emit DataReceived(message.toUtf8());
 }
 
 void WebSocketTransport::OnBinaryMessage(const QByteArray& message) {
-  if (!message.isEmpty()) Q_EMIT DataReceived(message);
+  if (!message.isEmpty()) emit DataReceived(message);
 }
 
 void WebSocketTransport::OnError() {
   // Flip to the other URL for the next attempt (the wss <-> ws dance).
   if (m_alternate.isValid()) m_use_alternate = !m_use_alternate;
-  Q_EMIT ErrorOccurred(m_ws->errorString());
+  emit ErrorOccurred(m_ws->errorString());
   // A failed CONNECT attempt never emits disconnected(), so the generic
   // driver's reconnect timer would not be armed -- emit it here when the
   // socket is not connected. OnDisconnected handles the connected case.
   if (m_ws->state() == QAbstractSocket::UnconnectedState)
-    Q_EMIT Disconnected();
+    emit Disconnected();
 }

@@ -47,7 +47,7 @@ public:
                              bool sendWaypoints);
   Q_INVOKABLE bool sendMark(const QString& guid, const QString& port);
 
-Q_SIGNALS:
+signals:
   void sendingChanged();
   void progressChanged();
   void statusChanged();

@@ -86,7 +86,7 @@ public:
                                const Viewport& viewport,
                                QQuickWindow* window) = 0;
 
-Q_SIGNALS:
+signals:
   /** Emit when the chart's data has changed and the subtree should be
    *  re-built. The wrapping ChartLayer connects this to its own
    *  `Layer::dirty` signal. */

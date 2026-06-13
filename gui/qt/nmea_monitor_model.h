@@ -53,7 +53,7 @@ public:
   void setPaused(bool on);
   QStringList sources() const { return m_sources; }
 
-Q_SIGNALS:
+signals:
   /** One decoded message: text "HH:mm:ss  <sentence/PGN>" + its source tag. */
   void lineReceived(const QString& line, const QString& source);
   void pausedChanged();

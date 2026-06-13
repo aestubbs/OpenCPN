@@ -98,7 +98,7 @@ bool S52Engine::init(const QString& data_dir) {
     // wx insists on main thread for its global init. opencpn-qt's main
     // calls us from main; this branch is a safety check.
     m_impl->status = QStringLiteral("S-52: init must be called from main");
-    Q_EMIT changed();
+    emit changed();
     return false;
   }
   m_impl->wx_initialised = wxInitialize();
@@ -112,7 +112,7 @@ bool S52Engine::init(const QString& data_dir) {
   if (!m_impl->lib->m_bOK) {
     m_impl->status =
         QStringLiteral("S-52: init failed (could not load %1)").arg(rle_path);
-    Q_EMIT changed();
+    emit changed();
     return false;
   }
 
@@ -145,7 +145,7 @@ bool S52Engine::init(const QString& data_dir) {
           .arg(m_impl->lib->GetMajorVersion())
           .arg(m_impl->lib->GetMinorVersion())
           .arg(data_dir);
-  Q_EMIT changed();
+  emit changed();
   return true;
 }
 
@@ -850,7 +850,7 @@ s52sg::Buffer S52Engine::loadEncCells(const QStringList& paths_000,
     m_impl->status =
         QStringLiteral("S-52: could not load S-57 class CSVs from %1")
             .arg(s57data_dir);
-    Q_EMIT changed();
+    emit changed();
     return buf;
   }
 
@@ -896,7 +896,7 @@ s52sg::Buffer S52Engine::loadEncCells(const QStringList& paths_000,
           .arg(ext.w, 0, 'f', 3)
           .arg(ext.e, 0, 'f', 3)
           .arg(err.isEmpty() ? QString() : QStringLiteral(" [%1]").arg(err));
-  Q_EMIT changed();
+  emit changed();
   return buf;
 }
 

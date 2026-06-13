@@ -159,7 +159,7 @@ public:
   /** A JSON message should be sent. Contains a AisTargetData* pointer. */
   EventVar plugin_msg;
 
-private Q_SLOTS:
+private slots:
   void OnTimerAIS();
   void OnTimerDSC();
 

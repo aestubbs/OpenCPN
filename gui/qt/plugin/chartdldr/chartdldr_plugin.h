@@ -72,7 +72,7 @@ public:
   Q_INVOKABLE void downloadAll();
   Q_INVOKABLE void cancelAll();
 
-Q_SIGNALS:
+signals:
   void catalogChanged();
   void busyChanged();
   void statusChanged();

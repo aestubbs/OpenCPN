@@ -291,7 +291,7 @@ void ConnectionsViewModel::activatePersisted() {
       apply(i);
       any = true;
     }
-  if (any) Q_EMIT activated();
+  if (any) emit activated();
 }
 
 QVariantList ConnectionsViewModel::connections() const {
@@ -329,7 +329,7 @@ QVariantMap ConnectionsViewModel::connectionAt(int index) const {
 void ConnectionsViewModel::addConnection(const QVariantMap& c) {
   m_conns.append(fromMap(c));
   save();
-  Q_EMIT changed();
+  emit changed();
 }
 
 void ConnectionsViewModel::updateConnection(int index, const QVariantMap& c) {
@@ -341,8 +341,8 @@ void ConnectionsViewModel::updateConnection(int index, const QVariantMap& c) {
   m_conns[index] = n;
   if (was_enabled) apply(index);  // restart with the new settings
   save();
-  Q_EMIT changed();
-  if (was_enabled) Q_EMIT activated();
+  emit changed();
+  if (was_enabled) emit activated();
 }
 
 void ConnectionsViewModel::removeConnection(int index) {
@@ -350,7 +350,7 @@ void ConnectionsViewModel::removeConnection(int index) {
   if (m_conns[index].enabled) disable(index);  // stop its driver first
   m_conns.removeAt(index);
   save();
-  Q_EMIT changed();
+  emit changed();
 }
 
 void ConnectionsViewModel::setEnabled(int index, bool on) {
@@ -361,8 +361,8 @@ void ConnectionsViewModel::setEnabled(int index, bool on) {
   else
     disable(index);  // tear the driver down so the feed stops
   save();
-  Q_EMIT changed();
-  if (on) Q_EMIT activated();
+  emit changed();
+  if (on) emit activated();
 }
 
 void ConnectionsViewModel::apply(int index) {

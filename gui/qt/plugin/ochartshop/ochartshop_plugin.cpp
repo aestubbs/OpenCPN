@@ -74,12 +74,12 @@ QString ShopContext::versionParam() const {
 void ShopContext::setBusy(bool b, int progress) {
   m_busy = b;
   m_progress = progress;
-  Q_EMIT busyChanged();
+  emit busyChanged();
 }
 
 void ShopContext::setStatus(const QString& s) {
   m_status = s;
-  Q_EMIT statusChanged();
+  emit statusChanged();
 }
 
 void ShopContext::post(
@@ -136,7 +136,7 @@ void ShopContext::login(const QString& user, const QString& password) {
     st.setValue(QStringLiteral("username"), m_user);
     st.setValue(QStringLiteral("key"), m_key);
     setStatus(tr("Logged in"));
-    Q_EMIT stateChanged();
+    emit stateChanged();
     refreshList();
   });
 }
@@ -146,8 +146,8 @@ void ShopContext::logout() {
   m_charts.clear();
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("ochartshop"))
       .remove(QStringLiteral("key"));
-  Q_EMIT stateChanged();
-  Q_EMIT chartsChanged();
+  emit stateChanged();
+  emit chartsChanged();
 }
 
 void ShopContext::refreshList() {
@@ -244,8 +244,8 @@ void ShopContext::parseList(const QByteArray& xml) {
                 .arg(m_charts.size())
                 .arg(m_system_name.isEmpty() ? tr("(not identified)")
                                              : m_system_name));
-  Q_EMIT stateChanged();
-  Q_EMIT chartsChanged();
+  emit stateChanged();
+  emit chartsChanged();
 }
 
 void ShopContext::withFingerprintHex(
@@ -405,7 +405,7 @@ void ShopContext::downloadAndInstall(const QString& link,
   connect(reply, &QNetworkReply::downloadProgress, this,
           [this](qint64 got, qint64 total) {
             m_progress = total > 0 ? static_cast<int>(100 * got / total) : 0;
-            Q_EMIT busyChanged();
+            emit busyChanged();
           });
   connect(reply, &QNetworkReply::finished, this,
           [this, reply, keysLink, chartName]() {

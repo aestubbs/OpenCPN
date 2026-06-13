@@ -69,19 +69,19 @@ public:
     if (m_center_lat == lat && m_center_lon == lon) return;
     m_center_lat = lat;
     m_center_lon = lon;
-    Q_EMIT changed();
+    emit changed();
   }
 
   void setScale(double s) {
     if (s <= 0.0 || m_scale == s) return;
     m_scale = s;
-    Q_EMIT changed();
+    emit changed();
   }
 
   void setRotation(double radians) {
     if (m_rotation == radians) return;
     m_rotation = radians;
-    Q_EMIT changed();
+    emit changed();
   }
 
   /** Pan by a screen-pixel delta (e.g. from a mouse drag). dx/dy are in
@@ -96,7 +96,7 @@ public:
     // Pan in world (Mercator) Y, then invert back to latitude. A mouse drag
     // DOWN moves the viewport to look further SOUTH.
     m_center_lat = worldYToLat(latToWorldY(m_center_lat) - wdy);
-    Q_EMIT changed();
+    emit changed();
   }
 
   /** Zoom by `factor` (>1 zooms in) about a screen-space point.
@@ -117,7 +117,7 @@ public:
     const double wry = (-s * srx + c * sry) / m_scale;
     m_center_lon = w_lon - wrx;
     m_center_lat = worldYToLat(latToWorldY(w_lat) - wry);
-    Q_EMIT changed();
+    emit changed();
   }
 
   /** Build the world→screen matrix for the WorldAnchored root.
@@ -156,7 +156,7 @@ public:
     if (m_canvas_w == w && m_canvas_h == h) return;
     m_canvas_w = w;
     m_canvas_h = h;
-    Q_EMIT changed();  // re-cull at the new extent
+    emit changed();  // re-cull at the new extent
   }
   int canvasWidth() const { return m_canvas_w; }
   int canvasHeight() const { return m_canvas_h; }
@@ -203,7 +203,7 @@ public:
     lat = worldYToLat(latToWorldY(m_center_lat) + wry);
   }
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

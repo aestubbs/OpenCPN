@@ -70,7 +70,7 @@ OwnShipLayer::OwnShipLayer(NavDataProvider* provider, const Viewport* viewport,
   connect(&OwnShipConfig::instance(), &OwnShipConfig::changed, this, [this]() {
     m_rings_dirty = true;
     m_symbol_dirty = true;  // icon type / dimensions / GPS offset may change
-    Q_EMIT dirty();
+    emit dirty();
   });
 }
 

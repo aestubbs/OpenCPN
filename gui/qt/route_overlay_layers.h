@@ -46,7 +46,7 @@ public:
   void setColorScheme(int scheme) {
     if (scheme == m_scheme) return;
     m_scheme = scheme;
-    Q_EMIT dirty();
+    emit dirty();
   }
 
   /** GUID of the route selected for editing; drawn emphasised with larger
@@ -54,7 +54,7 @@ public:
   void setSelectedRouteGuid(const QString& guid) {
     if (guid == m_selected) return;
     m_selected = guid;
-    Q_EMIT dirty();
+    emit dirty();
   }
 
   /** GUIDs whose visibility "eye" is on. A route is drawn when its eye is on
@@ -62,7 +62,7 @@ public:
    *  (P3.7). Default empty: only the selected route shows. */
   void setVisibleRouteGuids(const QSet<QString>& guids) {
     m_visible = guids;
-    Q_EMIT dirty();
+    emit dirty();
   }
 
   /** Whether the selected route is in edit mode. Only then does it get the
@@ -71,7 +71,7 @@ public:
   void setEditing(bool editing) {
     if (editing == m_editing) return;
     m_editing = editing;
-    Q_EMIT dirty();
+    emit dirty();
   }
 
 protected:
@@ -121,7 +121,7 @@ public:
   void setSelectedTrackGuid(const QString& guid) {
     if (guid == m_selected) return;
     m_selected = guid;
-    Q_EMIT dirty();
+    emit dirty();
   }
 
 protected:
@@ -148,7 +148,7 @@ public:
   void setSelectedWaypointGuid(const QString& guid) {
     if (guid == m_selected) return;
     m_selected = guid;
-    Q_EMIT dirty();
+    emit dirty();
   }
 
 protected:
@@ -179,7 +179,7 @@ public:
     m_pts = points;
     m_rubber = rubber;
     m_has_rubber = has_rubber;
-    Q_EMIT dirty();
+    emit dirty();
   }
 
 protected:

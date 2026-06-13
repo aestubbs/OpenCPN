@@ -98,7 +98,7 @@ public:
    *  the chart worker's decrypt then finds the daemon ready. */
   void prespawnDaemon();
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

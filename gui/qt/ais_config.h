@@ -166,7 +166,7 @@ public:
   double ackTimeoutMin() const { return m_ack_timeout; }
   void setAckTimeoutMin(double v);
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

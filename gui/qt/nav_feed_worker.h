@@ -51,11 +51,11 @@ public:
 
   bool hasData() const { return !m_lines.isEmpty(); }
 
-public Q_SLOTS:
+public slots:
   void start();  // create + start the timer (invoked on the worker thread)
   void stop();
 
-Q_SIGNALS:
+signals:
   void updated();  // coalesced, one per tick; queued to the GUI thread
 
 private:

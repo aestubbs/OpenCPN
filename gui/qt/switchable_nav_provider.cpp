@@ -124,11 +124,11 @@ void SwitchableNavDataProvider::addRoutePoint(double lat, double lon) {
     Route* r = (*pRouteList)[m_append_route];
     if (!r) return;
     r->AddPoint(new RoutePoint(lat, lon, QString(), QString()));
-    Q_EMIT staticChanged();
+    emit staticChanged();
     return;
   }
   m_draft.points.append(QPointF(lon, lat));
-  Q_EMIT editChanged();
+  emit editChanged();
 }
 
 bool SwitchableNavDataProvider::beginAppendRoute(int route) {
@@ -139,7 +139,7 @@ bool SwitchableNavDataProvider::beginAppendRoute(int route) {
   m_has_rubber = false;
   m_append_route = route;
   m_draft = NavRoute{};  // unused in append mode
-  Q_EMIT editChanged();
+  emit editChanged();
   return true;
 }
 
@@ -175,7 +175,7 @@ QVariantMap SwitchableNavDataProvider::importGpx(const QString& path) {
       route_pts += (*pRouteList)[i] ? (*pRouteList)[i]->GetnPoints() : 0;
   out["waypoints"] = std::max(0, wpts_after - wpts_before - route_pts);
   out["duplicates"] = duplicates;
-  Q_EMIT staticChanged();
+  emit staticChanged();
   return out;
 }
 
@@ -306,7 +306,7 @@ QVariantMap SwitchableNavDataProvider::pasteKml(const QString& kmlText) {
   if (routes_added || marks_added) {
     out["routes"] = routes_added;
     out["waypoints"] = marks_added;
-    Q_EMIT staticChanged();
+    emit staticChanged();
   }
   return out;
 }
@@ -482,7 +482,7 @@ void SwitchableNavDataProvider::startTrack() {
             &SwitchableNavDataProvider::checkDailyRollover);
   }
   m_rollover_timer->start();
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::checkDailyRollover() {
@@ -515,7 +515,7 @@ void SwitchableNavDataProvider::stopTrack() {
   g_pActiveTrack = nullptr;
   m_recording = false;
   if (m_rollover_timer) m_rollover_timer->stop();
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::resetTrack() {
@@ -529,7 +529,7 @@ void SwitchableNavDataProvider::renameTrack(const QString& guid,
     if (tk && tk->m_GUID == guid) {
       tk->SetName(name);
       NavObj_dB::GetInstance().UpdateTrack(tk);
-      Q_EMIT staticChanged();
+      emit staticChanged();
       return;
     }
 }
@@ -540,7 +540,7 @@ void SwitchableNavDataProvider::setTrackVisible(const QString& guid,
     if (tk && tk->m_GUID == guid) {
       tk->SetVisible(visible);
       NavObj_dB::GetInstance().UpdateTrack(tk);
-      Q_EMIT staticChanged();
+      emit staticChanged();
       return;
     }
 }
@@ -556,7 +556,7 @@ void SwitchableNavDataProvider::deleteTrack(const QString& guid) {
     }
     g_TrackList.erase(it);
     delete tk;
-    Q_EMIT staticChanged();
+    emit staticChanged();
     return;
   }
 }
@@ -573,7 +573,7 @@ bool SwitchableNavDataProvider::finishRoute() {
     m_building = false;
     m_has_rubber = false;
     m_append_route = -1;
-    Q_EMIT staticChanged();
+    emit staticChanged();
     return true;
   }
   const bool ok = m_draft.points.size() >= 2 && pRouteList;
@@ -595,7 +595,7 @@ bool SwitchableNavDataProvider::finishRoute() {
   m_building = false;
   m_has_rubber = false;
   m_draft = NavRoute{};
-  Q_EMIT staticChanged();
+  emit staticChanged();
   return ok;
 }
 
@@ -610,7 +610,7 @@ int SwitchableNavDataProvider::createRoute(const QString& name,
   }
   pRouteList->push_back(rte);
   NavObj_dB::GetInstance().InsertRoute(rte);  // persists route + its points
-  Q_EMIT staticChanged();
+  emit staticChanged();
   return static_cast<int>(pRouteList->size()) - 1;
 }
 
@@ -623,11 +623,11 @@ void SwitchableNavDataProvider::moveRoutePoint(int route, int pt, double lat,
   RoutePoint* rp = r->GetPoint(pt + 1);  // GetPoint is 1-based
   if (!rp) return;
   rp->SetPosition(lat, lon);
-  Q_EMIT editChanged();  // cheap redraw; persisted on commitRouteEdit
+  emit editChanged();  // cheap redraw; persisted on commitRouteEdit
 }
 
 void SwitchableNavDataProvider::commitRouteEdit() {
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::insertRoutePoint(int route, int seg,
@@ -640,7 +640,7 @@ void SwitchableNavDataProvider::insertRoutePoint(int route, int seg,
   if (!after) return;
   r->InsertPointAfter(after, lat, lon);
   NavObj_dB::GetInstance().UpdateRoute(r);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::deleteRoutePoint(int route, int pt) {
@@ -656,7 +656,7 @@ void SwitchableNavDataProvider::deleteRoutePoint(int route, int pt) {
   }
   r->DeletePoint(rp);
   NavObj_dB::GetInstance().UpdateRoute(r);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::deleteRoute(int route) {
@@ -667,7 +667,7 @@ void SwitchableNavDataProvider::deleteRoute(int route) {
   NavObj_dB::GetInstance().DeleteRoute(r);
   if (g_pRouteMan)
     g_pRouteMan->DeleteRoute(r);  // proper model teardown (list + cleanup)
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::reverseRoute(int route) {
@@ -677,7 +677,7 @@ void SwitchableNavDataProvider::reverseRoute(int route) {
   if (!r) return;
   r->Reverse();
   NavObj_dB::GetInstance().UpdateRoute(r);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::duplicateRoute(int route) {
@@ -702,7 +702,7 @@ void SwitchableNavDataProvider::duplicateRoute(int route) {
   }
   pRouteList->push_back(dup);
   NavObj_dB::GetInstance().InsertRoute(dup);  // persists route + its points
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::renameRoute(int route, const QString& name) {
@@ -712,7 +712,7 @@ void SwitchableNavDataProvider::renameRoute(int route, const QString& name) {
   if (!r) return;
   r->m_RouteNameString = name;
   NavObj_dB::GetInstance().UpdateDBRouteAttributes(r);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::setRoutePointIcon(int route,
@@ -727,7 +727,7 @@ void SwitchableNavDataProvider::setRoutePointIcon(int route,
   for (int i = 1; i <= n; ++i)
     if (RoutePoint* p = r->GetPoint(i)) p->SetIconName(icon);
   NavObj_dB::GetInstance().UpdateRoute(r);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 // --- Marks (free / isolated waypoints) ---------------------------------------
@@ -757,7 +757,7 @@ QString SwitchableNavDataProvider::dropMark(double lat, double lon,
     wp->SetUseSca(true);
   }
   NavObj_dB::GetInstance().InsertRoutePoint(wp);  // persist mark + position
-  Q_EMIT staticChanged();
+  emit staticChanged();
   return wp->m_GUID;
 }
 
@@ -771,7 +771,7 @@ void SwitchableNavDataProvider::setWaypointRangeRings(
   wp->SetWaypointRangeRingsStep(static_cast<float>(step));
   wp->SetWaypointRangeRingsStepUnits(units);
   NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::setWaypointScamin(const QString& guid,
@@ -782,7 +782,7 @@ void SwitchableNavDataProvider::setWaypointScamin(const QString& guid,
   wp->SetScaMin(scamin > 0 ? scamin : 100000002);  // sentinel = unset
   wp->SetUseSca(scamin > 0);
   NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::renameWaypoint(const QString& guid,
@@ -792,7 +792,7 @@ void SwitchableNavDataProvider::renameWaypoint(const QString& guid,
   if (!wp) return;
   wp->SetName(name);
   NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::setWaypointComment(const QString& guid,
@@ -802,7 +802,7 @@ void SwitchableNavDataProvider::setWaypointComment(const QString& guid,
   if (!wp) return;
   wp->m_MarkDescription = comment;
   NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::setWaypointIcon(const QString& guid,
@@ -812,7 +812,7 @@ void SwitchableNavDataProvider::setWaypointIcon(const QString& guid,
   if (!wp || icon.isEmpty()) return;
   wp->SetIconName(icon);
   NavObj_dB::GetInstance().UpdateDBRoutePointAttributes(wp);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::setWaypointVisible(const QString& guid,
@@ -822,7 +822,7 @@ void SwitchableNavDataProvider::setWaypointVisible(const QString& guid,
   if (!wp) return;
   wp->SetVisible(visible);
   NavObj_dB::GetInstance().UpdateDBRoutePointViz(wp);
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::deleteWaypoint(const QString& guid) {
@@ -832,7 +832,7 @@ void SwitchableNavDataProvider::deleteWaypoint(const QString& guid) {
   NavObj_dB::GetInstance().DeleteRoutePoint(wp);
   pWayPointMan->RemoveRoutePoint(wp);  // unlist (does not free)
   delete wp;
-  Q_EMIT staticChanged();
+  emit staticChanged();
 }
 
 void SwitchableNavDataProvider::setRecordingTrack(bool on) {

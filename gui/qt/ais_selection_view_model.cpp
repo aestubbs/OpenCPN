@@ -24,13 +24,13 @@ namespace ocpn::qtui {
 void AisSelectionViewModel::select(const AisTarget& target) {
   m_target = target;
   m_valid = true;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void AisSelectionViewModel::clear() {
   if (!m_valid) return;
   m_valid = false;
-  Q_EMIT changed();
+  emit changed();
 }
 
 QString AisSelectionViewModel::positionText() const {
@@ -74,7 +74,7 @@ void AisSelectionViewModel::refresh(const QList<AisTarget>& targets) {
   for (const AisTarget& t : targets) {
     if (t.mmsi == m_target.mmsi) {
       m_target = t;
-      Q_EMIT changed();
+      emit changed();
       return;
     }
   }

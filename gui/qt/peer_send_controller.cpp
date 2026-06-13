@@ -36,20 +36,20 @@ void PeerSendController::refreshPeers() {
     row["port"] = QString::fromStdString(e.port);
     m_peers.append(row);
   }
-  Q_EMIT peersChanged();
+  emit peersChanged();
 }
 
 void PeerSendController::scan() {
   if (m_scanning) return;
   m_scanning = true;
-  Q_EMIT scanningChanged();
+  emit scanningChanged();
   // FindAllOCPNServers blocks for the timeout; keep the UI live by running
   // it on a throwaway thread, then refresh the list back on this thread.
   QThread* t = QThread::create([] { FindAllOCPNServers(2); });
   connect(t, &QThread::finished, this, [this, t]() {
     t->deleteLater();
     m_scanning = false;
-    Q_EMIT scanningChanged();
+    emit scanningChanged();
     refreshPeers();
   });
   t->start();
@@ -70,9 +70,9 @@ bool PeerSendController::sendObjects(const QString& ip, bool activate,
                                      void* route, void* mark, void* track) {
   if (m_sending) return false;
   m_sending = true;
-  Q_EMIT sendingChanged();
+  emit sendingChanged();
   m_status.clear();
-  Q_EMIT statusChanged();
+  emit statusChanged();
 
   PeerData peer(m_progress);
   peer.dest_ip_address = ip.toStdString();
@@ -87,7 +87,7 @@ bool PeerSendController::sendObjects(const QString& ip, bool activate,
   // Synchronous PIN prompt: ask QML, then spin until it answers.
   peer.run_pincode_dlg = [this]() -> std::pair<PeerDlgResult, std::string> {
     m_pin_ok = false;
-    Q_EMIT pinRequested();
+    emit pinRequested();
     QEventLoop loop;
     m_pin_loop = &loop;
     loop.exec();
@@ -116,7 +116,7 @@ bool PeerSendController::sendObjects(const QString& ip, bool activate,
         m_status = tr("Transfer failed (code %1)").arg(code);
         break;
     }
-    Q_EMIT statusChanged();
+    emit statusChanged();
     return PeerDlgResult::Cancel;
   };
 
@@ -124,8 +124,8 @@ bool PeerSendController::sendObjects(const QString& ip, bool activate,
   if (ok && m_status.isEmpty()) m_status = tr("Sent ✓");
   if (!ok && m_status.isEmpty()) m_status = tr("Transfer failed");
   m_sending = false;
-  Q_EMIT sendingChanged();
-  Q_EMIT statusChanged();
+  emit sendingChanged();
+  emit statusChanged();
   return ok;
 }
 

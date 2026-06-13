@@ -61,8 +61,8 @@ double TideGraphViewModel::toUser(float raw) const {
 void TideGraphViewModel::clear() {
   if (m_idx < 0) return;
   m_idx = -1;
-  Q_EMIT changed();
-  Q_EMIT markerChanged();
+  emit changed();
+  emit markerChanged();
 }
 
 void TideGraphViewModel::select(int idx) {
@@ -87,7 +87,7 @@ void TideGraphViewModel::select(int idx) {
   }
   recomputeRange();
   recomputeMarker();
-  Q_EMIT changed();
+  emit changed();
 }
 
 void TideGraphViewModel::recomputeRange() {
@@ -125,7 +125,7 @@ void TideGraphViewModel::recomputeMarker() {
   if (m_idx < 0 || !ptcmgr) {
     m_marker_value = 0.0;
     m_marker_text.clear();
-    Q_EMIT markerChanged();
+    emit markerChanged();
     return;
   }
   const time_t t = static_cast<time_t>(
@@ -134,7 +134,7 @@ void TideGraphViewModel::recomputeMarker() {
   if (!sampleRaw(m_idx, m_is_current, t, val)) {
     m_marker_value = 0.0;
     m_marker_text.clear();
-    Q_EMIT markerChanged();
+    emit markerChanged();
     return;
   }
   m_marker_value = toUser(val);
@@ -143,7 +143,7 @@ void TideGraphViewModel::recomputeMarker() {
           ? DisplayConfig::instance().formatSpeed(std::fabs(val))
           : QString::number(m_marker_value, 'f', 1) + QStringLiteral(" ") +
                 m_unit_label;
-  Q_EMIT markerChanged();
+  emit markerChanged();
 }
 
 QVariantList TideGraphViewModel::samples(double startMs, double endMs,

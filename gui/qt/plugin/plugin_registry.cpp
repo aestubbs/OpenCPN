@@ -42,7 +42,7 @@ PluginRegistry::~PluginRegistry() {
 void PluginRegistry::loadFrom(const QString& dir) {
   const QDir pdir(dir);
   if (!pdir.exists()) {
-    Q_EMIT pluginsChanged();
+    emit pluginsChanged();
     return;
   }
 #if defined(Q_OS_MACOS)
@@ -130,7 +130,7 @@ void PluginRegistry::loadFrom(const QString& dir) {
     };
     host.toolbarStateChanged = [this] {
       ++m_toolbar_serial;
-      Q_EMIT toolbarStateChanged();
+      emit toolbarStateChanged();
     };
     host.registerContextMenuItem =
         [this](const QString& label, std::function<void(double, double)> cb) {
@@ -158,8 +158,8 @@ void PluginRegistry::loadFrom(const QString& dir) {
     qInfo("PluginRegistry: loaded %s %s",
           qPrintable(iface->name()), qPrintable(iface->version()));
   }
-  Q_EMIT pluginsChanged();
-  Q_EMIT contributionsChanged();
+  emit pluginsChanged();
+  emit contributionsChanged();
 }
 
 void PluginRegistry::triggerToolbarAction(int index) {
@@ -197,7 +197,7 @@ void PluginRegistry::setPluginEnabled(const QString& name, bool enabled) {
       break;
     }
   }
-  Q_EMIT pluginsChanged();
+  emit pluginsChanged();
 }
 
 }  // namespace ocpn::qtui

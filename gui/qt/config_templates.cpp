@@ -42,7 +42,7 @@ bool ConfigTemplates::saveCurrent(const QString& name) {
   QFile f(dirPath() + QDir::separator() + clean + QStringLiteral(".json"));
   if (!f.open(QIODevice::WriteOnly)) return false;
   f.write(QJsonDocument(QJsonObject::fromVariantMap(entries)).toJson());
-  Q_EMIT changed();
+  emit changed();
   return true;
 }
 
@@ -52,14 +52,14 @@ bool ConfigTemplates::apply(const QString& name) {
   const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
   if (!doc.isObject()) return false;
   ConfigStore::instance().setEntries(doc.object().toVariantMap());
-  Q_EMIT changed();
+  emit changed();
   return true;
 }
 
 void ConfigTemplates::remove(const QString& name) {
   QFile::remove(dirPath() + QDir::separator() + name +
                 QStringLiteral(".json"));
-  Q_EMIT changed();
+  emit changed();
 }
 
 }  // namespace ocpn::qtui

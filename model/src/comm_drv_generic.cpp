@@ -125,7 +125,7 @@ void CommDriver::OnConnected() {
   if (m_watchdog_timeout.count() > 0)
     m_watchdog_timer->start(static_cast<int>(m_watchdog_timeout.count()));
   if (m_listener) m_listener->Notify(*this);
-  Q_EMIT TransportConnected();
+  emit TransportConnected();
 }
 
 void CommDriver::OnDisconnected() {

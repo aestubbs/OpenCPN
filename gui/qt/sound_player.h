@@ -68,7 +68,7 @@ public:
   /** Stop playback. */
   Q_INVOKABLE void stop();
 
-Q_SIGNALS:
+signals:
   void outputDeviceChanged();
   void playingChanged();
 

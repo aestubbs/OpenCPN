@@ -228,7 +228,7 @@ public:
   Q_INVOKABLE double fromUserDepth(double value) const;
   Q_INVOKABLE QString depthUnitLabel() const;
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

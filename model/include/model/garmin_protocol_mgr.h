@@ -203,7 +203,7 @@ public:
   int m_nSats;
   QTimer TimerGarmin1;
 
-private Q_SLOTS:
+private slots:
   void OnTimerGarmin1();
 
 public:

@@ -66,14 +66,14 @@ void LayerCompositor::addLayer(Layer* layer) {
   // structural flag is what makes syncOneRoot actually re-attach.
   auto markStructural = [this]() {
     m_structure_dirty = true;
-    Q_EMIT changed();
+    emit changed();
   };
   connect(layer, &Layer::visibleChanged, this, markStructural);
   connect(layer, &Layer::zOrderChanged, this, markStructural);
   connect(layer, &Layer::opacityChanged, this, markStructural);
 
   m_structure_dirty = true;  // a newly added layer must be attached next sync
-  Q_EMIT changed();
+  emit changed();
 }
 
 void LayerCompositor::removeLayer(const QString& id) {
@@ -92,7 +92,7 @@ void LayerCompositor::removeLayer(const QString& id) {
   delete l;
 
   m_structure_dirty = true;  // the removed layer's subtree must be detached
-  Q_EMIT changed();
+  emit changed();
 }
 
 Layer* LayerCompositor::layer(const QString& id) const {
@@ -140,7 +140,7 @@ void LayerCompositor::restoreLayerState(Layer* l) const {
 void LayerCompositor::onLayerDirty(Layer* l) {
   auto it = m_entries_by_id.find(l->id());
   if (it != m_entries_by_id.end()) it.value().dirty = true;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void LayerCompositor::syncToScene(QSGTransformNode* world_root,

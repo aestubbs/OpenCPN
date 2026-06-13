@@ -108,7 +108,7 @@ public:
   bool advanceOnArrivalOnly() const { return m_advance_arrival_only; }
   void setAdvanceOnArrivalOnly(bool v);
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

@@ -102,7 +102,7 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
       if (Cm93Scanner::isCm93Root(path)) {
         const QList<CellExtent> cm93 = Cm93Scanner::scan(path);
         cells.append(cm93);
-        Q_EMIT extentsScanned(cells);
+        emit extentsScanned(cells);
         qWarning("ChartWorker: CM93 set %s -> %lld cells",
                  path.toUtf8().constData(), (long long)cm93.size());
       }
@@ -115,7 +115,7 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
       ++n_cached;
       cells.push_back(ce);
       if (++since_emit >= kBatch) {
-        Q_EMIT extentsScanned(cells);
+        emit extentsScanned(cells);
         since_emit = 0;
       }
       continue;  // cache hit -- no scan/decrypt
@@ -181,7 +181,7 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
       cells.push_back(ce);
     }
     if (++since_emit >= kBatch) {
-      Q_EMIT extentsScanned(cells);
+      emit extentsScanned(cells);
       since_emit = 0;
       qWarning("ChartWorker: scan progress %lld cells, %lld ms",
                (long long)cells.size(), (long long)timer.elapsed());
@@ -193,7 +193,7 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
     // queued; a queued loadCell runs to completion here, then the scan resumes.
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
   }
-  Q_EMIT extentsScanned(cells);  // final (also covers the empty case)
+  emit extentsScanned(cells);  // final (also covers the empty case)
   qWarning("ChartWorker: catalog scan %lld/%lld cells (%d cached) in %lld ms",
            (long long)cells.size(), (long long)paths_000.size(), n_cached,
            (long long)timer.elapsed());
@@ -209,7 +209,7 @@ void ChartWorker::loadRasterCell_(const CellExtent& cell) {
   }
   qWarning("loadCell: KAP %s %dx%d scale=%d", qPrintable(cell.name),
            rc.image.width(), rc.image.height(), rc.nativeScale);
-  Q_EMIT rasterCellLoaded(cell.name, rc.image, rc.north, rc.south, rc.east,
+  emit rasterCellLoaded(cell.name, rc.image, rc.north, rc.south, rc.east,
                           rc.west, rc.worldYTop, rc.worldYBottom);
 }
 
@@ -293,7 +293,7 @@ void ChartWorker::loadCell(const CellExtent& cell) {
       static_cast<long long>(buf.prims.size()),
       static_cast<long long>(buf.labels.size()), n_snd,
       n_snd ? sc_min : 0, sc_max, static_cast<long long>(buf.queryObjects.size()));
-  Q_EMIT cellLoaded(cell.name, buf, n, s, e, w);
+  emit cellLoaded(cell.name, buf, n, s, e, w);
 }
 
 void ChartWorker::setColorScheme(int scheme) {

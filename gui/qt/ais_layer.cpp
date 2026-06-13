@@ -127,7 +127,7 @@ AisLayer::AisLayer(NavDataProvider* provider, const Viewport* viewport,
   // fire on user action, not per frame, so a wholesale rebuild is cheap.
   auto bump = [this]() {
     m_config_dirty = true;
-    Q_EMIT dirty();
+    emit dirty();
   };
   connect(&AisConfig::instance(), &AisConfig::changed, this, bump);
   connect(&DisplayConfig::instance(), &DisplayConfig::changed, this, bump);
@@ -336,7 +336,7 @@ void AisLayer::setTrailEnabled(int mmsi, bool on) {
     }
     m_trails.erase(it);
   }
-  Q_EMIT dirty();
+  emit dirty();
 }
 
 void AisLayer::updateTrails(const QList<AisTarget>& targets, qint64 now_ms) {

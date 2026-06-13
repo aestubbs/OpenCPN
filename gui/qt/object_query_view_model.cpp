@@ -79,7 +79,7 @@ void ObjectQueryViewModel::setObjects(const QList<s52sg::QueryObject>& objs) {
     m_items.append(it);
   }
   m_index = 0;
-  Q_EMIT changed();
+  emit changed();
 }
 
 QList<QPointF> ObjectQueryViewModel::currentShape() const {
@@ -105,14 +105,14 @@ QString ObjectQueryViewModel::text() const {
 void ObjectQueryViewModel::next() {
   if (m_index + 1 < m_items.size()) {
     ++m_index;
-    Q_EMIT changed();
+    emit changed();
   }
 }
 
 void ObjectQueryViewModel::prev() {
   if (m_index > 0) {
     --m_index;
-    Q_EMIT changed();
+    emit changed();
   }
 }
 
@@ -120,7 +120,7 @@ void ObjectQueryViewModel::clear() {
   if (m_items.isEmpty()) return;
   m_items.clear();
   m_index = 0;
-  Q_EMIT changed();
+  emit changed();
 }
 
 }  // namespace ocpn::qtui

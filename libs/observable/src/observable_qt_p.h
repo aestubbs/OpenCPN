@@ -53,7 +53,7 @@ public:
   /** Emit Notified() to every connected listener. */
   void Notify(const ObsData& data);
 
-Q_SIGNALS:
+signals:
   /** Raised once per Notify() call. */
   void Notified(const ObsData& data);
 };

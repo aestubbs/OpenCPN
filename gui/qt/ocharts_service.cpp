@@ -83,7 +83,7 @@ bool OChartsService::daemonAvailable() const {
 void OChartsService::setStatus(const QString& text, bool busy) {
   m_status = text;
   m_busy = busy;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void OChartsService::probeVersion() {
@@ -97,7 +97,7 @@ void OChartsService::probeVersion() {
             const QString line = out.trimmed();
             if (!line.isEmpty()) {
               m_version = line.section('\n', 0, 0).trimmed();
-              Q_EMIT changed();
+              emit changed();
             }
             proc->deleteLater();
           });

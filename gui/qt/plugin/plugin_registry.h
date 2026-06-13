@@ -95,7 +95,7 @@ public:
    *  contributions cannot be detached live in v1. */
   Q_INVOKABLE void setPluginEnabled(const QString& name, bool enabled);
 
-Q_SIGNALS:
+signals:
   void pluginsChanged();
   void contributionsChanged();
   void toolbarStateChanged();

@@ -52,7 +52,7 @@ public:
    *  bundled data). Does not load -- call reload() after. */
   void seedIfEmpty(const QString& path);
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

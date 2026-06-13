@@ -36,7 +36,7 @@ PickHighlightProvider::PickHighlightProvider(QString id,
   if (m_viewport)
     connect(m_viewport, &Viewport::changed, this, [this]() {
       if (m_shape.size() == 1 && m_geom == s52sg::QueryGeom::Point)
-        Q_EMIT changed();
+        emit changed();
     });
 }
 
@@ -44,7 +44,7 @@ void PickHighlightProvider::setShape(const QList<QPointF>& shape,
                                      s52sg::QueryGeom geom) {
   m_shape = shape;
   m_geom = geom;
-  Q_EMIT changed();
+  emit changed();
 }
 
 QSGNode* PickHighlightProvider::renderChart(QSGNode* old_subtree,

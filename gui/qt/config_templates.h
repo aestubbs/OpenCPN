@@ -50,7 +50,7 @@ public:
   Q_INVOKABLE bool apply(const QString& name);
   Q_INVOKABLE void remove(const QString& name);
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

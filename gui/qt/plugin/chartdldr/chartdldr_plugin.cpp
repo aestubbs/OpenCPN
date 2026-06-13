@@ -43,19 +43,19 @@ void ChartDldrContext::setCatalogUrl(const QString& url) {
   m_catalog_url = url;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("chartdldr-plugin"))
       .setValue(QStringLiteral("catalogUrl"), url);
-  Q_EMIT catalogChanged();
+  emit catalogChanged();
 }
 
 void ChartDldrContext::setTargetFolder(const QUrl& url) {
   m_target = url;
   QSettings(QStringLiteral("OpenCPN"), QStringLiteral("chartdldr-plugin"))
       .setValue(QStringLiteral("targetFolder"), url);
-  Q_EMIT statusChanged();
+  emit statusChanged();
 }
 
 void ChartDldrContext::setStatus(const QString& s) {
   m_status = s;
-  Q_EMIT statusChanged();
+  emit statusChanged();
 }
 
 QVariantList ChartDldrContext::presets() const {
@@ -76,13 +76,13 @@ QVariantList ChartDldrContext::presets() const {
 void ChartDldrContext::loadCatalog() {
   if (m_busy || m_catalog_url.isEmpty()) return;
   m_busy = true;
-  Q_EMIT busyChanged();
+  emit busyChanged();
   setStatus(tr("Fetching catalog…"));
   QNetworkReply* reply = m_nam->get(QNetworkRequest(QUrl(m_catalog_url)));
   connect(reply, &QNetworkReply::finished, this, [this, reply]() {
     reply->deleteLater();
     m_busy = false;
-    Q_EMIT busyChanged();
+    emit busyChanged();
     if (reply->error() != QNetworkReply::NoError) {
       setStatus(tr("Catalog fetch failed: %1").arg(reply->errorString()));
       return;
@@ -128,7 +128,7 @@ void ChartDldrContext::parseCatalog(const QByteArray& xml) {
   setStatus(r.hasError()
                 ? tr("Catalog parse error: %1").arg(r.errorString())
                 : tr("%1 charts in catalog").arg(m_charts.size()));
-  Q_EMIT catalogChanged();
+  emit catalogChanged();
 }
 
 bool ChartDldrContext::extractZip(const QString& zipPath,
@@ -182,19 +182,19 @@ void ChartDldrContext::downloadChart(int index) {
   }
   m_busy = true;
   m_progress = 0;
-  Q_EMIT busyChanged();
+  emit busyChanged();
   setStatus(tr("Downloading %1…").arg(chart.value("title").toString()));
 
   QNetworkReply* reply = m_nam->get(QNetworkRequest(url));
   connect(reply, &QNetworkReply::downloadProgress, this,
           [this](qint64 got, qint64 total) {
             m_progress = total > 0 ? static_cast<int>(100 * got / total) : 0;
-            Q_EMIT busyChanged();
+            emit busyChanged();
           });
   connect(reply, &QNetworkReply::finished, this, [this, reply, dest, url]() {
     reply->deleteLater();
     m_busy = false;
-    Q_EMIT busyChanged();
+    emit busyChanged();
     if (reply->error() != QNetworkReply::NoError) {
       setStatus(tr("Download failed: %1").arg(reply->errorString()));
       return;

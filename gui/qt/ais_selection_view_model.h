@@ -65,7 +65,7 @@ public:
   /** Clear the selection (close the popup). Invokable from QML. */
   Q_INVOKABLE void clear();
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

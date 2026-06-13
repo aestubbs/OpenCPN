@@ -100,7 +100,7 @@ public:
   Q_INVOKABLE void raiseAnchor();         // clear the watch
   Q_INVOKABLE void setAnchorRadiusM(double metres);
 
-Q_SIGNALS:
+signals:
   void changed();
   void anchorChanged();
   /** Request the QML SoundPlayer play this audio file (absolute path). */

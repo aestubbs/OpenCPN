@@ -65,7 +65,7 @@ public:
   /** Clear the result (close the popup). */
   Q_INVOKABLE void clear();
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

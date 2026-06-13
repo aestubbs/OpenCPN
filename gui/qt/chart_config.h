@@ -135,7 +135,7 @@ public:
   double cm93OffsetY() const { return m_cm93_dy; }
   void setCm93OffsetY(double v);
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

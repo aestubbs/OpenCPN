@@ -81,11 +81,11 @@ public:
   Q_INVOKABLE QStringList allInstruments() const;
   Q_INVOKABLE void setInstrumentEnabled(const QString& key, bool on);
 
-Q_SIGNALS:
+signals:
   void navChanged();
   void enabledChanged();
 
-private Q_SLOTS:
+private slots:
   void onNavMsg(const QString& line, const QString& source);
 
 private:

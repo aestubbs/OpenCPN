@@ -551,7 +551,7 @@ public:
   // viewport is not ready.
   Q_INVOKABLE QVariantMap scaleBar() const;
 
-Q_SIGNALS:
+signals:
   void s52EngineChanged();
   void displayCategoryChanged();
   void hiddenObjectClassesChanged();

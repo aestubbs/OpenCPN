@@ -358,7 +358,7 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
               m_wtemp_text = m.captured(1) + QStringLiteral(" °C");
               changed = true;
             }
-            if (changed) Q_EMIT busStatsChanged();
+            if (changed) emit busStatsChanged();
           });
 
   // Edge auto-pan tick (P3.13, wx pPanTimer 200 ms / 2%-per-tick).
@@ -542,7 +542,7 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
           [this]() { update(); });
   connect(m_viewport.get(), &Viewport::changed, this, [this]() {
     update();
-    Q_EMIT viewChanged();  // refresh the MUIBar scale readout
+    emit viewChanged();  // refresh the MUIBar scale readout
     // Only chase visible cells once a catalog exists (async ENC path).
     if (!m_catalog.isEmpty()) m_load_debounce->start();
   });
@@ -659,7 +659,7 @@ ChartCanvas::~ChartCanvas() {
 void ChartCanvas::setS52Engine(S52Engine* engine) {
   if (m_s52_engine == engine) return;
   m_s52_engine = engine;
-  Q_EMIT s52EngineChanged();
+  emit s52EngineChanged();
   if (!m_s52_engine || !m_s52_engine->isOk()) return;
 
   // Plugins load once the canvas has a real engine: the hidden split
@@ -963,7 +963,7 @@ void ChartCanvas::onRasterCellLoaded(const QString& id, const QImage& image,
   qWarning("onRasterCellLoaded: ADD %s scale=%d %dx%d", qPrintable(id),
            cat.nativeScale, image.width(), image.height());
   updateFinerCoverage();
-  Q_EMIT chartCoverageChanged();
+  emit chartCoverageChanged();
   update();
 }
 
@@ -1012,7 +1012,7 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   // The new cell may own annotations in coarser cells (or be owned by finer
   // ones already loaded) -- re-derive every loaded cell's finer-coverage.
   updateFinerCoverage();
-  Q_EMIT chartCoverageChanged();
+  emit chartCoverageChanged();
   update();
 }
 
@@ -1194,7 +1194,7 @@ void ChartCanvas::updateVisibleCells() {
     updateFinerCoverage();
   }
   // Refresh the chart bar's coverage list only when the displayed set changed.
-  if (needed_changed) Q_EMIT chartCoverageChanged();
+  if (needed_changed) emit chartCoverageChanged();
 
   // Over-scale (S-52): a chart is "overscaled" when the display is zoomed in
   // FINER than the chart's compilation scale -- factor = chart 1:N / display
@@ -1229,7 +1229,7 @@ void ChartCanvas::updateVisibleCells() {
   if (std::abs(newOverscale - m_overscale_factor) >
       0.05 * std::max(1.0, m_overscale_factor)) {
     m_overscale_factor = newOverscale;
-    Q_EMIT overscaleChanged();
+    emit overscaleChanged();
   }
 }
 
@@ -1325,7 +1325,7 @@ void ChartCanvas::selectChart(const QString& name) {
   const double clat = std::max(0.05, std::cos(m_viewport->centerLat() *
                                               M_PI / 180.0));
   m_viewport->setScale(kK * clat / it->nativeScale);
-  Q_EMIT viewChanged();
+  emit viewChanged();
   update();  // viewport::changed also kicks the debounced quilt rebuild
 }
 
@@ -1452,7 +1452,7 @@ void ChartCanvas::setRouteEditMode(bool on) {
   if (on == m_route_edit_mode) return;
   m_route_edit_mode = on;
   if (m_route_layer) m_route_layer->setEditing(on);  // big handles only in edit
-  Q_EMIT routeEditModeChanged();
+  emit routeEditModeChanged();
   update();
 }
 
@@ -1474,7 +1474,7 @@ void ChartCanvas::selectRoute(int route) {
     }
     m_route_layer->setSelectedRouteGuid(guid);
   }
-  Q_EMIT selectedRouteChanged();
+  emit selectedRouteChanged();
   update();
 }
 
@@ -1649,7 +1649,7 @@ void ChartCanvas::appendToRoute(int index) {
   // Reuse the route-build mouse flow: click adds a point (addRoutePoint
   // appends to the model route in append mode), right-click finishes.
   m_route_build_mode = true;
-  Q_EMIT routeBuildModeChanged();
+  emit routeBuildModeChanged();
   update();
 }
 
@@ -1667,7 +1667,7 @@ void ChartCanvas::pushUndo(const UndoOp& op) {
   m_undo_stack.append(op);
   while (m_undo_stack.size() > kMaxUndo) m_undo_stack.removeFirst();
   m_redo_stack.clear();
-  Q_EMIT undoChanged();
+  emit undoChanged();
 }
 
 QVariantMap ChartCanvas::snapshotMark(const QString& guid) const {
@@ -1704,7 +1704,7 @@ void ChartCanvas::undo() {
     op.guid = recreateMark(op.snap);
   }
   m_redo_stack.append(op);
-  Q_EMIT undoChanged();
+  emit undoChanged();
   update();
 }
 
@@ -1719,7 +1719,7 @@ void ChartCanvas::redo() {
     m_nav_provider->deleteWaypoint(op.guid);
   }
   m_undo_stack.append(op);
-  Q_EMIT undoChanged();
+  emit undoChanged();
   update();
 }
 
@@ -1729,7 +1729,7 @@ void ChartCanvas::startMeasure() {
   m_measure_pts.clear();
   m_measure_text = tr("Click to start measuring");
   if (m_measure_layer) m_measure_layer->setState({}, QPointF(), false);
-  Q_EMIT measureChanged();
+  emit measureChanged();
   update();
 }
 
@@ -1739,7 +1739,7 @@ void ChartCanvas::stopMeasure() {
   m_measure_pts.clear();
   m_measure_text.clear();
   if (m_measure_layer) m_measure_layer->setState({}, QPointF(), false);
-  Q_EMIT measureChanged();
+  emit measureChanged();
   update();
 }
 
@@ -1772,7 +1772,7 @@ void ChartCanvas::updateMeasure(double cur_lat, double cur_lon,
   if (m_measure_layer)
     m_measure_layer->setState(m_measure_pts, QPointF(cur_lon, cur_lat),
                               has_cursor);
-  Q_EMIT measureChanged();
+  emit measureChanged();
   update();
 }
 
@@ -1813,7 +1813,7 @@ void ChartCanvas::centerOnAis(int mmsi) {
   for (const AisTarget& t : m_nav_provider->aisTargets()) {
     if (t.mmsi == mmsi) {
       m_viewport->setCenter(t.lat, t.lon);
-      Q_EMIT viewChanged();
+      emit viewChanged();
       update();
       return;
     }
@@ -2042,7 +2042,7 @@ void ChartCanvas::placeSimShipHere() {
   m_sim_ship->place(m_ctx_lat, m_ctx_lon);
   if (m_viewport) {
     m_viewport->setCenter(m_ctx_lat, m_ctx_lon);
-    Q_EMIT viewChanged();
+    emit viewChanged();
   }
   m_live_centered = true;  // we explicitly centred on the test ship
   update();
@@ -2069,7 +2069,7 @@ void ChartCanvas::setRouteVisible(int index, bool on) {
     m_visible_routes.remove(guid);
   if (m_route_layer) m_route_layer->setVisibleRouteGuids(m_visible_routes);
   ++m_route_vis_rev;
-  Q_EMIT routeVisibilityChanged();
+  emit routeVisibilityChanged();
   update();
 }
 
@@ -2191,7 +2191,7 @@ void ChartCanvas::showMark(const QString& guid) {
     m_selected_waypoint_guid = guid;
     if (m_waypoint_layer) m_waypoint_layer->setSelectedWaypointGuid(guid);
     m_viewport->setCenter(wp.lat, wp.lon);  // centre (a point has no extent)
-    Q_EMIT viewChanged();
+    emit viewChanged();
     update();
     return;
   }
@@ -2361,7 +2361,7 @@ void ChartCanvas::setDetailScale(double n) {
   ConfigStore::instance().setInt("display/detailScale", static_cast<int>(n));
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setDetailScale(n);
-  Q_EMIT detailScaleChanged();
+  emit detailScaleChanged();
   update();
 }
 
@@ -2378,7 +2378,7 @@ void ChartCanvas::setOverzoomFactor(double k) {
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setOverscaleThreshold(thr);
   if (!m_catalog.isEmpty()) updateVisibleCells();
-  Q_EMIT overzoomFactorChanged();
+  emit overzoomFactorChanged();
   update();
 }
 
@@ -2388,7 +2388,7 @@ void ChartCanvas::setDisplayCategory(int cat) {
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setDisplayCategory(cat);
   if (m_layer_config) m_layer_config->setValue("display/category", cat);
-  Q_EMIT displayCategoryChanged();
+  emit displayCategoryChanged();
   update();
 }
 
@@ -2440,7 +2440,7 @@ void ChartCanvas::scaleChartStep(int dir) {
   constexpr double kK = 111320.0 * 3.78 * 1000.0;
   const double cl = std::max(0.05, std::cos(clat * M_PI / 180.0));
   m_viewport->setScale(kK * cl / target);
-  Q_EMIT viewChanged();
+  emit viewChanged();
   update();
 }
 
@@ -2455,7 +2455,7 @@ void ChartCanvas::setHiddenObjectClasses(const QStringList& classes) {
     if (it.value().provider) it.value().provider->setHiddenClasses(hidden);
   if (m_layer_config)
     m_layer_config->setValue("display/hiddenClasses", norm.join(','));
-  Q_EMIT hiddenObjectClassesChanged();
+  emit hiddenObjectClassesChanged();
   update();
 }
 
@@ -2478,7 +2478,7 @@ void ChartCanvas::setShowSoundings(bool on) {
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowSoundings(on);
   if (m_layer_config) m_layer_config->setValue("display/soundings", on);
-  Q_EMIT showSoundingsChanged();
+  emit showSoundingsChanged();
   update();
 }
 
@@ -2488,7 +2488,7 @@ void ChartCanvas::setShowText(bool on) {
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowText(on);
   if (m_layer_config) m_layer_config->setValue("display/text", on);
-  Q_EMIT showTextChanged();
+  emit showTextChanged();
   update();
 }
 
@@ -2498,7 +2498,7 @@ void ChartCanvas::setShowLights(bool on) {
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowLights(on);
   if (m_layer_config) m_layer_config->setValue("display/lights", on);
-  Q_EMIT showLightsChanged();
+  emit showLightsChanged();
   update();
 }
 
@@ -2508,7 +2508,7 @@ void ChartCanvas::setShowBuoys(bool on) {
   for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
     if (it.value().provider) it.value().provider->setShowBuoys(on);
   if (m_layer_config) m_layer_config->setValue("display/buoys", on);
-  Q_EMIT showBuoysChanged();
+  emit showBuoysChanged();
   update();
 }
 
@@ -2526,7 +2526,7 @@ void ChartCanvas::setDemoMode(bool on) {
   m_live_centered = false;  // recentre on the new source's first fix
   // Track recording is left to the user (toolbar toggle, #29); it records
   // off whichever own-ship fix is active.
-  Q_EMIT demoModeChanged();
+  emit demoModeChanged();
   update();
 }
 
@@ -2572,7 +2572,7 @@ QSGNode* ChartCanvas::updatePaintNode(QSGNode* old_node,
             [this, txt]() {
               if (m_perf_text == txt) return;
               m_perf_text = txt;
-              Q_EMIT perfTextChanged();
+              emit perfTextChanged();
             },
             Qt::QueuedConnection);
       }
@@ -2599,7 +2599,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
     } else if (event->button() == Qt::RightButton) {
       m_nav_provider->finishRoute();
       m_route_build_mode = false;
-      Q_EMIT routeBuildModeChanged();
+      emit routeBuildModeChanged();
       update();
     }
     event->accept();
@@ -2637,7 +2637,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
       selectRoute(rt);
       m_menu_route = rt;
       m_menu_node = nd;
-      Q_EMIT routeNodeMenuRequested(event->position().x(),
+      emit routeNodeMenuRequested(event->position().x(),
                                     event->position().y());
       event->accept();
       return;
@@ -2648,14 +2648,14 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
     int ais_mmsi = 0;
     QString ais_name;
     if (hitAisAt(event->position(), &ais_mmsi, &ais_name)) {
-      Q_EMIT aisMenuRequested(event->position().x(), event->position().y(),
+      emit aisMenuRequested(event->position().x(), event->position().y(),
                               ais_mmsi, ais_name);
       event->accept();
       return;
     }
     QString wp_guid, wp_name;
     if (hitWaypointAt(event->position(), &wp_guid, &wp_name)) {
-      Q_EMIT markMenuRequested(event->position().x(), event->position().y(),
+      emit markMenuRequested(event->position().x(), event->position().y(),
                                wp_guid, wp_name);
       event->accept();
       return;
@@ -2668,7 +2668,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
       m_menu_seg = -1;
       const bool act = m_nav_provider &&
                        m_nav_provider->userRoutes().value(rt).active;
-      Q_EMIT routeMenuRequested(event->position().x(), event->position().y(),
+      emit routeMenuRequested(event->position().x(), event->position().y(),
                                 rt, act, false);
       event->accept();
       return;
@@ -2681,20 +2681,20 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
       m_menu_ins_lon = ilon;
       const bool act = m_nav_provider &&
                        m_nav_provider->userRoutes().value(rt).active;
-      Q_EMIT routeMenuRequested(event->position().x(), event->position().y(),
+      emit routeMenuRequested(event->position().x(), event->position().y(),
                                 rt, act, true);
       event->accept();
       return;
     }
     QString trk_guid, trk_name;
     if (hitTrackAt(event->position(), &trk_guid, &trk_name)) {
-      Q_EMIT trackMenuRequested(event->position().x(), event->position().y(),
+      emit trackMenuRequested(event->position().x(), event->position().y(),
                                 trk_guid, trk_name);
       event->accept();
       return;
     }
 
-    Q_EMIT contextMenuRequested(m_ctx_pos.x(), m_ctx_pos.y());
+    emit contextMenuRequested(m_ctx_pos.x(), m_ctx_pos.y());
     event->accept();
   } else {
     QQuickItem::mousePressEvent(event);
@@ -2704,7 +2704,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event) {
 void ChartCanvas::centerViewHere() {
   if (!m_viewport) return;
   m_viewport->setCenter(m_ctx_lat, m_ctx_lon);
-  Q_EMIT viewChanged();
+  emit viewChanged();
   update();
 }
 
@@ -2903,7 +2903,7 @@ void ChartCanvas::keyPressEvent(QKeyEvent* event) {
       if (m_route_build_mode && m_nav_provider) {
         m_nav_provider->finishRoute();
         m_route_build_mode = false;
-        Q_EMIT routeBuildModeChanged();
+        emit routeBuildModeChanged();
         update();
       }
       break;
@@ -2935,7 +2935,7 @@ void ChartCanvas::hoverMoveEvent(QHoverEvent* event) {
     }
     m_cursor_pos_lat = lat;
     m_cursor_pos_lon = lon;
-    Q_EMIT cursorMoved();
+    emit cursorMoved();
     // Live rubber-band segment to the cursor while drawing a route.
     if (m_route_build_mode && m_nav_provider)
       m_nav_provider->setRouteRubberband(lat, lon);
@@ -2960,7 +2960,7 @@ void ChartCanvas::setRouteBuildMode(bool on) {
     else
       m_nav_provider->cancelRoute();  // toggled off -> discard draft
   }
-  Q_EMIT routeBuildModeChanged();
+  emit routeBuildModeChanged();
   update();
 }
 
@@ -2982,7 +2982,7 @@ void ChartCanvas::setColorScheme(int scheme) {
     reloadResidentCells();
   }
 
-  Q_EMIT colorSchemeChanged();
+  emit colorSchemeChanged();
   update();
 }
 
@@ -3039,7 +3039,7 @@ void ChartCanvas::setTrackRecording(bool on) {
   if (on == m_track_recording) return;
   m_track_recording = on;
   if (m_nav_provider) m_nav_provider->setRecordingTrack(on);
-  Q_EMIT trackRecordingChanged();
+  emit trackRecordingChanged();
   update();
 }
 
@@ -3156,7 +3156,7 @@ bool ChartCanvas::showRoutes() const {
 }
 void ChartCanvas::setShowRoutes(bool on) {
   setLayerVisible(m_compositor.get(), "core.routes", on);
-  Q_EMIT overlayVisibilityChanged();
+  emit overlayVisibilityChanged();
   update();
 }
 bool ChartCanvas::showTracks() const {
@@ -3164,7 +3164,7 @@ bool ChartCanvas::showTracks() const {
 }
 void ChartCanvas::setShowTracks(bool on) {
   setLayerVisible(m_compositor.get(), "core.tracks", on);
-  Q_EMIT overlayVisibilityChanged();
+  emit overlayVisibilityChanged();
   update();
 }
 bool ChartCanvas::showWaypoints() const {
@@ -3172,7 +3172,7 @@ bool ChartCanvas::showWaypoints() const {
 }
 void ChartCanvas::setShowWaypoints(bool on) {
   setLayerVisible(m_compositor.get(), "core.waypoints", on);
-  Q_EMIT overlayVisibilityChanged();
+  emit overlayVisibilityChanged();
   update();
 }
 
@@ -3189,7 +3189,7 @@ void ChartCanvas::setFollowOwnShip(bool on) {
     const OwnShipState s = m_nav_provider->ownShip();
     if (s.valid) m_viewport->setCenter(s.lat, s.lon);
   }
-  Q_EMIT followOwnShipChanged();
+  emit followOwnShipChanged();
   update();
 }
 
@@ -3203,7 +3203,7 @@ void ChartCanvas::updateChartRotation() {
   if (mode == 0) {  // North-Up
     m_cog_avg_valid = false;
     m_viewport->setRotation(0.0);
-    Q_EMIT viewChanged();
+    emit viewChanged();
     return;
   }
   const OwnShipState s =
@@ -3235,7 +3235,7 @@ void ChartCanvas::updateChartRotation() {
   // Rotate the chart so the heading/course points up (mirrors wx: rotation =
   // -heading). The viewport stores radians.
   m_viewport->setRotation(-heading_deg * M_PI / 180.0);
-  Q_EMIT viewChanged();
+  emit viewChanged();
 }
 
 void ChartCanvas::fitBounds(double north, double south, double east,

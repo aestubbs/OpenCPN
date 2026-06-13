@@ -30,7 +30,7 @@
  * grid of bespoke driver classes collapses. See
  * docs/QT_MIGRATION_COMMS_ARCH.md (task P1.5i).
  *
- * The build defines QT_NO_KEYWORDS (task P1.5a) so Q_SLOTS is used instead
+ * The build defines QT_NO_KEYWORDS (task P1.5a) so slots is used instead
  * of the slots macro.
  */
 
@@ -138,12 +138,12 @@ public:
     return m_tx_pgn_handler ? m_tx_pgn_handler(pgn) : 0;
   }
 
-Q_SIGNALS:
+signals:
   /** Emitted when the transport becomes ready (see CommTransport::Connected).
    *  Lets side-channel logic (re)run a handshake on every (re)connect. */
   void TransportConnected();
 
-private Q_SLOTS:
+private slots:
   void OnDataReceived(const QByteArray& data);  ///< frame, decode, forward
   void OnConnected();                           ///< transport became ready
   void OnDisconnected();                        ///< transport lost; schedule retry

@@ -58,7 +58,7 @@ public:
   /** Re-read from the bridge (sources appear as data arrives). */
   Q_INVOKABLE void refresh();
 
-Q_SIGNALS:
+signals:
   void changed();
 
 private:

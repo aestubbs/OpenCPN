@@ -121,7 +121,7 @@ void GribWindLayer::setViewport(const Viewport* vp) {
     const double s = m_vp->scale();
     if (s != m_last_scale) {
       m_last_scale = s;
-      Q_EMIT dirty();
+      emit dirty();
     }
   });
 }
@@ -253,7 +253,7 @@ void GribWindLayer::setParticlesEnabled(bool on) {
     m_particle_timer->setInterval(33);
     connect(m_particle_timer, &QTimer::timeout, this, [this]() {
       stepParticles();
-      Q_EMIT dirty();
+      emit dirty();
     });
   }
   if (on) {
@@ -263,7 +263,7 @@ void GribWindLayer::setParticlesEnabled(bool on) {
     m_particle_timer->stop();
     m_particles.clear();
   }
-  Q_EMIT dirty();
+  emit dirty();
 }
 
 // Bilinear sample of the wind grid at (lon, lat); NaN off-grid.

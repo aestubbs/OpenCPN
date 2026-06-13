@@ -107,7 +107,7 @@ public:
   void setControlsVisible(bool on) {
     if (on == m_controls_visible) return;
     m_controls_visible = on;
-    Q_EMIT controlsChanged();
+    emit controlsChanged();
   }
   void toggleControls() { setControlsVisible(!m_controls_visible); }
   bool masterEnabled() const { return m_master_enabled; }
@@ -116,7 +116,7 @@ public:
   void setCursorPanelVisible(bool on) {
     if (on == m_cursor_panel) return;
     m_cursor_panel = on;
-    Q_EMIT controlsChanged();
+    emit controlsChanged();
   }
   /** Per-type cursor rows for the HUD panel: ["Wind\t214° 12.4 kn", ...]
    *  for the types available at this position. */
@@ -161,13 +161,13 @@ public:
   ocpn::qtui::GribWindLayer* layer() const { return m_layer; }
   void setLayer(ocpn::qtui::GribWindLayer* l) { m_layer = l; }
 
-Q_SIGNALS:
+signals:
   void gribChanged();
   void timeChanged();
   void controlsChanged();
   void typesChanged();
 
-private Q_SLOTS:
+private slots:
   // The app time bar moved: snap to the nearest GRIB timestep.
   void onTimelineChanged();
 

@@ -79,7 +79,7 @@ DisplayConfig::DisplayConfig() {
   if ((member) == (value)) return;               \
   (member) = (value);                            \
   persist;                                       \
-  Q_EMIT changed();
+  emit changed();
 
 void DisplayConfig::setNavMode(int v) {
   OCPN_SET(m_nav_mode, v, ConfigStore::instance().setInt("display/navMode", v))

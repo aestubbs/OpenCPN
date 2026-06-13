@@ -50,7 +50,7 @@ void OwnShipConfig::setVesselName(const QString& name) {
   if (name == m_name) return;
   m_name = name;
   ConfigStore::instance().setString("ownship/name", name);
-  Q_EMIT changed();
+  emit changed();
 }
 
 void OwnShipConfig::setMmsi(const QString& mmsi) {
@@ -58,7 +58,7 @@ void OwnShipConfig::setMmsi(const QString& mmsi) {
   if (trimmed == m_mmsi) return;
   m_mmsi = trimmed;
   ConfigStore::instance().setString("ownship/mmsi", trimmed);
-  Q_EMIT changed();
+  emit changed();
 }
 
 int OwnShipConfig::mmsiValue() const {
@@ -72,7 +72,7 @@ int OwnShipConfig::mmsiValue() const {
   if ((member) == (value)) return;              \
   (member) = (value);                           \
   ConfigStore::instance().putter(key, value);   \
-  Q_EMIT changed();
+  emit changed();
 
 void OwnShipConfig::setIconType(int v) {
   OCPN_OS_SET(m_icon_type, v, "ownship/iconType", setInt)
@@ -115,7 +115,7 @@ void OwnShipConfig::setRingColor(const QColor& v) {
   if (v == m_ring_color || !v.isValid()) return;
   m_ring_color = v;
   ConfigStore::instance().setString("ownship/ringColor", v.name());
-  Q_EMIT changed();
+  emit changed();
 }
 
 void OwnShipConfig::setHdtPredictorNm(double v) {

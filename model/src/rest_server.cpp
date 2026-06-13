@@ -157,7 +157,7 @@ static void PostEvent(RestServer* parent,
   // synchronously on this (mongoose IO) thread -- matching the pre-P1.11
   // wxEvtHandler-based behaviour where wxTheApp->ProcessPendingEvents()
   // dispatched the queued ObservedEvt to its handler in-line.
-  Q_EMIT parent->IoEventReceived(id, evt_data);
+  emit parent->IoEventReceived(id, evt_data);
   // Downstream code paths in HandleServerMessage still post wx events
   // (NavMsgBus::Notify, ObsListener::Init wiring etc.). Drain any pending
   // wx events from this thread so the test harness's listeners see them

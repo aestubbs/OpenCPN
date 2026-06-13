@@ -81,7 +81,7 @@ public:
   /** Assign (if needed) + download + install the chart set at `index`. */
   Q_INVOKABLE void installChart(int index);
 
-Q_SIGNALS:
+signals:
   void stateChanged();
   void chartsChanged();
   void busyChanged();

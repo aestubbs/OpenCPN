@@ -69,7 +69,7 @@ UIConfig::UIConfig() {
   if ((member) == (value)) return;              \
   (member) = (value);                           \
   ConfigStore::instance().putter(key, value);   \
-  Q_EMIT changed();
+  emit changed();
 
 void UIConfig::setLanguage(int v) {
   OCPN_UI_SET(m_language, v, "ui/language", setInt)
@@ -105,7 +105,7 @@ void UIConfig::setHudStats(const QStringList& v) {
   if (m_hud_stats == v) return;
   m_hud_stats = v;
   ConfigStore::instance().setString("ui/hudStats", v.join(','));
-  Q_EMIT changed();
+  emit changed();
 }
 void UIConfig::setHudStatsX(double v) {
   OCPN_UI_SET(m_hud_stats_x, v, "ui/hudStatsX", setDouble)

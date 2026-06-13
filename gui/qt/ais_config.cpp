@@ -61,7 +61,7 @@ AisConfig::AisConfig() {
   if ((member) == (value)) return;               \
   (member) = (value);                            \
   ConfigStore::instance().putter(key, value);    \
-  Q_EMIT changed();
+  emit changed();
 
 void AisConfig::setCpaMaxRangeNm(double v) {
   OCPN_AIS_SET(m_cpa_max_range, v, "ais/cpaMaxRange", setDouble)

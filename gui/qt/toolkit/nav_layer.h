@@ -60,7 +60,7 @@ public:
         const double s = m_viewport->scale();
         if (s != m_last_scale) {
           m_last_scale = s;
-          Q_EMIT dirty();
+          emit dirty();
         }
       });
     }

@@ -69,13 +69,13 @@ RouteDefaultsConfig::RouteDefaultsConfig() {
   if ((member) == (value)) return;              \
   (member) = (value);                           \
   ConfigStore::instance().putter(key, value);   \
-  Q_EMIT changed();
+  emit changed();
 
 void RouteDefaultsConfig::setRouteColor(const QColor& v) {
   if (m_route_color == v) return;
   m_route_color = v;
   ConfigStore::instance().setString("routes/routeColor", v.name());
-  Q_EMIT changed();
+  emit changed();
 }
 void RouteDefaultsConfig::setRouteStyle(int v) {
   OCPN_RT_SET(m_route_style, v, "routes/routeStyle", setInt)
@@ -85,34 +85,34 @@ void RouteDefaultsConfig::setPersistActiveRoute(bool v) {
   m_persist_active = v;
   g_persist_active_route = v;
   ConfigStore::instance().setBool("routes/persistActive", v);
-  Q_EMIT changed();
+  emit changed();
 }
 void RouteDefaultsConfig::setAutoAnchorMark(bool v) {
   if (m_auto_anchor_mark == v) return;
   m_auto_anchor_mark = v;
   ConfigStore::instance().setBool("routes/autoAnchorMark", v);
-  Q_EMIT changed();
+  emit changed();
 }
 void RouteDefaultsConfig::setWaypointIcon(const QString& v) {
   if (m_waypoint_icon == v) return;
   m_waypoint_icon = v;
   g_default_wp_icon = QString_to_wxString(v);
   ConfigStore::instance().setString("routes/waypointIcon", v);
-  Q_EMIT changed();
+  emit changed();
 }
 void RouteDefaultsConfig::setRoutepointIcon(const QString& v) {
   if (m_routepoint_icon == v) return;
   m_routepoint_icon = v;
   g_default_routepoint_icon = QString_to_wxString(v);
   ConfigStore::instance().setString("routes/routepointIcon", v);
-  Q_EMIT changed();
+  emit changed();
 }
 void RouteDefaultsConfig::setArrivalCircleNm(double v) {
   if (m_arrival_nm == v) return;
   m_arrival_nm = v;
   g_n_arrival_circle_radius = v;  // keep the model's arrival radius in step
   ConfigStore::instance().setDouble("routes/arrivalNm", v);
-  Q_EMIT changed();
+  emit changed();
 }
 void RouteDefaultsConfig::setScaminMin(int v) {
   OCPN_RT_SET(m_scamin_min, v, "routes/scaminMin", setInt)
@@ -128,27 +128,27 @@ void RouteDefaultsConfig::setTrackHighlight(bool v) {
   m_track_highlight = v;
   g_bHighliteTracks = v;
   ConfigStore::instance().setBool("routes/trackHighlight", v);
-  Q_EMIT changed();
+  emit changed();
 }
 void RouteDefaultsConfig::setTrackColor(const QColor& v) {
   if (m_track_color == v) return;
   m_track_color = v;
   ConfigStore::instance().setString("routes/trackColor", v.name());
-  Q_EMIT changed();
+  emit changed();
 }
 void RouteDefaultsConfig::setTrackingPrecision(int v) {
   if (m_tracking_precision == v) return;
   m_tracking_precision = v;
   g_nTrackPrecision = v;  // the model ActiveTrack reads this on Start()
   ConfigStore::instance().setInt("routes/trackingPrecision", v);
-  Q_EMIT changed();
+  emit changed();
 }
 
 void RouteDefaultsConfig::setConfirmObjectDelete(bool v) {
   if (m_confirm_delete == v) return;
   m_confirm_delete = v;
   ConfigStore::instance().setBool("routes/confirmDelete", v);
-  Q_EMIT changed();
+  emit changed();
 }
 
 void RouteDefaultsConfig::setAdvanceOnArrivalOnly(bool v) {
@@ -156,7 +156,7 @@ void RouteDefaultsConfig::setAdvanceOnArrivalOnly(bool v) {
   m_advance_arrival_only = v;
   g_bAdvanceRouteWaypointOnArrivalOnly = v;  // Routeman reads this per tick
   ConfigStore::instance().setBool("routes/advanceArrivalOnly", v);
-  Q_EMIT changed();
+  emit changed();
 }
 
 #undef OCPN_RT_SET

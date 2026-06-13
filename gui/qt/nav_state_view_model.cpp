@@ -37,7 +37,7 @@ NavStateViewModel::NavStateViewModel(NavDataProvider* provider,
 void NavStateViewModel::refresh() {
   if (!m_provider) return;
   m_own = m_provider->ownShip();
-  Q_EMIT changed();
+  emit changed();
 }
 
 QString NavStateViewModel::positionText() const {

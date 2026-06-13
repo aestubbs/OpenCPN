@@ -63,7 +63,7 @@ public:
                        QObject* parent = nullptr);
   ~ChartWorker() override;  // out-of-line for the unique_ptr<SencCache> pimpl
 
-public Q_SLOTS:
+public slots:
   /** Open every cell, union feature envelopes (no decode), and emit the
    *  catalog. Cheap relative to a full load; safe to run for a whole set. */
   void scanExtents(const QStringList& paths_000);
@@ -72,7 +72,7 @@ public Q_SLOTS:
    *  emit it. Serialised against other loadCell calls on this thread. */
   void loadCell(const ocpn::qtui::CellExtent& cell);
 
-Q_SIGNALS:
+signals:
   /** A decoded raster (KAP) chart: image + linear world rectangle
    *  (P2.7). Emitted alongside cellLoaded for vector cells. */
   void rasterCellLoaded(const QString& id, const QImage& image, double north,
@@ -85,7 +85,7 @@ private:
   // Resume the slots section my signal insertion above terminated --
   // setColorScheme/applyDisplaySettings are invoked by name from the
   // canvas and silently failed as plain publics.
-public Q_SLOTS:
+public slots:
 
   /** Switch the S-52 colour scheme (0=day,1=dusk,2=night) on the decode
    *  thread, serialised against loadCell so it never races a decode. The
@@ -97,7 +97,7 @@ public Q_SLOTS:
    *  serialised against loadCell. The canvas re-requests loaded cells after. */
   void applyDisplaySettings(const ocpn::qtui::ChartDisplaySettings& settings);
 
-Q_SIGNALS:
+signals:
   void extentsScanned(const QList<ocpn::qtui::CellExtent>& cells);
   void cellLoaded(const QString& id, const s52sg::Buffer& buffer, double north,
                   double south, double east, double west);

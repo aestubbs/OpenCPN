@@ -78,7 +78,7 @@ void SoundPlayer::setOutputDevice(int index) {
           ? QString::fromUtf8(devs[index - 1].id())
           : QString());
   applyDevice();
-  Q_EMIT outputDeviceChanged();
+  emit outputDeviceChanged();
 }
 
 bool SoundPlayer::playing() const {

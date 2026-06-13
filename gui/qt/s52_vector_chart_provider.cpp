@@ -330,7 +330,7 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
   connect(m_zoom_timer, &QTimer::timeout, this, [this]() {
     // Zoom settled: owe a full declutter re-layout (density depends on scale).
     m_relayout_pending = true;
-    Q_EMIT changed();
+    emit changed();
   });
   if (m_viewport) {
     connect(m_viewport, &Viewport::changed, this, [this]() {
@@ -345,7 +345,7 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
       // opacity only -- no declutter, no geometry rebuild, same subtree node
       // (so the compositor doesn't restructure). This is what bounds the draw
       // to on-screen detail at any zoom.
-      Q_EMIT changed();
+      emit changed();
     });
   }
 }
@@ -356,7 +356,7 @@ void S52VectorChartProvider::setDisplayCategory(int cat) {
   // Force a full rebuild filtering by the new category. m_built=false makes
   // renderChart construct a fresh subtree (the compositor frees the old).
   m_built = false;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setHiddenClasses(const QSet<QString>& hidden) {
@@ -364,7 +364,7 @@ void S52VectorChartProvider::setHiddenClasses(const QSet<QString>& hidden) {
   m_hiddenClasses = hidden;
   rebuildHiddenIdx();
   m_built = false;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::rebuildHiddenIdx() {
@@ -428,49 +428,49 @@ void S52VectorChartProvider::setShowSoundings(bool on) {
   if (on == m_showSoundings) return;
   m_showSoundings = on;
   m_built = false;  // re-emit the subtree with soundings filtered in/out
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setShowText(bool on) {
   if (on == m_showText) return;
   m_showText = on;
   m_built = false;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setShowLights(bool on) {
   if (on == m_showLights) return;
   m_showLights = on;
   m_built = false;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setShowBuoys(bool on) {
   if (on == m_showBuoys) return;
   m_showBuoys = on;
   m_built = false;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setDepthUnit(int unit) {
   if (unit == m_depth_unit) return;
   m_depth_unit = unit;
   m_built = false;  // re-raster sounding labels in the new unit
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setSafetyDepth(double metres) {
   if (metres == m_safety_depth_m) return;
   m_safety_depth_m = metres;
   m_built = false;  // shallow-sounding (<= safety) emphasis threshold moved
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setSoundingScale(double mult) {
   if (mult <= 0.0 || mult == m_sounding_scale) return;
   m_sounding_scale = mult;
   m_built = false;  // re-raster soundings at the new figure size
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setNativeScale(int n) {
@@ -479,14 +479,14 @@ void S52VectorChartProvider::setNativeScale(int n) {
   // The hatch node is built lazily on the next build; if already built, owe a
   // re-layout so its show/hide + spacing reflect the new native scale.
   m_relayout_pending = true;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setOverscaleThreshold(double t) {
   if (t <= 0.0 || t == m_overscale_threshold) return;
   m_overscale_threshold = t;
   m_relayout_pending = true;  // re-evaluate the hatch show/hide
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setFinerCoverage(
@@ -507,7 +507,7 @@ void S52VectorChartProvider::setFinerCoverage(
   m_finer_coverage_world = std::move(world);
   // Changes which point annotations survive owner-cull -- owe a declutter pass.
   m_relayout_pending = true;
-  Q_EMIT changed();
+  emit changed();
 }
 
 bool S52VectorChartProvider::coveredByFiner(const QPointF& world_pos) const {
@@ -521,7 +521,7 @@ void S52VectorChartProvider::setDetailScale(double n) {
   m_unset_scamin_n = n;
   // Changes which billboards survive SCAMIN -- owe a declutter re-layout.
   m_relayout_pending = true;
-  Q_EMIT changed();
+  emit changed();
 }
 
 void S52VectorChartProvider::setDeclutter(bool on) {
@@ -529,7 +529,7 @@ void S52VectorChartProvider::setDeclutter(bool on) {
   m_declutter = on;
   // Label overlap-avoid is part of the declutter pass -- owe a re-layout.
   m_relayout_pending = true;
-  Q_EMIT changed();
+  emit changed();
 }
 
 bool S52VectorChartProvider::viewGroupEnabled(int vg) const {

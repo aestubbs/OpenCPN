@@ -27,8 +27,8 @@
  * and reconnect/watchdog/stats the generic CommDriver's. See
  * docs/QT_MIGRATION_COMMS_ARCH.md (task P1.5i).
  *
- * The build defines QT_NO_KEYWORDS (task P1.5a) so Q_SIGNALS / Q_SLOTS /
- * Q_EMIT are used instead of the signals/slots/emit macros.
+ * The build defines QT_NO_KEYWORDS (task P1.5a) so signals / slots /
+ * emit are used instead of the signals/slots/emit macros.
  */
 
 #ifndef COMM_TRANSPORT_H
@@ -81,7 +81,7 @@ public:
    */
   virtual bool Write(const QByteArray& data) = 0;
 
-Q_SIGNALS:
+signals:
   /** A chunk of raw bytes arrived from the device. */
   void DataReceived(const QByteArray& data);
 
@@ -112,7 +112,7 @@ public:
   bool IsOpen() const override;
   bool Write(const QByteArray& data) override;
 
-private Q_SLOTS:
+private slots:
   void OnReadyRead();
   void OnError();
 
@@ -144,7 +144,7 @@ public:
   bool IsOpen() const override;
   bool Write(const QByteArray& data) override;
 
-private Q_SLOTS:
+private slots:
   void OnReadyRead();
   void OnConnected();
   void OnDisconnected();
@@ -181,7 +181,7 @@ public:
   bool IsOpen() const override;
   bool Write(const QByteArray& data) override;
 
-private Q_SLOTS:
+private slots:
   void OnNewConnection();
 
 private:
@@ -211,7 +211,7 @@ public:
   bool IsOpen() const override;
   bool Write(const QByteArray& data) override;
 
-private Q_SLOTS:
+private slots:
   void OnReadyRead();
   void OnError();
 
@@ -249,7 +249,7 @@ public:
   /** Sends data as one websocket TEXT message (the JSON protocols). */
   bool Write(const QByteArray& data) override;
 
-private Q_SLOTS:
+private slots:
   void OnConnected();
   void OnDisconnected();
   void OnTextMessage(const QString& message);

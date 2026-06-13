@@ -97,7 +97,7 @@ void TideModel::rebuild() {
                    .arg(m_sources.size());
   else
     m_status = tr("No stations loaded");
-  Q_EMIT changed();
+  emit changed();
 }
 
 }  // namespace ocpn::qtui

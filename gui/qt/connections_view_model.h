@@ -77,7 +77,7 @@ public:
    *  launch) and emit activated() if any. Call once after wiring activated(). */
   void activatePersisted();
 
-Q_SIGNALS:
+signals:
   void changed();
   /** A connection was enabled -- the canvas should go live + mirror the
    *  model so the incoming data shows. */

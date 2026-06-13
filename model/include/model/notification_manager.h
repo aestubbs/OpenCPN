@@ -92,7 +92,7 @@ public:
   /** Notified without data when a notification is added or removed. */
   EventVar evt_notificationlist_change;
 
-private Q_SLOTS:
+private slots:
   void OnTimer();
 
 private:
