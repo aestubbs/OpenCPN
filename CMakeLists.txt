@@ -114,11 +114,14 @@ if (NOT QT_ANDROID)
   # qt_add_qml_module / qt_add_resources etc. used by the new gui/qt/ tree.
   qt_standard_project_setup(REQUIRES 6.5)
 
-  # Native QObject classes now live in headers shared with wxWidgets TUs.
-  # QT_NO_KEYWORDS disables the signals/slots/emit macros (use Q_SIGNALS/
-  # Q_SLOTS/Q_EMIT) so they cannot collide with wx/system headers. This is
-  # transitional -- removed once the wx path is gone (task P3.12).
-  add_compile_definitions(QT_NO_KEYWORDS)
+  # P3.12 (2026-06-13): QT_NO_KEYWORDS WAS set defensively so the Qt
+  # signals/slots/emit macros couldn't collide with wx/system headers in
+  # shared TUs. Verified unnecessary now that the wx GUI is gone -- the model +
+  # gui/qt TUs (which still include wx shim headers) compile clean with the
+  # macros enabled, i.e. nothing in the remaining wx/system surface uses
+  # signals/slots/emit as identifiers. Removed, so the Qt code can use the
+  # plain keywords. (The X11 None/Bool/Status macros are handled separately by
+  # x11_macro_scrub.h.)
 endif ()
 
 #
