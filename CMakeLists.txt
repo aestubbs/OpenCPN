@@ -1221,7 +1221,14 @@ if (APPLE)
   endif ()
 endif ()
 
-find_package(Gettext REQUIRED)
+# P3.11: system Gettext drives the wx .pot/.po/.mo translation build only.
+# The Qt app uses Qt Linguist (.ts -> .qm via lrelease, found by gui/qt's
+# find_package(Qt6 ... LinguistTools)), so the default build needs no system
+# gettext. All the gettext targets below are guarded by GETTEXT_*_EXECUTABLE,
+# which stay unset when this is gated, so they self-skip.
+if (OCPN_BUILD_WX_APP)
+  find_package(Gettext REQUIRED)
+endif ()
 if (LINUX)
   find_package(LIBUDEV)
   if (LIBUDEV_FOUND)

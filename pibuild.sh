@@ -69,7 +69,7 @@ $SUDO apt-get install -y --no-install-recommends \
   libgl1-mesa-dev libglu1-mesa-dev libgles2-mesa-dev \
   libcurl4-openssl-dev libssl-dev liblz4-dev libzstd-dev \
   libmpg123-dev libmp3lame-dev libsndfile1-dev libexif-dev \
-  libusb-1.0-0-dev libudev-dev gettext \
+  libusb-1.0-0-dev libudev-dev \
   libxkbcommon-dev libxcb-cursor0 mesa-utils
 
 # ---- 2. Qt (prebuilt arm64 via aqtinstall) --------------------------------
