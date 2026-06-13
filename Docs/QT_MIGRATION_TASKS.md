@@ -1528,13 +1528,19 @@ direction: all six are wanted eventually.**
       Qt plugins/tests to vendor their own copies — a separate cleanup, not a
       parallel build path. wxWidgets is still LINKED for the model's residual
       Phase-1 boundaries → P3.12.
-- [ ] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
-      `slots` / `emit` keywords. **Blocked (not by P3.11 directly):** the
-      `model/` layer still links wxWidgets at its deliberate Phase-1
-      boundaries and hosts the Phase-1 QObject classes (`observable_qt`,
-      `comm_drv_*`), so wx and Qt headers still co-exist in model TUs and the
-      keyword macros could still clash. Safe only once the residual model wx
-      usage is gone. Introduced by P1.5a.
+- [x] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
+      `slots` / `emit` keywords. **DONE (2026-06-13).** The earlier
+      assumption that this was blocked on model de-wx turned out **false** —
+      tested it: with `QT_NO_KEYWORDS` removed, the model + gui/qt TUs (which
+      still include wx shim headers) compile clean, i.e. nothing in the
+      remaining wx/system surface actually uses signals/slots/emit as an
+      identifier (it was a purely defensive define). Removed the define, then
+      converted **468** `Q_SIGNALS`/`Q_SLOTS`/`Q_EMIT` → `signals`/`slots`/
+      `emit` across **109 files** (gui/qt + the Phase-1 model QObject classes
+      `observable_qt`/`comm_drv_*` + libs/observable). Verified: opencpn-qt +
+      tests + the grib/ochartshop/chartdldr Qt plugins build clean + app
+      smoke-run; CI confirms macOS + Linux + arm64. (X11 None/Bool/Status are
+      handled separately by `x11_macro_scrub.h`.) Introduced by P1.5a.
 - [x] **P3.13** **Route-creation interaction parity (pan/zoom while routing).**
       **Drag-to-pan + line rendering done (2026-06-01); keyboard / edge-pan /
       snap pending.** Interaction model chosen: **drag = pan, click = place
