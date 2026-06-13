@@ -2269,6 +2269,12 @@ Phase 6). New scope found untracked:
       day-1 (new P4.7); dashboard = built-in HUD; chart downloader +
       GRIB at v1. Item 7 (acceptance pass) remains; the user has
       directed wx-deprecation work to begin.**
+      **Checklist authored (2026-06-13): `Docs/QT_MIGRATION_ACCEPTANCE.md`**
+      — an executable per-area sign-off sheet. Its top section is
+      pre-verified headlessly (clean launch, vector-chart render of the
+      Solent o-charts cells, `de` catalog loads, viewport restore, arm64
+      CI link); the manual rows (charts/nav/AIS/routes/tides/comms/UI/
+      o-charts) need the user's eyes to close item 7 and unblock P3.11.
 - [x] **P3.22** **Data Monitor launcher → Connections page. DONE
       (2026-06-10).** The 📡 toolbar slot is removed; a "Data monitor…"
       button on Options > Connections opens the window
