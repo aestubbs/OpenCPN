@@ -1518,28 +1518,30 @@ direction: all six are wanted eventually.**
           reuse legacy plugin *computation* sources (e.g.
           `plugins/grib_pi/src/GribRecord.cpp`); needs the Qt plugins to
           vendor their own copies first.
-      (b) the `GUI_SRC`/`GUI_HDRS` list-assembly (CMakeLists ~810–1102) names
-          the deleted files but is **NOT safe to gate/remove on its own** —
-          attempted 2026-06-13 and reverted: the range interleaves shared
-          `config.h` variable-setting the Qt build needs (the
-          `OCPN_USE_GARMINHOST` block sets `USE_GARMINHOST`, which
-          `model/comm_n0183_output.cpp` depends on; gating it broke the model
-          build). It is harmless as-is (builds unused list vars). Removing it
-          must go with the full teardown (c), where those config vars are
-          relocated out of the GUI assembly. A NOTE comment now marks this.
+      (b) **DONE (2026-06-13):** the `GUI_SRC`/`GUI_HDRS` list-assembly
+          (CMakeLists ~810–1102) is now gated behind `OCPN_BUILD_WX_APP`. The
+          one shared bit it carried — `set(USE_GARMINHOST 1)` → config.h, which
+          `model/comm_n0183_output.cpp` needs — was relocated to the ungated
+          `OCPN_USE_GARMINHOST` block (runs before config.h gen); the dead
+          `list(APPEND MODEL_SRC garmin_wrapper.cpp)` beside it was dropped
+          (`model/CMakeLists.txt` builds it). Verified: `make opencpn-qt` +
+          `make tests` build, `#define USE_GARMINHOST` still in config.h.
       (c) final cleanup: remove the stub `OpenCPN` target + all its scattered
-          refs + the `OCPN_BUILD_WX_APP` option once (a)/(b) are done.
-          **This must be one holistic, careful pass — NOT incremental slices.**
-          Two slice attempts on 2026-06-13 were each caught by the build and
-          reverted: gating the GUI assembly broke the model (`USE_GARMINHOST`
-          config var, see (b)); `git rm -r cli` broke the **test suite**,
-          which compiles `cli/api_shim.cpp` as a shared shim (so cli is not a
-          standalone wx target either). The wx-app machinery (stub target,
-          GUI assembly, CLI, config vars) is woven through the shared
-          model/test/Qt config; teardown needs to relocate those shared bits
-          first. **Important:** this is pure build *hygiene* — the default Qt
-          build is complete, correct, and shipping-capable (mac/Linux/arm/Pi)
-          with the machinery inert; removing it changes nothing that builds or
+          refs + the `OCPN_BUILD_WX_APP` option.
+          **Approach: incremental IS workable, but each slice must first
+          relocate/preserve the shared bits it touches** — proven by (b)
+          (relocate one config var → gate succeeds) and by two reverted
+          over-reaches (gating the assembly wholesale broke the model;
+          `git rm -r cli` broke the **test suite**, which compiles
+          `cli/api_shim.cpp` as a shared shim — so cli's *console.cpp/target*
+          can go but `api_shim.cpp` must stay). Remaining shared bits to map
+          before removing the stub target: the ~50 scattered
+          `target_link_libraries(${PACKAGE_NAME} …)` (harmless once the target
+          goes), the `_opencpn`/`ocpn::opencpn` plugin alias, and the
+          wx-bundle staging/fixup. **Important:** this is pure build *hygiene*
+          — the default Qt build is complete, correct, and shipping-capable
+          (mac/Linux/arm/Pi) with the machinery inert; removing it changes
+          nothing that builds or
           ships.
       **Dependency rework (2026-06-13, follow-on):** with the wx GUI gone,
       gated the build deps that only existed to link the wx target behind
