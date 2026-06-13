@@ -1529,6 +1529,18 @@ direction: all six are wanted eventually.**
           relocated out of the GUI assembly. A NOTE comment now marks this.
       (c) final cleanup: remove the stub `OpenCPN` target + all its scattered
           refs + the `OCPN_BUILD_WX_APP` option once (a)/(b) are done.
+          **This must be one holistic, careful pass — NOT incremental slices.**
+          Two slice attempts on 2026-06-13 were each caught by the build and
+          reverted: gating the GUI assembly broke the model (`USE_GARMINHOST`
+          config var, see (b)); `git rm -r cli` broke the **test suite**,
+          which compiles `cli/api_shim.cpp` as a shared shim (so cli is not a
+          standalone wx target either). The wx-app machinery (stub target,
+          GUI assembly, CLI, config vars) is woven through the shared
+          model/test/Qt config; teardown needs to relocate those shared bits
+          first. **Important:** this is pure build *hygiene* — the default Qt
+          build is complete, correct, and shipping-capable (mac/Linux/arm/Pi)
+          with the machinery inert; removing it changes nothing that builds or
+          ships.
       **Dependency rework (2026-06-13, follow-on):** with the wx GUI gone,
       gated the build deps that only existed to link the wx target behind
       `OCPN_BUILD_WX_APP`, so the default (Qt) build no longer requires them:
