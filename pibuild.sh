@@ -67,7 +67,7 @@ $SUDO apt-get install -y --no-install-recommends \
   cmake ninja-build g++ git python3 python3-venv python3-pip \
   libwxgtk3.2-dev libgdal-dev libarchive-dev libglew-dev \
   libgl1-mesa-dev libglu1-mesa-dev libgles2-mesa-dev \
-  libgtk-3-dev libcurl4-openssl-dev libssl-dev liblz4-dev libzstd-dev \
+  libcurl4-openssl-dev libssl-dev liblz4-dev libzstd-dev \
   libmpg123-dev libmp3lame-dev libsndfile1-dev libexif-dev \
   libusb-1.0-0-dev libudev-dev gettext \
   libxkbcommon-dev libxcb-cursor0 mesa-utils

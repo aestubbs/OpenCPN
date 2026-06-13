@@ -1273,7 +1273,10 @@ endif ()
 #
 # Linux: set up GTK
 #
-if (LINUX)
+# P3.11: GTK is the wx GUI's Linux toolkit. The Qt app uses the Fusion
+# QtQuick Controls style + Qt's own xcb platform, so it needs neither GTK
+# nor Pango. Gate alongside the (retired) wx app.
+if (LINUX AND OCPN_BUILD_WX_APP)
   include(OcpnFindGtk)
   target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::gtk)
 endif ()
@@ -1383,12 +1386,23 @@ if (NOT QT_ANDROID)
   target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::dnet)
 endif ()
 
+# P3.11: this whole block links system libs (BZip2, ZLIB, X11, TinyXML and,
+# on old wx, the wxSVG font stack: Freetype/Fontconfig/PNG/Pixman) to the wx
+# OpenCPN target only. None are needed by the Qt app — it gets zlib
+# transitively (GDAL/libarchive), uses Qt's xcb for X11, QtSvg for SVG, and
+# system fonts (no Freetype/Fontconfig). The font deps were already inert on
+# wx >= 3.1.6. Gate the lot with the retired wx app so the default build no
+# longer requires them. (GLEW is NOT here — s52plib uses it; see line ~676.)
+if (UNIX AND NOT QT_ANDROID)
+  # ZLIB::ZLIB is a genuine Qt-build dependency (the Qt grib plugin links it),
+  # so find it unconditionally — NOT gated with the wx app.
+  find_package(ZLIB REQUIRED)
+endif ()
 if (UNIX)
-  if (NOT QT_ANDROID) # this should be detected by the grib plugin
+  if (NOT QT_ANDROID AND OCPN_BUILD_WX_APP)
     find_package(BZip2 REQUIRED)
     target_include_directories(${PACKAGE_NAME} PRIVATE ${BZIP2_INCLUDE_DIR})
     target_link_libraries(${PACKAGE_NAME} PRIVATE ${BZIP2_LIBRARIES})
-    find_package(ZLIB REQUIRED)
     target_include_directories(${PACKAGE_NAME} PRIVATE ${ZLIB_INCLUDE_DIR})
     target_link_libraries(${PACKAGE_NAME} PRIVATE ${ZLIB_LIBRARY})
     find_package(X11)
