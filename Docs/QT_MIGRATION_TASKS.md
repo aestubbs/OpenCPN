@@ -1501,17 +1501,35 @@ direction: all six are wanted eventually.**
       About box) that never existed in wx.
       Remaining: those new-string translations (community/lupdate workflow)
       and any hard-coded strings still missing `qsTr()`.
-- [~] **P3.11** Remove the parallel wx build path — **BEGUN (user
-      direction, 2026-06-10): increment 1 landed** — OCPN_BUILD_WX_APP
-      (default OFF) makes the wx app EXCLUDE_FROM_ALL, skips plugins/,
-      and excludes the broken wx-era opencpn-cmd; the default build is
-      Qt-only. Remaining: configure-time removal (gate the wx-only
-      find_package/staging blocks), then source deletion (gui/src,
-      gui/include, plugins/) once the acceptance pass closes.
+- [~] **P3.11** Remove the parallel wx build path —
+      **increment 1 (2026-06-10):** OCPN_BUILD_WX_APP (default OFF) makes the
+      wx app EXCLUDE_FROM_ALL and excludes the wx-era opencpn-cmd.
+      **increment 2 — wx GUI DELETED (2026-06-13, gate now satisfied via
+      P3.21 sign-off):** removed **gui/src (135) + gui/include (146) = 281
+      files**, the entire legacy wxWidgets GUI. The OpenCPN target is kept
+      DEFINED but compiles only `cmake/wx_app_retired_stub.cpp` when
+      OCPN_BUILD_WX_APP=OFF (the ~50 scattered
+      `target_link_libraries(${PACKAGE_NAME} ...)` + the `_opencpn` alias
+      still reference it); the `OPENGL_FOUND` gl_* `target_sources` block was
+      gated; the wx `add_subdirectory(plugins)` was dropped. Verified: clean
+      reconfigure (generate done) + `make opencpn-qt` links + app runs/renders.
+      **Remaining:**
+      (a) `plugins/` is NOT yet deletable — the Qt plugins (gui/qt/plugin/)
+          reuse legacy plugin *computation* sources (e.g.
+          `plugins/grib_pi/src/GribRecord.cpp`); needs the Qt plugins to
+          vendor their own copies first.
+      (b) dead `GUI_SRC`/`GUI_HDRS` list-assembly (CMakeLists ~810–1102) now
+          references deleted files — harmless (unused when OFF) but should be
+          removed for clarity.
+      (c) final cleanup: remove the stub `OpenCPN` target + all its scattered
+          refs + the `OCPN_BUILD_WX_APP` option once (a)/(b) are done.
 - [ ] **P3.12** Remove `QT_NO_KEYWORDS`; restore the plain `signals` /
-      `slots` / `emit` keywords now that no wx/system headers remain to clash
-      with. Touches the QObject classes added during Phase 1 (`observable_qt`,
-      `comm_drv_*`). Introduced by P1.5a.
+      `slots` / `emit` keywords. **Blocked (not by P3.11 directly):** the
+      `model/` layer still links wxWidgets at its deliberate Phase-1
+      boundaries and hosts the Phase-1 QObject classes (`observable_qt`,
+      `comm_drv_*`), so wx and Qt headers still co-exist in model TUs and the
+      keyword macros could still clash. Safe only once the residual model wx
+      usage is gone. Introduced by P1.5a.
 - [x] **P3.13** **Route-creation interaction parity (pan/zoom while routing).**
       **Drag-to-pan + line rendering done (2026-06-01); keyboard / edge-pan /
       snap pending.** Interaction model chosen: **drag = pan, click = place
