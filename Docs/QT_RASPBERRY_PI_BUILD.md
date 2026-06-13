@@ -29,6 +29,19 @@ runner (`build-linux-arm64` in `.github/workflows/opencpn-qt.yml`). A green
 run proves the **compile + link**; the **GLES runtime** can only be
 verified on real hardware (CI has no GPU).
 
+## Quick start
+
+On a 64-bit Raspberry Pi OS Bookworm Pi, the repo-root script does
+everything below (deps → Qt → build), idempotently:
+
+```bash
+git clone --recurse-submodules https://github.com/aestubbs/OpenCPN.git
+cd OpenCPN
+./pibuild.sh          # override e.g. QT_VERSION=6.12.0 JOBS=2 ./pibuild.sh
+```
+
+The rest of this document is the manual breakdown of what the script does.
+
 ## Target
 
 - Raspberry Pi **4 or 5**, 64-bit **Raspberry Pi OS (Bookworm)** or Ubuntu
