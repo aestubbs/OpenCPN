@@ -122,6 +122,10 @@ available to verify against, so P2.19 stays parked behind the day-1
 retirement gate — do not treat it as blocking. **Windows CI postponed to
 post-wx-retirement** (user) — so P0.5's remaining leg is **Linux**
 best-effort + the deferred Windows job, not a pre-retirement blocker.
+**Raspberry Pi (aarch64) support added** (P0.8, user-requested): codebase
+verified Pi-ready (GLES-baked shaders, no x86 intrinsics, no forced
+desktop-GL), an `arm64` CI job on a free GitHub ARM runner, and a build
+guide with **Wayland** as the headline display path (Bookworm default).
 **What remains:** P2.19 CM93 (parked — plan written, decode-extraction is
 the one big engineering item, but no chart set to verify), P2.17/P2.25
 (chart-visual polish/defect sweep, needs charts + eyes), P3.6
@@ -172,6 +176,29 @@ Task IDs (`P1.2`) are stable — never renumber; add `Pn.x` for new work.
       **Deferred by decision 2026-06-10 (macOS-first):** verification
       stays on macOS; the Linux leg of the **pre-P3.11 gate** (P3.21)
       is now satisfied at build level.
+      **arm64 / Raspberry Pi build leg (P0.8, 2026-06-13):** added a
+      `build-linux-arm64` job on GitHub's free `ubuntu-24.04-arm` runner
+      with Qt 6.8 from the official linux_arm64 binaries (aqt
+      host=linux_arm64 arch=linux_gcc_arm64) — see P0.8 below.
+- [~] **P0.8** **Raspberry Pi (aarch64) support** — user-requested
+      (2026-06-13). A Pi 4/5 is aarch64 Linux rendering via OpenGL ES
+      (Mesa V3D). **Codebase verified Pi-ready** against the tree before
+      writing any port: the `.qsb` shaders already bake a `GLSL 100 es`
+      variant (`qsb -d` confirms), there are **no x86 intrinsics** in
+      `gui/qt`/`libs/s52plib`/`libs/s57-charts`, and `main.cpp` never
+      forces a desktop-GL profile (MSAA samples only) so RHI auto-selects
+      GLES. Fusion controls style on Linux; all deps in Pi OS / Ubuntu
+      arm64 apt. The only prerequisite is **Qt 6.5+** (`loadFromModule`)
+      vs Pi OS Bookworm's apt **Qt 6.4** — handled via aqt's prebuilt
+      arm64 Qt. **Done:** `build-linux-arm64` CI job (best-effort, like
+      the x86 Linux job — proves compile+link; GLES runtime needs real
+      hardware) + `Docs/QT_RASPBERRY_PI_BUILD.md` (build on hardware;
+      **Wayland is the headline path** since Bookworm defaults to a
+      Wayland compositor — native `wayland`/qtwayland, XWayland fallback,
+      eglfs kiosk; V3D MSAA tuning; ARM `oexserverd` note for o-charts).
+      Remaining: confirm the arm64 CI job goes green; runtime verification
+      on a real Pi (needs hardware + eyes); optional `loadFromModule`
+      fallback to also build on distro Qt 6.4.
 - [x] **P0.6** Repo layout decided: new Qt-Quick code lives in `gui/qt/`
       (subdir of the existing `gui/` tree — closest to what it'll
       eventually replace; the legacy `gui/src/` retires in Phase 3).
