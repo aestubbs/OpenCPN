@@ -1518,9 +1518,15 @@ direction: all six are wanted eventually.**
           reuse legacy plugin *computation* sources (e.g.
           `plugins/grib_pi/src/GribRecord.cpp`); needs the Qt plugins to
           vendor their own copies first.
-      (b) dead `GUI_SRC`/`GUI_HDRS` list-assembly (CMakeLists ~810–1102) now
-          references deleted files — harmless (unused when OFF) but should be
-          removed for clarity.
+      (b) the `GUI_SRC`/`GUI_HDRS` list-assembly (CMakeLists ~810–1102) names
+          the deleted files but is **NOT safe to gate/remove on its own** —
+          attempted 2026-06-13 and reverted: the range interleaves shared
+          `config.h` variable-setting the Qt build needs (the
+          `OCPN_USE_GARMINHOST` block sets `USE_GARMINHOST`, which
+          `model/comm_n0183_output.cpp` depends on; gating it broke the model
+          build). It is harmless as-is (builds unused list vars). Removing it
+          must go with the full teardown (c), where those config vars are
+          relocated out of the GUI assembly. A NOTE comment now marks this.
       (c) final cleanup: remove the stub `OpenCPN` target + all its scattered
           refs + the `OCPN_BUILD_WX_APP` option once (a)/(b) are done.
       **Dependency rework (2026-06-13, follow-on):** with the wx GUI gone,

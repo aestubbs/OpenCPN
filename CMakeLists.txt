@@ -806,6 +806,13 @@ message(STATUS "*** Staging to build ${PACKAGE_NAME}  ***")
 message(STATUS "*** Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "*** Will install to ${CMAKE_INSTALL_PREFIX}  ***")
 
+# NOTE (P3.11): this GUI_HDRS/GUI_SRC list names the now-deleted gui/src +
+# gui/include trees and feeds only the wx OpenCPN target. It is left in place
+# (harmless: it just builds unused list variables) because it interleaves
+# shared config.h variable-setting the Qt build needs -- e.g. the
+# OCPN_USE_GARMINHOST block below sets USE_GARMINHOST (model/comm_n0183_output
+# depends on it). Removing this list belongs with the full wx-target teardown,
+# where those config vars get relocated. Do NOT gate it wholesale.
 set(GUI_HDR_DIR ${CMAKE_SOURCE_DIR}/gui/include/gui)
 set(GUI_HDRS
     ${GUI_HDR_DIR}/about_frame.h
