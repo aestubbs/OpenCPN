@@ -112,13 +112,24 @@ Grid/Outlines, sound device; per-element fonts recommended-drop, config
 templates still deferred). Plus user-driven fixes: native dialog windows
 everywhere, quartered-icon + stale-position mark-dialog bugs, picker
 dedup, HIG leading-label forms.
-**What remains:** P2.19 CM93 (plan written, decode-extraction is the one
-big engineering item left), P2.17/P2.25 (chart-visual polish/defect sweep,
-needs charts + eyes), P3.6 config-templates (deferred) + fonts decision,
-actual translations, and the **gated retirement sequence** — Phase-4
-plugin decision (user), P0.5 Linux/Windows CI, macOS acceptance pass,
-then P3.11 wx removal + P3.12 keyword cleanup, then Phases 4–6.
-**Last updated:** 2026-06-10 (night).
+**Session update (2026-06-13):** **o-charts shop login FIXED** — the
+result-5 ("plugin version obsolete") failure was a bogus version string;
+now sends the wx platform-prefixed plugin version (`d./w./l.` + `2.1.17`),
+verified differentially against the live API. **Translations bootstrapped
+from the wx catalogs** (P3.10 — 273/265/264 finished per language).
+**CM93 confirmed NOT day-1** (user, 2026-06-13): no CM93 chart set
+available to verify against, so P2.19 stays parked behind the day-1
+retirement gate — do not treat it as blocking. **Windows CI postponed to
+post-wx-retirement** (user) — so P0.5's remaining leg is **Linux**
+best-effort + the deferred Windows job, not a pre-retirement blocker.
+**What remains:** P2.19 CM93 (parked — plan written, decode-extraction is
+the one big engineering item, but no chart set to verify), P2.17/P2.25
+(chart-visual polish/defect sweep, needs charts + eyes), P3.6
+config-templates (deferred) + fonts decision, the new QtQuick-only-string
+translations, and the **gated retirement sequence** — Phase-4 plugin
+decision (user), macOS acceptance pass, then P3.11 wx removal + P3.12
+keyword cleanup, then Phases 4–6 (Windows CI folds in here).
+**Last updated:** 2026-06-13.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked
 · `[—]` not applicable / dropped by decision (rationale given).
@@ -1444,12 +1455,22 @@ direction: all six are wanted eventually.**
       P3.15, anchor-watch card). All follow the native-dialog convention
       where they are dialogs.
 - [~] **P3.10** i18n via Qt Linguist — **infrastructure DONE (2026-06-10):**
-      `qt_add_translations` with de/fr/es/nl/it seed catalogs (~556 messages
-      from the existing `tr()`/`qsTr()` surface), `update_translations`
-      lupdate target, `.qm` embedded at `:/i18n`, `QTranslator` installed at
-      startup from the persisted Options language choice (restart applies).
-      Remaining: actual translations (community/lupdate workflow) and any
-      hard-coded strings still missing `qsTr()`.
+      `qt_add_translations` with de/fr/es/nl/it seed catalogs (841 messages
+      from the existing `tr()`/`qsTr()` surface after the AppMenuBar/etc.
+      lupdate re-scan), `update_translations` lupdate target, `.qm` embedded
+      at `:/i18n`, `QTranslator` installed at startup from the persisted
+      Options language choice (restart applies).
+      **Bootstrap DONE (2026-06-13):** harvested the legacy wx gettext
+      catalogs (`po/opencpn_<lang>.po`) into the 5 `.ts` files — two-tier
+      match (verbatim msgid + normalized: case-/mnemonic-/trailing-punctuation-
+      insensitive), written as FINISHED so lrelease compiles them.
+      Result: **273** finished (de/es/fr), **265** (it), **264** (nl)
+      (verified via `lconvert` round-trip + clean startup under a `de`
+      locale). The ~568 still-untranslated per catalog are the new
+      QtQuick-only strings (N-Up, "Move test ship here", the Qt-edition
+      About box) that never existed in wx.
+      Remaining: those new-string translations (community/lupdate workflow)
+      and any hard-coded strings still missing `qsTr()`.
 - [~] **P3.11** Remove the parallel wx build path — **BEGUN (user
       direction, 2026-06-10): increment 1 landed** — OCPN_BUILD_WX_APP
       (default OFF) makes the wx app EXCLUDE_FROM_ALL, skips plugins/,
