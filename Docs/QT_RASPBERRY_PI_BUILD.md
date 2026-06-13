@@ -40,17 +40,20 @@ verified on real hardware (CI has no GPU).
 
 The app uses `QQmlApplicationEngine::loadFromModule()` (Qt 6.5). Raspberry
 Pi OS Bookworm's apt Qt is **6.4**, which is too old, so install a newer Qt
-rather than the distro packages. Easiest is `aqtinstall`, which pulls the
-official prebuilt **linux_arm64** desktop binaries (Qt ships these from
-6.7+) — the same path CI uses:
+rather than the distro packages. We track **Qt 6.11** to match the macOS
+dev build. Easiest is `aqtinstall`, which pulls the official prebuilt
+**linux_arm64** desktop binaries (Qt ships these from 6.7+; arm64 is
+available up to 6.12) — the same path CI uses:
 
 ```bash
 python3 -m pip install --user aqtinstall
 # host=linux_arm64  target=desktop  arch=linux_gcc_arm64
-aqt install-qt linux_arm64 desktop 6.8.3 linux_gcc_arm64 \
-    -m qtserialport qtwebsockets qtshadertools qtmultimedia qtwayland \
+# The native `wayland` QPA plugin is part of the BASE install (qtwayland is
+# a base archive, not an add-on module), so it needs no -m entry.
+aqt install-qt linux_arm64 desktop 6.11.1 linux_gcc_arm64 \
+    -m qtserialport qtwebsockets qtshadertools qtmultimedia \
     -O "$HOME/Qt"
-export CMAKE_PREFIX_PATH="$HOME/Qt/6.8.3/gcc_arm64"
+export CMAKE_PREFIX_PATH="$HOME/Qt/6.11.1/gcc_arm64"
 export PATH="$CMAKE_PREFIX_PATH/bin:$PATH"
 ```
 
@@ -92,13 +95,14 @@ Raspberry Pi OS Bookworm **defaults to Wayland** (the `labwc` compositor on
 Pi 5, `wayfire` on Pi 4), so Wayland is the primary path, not a fallback.
 Qt picks the platform plugin automatically, but you can pin it:
 
-- **Native Wayland (preferred on Bookworm)** — needs the `qtwayland` module
-  installed above (the `wayland` QPA plugin):
+- **Native Wayland (preferred on Bookworm)** — the `wayland` QPA plugin
+  ships in the base Qt install (qtwayland is a base archive), so it is
+  always available:
   ```bash
   QT_QPA_PLATFORM=wayland ./build/gui/qt/opencpn-qt
   ```
-- **XWayland (fallback)** — if `qtwayland` is absent, the X11 (`xcb`) plugin
-  runs transparently under the compositor's X compatibility layer:
+- **XWayland (fallback)** — the X11 (`xcb`) plugin runs transparently under
+  the compositor's X compatibility layer:
   ```bash
   QT_QPA_PLATFORM=xcb ./build/gui/qt/opencpn-qt
   ```
