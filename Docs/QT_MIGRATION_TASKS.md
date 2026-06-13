@@ -126,13 +126,24 @@ best-effort + the deferred Windows job, not a pre-retirement blocker.
 verified Pi-ready (GLES-baked shaders, no x86 intrinsics, no forced
 desktop-GL), an `arm64` CI job on a free GitHub ARM runner, and a build
 guide with **Wayland** as the headline display path (Bookworm default).
-**What remains:** P2.19 CM93 (parked — plan written, decode-extraction is
-the one big engineering item, but no chart set to verify), P2.17/P2.25
-(chart-visual polish/defect sweep, needs charts + eyes), P3.6
-config-templates (deferred) + fonts decision, the new QtQuick-only-string
-translations, and the **gated retirement sequence** — Phase-4 plugin
-decision (user), macOS acceptance pass, then P3.11 wx removal + P3.12
-keyword cleanup, then Phases 4–6 (Windows CI folds in here).
+**The wx→Qt retirement is COMPLETE (2026-06-13):** macOS acceptance pass
+signed off (P3.21) + day-1 plugin set confirmed → **P3.11 DONE** (wx GUI +
+target + `OCPN_BUILD_WX_APP` + wx-only deps all removed) → **P3.12 DONE**
+(`QT_NO_KEYWORDS` removed, `signals`/`slots`/`emit` restored). The default
+build on macOS / Linux / arm64 / Pi **is** the QtQuick app, no wx
+application target. All CI-green.
+**What remains (none blocking the core migration):**
+- **P2.19 CM93** — parked; needs a chart set to verify.
+- **P2.17/P2.25** chart-visual polish — needs charts + the user's eyes.
+- **P3.6** config-templates (deferred) + fonts decision.
+- **~568 new QtQuick-only strings** — community/lupdate translation.
+- **`plugins/` + `cli/api_shim.cpp` source files** — leftover (reused by the
+  Qt plugins / test shim); not a build path, await vendoring (cosmetic).
+- **Residual model wx** — the frozen plugin ABI / chart-reader streams /
+  `wxStandardPaths`; wxWidgets is still *linked* for these. Removing them is
+  an ABI decision (would break existing wx plugins), no longer blocks any
+  keyword/build cleanup.
+- **Phases 4–6** + the deferred Windows CI job — downstream.
 **Last updated:** 2026-06-13.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked
