@@ -1133,12 +1133,28 @@ void ChartCanvas::updateVisibleCells() {
   // finer cell's M_COVR could now expose the basemap instead of a coarser chart;
   // the 24x24 grid keeps that rare.)
   for (const GridPt& p : pts) {
-    for (const CellExtent* c : cands) {  // cands sorted finest -> coarsest
-      if (eligible(c) && c->covers(p.lat, p.lon)) {
-        m_needed.insert(c->name);
-        break;  // finest eligible chart here; coarser ones would only overdraw
+    // CLOSEST-SCALE per location (was: finest). Pick the covering chart whose
+    // native scale is NEAREST the view scale, not the most detailed one. The
+    // old "finest" rule handed each spot to the finest eligible cell -- and
+    // when that was a harbour chart shown zoomed OUT (e.g. a 1:20k cell at a
+    // 1:55k view), it suppressed the coarser chart whose nav aids ARE visible
+    // while its own aids were still SCAMIN-culled, leaving a wide "dead band"
+    // with no buoys/lights. Nearest-scale only adopts the finer cell once the
+    // view approaches its native scale (where its aids become visible), the
+    // wx reference-scale behaviour.
+    const CellExtent* best = nullptr;
+    double bestDist = 0.0;
+    for (const CellExtent* c : cands) {
+      if (!eligible(c) || !c->covers(p.lat, p.lon)) continue;
+      const bool is_cm93 = c->name.startsWith(QLatin1String("CM93-"));
+      const double eff = c->nativeScale * (is_cm93 ? cm93_bias : 1.0);
+      const double dist = std::abs(std::log(eff / displayN));  // log-scale ratio
+      if (!best || dist < bestDist) {
+        best = c;
+        bestDist = dist;
       }
     }
+    if (best) m_needed.insert(best->name);
   }
   // Fallback: a sample point that NO eligible chart covers (zoomed out past
   // every covering chart's threshold there) gets its coarsest covering chart, so
