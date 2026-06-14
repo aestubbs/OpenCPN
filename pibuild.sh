@@ -11,20 +11,30 @@
 #
 # The one reason we don't use the distro's apt Qt: Raspberry Pi OS Bookworm
 # ships Qt 6.4, but the app needs 6.5+ (QQmlApplicationEngine::loadFromModule).
-# We track Qt 6.11 to match the macOS dev build. The native `wayland` QPA
-# plugin ships in the base Qt install (qtwayland is a base archive), so no
-# extra module is needed for Bookworm's default Wayland session.
+#
+# We pin Qt 6.7.3, NOT the newer 6.11 the macOS dev build tracks. Reason: the
+# aqtinstall arm64 binaries for Qt 6.8+ are built on Ubuntu 24.04 (glibc 2.39,
+# GLIBCXX_3.4.32), but Bookworm only has glibc 2.36 / GLIBCXX_3.4.30 -- so even
+# Qt's own build tools (qmlimportscanner) fail to load with "GLIBC_2.38 not
+# found" and configure dies. glibc is the core of the OS and can't be upgraded
+# in place, so the prebuilt 6.8+ Qt simply cannot run on Bookworm. The 6.7.x
+# arm64 binaries are built on Debian 11 (glibc 2.31 floor) and run fine here.
+# (On Debian 13 "Trixie" -- glibc 2.41 -- you can move back to 6.8+, or just
+# use the distro's Qt 6.8; override with QT_VERSION= below.)
+#
+# The native `wayland` QPA plugin ships in the base Qt install (qtwayland is a
+# base archive), so no extra module is needed for Bookworm's Wayland session.
 #
 # See Docs/QT_RASPBERRY_PI_BUILD.md for the full write-up (display stack,
 # performance tuning, o-charts on ARM).
 #
 # Override any of these via the environment, e.g.:
-#   QT_VERSION=6.12.0 JOBS=2 ./pibuild.sh
+#   QT_VERSION=6.7.3 JOBS=2 ./pibuild.sh
 #
 set -euo pipefail
 
 # ---- configuration (env-overridable) --------------------------------------
-QT_VERSION="${QT_VERSION:-6.11.1}"
+QT_VERSION="${QT_VERSION:-6.7.3}"   # 6.8+ aqt arm64 needs glibc 2.38 > Bookworm's 2.36 (see header)
 QT_HOST="${QT_HOST:-linux_arm64}"
 QT_ARCH="${QT_ARCH:-linux_gcc_arm64}"
 QT_ROOT="${QT_ROOT:-$HOME/Qt}"
@@ -63,14 +73,49 @@ if ! $SUDO apt-get update; then
   warn "then re-run ./pibuild.sh. (Refusing to build against a stale package index.)"
   exit 1
 fi
-$SUDO apt-get install -y --no-install-recommends \
-  cmake ninja-build g++ git python3 python3-venv python3-pip \
-  libwxgtk3.2-dev libgdal-dev libarchive-dev libglew-dev \
-  libgl1-mesa-dev libglu1-mesa-dev libgles2-mesa-dev \
-  libcurl4-openssl-dev libssl-dev liblz4-dev libzstd-dev \
-  libmpg123-dev libmp3lame-dev libsndfile1-dev libexif-dev \
-  libusb-1.0-0-dev libudev-dev \
+# libwxgtk3.2-dev stays: the wx GUI is gone (P3.11) but s52plib is still
+# wx-coupled, so opencpn-qt links wxWidgets transitively. libgtk-3-dev and
+# gettext were dropped with the wx GUI -- the Qt app needs neither.
+APT_PKGS=(
+  cmake ninja-build g++ git python3 python3-venv python3-pip
+  libwxgtk3.2-dev libgdal-dev libarchive-dev libglew-dev
+  libgl1-mesa-dev libglu1-mesa-dev libgles2-mesa-dev
+  libcurl4-openssl-dev libssl-dev liblz4-dev libzstd-dev
+  libmpg123-dev libmp3lame-dev libsndfile1-dev libexif-dev
+  libusb-1.0-0-dev libudev-dev
   libxkbcommon-dev libxcb-cursor0 mesa-utils
+)
+
+if ! $SUDO apt-get install -y --no-install-recommends "${APT_PKGS[@]}"; then
+  # The usual cause on a Pi that has pulled newer libraries from
+  # bookworm-backports (or that runs OpenPlotter/free-x): the stock Bookworm
+  # `-dev` packages pin to the EXACT stock runtime (e.g. libcurl4-openssl-dev
+  # wants libcurl4 = 7.88.1), but a backports runtime (libcurl4 8.x,
+  # libwebp7 1.5, libheif1 1.19, libudev1 254, libatk 2.56 ...) is already
+  # installed, so apt reports "held broken packages".
+  #
+  # The fix is NOT to remove any third-party repo -- the libs come from
+  # Debian's own bookworm-backports. We just promote backports from a
+  # never-prefer pool (priority 100) to a normal candidate (500) so apt picks
+  # the matching backports `-dev` packages. Pi-repo packages still win on
+  # version (e.g. wayland 1.23.1+rpt1 > backports 1.23.0), so the native
+  # Wayland QPA plugin is unaffected.
+  if apt-cache policy 2>/dev/null | grep -q bookworm-backports; then
+    warn "stock -dev packages clash with backports-upgraded runtime libs;"
+    warn "retrying with bookworm-backports promoted to a normal apt candidate"
+    pref="$(mktemp)"
+    printf 'Package: *\nPin: release n=bookworm-backports\nPin-Priority: 500\n' >"$pref"
+    rc=0
+    $SUDO apt-get install -y --no-install-recommends \
+      -o "Dir::Etc::Preferences=$pref" \
+      -o "Dir::Etc::PreferencesParts=/dev/null" \
+      "${APT_PKGS[@]}" || rc=$?
+    rm -f "$pref"
+    [ "$rc" -eq 0 ] || die "apt install failed even with backports allowed -- see output above"
+  else
+    die "apt install failed and bookworm-backports is not enabled to fall back to -- see output above"
+  fi
+fi
 
 # ---- 2. Qt (prebuilt arm64 via aqtinstall) --------------------------------
 if [ -x "$QT_PREFIX/bin/qmake" ]; then
