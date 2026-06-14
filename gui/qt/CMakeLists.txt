@@ -38,9 +38,12 @@ qt_add_qml_module(opencpn-qt
   VERSION 1.0
   QML_FILES
     qml/AppMenuBar.qml
+    qml/AppMenuBarInWindow.qml
+    qml/MenuModel.qml
     qml/Main.qml
     qml/FloatToolbar.qml
     qml/MuiBar.qml
+    qml/ToolbarFlyout.qml
     qml/OptionsWindow.qml
     qml/VectorDetailList.qml
     qml/ScaleDialog.qml
@@ -144,6 +147,8 @@ qt_add_qml_module(opencpn-qt
     chart_catalog_db.cpp
     senc_cache.h
     senc_cache.cpp
+    decoded_cell_cache.h
+    decoded_cell_cache.cpp
     config_store.h
     config_store.cpp
     own_ship_config.h

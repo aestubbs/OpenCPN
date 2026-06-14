@@ -28,6 +28,7 @@
 #include <QFileInfo>
 
 #include "chart_catalog_db.h"
+#include "decoded_cell_cache.h"
 #include "ocharts_service.h"
 #include "osenc_reader.h"
 #include "s52_engine.h"
@@ -205,6 +206,7 @@ void ChartWorker::loadRasterCell_(const CellExtent& cell) {
   if (!rc.ok) {
     qWarning("loadCell: KAP decode failed %s: %s", qPrintable(cell.path),
              qPrintable(rc.error));
+    emit cellUnavailable(cell.name, /*genuineEmpty=*/true);  // clear in-flight
     return;
   }
   qWarning("loadCell: KAP %s %dx%d scale=%d", qPrintable(cell.name),
@@ -213,19 +215,60 @@ void ChartWorker::loadRasterCell_(const CellExtent& cell) {
                           rc.west, rc.worldYTop, rc.worldYBottom);
 }
 
+void ChartWorker::setWanted(const void* owner, const QSet<QString>& names) {
+  QMutexLocker lock(&m_wanted_mutex);
+  m_wanted_by.insert(owner, names);
+}
+
+void ChartWorker::forgetWanted(const void* owner) {
+  QMutexLocker lock(&m_wanted_mutex);
+  m_wanted_by.remove(owner);
+}
+
+bool ChartWorker::isWanted(const QString& name) {
+  QMutexLocker lock(&m_wanted_mutex);
+  if (m_wanted_by.isEmpty()) return true;  // filter not armed yet
+  for (auto it = m_wanted_by.cbegin(); it != m_wanted_by.cend(); ++it)
+    if (it.value().contains(name)) return true;
+  return false;
+}
+
 void ChartWorker::loadCell(const CellExtent& cell) {
   if (!m_engine) return;
+  // Cancellation: a quick pan can queue many loadCell requests faster than the
+  // single decode thread drains them. By the time this one is dequeued the user
+  // may have panned past it -- skip the decode entirely (the canvas clears its
+  // in-flight flag and stays eligible to re-request if it pans back).
+  if (!isWanted(cell.name)) {
+    emit cellUnavailable(cell.name, /*genuineEmpty=*/false);
+    return;
+  }
   if (kindOf(cell.path) == CellKind::Raster) {
     loadRasterCell_(cell);
     return;
   }
+  const qint64 mtime = QFileInfo(cell.path).lastModified().toSecsSinceEpoch();
+
+  // Decoded-buffer cache: a re-selected cell (pan back, tier handoff, oscillate)
+  // skips the whole OGR/OSENC read + tessellation + s52plib pass and re-emits
+  // the cached geometry. This is the dominant win for "panning a chart-dense
+  // region pegs the CPU" -- the same cells stop being decoded over and over.
+  if (!m_decoded_cache) m_decoded_cache = std::make_unique<DecodedCellCache>();
+  DecodedCellCache::Entry hit;
+  if (m_decoded_cache->get(cell.path, mtime, &hit)) {
+    qWarning("loadCell: CACHE HIT name=%s (cache %d cells, %lld KB)",
+             qPrintable(cell.name), m_decoded_cache->count(),
+             static_cast<long long>(m_decoded_cache->bytes() / 1024));
+    emit cellLoaded(cell.name, hit.buffer, hit.north, hit.south, hit.east,
+                    hit.west);
+    return;
+  }
+
   double n = 0, s = 0, e = 0, w = 0;
   s52sg::Buffer buf;
   switch (kindOf(cell.path)) {
     case CellKind::Ocharts: {
       if (!m_senc_cache) m_senc_cache = std::make_unique<SencCache>();
-      const qint64 mtime =
-          QFileInfo(cell.path).lastModified().toSecsSinceEpoch();
       // Cache hit -> skip the (slow) daemon decrypt; just re-decode.
       QByteArray osenc = m_senc_cache->get(cell.path, mtime);
       if (osenc.isEmpty()) {
@@ -276,6 +319,11 @@ void ChartWorker::loadCell(const CellExtent& cell) {
              qPrintable(cell.name), static_cast<int>(kindOf(cell.path)),
              static_cast<long long>(cell.coverage.size()),
              qPrintable(cell.path));
+    // Tell the canvas so it clears its in-flight bookkeeping AND records the
+    // cell as known-empty (genuineEmpty = true) -- otherwise the name stayed in
+    // m_requested forever (a slow leak) and, worse, the cell could be
+    // re-requested every selection pass, busy-looping the decode thread.
+    emit cellUnavailable(cell.name, /*genuineEmpty=*/true);
     return;
   }
   int n_snd = 0, sc_min = 2000000000, sc_max = 0;
@@ -293,15 +341,24 @@ void ChartWorker::loadCell(const CellExtent& cell) {
       static_cast<long long>(buf.prims.size()),
       static_cast<long long>(buf.labels.size()), n_snd,
       n_snd ? sc_min : 0, sc_max, static_cast<long long>(buf.queryObjects.size()));
+  // Retain the decoded geometry so the next selection of this cell is free.
+  m_decoded_cache->put(cell.path, mtime, {buf, n, s, e, w});
   emit cellLoaded(cell.name, buf, n, s, e, w);
 }
 
 void ChartWorker::setColorScheme(int scheme) {
   if (m_engine) m_engine->setColorScheme(scheme);
+  // Cached buffers baked in the old palette -- drop them so re-requested cells
+  // re-decode with the new colours. (Queued before the canvas's re-requests,
+  // so the flush always precedes any cache lookup of those cells.)
+  if (m_decoded_cache) m_decoded_cache->clear();
 }
 
 void ChartWorker::applyDisplaySettings(const ChartDisplaySettings& settings) {
   if (m_engine) m_engine->applyDisplaySettings(settings);
+  // Display settings (SCAMIN, depth shading/contours, symbol/boundary style,
+  // text/height/depth options) bake into the decode -- invalidate the cache.
+  if (m_decoded_cache) m_decoded_cache->clear();
 }
 
 }  // namespace ocpn::qtui

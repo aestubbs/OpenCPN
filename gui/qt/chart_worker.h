@@ -36,7 +36,9 @@
 
 #include <QHash>
 #include <QImage>
+#include <QMutex>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -50,6 +52,7 @@ Q_DECLARE_METATYPE(ocpn::qtui::ChartDisplaySettings)
 namespace ocpn::qtui {
 
 class Cm93Dictionary;
+class DecodedCellCache;
 
 class S52Engine;
 
@@ -72,6 +75,23 @@ public slots:
    *  emit it. Serialised against other loadCell calls on this thread. */
   void loadCell(const ocpn::qtui::CellExtent& cell);
 
+public:
+  /** Publish the set of cells a canvas still wants drawn. Thread-safe and
+   *  called DIRECTLY from the UI thread (not a queued slot) so it updates the
+   *  filter out of band: a loadCell that was queued for a cell the user has
+   *  since panned past is dropped at dequeue WITHOUT the (expensive) decode,
+   *  instead of grinding through a stale backlog one cell at a time.
+   *
+   *  `owner` identifies the calling canvas (its `this`). A cell is kept if ANY
+   *  canvas wants it -- so a shared worker (split view, P6.1) never cancels one
+   *  pane's decode because the other pane no longer needs it. Calling it at
+   *  least once arms the filter; before that, nothing is skipped. */
+  void setWanted(const void* owner, const QSet<QString>& names);
+
+  /** Drop a canvas's wanted set when it goes away (shared worker, split view),
+   *  so its last selection doesn't keep cells un-cancellable forever. */
+  void forgetWanted(const void* owner);
+
 signals:
   /** A decoded raster (KAP) chart: image + linear world rectangle
    *  (P2.7). Emitted alongside cellLoaded for vector cells. */
@@ -81,6 +101,8 @@ signals:
 
 private:
   void loadRasterCell_(const ocpn::qtui::CellExtent& cell);
+  // True if `name` is still wanted (or the filter hasn't been armed yet).
+  bool isWanted(const QString& name);
 
   // Resume the slots section my signal insertion above terminated --
   // setColorScheme/applyDisplaySettings are invoked by name from the
@@ -101,12 +123,22 @@ signals:
   void extentsScanned(const QList<ocpn::qtui::CellExtent>& cells);
   void cellLoaded(const QString& id, const s52sg::Buffer& buffer, double north,
                   double south, double east, double west);
+  /** A requested cell will NOT arrive as a cellLoaded: either it decoded to
+   *  nothing (`genuineEmpty` = true -- the canvas records it so it isn't
+   *  re-requested in a tight loop) or the request was superseded/skipped
+   *  before decoding (`genuineEmpty` = false -- eligible to retry). Lets the
+   *  canvas clear its in-flight bookkeeping instead of leaking it forever. */
+  void cellUnavailable(const QString& id, bool genuineEmpty);
 
 private:
   S52Engine* m_engine;
   QString m_s57data_dir;
   // Decrypted-OSENC cache (o-charts), created lazily on the worker thread.
   std::unique_ptr<class SencCache> m_senc_cache;
+  // Decoded-buffer LRU (all cell kinds): skips the expensive re-decode when the
+  // quilt re-selects a cell on pan/zoom. Flushed on any display-setting or
+  // colour-scheme change (those bake into the decode). Lazily created.
+  std::unique_ptr<DecodedCellCache> m_decoded_cache;
   // True while scanExtents is running. The scan pumps the worker's event
   // queue between cells so queued loadCell requests are serviced during a long
   // (o-charts decrypt) scan instead of waiting for it to finish; this guards
@@ -114,6 +146,12 @@ private:
   bool m_scanning = false;
   // Per-CM93-root dictionary cache (P2.19): loaded once per set.
   QHash<QString, std::shared_ptr<ocpn::qtui::Cm93Dictionary>> m_cm93_dicts;
+
+  // Cancellation filter (see setWanted): per-canvas wanted sets, unioned. A
+  // cell is decoded if ANY canvas still wants it. Written by UI thread(s), read
+  // by the worker thread, all under the mutex. Empty => filter not yet armed.
+  QMutex m_wanted_mutex;
+  QHash<const void*, QSet<QString>> m_wanted_by;
 };
 
 }  // namespace ocpn::qtui

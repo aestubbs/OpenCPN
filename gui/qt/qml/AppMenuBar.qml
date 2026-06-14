@@ -9,282 +9,56 @@
 
 import QtQuick
 import Qt.labs.platform as Platform
-import opencpn.qt
 
-// --- Application menu bar (wx RegisterGlobalMenuItems parity) ---
-// Qt.labs.platform renders the NATIVE menu bar (the macOS global bar),
-// matching the wx app's Navigate / View / AIS / Tools / Help tree. Items
-// bind two-way onto the same seams the toolbars and Options dialog use.
-// The one omitted wx item is the quilting toggle: the Qt provider is
-// always-quilted by design.
+// --- NATIVE application menu bar (macOS global bar at the top of the SCREEN) ---
+// Qt.labs.platform renders the native menu. The menu CONTENT is not defined
+// here -- it is built from the single shared MenuModel (see MenuModel.qml), so
+// the in-window bar (AppMenuBarInWindow.qml) and this one always match. This
+// file is just the native presentation: it turns each model entry into a
+// Platform.Menu / Platform.MenuItem / Platform.MenuSeparator.
 Platform.MenuBar {
-    id: menuBar
+    id: bar
 
-    // Wired by the shell (Main.qml): the primary canvas + the windows.
-    property var chart
-    property var rootWindow
-    property var optionsWin
-    property var aisTargetList
-    property var dataMonitor
-    property var aboutWin
-    property var drawerRef
+    // The single source of truth (MenuModel), wired by the shell (Main.qml).
+    property var menuModel
 
-    Platform.Menu {
-        title: qsTr("&Navigate")
-        Platform.MenuItem {
-            text: qsTr("Auto Follow")
-            shortcut: "Ctrl+A"
-            checkable: true
-            checked: menuBar.chart ? menuBar.chart.followOwnShip : false
-            onTriggered: menuBar.chart.followOwnShip = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Enable Tracking")
-            checkable: true
-            checked: menuBar.chart ? menuBar.chart.trackRecording : false
-            onTriggered: menuBar.chart.trackRecording = checked
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItemGroup { id: upModeGroup }
-        Platform.MenuItem {
-            text: qsTr("North Up Mode")
-            checkable: true
-            group: upModeGroup
-            checked: DisplayConfig.navMode === 0
-            onTriggered: DisplayConfig.navMode = 0
-        }
-        Platform.MenuItem {
-            text: qsTr("Course Up Mode")
-            checkable: true
-            group: upModeGroup
-            checked: DisplayConfig.navMode === 1
-            onTriggered: DisplayConfig.navMode = 1
-        }
-        Platform.MenuItem {
-            text: qsTr("Head Up Mode")
-            checkable: true
-            group: upModeGroup
-            checked: DisplayConfig.navMode === 2
-            onTriggered: DisplayConfig.navMode = 2
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Zoom In")
-            shortcut: "Alt++"
-            onTriggered: menuBar.chart.zoomIn()
-        }
-        Platform.MenuItem {
-            text: qsTr("Zoom Out")
-            shortcut: "Alt+-"
-            onTriggered: menuBar.chart.zoomOut()
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Larger Scale Chart")
-            shortcut: "Ctrl+Left"
-            onTriggered: menuBar.chart.scaleChartStep(1)
-        }
-        Platform.MenuItem {
-            text: qsTr("Smaller Scale Chart")
-            shortcut: "Ctrl+Right"
-            onTriggered: menuBar.chart.scaleChartStep(-1)
-        }
-    }
+    readonly property Component _menuComp: Component { Platform.Menu {} }
+    readonly property Component _itemComp: Component { Platform.MenuItem {} }
+    readonly property Component _sepComp: Component { Platform.MenuSeparator {} }
+    // Restoring binding for a checkable item's tick: clicking a native item
+    // toggles `checked` imperatively, which would drop a plain binding; a
+    // Binding object re-asserts it so the tick keeps tracking the source.
+    readonly property Component _bindingComp: Component { Binding { } }
 
-    Platform.Menu {
-        title: qsTr("&View")
-        Platform.MenuItem {
-            text: qsTr("Show Chart Outlines")
-            shortcut: "Alt+O"
-            checkable: true
-            checked: DisplayConfig.showChartOutlines
-            onTriggered: DisplayConfig.showChartOutlines = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Show Chart Bar")
-            shortcut: "Ctrl+B"
-            checkable: true
-            checked: UIConfig.showChartBar
-            onTriggered: UIConfig.showChartBar = checked
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Show ENC Text")
-            shortcut: "Alt+T"
-            checkable: true
-            checked: menuBar.chart ? menuBar.chart.showText : false
-            onTriggered: menuBar.chart.showText = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Show ENC Lights")
-            shortcut: "Alt+L"
-            checkable: true
-            checked: menuBar.chart ? menuBar.chart.showLights : false
-            onTriggered: menuBar.chart.showLights = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Show ENC Soundings")
-            shortcut: "Alt+S"
-            checkable: true
-            checked: menuBar.chart ? menuBar.chart.showSoundings : false
-            onTriggered: menuBar.chart.showSoundings = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Show ENC Anchoring Info")
-            shortcut: "Alt+A"
-            checkable: true
-            checked: menuBar.chart ? menuBar.chart.showEncAnchoring : true
-            onTriggered: menuBar.chart.showEncAnchoring = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Show ENC Data Quality")
-            shortcut: "Alt+U"
-            checkable: true
-            checked: ChartConfig.dataQuality
-            onTriggered: ChartConfig.dataQuality = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Show Navobjects")
-            shortcut: "Alt+V"
-            checkable: true
-            checked: menuBar.chart ? menuBar.chart.showRoutes : false
-            onTriggered: {
-                menuBar.chart.showRoutes = checked
-                menuBar.chart.showTracks = checked
-            }
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            // One seam covers both (the tide layer draws currents too).
-            text: qsTr("Show Tides && Currents")
-            checkable: true
-            checked: DisplayConfig.showTides
-            onTriggered: DisplayConfig.showTides = checked
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Change Color Scheme")
-            shortcut: "Alt+C"
-            onTriggered: menuBar.chart.colorScheme =
-                             (menuBar.chart.colorScheme + 1) % 3
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Toggle Full Screen")
-            onTriggered: menuBar.rootWindow.visibility === Window.FullScreen
-                         ? menuBar.rootWindow.showNormal()
-                         : menuBar.rootWindow.showFullScreen()
-        }
-    }
-
-    Platform.Menu {
-        title: qsTr("&AIS")
-        Platform.MenuItem {
-            text: qsTr("Show AIS Targets")
-            checkable: true
-            checked: AisConfig.showTargets
-            onTriggered: AisConfig.showTargets = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Hide Moored AIS Targets")
-            checkable: true
-            checked: AisConfig.hideMoored
-            onTriggered: AisConfig.hideMoored = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Show AIS Target Tracks")
-            checkable: true
-            checked: AisConfig.showTargetTracks
-            onTriggered: AisConfig.showTargetTracks = checked
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Show CPA Alert Dialogs")
-            checkable: true
-            checked: AisConfig.cpaAlert
-            onTriggered: AisConfig.cpaAlert = checked
-        }
-        Platform.MenuItem {
-            text: qsTr("Sound CPA Alarms")
-            checkable: true
-            checked: AisConfig.cpaAlertSound
-            onTriggered: AisConfig.cpaAlertSound = checked
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("AIS Target List…")
-            onTriggered: {
-                menuBar.aisTargetList.show()
-                menuBar.aisTargetList.raise()
+    function _build() {
+        if (!menuModel)
+            return
+        var menus = menuModel.menus
+        for (var i = 0; i < menus.length; ++i) {
+            var mdef = menus[i]
+            var menu = _menuComp.createObject(bar, { title: mdef.title })
+            bar.addMenu(menu)
+            for (var j = 0; j < mdef.items.length; ++j) {
+                var it = mdef.items[j]
+                if (it.separator) {
+                    menu.addItem(_sepComp.createObject(menu))
+                    continue
+                }
+                var mi = _itemComp.createObject(menu, {
+                    text: it.text,
+                    shortcut: it.shortcut !== undefined ? it.shortcut : "",
+                    checkable: it.checkable === true
+                })
+                if (it.checkable && it.checked)
+                    _bindingComp.createObject(mi, {
+                        target: mi, property: "checked", value: Qt.binding(it.checked)
+                    })
+                if (it.triggered)
+                    mi.triggered.connect(it.triggered)
+                menu.addItem(mi)
             }
         }
     }
 
-    Platform.Menu {
-        title: qsTr("&Tools")
-        Platform.MenuItem {
-            text: qsTr("Data Monitor")
-            shortcut: "Alt+E"
-            onTriggered: {
-                menuBar.dataMonitor.show()
-                menuBar.dataMonitor.raise()
-            }
-        }
-        Platform.MenuItem {
-            text: qsTr("Measure Distance")
-            shortcut: "Alt+M"
-            onTriggered: menuBar.chart.startMeasure()
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Route && Mark Manager…")
-            onTriggered: menuBar.drawerRef.open()
-        }
-        Platform.MenuItem {
-            text: qsTr("Create Route")
-            shortcut: "Ctrl+R"
-            onTriggered: menuBar.chart.routeBuildMode = true
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Drop Mark at Boat")
-            shortcut: "Ctrl+O"
-            onTriggered: menuBar.chart.dropMarkAtBoat()
-        }
-        Platform.MenuItem {
-            text: qsTr("Drop Mark at Cursor")
-            shortcut: "Ctrl+M"
-            onTriggered: menuBar.chart.dropMarkAtCursor()
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Drop MOB Marker")
-            onTriggered: menuBar.chart.dropMob()
-        }
-        Platform.MenuSeparator { }
-        Platform.MenuItem {
-            text: qsTr("Options…")
-            shortcut: "Ctrl+,"
-            onTriggered: {
-                menuBar.optionsWin.show()
-                menuBar.optionsWin.raise()
-            }
-        }
-    }
-
-    Platform.Menu {
-        title: qsTr("&Help")
-        Platform.MenuItem {
-            text: qsTr("About OpenCPN")
-            onTriggered: {
-                menuBar.aboutWin.show()
-                menuBar.aboutWin.raise()
-            }
-        }
-        Platform.MenuItem {
-            text: qsTr("OpenCPN Help")
-            onTriggered: Qt.openUrlExternally(
-                             "https://opencpn-manuals.github.io/main/opencpn/")
-        }
-    }
+    Component.onCompleted: _build()
 }

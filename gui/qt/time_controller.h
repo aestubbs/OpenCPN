@@ -30,6 +30,7 @@
 
 #include <QDateTime>
 #include <QObject>
+#include <QSet>
 #include <QVariantList>
 #include <QQmlEngine>
 #include <QString>
@@ -56,6 +57,12 @@ class TimeController : public QObject {
   Q_PROPERTY(double nowFraction READ nowFraction NOTIFY timeChanged)
   Q_PROPERTY(QString timeLabel READ timeLabel NOTIFY timeChanged)  // "HH:mm"
   Q_PROPERTY(QString dateLabel READ dateLabel NOTIFY timeChanged)  // "ddd dd MMM"
+  // Time-bar visibility (P3.14 decoupling): the bar shows if the user PINNED it
+  // (native time-bar toggle) OR any time-aware overlay needs it (tides, GRIB,
+  // ... -- they register as "consumers"). So turning on tides or weather brings
+  // the bar up; the pin keeps it up on its own.
+  Q_PROPERTY(bool pinned READ pinned WRITE setPinned NOTIFY barVisibleChanged)
+  Q_PROPERTY(bool barVisible READ barVisible NOTIFY barVisibleChanged)
 
 public:
   ~TimeController() override;
@@ -84,6 +91,14 @@ public:
   double nowFraction() const;
   QString timeLabel() const;
   QString dateLabel() const;
+
+  bool pinned() const { return m_pinned; }
+  void setPinned(bool v);
+  bool barVisible() const { return m_pinned || !m_consumers.isEmpty(); }
+  /** A time-aware overlay declares whether it currently needs the time bar
+   *  (keyed, e.g. "tides", "grib"). The bar shows while ANY consumer needs it
+   *  or the user has pinned it. Callable from QML and C++/plugins. */
+  Q_INVOKABLE void setConsumer(const QString& key, bool needed);
 
   /** Snap to the real clock and resume live tracking (gTimeSource invalid). */
   Q_INVOKABLE void goLive();
@@ -139,6 +154,7 @@ signals:
   void timeChanged();   // displayTime / nowFraction / time+date labels
   void modeChanged();   // live / playing
   void windowChanged(); // window edges / fraction / span
+  void barVisibleChanged();  // pinned / consumers changed
 
 private:
   // Private so the QML engine cannot default-construct a SECOND
@@ -162,6 +178,8 @@ private:
   double m_marker_fraction = 0.25;       // read-marker x fraction
   bool m_live = true;
   bool m_playing = false;
+  bool m_pinned = false;       // user pinned the time bar (native toggle)
+  QSet<QString> m_consumers;   // overlays currently needing the bar
   int m_play_minutes_per_tick = 5;  // per 100 ms play tick
   QTimer* m_timer = nullptr;
 };

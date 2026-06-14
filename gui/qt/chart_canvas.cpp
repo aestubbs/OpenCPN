@@ -642,6 +642,9 @@ ChartCanvas::~ChartCanvas() {
   // Persist per-Layer state while the compositor (and its config) are still
   // alive (P2.10).
   if (m_compositor) m_compositor->saveState();
+  // Drop our cancellation entry from a shared worker (split view) we don't own;
+  // the owner tears its worker down entirely just below.
+  if (m_worker && !m_worker_thread) m_worker->forgetWanted(this);
   // Stop the worker thread before the QObject teardown chain runs.
   if (m_worker_thread) {
     m_worker_thread->quit();
@@ -717,6 +720,8 @@ void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
             &ChartCanvas::onExtentsScanned);
     connect(m_worker, &ChartWorker::cellLoaded, this,
             &ChartCanvas::onCellLoaded);
+    connect(m_worker, &ChartWorker::cellUnavailable, this,
+            &ChartCanvas::onCellUnavailable);
     connect(m_worker, &ChartWorker::rasterCellLoaded, this,
             &ChartCanvas::onRasterCellLoaded);
     // The owner's scan broadcast also reaches this canvas; a re-scan here
@@ -738,6 +743,8 @@ void ChartCanvas::startAsyncLoad(const QStringList& cell_paths,
           &ChartCanvas::onExtentsScanned);
   connect(m_worker, &ChartWorker::cellLoaded, this,
           &ChartCanvas::onCellLoaded);
+  connect(m_worker, &ChartWorker::cellUnavailable, this,
+          &ChartCanvas::onCellUnavailable);
   connect(m_worker, &ChartWorker::rasterCellLoaded, this,
           &ChartCanvas::onRasterCellLoaded);
 
@@ -841,6 +848,9 @@ void ChartCanvas::reloadCharts() {
 void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
   m_catalog.clear();
   for (const CellExtent& c : cells) m_catalog.insert(c.name, c);
+  // Rebuild the spatial index over the new catalog (it holds pointers into
+  // m_catalog, so it must be rebuilt here, before any updateVisibleCells use).
+  m_spatial_index.build(m_catalog);
 
   // Evict any resident cell that is no longer in the catalog (e.g. its
   // directory was removed). "demo" has no catalog entry and is never evicted.
@@ -851,6 +861,7 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
       m_compositor->removeLayer(m_loaded.value(name).layerId);
       m_loaded.remove(name);
       m_requested.remove(name);
+      m_known_empty.remove(name);  // gone from the catalog -- forget it
     }
   }
   if (m_chart_source)
@@ -1016,6 +1027,17 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   update();
 }
 
+void ChartCanvas::onCellUnavailable(const QString& id, bool genuineEmpty) {
+  // The worker decided this requested cell won't become a layer. Clear the
+  // in-flight flag (it was leaking before -- a never-arriving cell stayed in
+  // m_requested forever, since the evict loop only walks loaded cells).
+  m_requested.remove(id);
+  // A genuine empty decode: don't ask for it again under these settings, or the
+  // 24x24 selection would re-request it every pan, pegging the decode thread.
+  // A superseded/skipped request (genuineEmpty == false) stays eligible.
+  if (genuineEmpty) m_known_empty.insert(id);
+}
+
 double ChartCanvas::displayScaleN(double scale, double centerLat) {
   // ~1:N display-scale denominator at a nominal 96 dpi (3.78 px/mm):
   //   N = (ground metres per degree of longitude) / (screen metres per pixel)
@@ -1062,12 +1084,17 @@ void ChartCanvas::updateVisibleCells() {
   // has a known scale and actual chart content (administrative coverage-only
   // cells -- no depth areas/soundings/land -- are excluded so they never win
   // a location and render nothing useful).
+  // Spatial index gives a coarse superset of cells near the view (O(in-view),
+  // not O(whole catalog) -- the catalog can hold thousands of cells); refine
+  // with the precise scale/feature/intersects test, exactly as before.
+  QList<const CellExtent*> near;
+  m_spatial_index.query(lat0, lat1, lon0, lon1, near);
   QList<const CellExtent*> cands;
-  for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
-    const CellExtent& c = it.value();
-    if (c.nativeScale > 0 && c.navFeatures > 0 &&
-        c.intersects(lat0, lat1, lon0, lon1))
-      cands.append(&c);
+  cands.reserve(near.size());
+  for (const CellExtent* c : near) {
+    if (c->nativeScale > 0 && c->navFeatures > 0 &&
+        c->intersects(lat0, lat1, lon0, lon1))
+      cands.append(c);
   }
 
   // Composite quilt (see Docs/QT_QUILT_VS_WX.md "Display rules"). At any zoom we
@@ -1181,9 +1208,16 @@ void ChartCanvas::updateVisibleCells() {
              static_cast<long long>(m_needed.size()),
              qPrintable(QStringList(m_needed.values()).join(QLatin1Char(','))));
 
+  // Publish the wanted set to the worker (out of band, thread-safe) BEFORE
+  // queueing this pass's loads, so any still-queued decode for a cell that just
+  // left m_needed is dropped at dequeue instead of decoded then discarded.
+  // `this` identifies the canvas so a shared worker unions both panes' needs.
+  if (m_worker) m_worker->setWanted(this, m_needed);
+
   // --- Load: needed cells not already requested. ---
   for (const QString& name : m_needed) {
     if (m_requested.contains(name)) continue;
+    if (m_known_empty.contains(name)) continue;  // decoded to nothing already
     auto it = m_catalog.constFind(name);
     if (it == m_catalog.cend()) continue;
     m_requested.insert(name);
@@ -1302,12 +1336,14 @@ QVariantList ChartCanvas::chartBarCells() const {
   const double latMin = cLat - halfLat, latMax = cLat + halfLat;
   const double lonMin = cLon - halfLon, lonMax = cLon + halfLon;
 
+  QList<const CellExtent*> near;
+  m_spatial_index.query(latMin, latMax, lonMin, lonMax, near);
   QList<const CellExtent*> cells;
-  for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it) {
-    const CellExtent& c = it.value();
-    if (c.navFeatures <= 0) continue;  // administrative cell -- not a chart
-    if (!c.intersects(latMin, latMax, lonMin, lonMax)) continue;
-    cells.append(&c);
+  cells.reserve(near.size());
+  for (const CellExtent* c : near) {
+    if (c->navFeatures <= 0) continue;  // administrative cell -- not a chart
+    if (!c->intersects(latMin, latMax, lonMin, lonMax)) continue;
+    cells.append(c);
   }
   // Coarse -> fine (largest 1:N first), like the wx chart bar.
   std::sort(cells.begin(), cells.end(),
@@ -3048,6 +3084,10 @@ void ChartCanvas::reloadResidentCells() {
     m_requested.remove(name);
   }
   m_needed.clear();
+  // New settings/palette: a cell that was content-less before may now render
+  // (e.g. SCAMIN off), so forget the known-empty set and let it re-decode. The
+  // worker flushes its decoded-buffer cache on the same setting change.
+  m_known_empty.clear();
   if (!m_catalog.isEmpty()) m_load_debounce->start();
 }
 

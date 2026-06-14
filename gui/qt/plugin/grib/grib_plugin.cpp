@@ -531,6 +531,12 @@ void GribContext::setMasterEnabled(bool on) {
   m_master_enabled = on;
   if (m_layer) m_layer->setVisible(on);
   if (notifyToolbar) notifyToolbar();
+  // Weather needs the time bar (to scrub the forecast time): register/clear a
+  // TimeController consumer so the bar auto-shows while GRIB is on.
+  if (m_timeline)
+    QMetaObject::invokeMethod(m_timeline, "setConsumer",
+                              Q_ARG(QString, QStringLiteral("grib")),
+                              Q_ARG(bool, on));
   emit controlsChanged();
 }
 
@@ -1132,21 +1138,22 @@ bool GribPlugin::init(const ocpn::qtui::OcpnQtPluginHost& host) {
     host.registerLayer(layer);  // compositor takes ownership
   }
   if (host.registerHud)
-    host.registerHud(QUrl(QStringLiteral("qrc:/grib_plugin/Flyout.qml")),
-                     m_ctx);
-  if (host.registerHud)
     host.registerHud(
         QUrl(QStringLiteral("qrc:/grib_plugin/CursorDataHud.qml")), m_ctx);
   m_ctx->notifyToolbar = host.toolbarStateChanged;
   if (host.registerToolbarAction)
     host.registerToolbarAction(
         QStringLiteral("🌬"),
-        QStringLiteral("GRIB weather  (hold for options)"),
+        QStringLiteral("GRIB weather  (hold for controls)"),
         [this] {  // click: weather on/off, state shown on the chip
           if (m_ctx) m_ctx->setMasterEnabled(!m_ctx->masterEnabled());
         },
-        [this] { if (m_ctx) m_ctx->setControlsVisible(true); },
+        nullptr,  // flyout is hosted in the toolbar bulge (registerToolbarFlyout)
         [this] { return m_ctx && m_ctx->masterEnabled(); });
+  // The flyout (toggle chips) grows out of the 🌬 tool's own backdrop.
+  if (host.registerToolbarFlyout)
+    host.registerToolbarFlyout(
+        QUrl(QStringLiteral("qrc:/grib_plugin/Flyout.qml")), m_ctx);
   if (host.registerSettingsPage)
     host.registerSettingsPage(
         QStringLiteral("GRIB"),

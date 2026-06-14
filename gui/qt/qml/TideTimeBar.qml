@@ -21,8 +21,11 @@ Item {
     id: tideBar
     // anchors.left/right/bottom are set by the shell (Main.qml): the bar
     // spans the window bottom and yields to the vessel HUD on the right.
-    height: DisplayConfig.showTides ? 30 : 0
-    visible: DisplayConfig.showTides
+    // Shown when the user pinned the bar OR a time-aware overlay needs it
+    // (tides / GRIB register as TimeController consumers). Decoupled from
+    // DisplayConfig.showTides so the bar can stand alone or serve weather.
+    height: TimeController.barVisible ? 30 : 0
+    visible: TimeController.barVisible
     clip: true
     Behavior on height { NumberAnimation { duration: 150 } }
 

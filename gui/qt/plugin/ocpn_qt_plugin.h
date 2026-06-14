@@ -109,6 +109,19 @@ struct OcpnQtPluginHost {
    *  connection tag). Connect with the string-based SIGNAL() form -- the
    *  emitter's concrete type is not part of the plugin API. */
   QObject* navMsgTap = nullptr;
+  /** Attach a FLYOUT to the most-recently-registered toolbar action: a QML
+   *  component (qrc:/ or module URL) the master toolbar hosts in an animated
+   *  bulge of its own backdrop when the tool is held/right-clicked. The
+   *  component's root needs `property var pluginContext` (set to `context`)
+   *  and may emit `settingsRequested()` / `closeRequested()`. Use this instead
+   *  of a free registerHud() so the flyout tracks the toolbar.
+   *
+   *  NB: kept LAST in this struct so adding it stays ABI-additive -- prebuilt
+   *  plugins compiled against the older header keep their field offsets and
+   *  simply don't see this member. Append future fields here too, never in the
+   *  middle. */
+  std::function<void(const QUrl& component, QObject* context)>
+      registerToolbarFlyout;
 };
 
 /** The plugin interface proper. Implementations are QObject-derived and

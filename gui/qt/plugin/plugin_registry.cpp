@@ -128,6 +128,15 @@ void PluginRegistry::loadFrom(const QString& dir) {
       m_toolbar_longpress.append(std::move(lp));
       m_toolbar_checked.append(std::move(chk));
     };
+    host.registerToolbarFlyout = [this](const QUrl& component,
+                                        QObject* context) {
+      if (m_toolbar_actions.isEmpty()) return;
+      QVariantMap a = m_toolbar_actions.last().toMap();
+      a["flyoutSource"] = component;
+      a["flyoutContext"] = QVariant::fromValue(context);
+      a["hasFlyout"] = true;
+      m_toolbar_actions[m_toolbar_actions.size() - 1] = a;
+    };
     host.toolbarStateChanged = [this] {
       ++m_toolbar_serial;
       emit toolbarStateChanged();

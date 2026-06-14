@@ -70,6 +70,21 @@ void TimeController::enterScrub() {
   if (was_live) emit modeChanged();  // playing already cleared above
 }
 
+void TimeController::setPinned(bool v) {
+  if (m_pinned == v) return;
+  m_pinned = v;
+  emit barVisibleChanged();
+}
+
+void TimeController::setConsumer(const QString& key, bool needed) {
+  const bool before = barVisible();
+  if (needed)
+    m_consumers.insert(key);
+  else
+    m_consumers.remove(key);
+  if (barVisible() != before) emit barVisibleChanged();
+}
+
 void TimeController::goLive() {
   m_playing = false;
   if (m_timer) m_timer->setInterval(1000);

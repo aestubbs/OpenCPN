@@ -191,10 +191,18 @@ ApplicationWindow {
     //     stream with pause + per-source filter.
     DataMonitorWindow { id: dataMonitorWindow }
 
-    // --- Application menu bar (P3.23, wx RegisterGlobalMenuItems parity):
-    //     the NATIVE macOS/global menu, bound to the same seams as the
-    //     toolbars and Options.
-    AppMenuBar {
+    // --- Application menu bar (P3.23, wx RegisterGlobalMenuItems parity) ---
+    // ONE menu definition (MenuModel), TWO platform presentations:
+    //  * macOS: the NATIVE global menu at the top of the SCREEN (Qt.labs.
+    //    platform, AppMenuBar). It can't render on a plain window manager /
+    //    EGLFS / Wayland (the Raspberry Pi), so there it stays inert and the
+    //    in-window bar below is used.
+    //  * everything else: an in-window QtQuick.Controls bar at the top of the
+    //    WINDOW (AppMenuBarInWindow), assigned to ApplicationWindow.menuBar.
+    // Both build their items from this shared model -- labels, shortcuts,
+    // checked-state, actions and order live in MenuModel.qml only.
+    MenuModel {
+        id: appMenuModel
         chart: root.activeChart
         rootWindow: root
         optionsWin: optionsWindow
@@ -202,6 +210,22 @@ ApplicationWindow {
         dataMonitor: dataMonitorWindow
         aboutWin: aboutWindow
         drawerRef: routeDrawer
+    }
+    AppMenuBar {
+        menuModel: appMenuModel
+    }
+    // In-window menu bar: instantiated everywhere EXCEPT macOS (which uses the
+    // native global bar above). A Loader, not just `visible:false`, so on macOS
+    // the bar's Actions never exist -- otherwise their keyboard shortcuts would
+    // collide with the native menu's identical ones ("ambiguous shortcut"). An
+    // inactive Loader also contributes zero height, so there's no empty strip.
+    menuBar: Loader {
+        active: Qt.platform.os !== "osx"
+        sourceComponent: Component {
+            AppMenuBarInWindow {
+                menuModel: appMenuModel
+            }
+        }
     }
 
     // --- Central: world-anchored + display-anchored scene-graph subtrees,
@@ -865,6 +889,7 @@ ApplicationWindow {
             // drags it (a drag breaks the binding), then it stays where put.
             x: parent.width - width - 12
             y: parent.height - height - 12
+            touchSize: root.touchSize  // same control-sizing option as the master bar
             onCanvasOptionsRequested: canvasOptions.open()
         }
 
@@ -1168,6 +1193,18 @@ ApplicationWindow {
         anchors.left: parent.left
         anchors.right: hudPanel.left
         anchors.bottom: parent.bottom
+    }
+
+    // Tides display drives the time bar (it shows the tide-prediction time),
+    // decoupled from the bar's own pin via a TimeController consumer. GRIB
+    // registers its own "grib" consumer from the plugin.
+    Connections {
+        target: DisplayConfig
+        function onChanged() {
+            TimeController.setConsumer("tides", DisplayConfig.showTides)
+        }
+        Component.onCompleted: TimeController.setConsumer("tides",
+                                                          DisplayConfig.showTides)
     }
 
     // --- Vessel data HUD (VesselHud.qml, P3.17): expandable right-edge

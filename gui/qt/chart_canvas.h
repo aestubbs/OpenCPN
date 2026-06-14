@@ -46,6 +46,7 @@
 #include "ais_selection_view_model.h"  // complete type needed for Q_PROPERTY
 #include "tide_graph_view_model.h"     // complete type needed for Q_PROPERTY
 #include "chart_extent.h"  // CellExtent -- catalog entry (value type)
+#include "chart_spatial_index.h"  // grid index over the catalog (value member)
 #include "chart_source_model.h"  // complete type needed for Q_PROPERTY
 #include "connections_view_model.h"  // complete type needed for Q_PROPERTY
 #include "nmea_monitor_model.h"  // complete type needed for Q_PROPERTY
@@ -635,6 +636,10 @@ private:
                           double worldYTop, double worldYBottom);
   void onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
                     double north, double south, double east, double west);
+  // A requested cell will not arrive: clear its in-flight flag, and if it
+  // decoded to nothing (genuineEmpty) remember that so it isn't re-requested
+  // every selection pass (which would busy-loop the decode thread).
+  void onCellUnavailable(const QString& id, bool genuineEmpty);
   // Reconcile the set of loaded cells with the current view: request
   // catalogued cells that have come into view (and grown large enough on
   // screen to be worth decoding), and evict loaded cells that have left the
@@ -776,8 +781,16 @@ private:
   ShapefileBasemapProvider* m_basemap = nullptr;
   // The decode-free catalog, keyed by cell name.
   QHash<QString, CellExtent> m_catalog;
+  // Grid index over m_catalog for O(cells-in-view) candidate gather. Rebuilt
+  // whenever m_catalog changes (it holds pointers into m_catalog's values).
+  ChartSpatialIndex m_spatial_index;
   // Cells already asked of the worker (loaded or in flight) -- never twice.
   QSet<QString> m_requested;
+  // Cells that decoded to nothing under the current display settings: skipped
+  // when building loads so a content-less cell isn't re-decoded every pass.
+  // Cleared whenever a re-decode could change the outcome (display-setting or
+  // colour-scheme change, catalog reload).
+  QSet<QString> m_known_empty;
   // Coalesces a burst of pan/zoom into one visible-cell evaluation.
   QTimer* m_load_debounce = nullptr;
   QTimer* m_chart_cfg_debounce = nullptr;  // coalesces ChartConfig edits
