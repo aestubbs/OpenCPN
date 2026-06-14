@@ -49,9 +49,19 @@ finding adversarially re-verified against code) added **P2.14–P2.19** — see
 on S-52 primitive emission** (AC/AP fills, LS/LC lines, SY symbols, CARC arcs,
 TX/TE text, depth shading incl. 2-/4-shade + shallow/safety/deep thresholds,
 conditional-symbology recolour incl. DEPCNT02/UDWHAZ03/SNDFRM02, and full
-day/dusk/night palette switching), and the **composite quilt is a deliberate,
-working divergence** from wx's reference-scale tiers (it fixes the wx
-"coarse chart loses its soundings in one zoom step" symptom). Genuine open
+day/dusk/night palette switching). **Quilt selection (revised 2026-06-14):**
+the quilt now picks the **closest-scale** covering chart per location (wx
+reference-scale behaviour), reverting the earlier composite "finest-per-
+location" divergence. Finest-per-location had a serious flaw found on the
+full NOAA set (Houston ship channel): it handed each spot to the finest
+eligible cell, so a harbour chart shown zoomed OUT (1:20k cell at a 1:55k
+view) suppressed the coarser chart whose nav aids were visible while its own
+were SCAMIN-culled — a wide "dead band" (~1:80k..1:12k) with NO buoys/lights
+(a safety issue), plus heavy label clutter. Closest-scale only adopts a
+finer cell as the view nears its native scale. **Accepted tradeoff** (user
+decision): soundings can thin/step across a tier boundary like wx, vs the
+old composite's continuous-soundings goal — judged worth it to eliminate the
+dead band + clutter. Genuine open
 gaps are narrower than first thought: SCAMIN on **AC solid fills, LS simple
 lines and AP pattern fills** (the `Prim`/`PatternFill` families — SY/TX/LC/
 soundings already honour it) — **P2.14**; area **boundary lines** not emitted —
