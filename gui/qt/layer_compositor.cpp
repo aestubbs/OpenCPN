@@ -82,12 +82,12 @@ void LayerCompositor::removeLayer(const QString& id) {
 
   Layer* l = it.value().layer;
   m_layers.removeAll(l);
-  // Detaching from Qt SG happens at next syncToScene: removeAllChildNodes
-  // is called per anchor root and the layer's subtree just won't be
-  // re-added. The wrapper/subtree nodes are reachable until then via
-  // their parent root; deleting them here would race the render thread.
-  // For now leak them through to next sync, then forget. Cleaner once we
-  // run sync as part of removeLayer.
+  // The subtree/wrapper are live QSG nodes the render thread may be using, so we
+  // can't delete them here (GUI thread). Park them for syncToScene() to detach
+  // and delete on the render thread; otherwise the whole subtree (texture atlas,
+  // VBOs, billboard nodes) leaks on every eviction -> panning OOMs.
+  if (it.value().subtree) m_pending_delete.append(it.value().subtree);
+  if (it.value().wrapper) m_pending_delete.append(it.value().wrapper);
   m_entries_by_id.erase(it);
   delete l;
 
@@ -150,6 +150,20 @@ void LayerCompositor::syncToScene(QSGTransformNode* world_root,
   if (display_root) syncOneRoot(display_root, Layer::DisplayAnchored, window);
   // Any structural change has now been applied to both roots.
   m_structure_dirty = false;
+
+  // Free removed layers' subtrees (render thread -- safe here). syncOneRoot has
+  // just detached them from their root as "stale". Detach every parked node from
+  // any remaining parent FIRST (so a wrapper and its child subtree are unlinked
+  // before either is deleted -- no double-free), then delete them all.
+  if (!m_pending_delete.isEmpty()) {
+    for (QSGNode* n : m_pending_delete)
+      if (n && n->parent()) n->parent()->removeChildNode(n);
+    for (QSGNode* n : m_pending_delete) delete n;
+    if (qEnvironmentVariableIsSet("OCPN_INSTR"))
+      qWarning("compositor: freed %lld evicted subtree node(s)",
+               static_cast<long long>(m_pending_delete.size()));
+    m_pending_delete.clear();
+  }
 }
 
 void LayerCompositor::syncOneRoot(QSGTransformNode* root,

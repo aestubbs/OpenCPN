@@ -122,6 +122,13 @@ private:
 
   QList<Layer*> m_layers;                  // registration order
   QHash<QString, Entry> m_entries_by_id;
+  // Subtrees/wrappers of removed layers, awaiting deletion. removeLayer() runs
+  // on the GUI thread where deleting live QSG nodes would race the render
+  // thread, so it parks them here; syncToScene() (render thread) detaches and
+  // deletes them. Without this an evicted cell's whole subtree -- its texture
+  // atlas, geometry VBOs and billboard nodes -- leaked (~50-100MB/cell), so
+  // panning across charts climbed to OOM.
+  QVector<QSGNode*> m_pending_delete;
   OcpnConfig* m_config = nullptr;          // non-owning; per-layer persistence
   // The composition (set of visible layers, their z-order, opacity wrappers,
   // or a layer's subtree node identity) changed, so a root's children must be
