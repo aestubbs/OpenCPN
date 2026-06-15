@@ -61,10 +61,9 @@ constexpr double kBillboardCullMarginPx = 64.0;
 // application font). This is the Qt-native replacement for the chart's
 // proprietary TexFont/DepthFont engine; font selection becomes
 // configurable later. Rendered at 2x for crispness on hi-DPI.
-QImage renderLabelImage(const s52sg::Label& lab) {
+QImage renderLabelImage(const s52sg::Label& lab, qreal dpr) {
   QFont font;  // default system font
   font.setPointSizeF(lab.pointSize);
-  const qreal dpr = 2.0;
   QFontMetrics fm(font);
   QRect br = fm.boundingRect(lab.text);
   const int w = (br.width() + 4);
@@ -98,7 +97,7 @@ QImage renderLabelImage(const s52sg::Label& lab) {
 // comparison is unit-agnostic). `basePt` is the integer-figure point size.
 QImage renderSoundingImage(double depthMetres, int depthUnit,
                            double safetyMetres, float basePt, bool swept,
-                           bool lowAccuracy) {
+                           bool lowAccuracy, qreal dpr) {
   // Guard bogus SENC/ENC values (mirrors SNDFRM02): absurdly deep -> no sounding
   // figure of merit; far-above-datum -> clamp to datum.
   double dm = depthMetres;
@@ -145,7 +144,6 @@ QImage renderSoundingImage(double depthMetres, int depthUnit,
   fFrac.setPointSizeF(basePt * 0.80);
   fFrac.setUnderline(false);
 
-  const qreal dpr = 2.0;
   QFontMetricsF fmI(fInt), fmF(fFrac);
   const qreal wI = fmI.horizontalAdvance(intStr);
   const qreal wF = fracStr.isEmpty() ? 0.0 : fmF.horizontalAdvance(fracStr);
@@ -330,6 +328,17 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
   connect(m_zoom_timer, &QTimer::timeout, this, [this]() {
     // Zoom settled: owe a full declutter re-layout (density depends on scale).
     m_relayout_pending = true;
+    // SCAMIN-aware build: if the scale has moved past the band the billboards
+    // were rasterised for, force a full rebuild so the visible label/sounding
+    // set is regenerated -- reveal detail on zoom-in, drop the now-invisible
+    // (and memory-hungry) bitmaps on zoom-out.
+    if (m_viewport && m_build_scale_n > 0.0) {
+      constexpr double kRebuildScaleBand = 2.0;
+      const double n = chartScaleN(*m_viewport);
+      if (n < m_build_scale_n / kRebuildScaleBand ||
+          n > m_build_scale_n * kRebuildScaleBand)
+        m_built = false;  // next renderChart does a full rebuild at this scale
+    }
     emit changed();
   });
   if (m_viewport) {
@@ -701,6 +710,16 @@ void S52VectorChartProvider::rebuildOverscaleHatch(double scale,
   node->markDirty(QSGNode::DirtyGeometry);
 }
 
+double S52VectorChartProvider::chartScaleN(const Viewport& vp) const {
+  // 1:N display denominator (matches ChartCanvas::displayScaleN): ground metres
+  // per pixel over screen metres per pixel, Mercator cos(lat)-corrected.
+  const double s = vp.scale();
+  if (s <= 0.0) return 1.0e12;
+  constexpr double kMetresPerDegLat = 111320.0;
+  const double clat = std::max(0.05, std::cos(vp.centerLat() * M_PI / 180.0));
+  return (kMetresPerDegLat * clat / s) * m_screen_ppmm * 1000.0;
+}
+
 void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   const double s = viewport.scale();  // pixels per degree
   if (s <= 0.0) return;
@@ -719,11 +738,7 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   // m_screen_ppmm is the real display density (set from QScreen at build).
   // Mercator: s is px per degree of LONGITUDE (ground 111320*cos(lat) m), so
   // include cos(centre_lat) for the true 1:N (matches displayScaleN).
-  constexpr double kMetresPerDegLat = 111320.0;
-  const double clat =
-      std::max(0.05, std::cos(viewport.centerLat() * M_PI / 180.0));
-  const double chart_scale_n =
-      (kMetresPerDegLat * clat / s) * m_screen_ppmm * 1000.0;
+  const double chart_scale_n = chartScaleN(viewport);
 
   rebuildComplexLines(s, chart_scale_n);  // screen-fixed LC glyphs along lines
   updateScaminNodes(chart_scale_n);       // hide static fills/lines past SCAMIN
@@ -1343,6 +1358,40 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // shelf-packed into shared atlas pages after the loops, so a cell
   // carries a handful of textures instead of one per label/symbol.
   m_billboards.clear();
+  // Rasterise label/sounding bitmaps at the REAL screen device-pixel ratio, not
+  // a hardcoded 2x. On a 1x display 2x quadrupled every text atlas page for no
+  // visible gain (the dominant Pi chart-memory cost); on a 2x panel this still
+  // resolves to 2. Clamp to >=1 so a stale/zero ratio can't blank the text.
+  const qreal bbDpr =
+      window ? std::max<qreal>(1.0, window->effectiveDevicePixelRatio()) : 1.0;
+
+  // SCAMIN-aware build: rasterise only billboards visible at -- or within one
+  // zoom band of -- the build scale. A far-underzoomed overview cell otherwise
+  // rasterises thousands of SCAMIN-hidden labels/soundings into 16MB atlas pages
+  // (the dominant Pi chart-memory cost). The zoom-settle timer rebuilds when the
+  // scale crosses kRebuildScaleBand x this, so detail reappears on zoom-in and
+  // the invisible bitmaps are dropped on zoom-out. The margin (build one band
+  // finer than strictly visible) avoids a rebuild on every small zoom-in.
+  constexpr double kBuildScaminMargin = 2.0;
+  m_build_scale_n = chartScaleN(viewport);
+  const double buildN = m_build_scale_n;
+  // Mirrors recomputeDeclutter's effScamin: a billboard is SCAMIN-visible while
+  // buildN <= effScamin. Soundings carry no SCAMIN cliff (they follow the chart
+  // + declutter), so gate them on how far the cell is underzoomed vs its native
+  // scale -- they're pointless once the cell is shown much smaller than native.
+  const auto buildSkip = [&](int scamin, int viewGroup, bool isSounding) -> bool {
+    if (isSounding) {
+      if (m_native_scale <= 0) return false;  // unknown native scale -> keep
+      return buildN > m_native_scale * kBuildScaminMargin;
+    }
+    constexpr double kScaminUnset = 1.0e8;
+    double eff = scamin >= kScaminUnset ? m_unset_scamin_n
+                                        : static_cast<double>(scamin);
+    if (viewGroup == s52sg::VgLights || viewGroup == s52sg::VgBuoysBeacons)
+      eff = std::min(eff, m_unset_scamin_n);
+    return buildN > eff * kBuildScaminMargin;
+  };
+
   struct PendingAtlasImage {
     QSGImageNode* node;
     QImage image;
@@ -1411,6 +1460,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   for (const s52sg::Symbol& sym : m_buffer.symbols) {
     if (catCulled(sym.dispCat, sym.classIdx)) continue;
     if (!viewGroupEnabled(sym.viewGroup)) continue;  // Lights/Buoys toggle
+    if (buildSkip(sym.scamin, sym.viewGroup, false)) continue;  // underzoomed
     addBillboard(sym.image,
                  QPointF(sym.pos.x(), Viewport::latToWorldY(sym.pos.y())),
                  sym.pivot, sym.scamin, BbKind::Symbol, /*depth=*/0.0f,
@@ -1423,6 +1473,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   for (const s52sg::VectorSymbol& vs : m_buffer.vectorSymbols) {
     if (catCulled(vs.dispCat, vs.classIdx)) continue;
     if (!viewGroupEnabled(vs.viewGroup)) continue;  // Lights/Buoys toggle
+    if (buildSkip(vs.scamin, vs.viewGroup, false)) continue;  // underzoomed
     auto* xform = new QSGTransformNode();
     for (const s52sg::VectorOp& op : vs.ops) {
       const int need = op.filled ? 3 : 2;
@@ -1462,6 +1513,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     // independently toggleable (mirrors s52plib's ShowSoundings /
     // ShowS57Text).
     if (lab.isSounding ? !m_showSoundings : !m_showText) continue;
+    if (buildSkip(lab.scamin, lab.viewGroup, lab.isSounding)) continue;
     // Soundings get the unit-aware S-52 SNDFRM layout (integer + subscript
     // tenths, drying-height underline, safety-depth emphasis); other labels
     // (feature names) render as plain text.
@@ -1470,8 +1522,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
             ? renderSoundingImage(
                   lab.depth, m_depth_unit, m_safety_depth_m,
                   lab.pointSize * static_cast<float>(m_sounding_scale),
-                  lab.soundingSwept, lab.soundingLowAccuracy)
-            : renderLabelImage(lab);
+                  lab.soundingSwept, lab.soundingLowAccuracy, bbDpr)
+            : renderLabelImage(lab, bbDpr);
     const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
     const qreal w = img.width() / dpr;
     const qreal h = img.height() / dpr;

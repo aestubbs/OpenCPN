@@ -320,6 +320,17 @@ private:
   QSGOpacityNode* m_overscale_hatch = nullptr;
   void rebuildOverscaleHatch(double scale, double chart_scale_n);
   double m_unset_scamin_n = 100000.0;  // default min display scale (no SCAMIN)
+  // The 1:N display scale the billboards were last BUILT at. Labels/soundings/
+  // symbols that are SCAMIN-hidden (or, for soundings, far underzoomed) at the
+  // build scale are not rasterised at all -- a big overview cell shown zoomed
+  // out otherwise rasterises thousands of invisible text bitmaps into 16MB atlas
+  // pages (the Pi OOM). The zoom-settle timer rebuilds when the scale moves past
+  // kRebuildScaleBand x this, so detail (re)appears as you zoom in. -1 = unbuilt.
+  double m_build_scale_n = -1.0;
+  // Current chart scale as a 1:N denominator at this viewport (Mercator, screen-
+  // density aware) -- the SCAMIN comparison value. Shared by build, declutter
+  // and the zoom-settle rebuild decision.
+  double chartScaleN(const Viewport& vp) const;
   // True if the symbol/vector-symbol's viewing group is currently enabled.
   bool viewGroupEnabled(int vg) const;
 
