@@ -943,8 +943,17 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
   }
   update();
 
-  // Pull in whatever's already big enough on screen.
-  updateVisibleCells();
+  // Pull in whatever's already big enough on screen -- but DEBOUNCED. The
+  // worker re-emits the whole growing catalog every kBatch=25 cells, so a big
+  // library delivers hundreds of extentsScanned batches; running the full
+  // (576-grid-point x N-cell point-in-polygon) updateVisibleCells on every one
+  // pegs the main thread and lets heavy cellLoaded events pile up unbounded ->
+  // OOM on a Pi. Coalesce the batch storm into a single evaluation once the
+  // catalog settles (the same 250ms debounce a pan/zoom burst uses).
+  if (m_load_debounce)
+    m_load_debounce->start();
+  else
+    updateVisibleCells();
 }
 
 void ChartCanvas::onRasterCellLoaded(const QString& id, const QImage& image,
@@ -1176,7 +1185,20 @@ void ChartCanvas::updateVisibleCells() {
       const bool is_cm93 = c->name.startsWith(QLatin1String("CM93-"));
       const double eff = c->nativeScale * (is_cm93 ? cm93_bias : 1.0);
       const double dist = std::abs(std::log(eff / displayN));  // log-scale ratio
-      if (!best || dist < bestDist) {
+      if (!best) {
+        best = c;
+        bestDist = dist;
+        continue;
+      }
+      // Closest scale wins; on a TIE (two equal-scale cells covering the same
+      // point -- common where adjacent charts of the same band overlap) break
+      // DETERMINISTICALLY by name. The candidate order out of the spatial index
+      // is not stable between calls, so a bare `dist < bestDist` let the winner
+      // flip every evaluation -> m_needed flapped -> the same cells were
+      // re-requested and re-decoded forever (wasted CPU + churn).
+      constexpr double kTieEps = 1e-9;
+      if (dist < bestDist - kTieEps ||
+          (dist <= bestDist + kTieEps && c->name < best->name)) {
         best = c;
         bestDist = dist;
       }

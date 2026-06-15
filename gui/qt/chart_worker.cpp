@@ -91,8 +91,14 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
   timer.start();
   QList<CellExtent> cells;
   cells.reserve(paths_000.size());
-  constexpr int kBatch = 25;
-  int since_emit = 0;
+  // Throttle catalog broadcasts by TIME, not by cell count. Re-emitting the
+  // whole growing catalog every 25 cells produced ~285 events for a 7k-cell
+  // library, each a larger copy of thousands of polygon-bearing extents queued
+  // to the main thread -- a needless cross-thread copy storm. A ~250ms cadence
+  // collapses that to a handful; the final emit below always delivers the
+  // complete list.
+  constexpr qint64 kEmitIntervalMs = 250;
+  qint64 last_emit_ms = 0;
   int n_cached = 0;
   // Persistent catalog cache: a hit skips the (expensive) per-cell scan.
   ChartCatalogCache cache;
@@ -103,7 +109,10 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
       if (Cm93Scanner::isCm93Root(path)) {
         const QList<CellExtent> cm93 = Cm93Scanner::scan(path);
         cells.append(cm93);
-        emit extentsScanned(cells);
+        if (timer.elapsed() - last_emit_ms >= kEmitIntervalMs) {
+          emit extentsScanned(cells);
+          last_emit_ms = timer.elapsed();
+        }
         qWarning("ChartWorker: CM93 set %s -> %lld cells",
                  path.toUtf8().constData(), (long long)cm93.size());
       }
@@ -115,9 +124,9 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
     if (cache.get(path, mtime, ce)) {
       ++n_cached;
       cells.push_back(ce);
-      if (++since_emit >= kBatch) {
+      if (timer.elapsed() - last_emit_ms >= kEmitIntervalMs) {
         emit extentsScanned(cells);
-        since_emit = 0;
+        last_emit_ms = timer.elapsed();
       }
       continue;  // cache hit -- no scan/decrypt
     }
@@ -181,9 +190,9 @@ void ChartWorker::scanExtents(const QStringList& paths_000) {
       cache.put(ce, mtime);  // remember so next launch is instant
       cells.push_back(ce);
     }
-    if (++since_emit >= kBatch) {
+    if (timer.elapsed() - last_emit_ms >= kEmitIntervalMs) {
       emit extentsScanned(cells);
-      since_emit = 0;
+      last_emit_ms = timer.elapsed();
       qWarning("ChartWorker: scan progress %lld cells, %lld ms",
                (long long)cells.size(), (long long)timer.elapsed());
     }
