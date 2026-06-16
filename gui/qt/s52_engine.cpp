@@ -330,47 +330,107 @@ void ApplySuperScamin(S57Obj* obj, int nativeScale, bool useSuper) {
   obj->Scamin = nativeScale * 2;
 }
 
-void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
+// ---- Shared ENC(.000)/OSENC emit pipeline ---------------------------------
+// Both decoders -- loadOneCell (OGR .000) and decodeOsenc (OSENC) -- build
+// fully formed S57Objs and funnel them through these three helpers, so
+// symbology lookup, render, and centroid symbol/text emit are IDENTICAL for
+// both formats. That is the convergence point. The one thing the formats
+// supply differently is geometry: OGR carries assembled lon/lat rings/lines,
+// OSENC carries edge-index topology resolved (resolveSeg/stitchRings) to the
+// SAME lon/lat polyline form. Each caller resolves to that common form here.
+// Ownership stays with the caller: it collects every S57Obj and qDeleteAll's
+// them after the cell is emitted, so an early `return` in these helpers (a
+// missing LUP) never leaks.
+
+bool emitAreaObject(s52plib* plib, s52sg::Buffer& buf, S57Obj* obj,
+                    const QList<QList<QPointF>>& boundary) {
+  // Plain vs Symbolized boundaries (m_nBoundaryStyle).
+  LUPrec* lup =
+      plib->S52_LUPLookup(plib->m_nBoundaryStyle, obj->FeatureName, obj);
+  if (!lup) return false;
+  plib->_LUP2rules(lup, obj);
+  ObjRazRules rz;
+  rz.obj = obj;
+  rz.LUP = lup;
+  rz.sm_transform_parms = nullptr;  // SG emit applies no projection
+  rz.child = nullptr;
+  rz.next = nullptr;
+  rz.mps = nullptr;
+  plib->RenderAreaToSG(buf, &rz);  // AC/AP fill from the obj's PolyTessGeo
+  // S-52 boundary line rules (RUL_SIM_LN/RUL_COM_LN -- depth-area edges,
+  // DRGARE/RESARE borders, ...) are NOT emitted by RenderAreaToSG; feed each
+  // outline ring to RenderLineToSG with the area's rz so the border draws over
+  // the fill (priority-sorted). Mirrors wx's second RenderObjectToGL pass.
+  for (const QList<QPointF>& ring : boundary)
+    if (ring.size() >= 2) plib->RenderLineToSG(buf, &rz, ring);
+  // Centroid SY symbols + TX/TE text (area names, restricted-area markers,
+  // DEPARE depth labels, ...), anchored at the area base point.
+  plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
+  plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
+  return true;
+}
+
+bool emitLineObject(s52plib* plib, s52sg::Buffer& buf, S57Obj* obj,
+                    const QList<QList<QPointF>>& parts, QPointF anchor) {
+  LUPrec* lup = plib->S52_LUPLookup(LINES, obj->FeatureName, obj);
+  if (!lup) return false;
+  plib->_LUP2rules(lup, obj);
+  ObjRazRules rz;
+  rz.obj = obj;
+  rz.LUP = lup;
+  rz.sm_transform_parms = nullptr;
+  rz.child = nullptr;
+  rz.next = nullptr;
+  rz.mps = nullptr;
+  // Each part is an INDEPENDENT polyline (OGR line strings, or OSENC
+  // edge-triples -- which must NOT be concatenated, else spurious connectors).
+  for (const QList<QPointF>& p : parts)
+    if (p.size() >= 2) plib->RenderLineToSG(buf, &rz, p);
+  // Line SY symbols + TX/TE text (cable/pipe names, ...), at the anchor.
+  plib->RenderPointSymbolToSG(buf, &rz, anchor.x(), anchor.y());
+  plib->RenderTextToSG(buf, &rz, anchor.x(), anchor.y());
+  return true;
+}
+
+bool emitPointObject(s52plib* plib, s52sg::Buffer& buf, S57Obj* obj) {
+  // Paper-chart vs Simplified point symbols (m_nSymbolStyle).
+  LUPrec* lup =
+      plib->S52_LUPLookup(plib->m_nSymbolStyle, obj->FeatureName, obj);
+  if (!lup) return false;
+  plib->_LUP2rules(lup, obj);
+  ObjRazRules rz;
+  rz.obj = obj;
+  rz.LUP = lup;
+  rz.sm_transform_parms = nullptr;
+  rz.child = nullptr;
+  rz.next = nullptr;
+  rz.mps = nullptr;
+  // Symbol first so CSrules are built once and shared with the text walk.
+  plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
+  plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
+  return true;
+}
+
+// Attach an OGRPolygon's tessellated fill + boundary to a caller-built S57Obj
+// and emit it through the shared area pipeline. The caller RETAINS ownership of
+// `obj` (it collects it for the cell's qDeleteAll); on geometry failure only
+// the unattached ptg is freed here. Returns true if symbolized + emitted.
+bool EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
                   OGRPolygon* poly, double ref_lat, double ref_lon,
                   S57Obj* obj, chart_context* ctx) {
+  (void)feature;
   obj->m_chart_context = ctx;
   auto* ptg = new PolyTessGeo(poly, true, ref_lat, ref_lon, 0.0);
   if (!ptg->IsOk()) {
-    delete ptg;
-    delete obj;
-    return;
+    delete ptg;  // not yet attached to obj; obj stays with the caller
+    return false;
   }
-  obj->SetAreaGeometry(ptg, ref_lat, ref_lon);
-
-  // Area boundary table per the Plain vs Symbolized option
-  // (m_nBoundaryStyle = PLAIN_BOUNDARIES | SYMBOLIZED_BOUNDARIES).
-  LUPrec* lup =
-      plib->S52_LUPLookup(plib->m_nBoundaryStyle, obj->FeatureName, obj);
-  if (!lup) {
-    delete obj;
-    return;
-  }
-  plib->_LUP2rules(lup, obj);
-
-  ObjRazRules rzRules;
-  rzRules.obj = obj;
-  rzRules.LUP = lup;
-  rzRules.sm_transform_parms = nullptr;  // SG emit applies no projection
-  rzRules.child = nullptr;
-  rzRules.next = nullptr;
-  rzRules.mps = nullptr;
-
-  plib->RenderAreaToSG(buf, &rzRules);
-  // P2.15 (OGR/.000 half): area BOUNDARY lines. RenderAreaToSG emits only the
-  // AC/AP fill; the area's S-52 boundary line rules (RUL_SIM_LN / RUL_COM_LN --
-  // depth-area edges, DRGARE/RESARE borders, ...) are not. The OGR path has no
-  // m_lsindex edge list (unlike OSENC), so take the boundary from the
-  // OGRPolygon rings (exterior + holes; geographic lon/lat, as the LNDARE
-  // coast-shade capture does) and feed each to RenderLineToSG with the area's
-  // rzRules -- it dispatches the boundary rules as for a line feature
-  // (priority-sorted, so the border draws over the fill). Mirrors wx's second
-  // RenderObjectToGL pass over area objects.
-  auto emitRing = [&](const OGRLinearRing* r) {
+  obj->SetAreaGeometry(ptg, ref_lat, ref_lon);  // obj now owns ptg
+  // Boundary outline in the common polyline form: OGR exterior + interior
+  // rings as lon/lat (the OSENC path supplies the same form from its edge
+  // tables, so emitAreaObject treats both identically).
+  QList<QList<QPointF>> boundary;
+  auto addRing = [&](const OGRLinearRing* r) {
     if (!r) return;
     const int np = r->getNumPoints();
     if (np < 2) return;
@@ -378,18 +438,12 @@ void EmitAreaPoly(s52plib* plib, s52sg::Buffer& buf, const char* feature,
     pts.reserve(np);
     for (int i = 0; i < np; ++i)
       pts.append(QPointF(r->getX(i), r->getY(i)));  // (lon, lat)
-    plib->RenderLineToSG(buf, &rzRules, pts);
+    boundary.append(std::move(pts));
   };
-  emitRing(poly->getExteriorRing());
+  addRing(poly->getExteriorRing());
   for (int k = 0; k < poly->getNumInteriorRings(); ++k)
-    emitRing(poly->getInteriorRing(k));
-  // Area centroid SY symbols + TX/TE text (area names, restricted-area markers,
-  // etc.) via the LUP/CS, anchored at the area base point -- parity with the
-  // OSENC path and with wx (which walks every rule type per object).
-  plib->RenderPointSymbolToSG(buf, &rzRules, obj->m_lon, obj->m_lat);
-  plib->RenderTextToSG(buf, &rzRules, obj->m_lon, obj->m_lat);
-  // obj/ptg intentionally leaked for this proof-of-pipeline; real chart
-  // loading owns these in the chart-object set.
+    addRing(poly->getInteriorRing(k));
+  return emitAreaObject(plib, buf, obj, boundary);
 }
 
 // Synthetic helper: build an area from a (lon,lat) ring + double attrs.
@@ -408,6 +462,7 @@ void EmitArea(s52plib* plib, s52sg::Buffer& buf, const char* feature,
 
   EmitAreaPoly(plib, buf, feature, &poly, ref_lat, ref_lon, obj,
                MakeMinimalChartContext(ref_lat, ref_lon));
+  delete obj;  // synthetic one-shot; geometry already copied into buf
 }
 
 // Copy an OGR feature's set fields onto an S57Obj as S-52 attributes, so
@@ -551,6 +606,10 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
   // (its filter logic is commented out, so it always returns NULL). Read
   // straight from the S57Reader module instead, like the legacy ingest.
   chart_context* ctx = MakeMinimalChartContext(0.0, 0.0);
+  // Every emitted S57Obj is collected here and freed in one qDeleteAll after
+  // the cell is decoded -- the SAME ownership model as decodeOsenc, so neither
+  // path leaks the transient decode objects (and their PolyTessGeo fills).
+  std::vector<S57Obj*> objects;
   S57Reader* reader = ds.GetModule(0);
   // Cell compilation scale (DSPM:CSCL) for the P2.23b super-SCAMIN synthesis.
   const int cellNativeScale = reader ? reader->GetCSCL() : 0;
@@ -650,8 +709,9 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             auto* obj = new S57Obj(className);
             CopyFeatureAttributes(feat, obj);
             ApplySuperScamin(obj, cellNativeScale, useSuper);  // P2.23b
-            EmitAreaPoly(plib, buf, className, poly, 0.0, 0.0, obj, ctx);
-            ++n_areas;
+            if (EmitAreaPoly(plib, buf, className, poly, 0.0, 0.0, obj, ctx))
+              ++n_areas;
+            objects.push_back(obj);  // freed by the cell's qDeleteAll
             // Capture land-area exterior rings (lon, lat) for the coastline
             // land-shade pass.
             if (strncmp(className, "LNDARE", 6) == 0) {
@@ -684,32 +744,16 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
             obj->Primitive_type = GEO_LINE;
             CopyFeatureAttributes(feat, obj);
             ApplySuperScamin(obj, cellNativeScale, useSuper);  // P2.23b
-            LUPrec* lup = plib->S52_LUPLookup(LINES, obj->FeatureName, obj);
-            if (!lup) {
-              delete obj;
-              return;
-            }
-            plib->_LUP2rules(lup, obj);
-            ObjRazRules rz;
-            rz.obj = obj;
-            rz.LUP = lup;
-            rz.sm_transform_parms = nullptr;
-            rz.child = nullptr;
-            rz.next = nullptr;
-            rz.mps = nullptr;
+            // Resolve to the common polyline form, then funnel through the
+            // shared line pipeline. SY/TX-TE anchored at the line midpoint (the
+            // OGR obj has no base point) -- parity with the OSENC path.
             QList<QPointF> pts;
             pts.reserve(np);
             for (int pi = 0; pi < np; ++pi)
               pts.append(QPointF(ls->getX(pi), ls->getY(pi)));  // (lon, lat)
-            plib->RenderLineToSG(buf, &rz, pts);
-            // Line SY symbols + TX/TE text (names along cables/pipes, etc.) via
-            // the LUP/CS, anchored at the line midpoint -- parity with the
-            // OSENC path. The OGR obj has no base point set, so use the mid
-            // vertex.
-            const QPointF anchor = pts.at(np / 2);
-            plib->RenderPointSymbolToSG(buf, &rz, anchor.x(), anchor.y());
-            plib->RenderTextToSG(buf, &rz, anchor.x(), anchor.y());
-            ++n_lines;
+            if (emitLineObject(plib, buf, obj, {pts}, pts.at(np / 2)))
+              ++n_lines;
+            objects.push_back(obj);  // freed by the cell's qDeleteAll
           };
           if (gt == wkbLineString) {
             emitLine(static_cast<OGRLineString*>(geom));
@@ -757,36 +801,16 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
               ++n_points;
               return;
             }
-            // Other point features: build a GEO_POINT S57Obj, look up its
-            // symbology, and emit any TX/TE text labels. (Raster point
-            // symbols are added next.)
+            // Other point features: build a GEO_POINT S57Obj and funnel it
+            // through the shared point pipeline (symbol + any TX/TE label).
             auto* obj = new S57Obj(className);
             obj->m_chart_context = ctx;
             obj->Primitive_type = GEO_POINT;
             obj->m_lat = lat;
             obj->m_lon = lon;
             CopyFeatureAttributes(feat, obj);
-            // Point symbol table per the Paper-chart vs Simplified option
-            // (m_nSymbolStyle = PAPER_CHART | SIMPLIFIED).
-            LUPrec* lup = plib->S52_LUPLookup(plib->m_nSymbolStyle,
-                                              obj->FeatureName, obj);
-            if (!lup) {
-              delete obj;
-              return;
-            }
-            plib->_LUP2rules(lup, obj);
-            ObjRazRules rz;
-            rz.obj = obj;
-            rz.LUP = lup;
-            rz.sm_transform_parms = nullptr;
-            rz.child = nullptr;
-            rz.next = nullptr;
-            rz.mps = nullptr;
-            // Raster symbol (buoy/beacon/...) + any TX/TE label. Symbol
-            // first so CSrules are built once and shared with the text walk.
-            plib->RenderPointSymbolToSG(buf, &rz, lon, lat);
-            plib->RenderTextToSG(buf, &rz, lon, lat);
-            ++n_points;
+            if (emitPointObject(plib, buf, obj)) ++n_points;
+            objects.push_back(obj);  // freed by the cell's qDeleteAll
           };
           if (gt == wkbPoint) {
             emitPoint(static_cast<OGRPoint*>(geom));
@@ -800,6 +824,9 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
       OGRFeature::DestroyFeature(feat);
     }
   }
+  // Geometry has been copied into `buf`; free the transient decode objects
+  // (each ~S57Obj also frees its PolyTessGeo fill + TriPrim vertex arrays).
+  qDeleteAll(objects);
   return true;
 }
 
@@ -1071,8 +1098,9 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
             lD.extent_s_lat = ext[0]; lD.extent_n_lat = ext[1];
             lD.extent_w_lon = ext[2]; lD.extent_e_lon = ext[3];
             lD.indexCount = n;
-            // SetLineGeometry ALIASES this table (no copy); keep it alive for
-            // the object's lifetime (intentionally leaked, like the OGR path).
+            // SetLineGeometry ALIASES this table (no copy) into cur's
+            // m_lsindex_array; ~S57Obj frees it when the cell's objects are
+            // qDeleteAll'd after emit, so it lives exactly as long as needed.
             lD.indexTable = tbl;
             cur->SetLineGeometry(&lD, GEO_LINE, ref_lat, ref_lon);
           }
@@ -1327,83 +1355,43 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
     // P2.23b -- super-SCAMIN: synthesize a SCAMIN for un-SCAMIN'd objects from
     // the cell native scale so the per-frame cull thins over-zoomed-out detail.
     ApplySuperScamin(obj, native_scale, plib->m_bUseSUPER_SCAMIN);
+    // Resolve this OSENC object's edge-index topology to the common lon/lat
+    // polyline form, then funnel through the SAME emit helpers as the OGR
+    // (.000) path. resolveSeg/stitchRings are the only OSENC-specific step.
     if (obj->Primitive_type == GEO_POINT) {
-      // Paper-chart vs Simplified point symbols (m_nSymbolStyle).
-      LUPrec* lup =
-          plib->S52_LUPLookup(plib->m_nSymbolStyle, obj->FeatureName, obj);
-      if (!lup) continue;
-      plib->_LUP2rules(lup, obj);
-      ObjRazRules rz;
-      rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
-      rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
-      plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
-      plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
-      ++n_points;
+      if (emitPointObject(plib, buf, obj)) ++n_points;
     } else if (obj->Primitive_type == GEO_LINE) {
-      // Each edge-triple [startVC, ±edgeVE, endVC] is an INDEPENDENT segment:
-      // startNode -> edge points -> endNode (the start/end "connectors" of the
-      // wx s57chart line_segment_element list, types CE/EE/EC/CC). Mirror that
-      // by emitting one polyline per triple -- the triples within a feature are
-      // NOT guaranteed to be listed in geometrically contiguous order, so
-      // concatenating them into a single strip draws spurious connector lines
-      // between unrelated nodes (the chart-wide "spider web").
-      LUPrec* lup = plib->S52_LUPLookup(LINES, obj->FeatureName, obj);
-      if (!lup) continue;
-      plib->_LUP2rules(lup, obj);  // resolve symbology + CS rules once per obj
-      ObjRazRules rz;
-      rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
-      rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
-      bool any = false;
+      // Each edge-triple [startVC, ±edgeVE, endVC] is an INDEPENDENT segment;
+      // they are NOT guaranteed contiguous, so each becomes its own polyline
+      // (concatenating draws spurious connectors -- the chart-wide "spider
+      // web"). SY/TX-TE anchored at the feature base point (extent centre).
+      QList<QList<QPointF>> parts;
       for (int iseg = 0; iseg < obj->m_n_lsindex; ++iseg) {
-        const QList<QPointF> pts = resolveSeg(&obj->m_lsindex_array[iseg * 3]);
-        if (pts.size() < 2) continue;
-        plib->RenderLineToSG(buf, &rz, pts);
-        any = true;
+        QList<QPointF> pts = resolveSeg(&obj->m_lsindex_array[iseg * 3]);
+        if (pts.size() >= 2) parts.append(std::move(pts));
       }
-      if (any) ++n_lines;
-      // Line features also carry SY symbols and TX/TE text via their LUP/CS
-      // (e.g. a name along a fairway, a cable/pipe label), anchored at the
-      // feature's base point (extent centre). wx walks every rule type per
-      // object; mirror that.
-      plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
-      plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
+      if (emitLineObject(plib, buf, obj, parts,
+                         QPointF(obj->m_lon, obj->m_lat)))
+        ++n_lines;
     } else if (obj->Primitive_type == GEO_AREA) {
-      // Plain vs Symbolized area boundaries (m_nBoundaryStyle).
-      LUPrec* lup =
-          plib->S52_LUPLookup(plib->m_nBoundaryStyle, obj->FeatureName, obj);
-      if (!lup) continue;
-      plib->_LUP2rules(lup, obj);
-      ObjRazRules rz;
-      rz.obj = obj; rz.LUP = lup; rz.sm_transform_parms = nullptr;
-      rz.child = nullptr; rz.next = nullptr; rz.mps = nullptr;
-      plib->RenderAreaToSG(buf, &rz);
-      // P2.15: area BOUNDARY lines. RenderAreaToSG emits only the AC/AP fill;
-      // the area's S-52 boundary line rules (RUL_SIM_LN / RUL_COM_LN in its
-      // PLAIN_/SYMBOLIZED_BOUNDARIES LUP -- depth-area edges, DRGARE/RESARE
-      // borders, ...) are not. Walk the boundary edge-triples (the same ones
-      // used for the LNDARE coast-shade below) and feed each to RenderLineToSG
-      // with the area's rz; it dispatches those boundary rules exactly as for a
-      // line feature (priority-sorted, so the border draws over the fill).
-      // Mirrors wx's second RenderObjectToGL pass over area objects.
+      // Boundary outline in the common polyline form (depth-area edges,
+      // DRGARE/RESARE borders, ...) -- the same edge-triples reused for the
+      // LNDARE coast-shade below.
+      QList<QList<QPointF>> boundary;
       for (int iseg = 0; iseg < obj->m_n_lsindex; ++iseg) {
-        const QList<QPointF> bpts = resolveSeg(&obj->m_lsindex_array[iseg * 3]);
-        if (bpts.size() >= 2) plib->RenderLineToSG(buf, &rz, bpts);
+        QList<QPointF> bpts = resolveSeg(&obj->m_lsindex_array[iseg * 3]);
+        if (bpts.size() >= 2) boundary.append(std::move(bpts));
       }
-      // Area features also carry centroid SY symbols and TX/TE text via their
-      // LUP/CS (restricted-area markers, anchorage symbols, area names, the
-      // depth label of a DEPARE, etc.), anchored at the area base point (extent
-      // centre). wx walks every rule type per object; mirror that.
-      plib->RenderPointSymbolToSG(buf, &rz, obj->m_lon, obj->m_lat);
-      plib->RenderTextToSG(buf, &rz, obj->m_lon, obj->m_lat);
-      ++n_areas;
-      // LNDARE boundary -> coastline land-shade. Stitch the boundary edges
-      // into proper closed, contiguous rings (by VC node index). Concatenating
-      // the triples in stream order joined non-adjacent points, so the shade
-      // band drew crossing slivers across the polygon (the "X" artifacts).
-      if (strncmp(obj->FeatureName, "LNDARE", 6) == 0) {
-        for (QList<QPointF>& ring :
-             stitchRings(obj->m_lsindex_array, obj->m_n_lsindex))
-          buf.landContours.append(std::move(ring));
+      if (emitAreaObject(plib, buf, obj, boundary)) {
+        ++n_areas;
+        // LNDARE boundary -> coastline land-shade. Stitch the boundary edges
+        // into proper closed, contiguous rings (by VC node index); stream-order
+        // concatenation joined non-adjacent points (the "X" artifacts).
+        if (strncmp(obj->FeatureName, "LNDARE", 6) == 0) {
+          for (QList<QPointF>& ring :
+               stitchRings(obj->m_lsindex_array, obj->m_n_lsindex))
+            buf.landContours.append(std::move(ring));
+        }
       }
     }
   }
@@ -1477,6 +1465,10 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
       "%d nodes)%s",
       static_cast<int>(objects.size()), n_areas, n_points, n_lines, ve.size(),
       vc.size(), have_extent ? "" : " [no extent]");
+  // Geometry + query snapshots have been copied into `buf`; free the transient
+  // decode objects (each ~S57Obj frees its PolyTessGeo fill, edge-index table,
+  // etc.). Same ownership model as loadOneCell -- neither path leaks now.
+  qDeleteAll(objects);
   return buf;
 }
 

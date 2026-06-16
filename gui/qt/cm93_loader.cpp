@@ -152,9 +152,14 @@ bool Cm93Loader::loadCell(s52plib* plib, const QString& path,
     s = std::min(s, obj->BBObj.GetMinLat());
     e = std::max(e, obj->BBObj.GetMaxLon());
     w = std::min(w, obj->BBObj.GetMinLon());
-    // Areas keep their xgeom inside PolyTessGeo; the object itself is
-    // emit-complete now. (Leaked like the OGR proof-of-pipeline path; the
-    // queryable-feature capture owns lifetimes when that lands for CM93.)
+    // Geometry is copied into `out`; free the transient decode object, as the
+    // OGR/.000 and OSENC paths now do. ~S57Obj frees its arrays and, for areas,
+    // the PolyTessGeo -> Extended_Geometry (xgeom). NB: createS57Obj moves
+    // xgeom's arrays onto the S57Obj for line/point features but never frees the
+    // bare Extended_Geometry shell there, so a small per-feature wrapper leak
+    // remains on those paths until CM93's emitObj is also converged onto the
+    // shared emit*Object() helpers.
+    delete obj;
   }
   if (north) *north = n;
   if (south) *south = s;

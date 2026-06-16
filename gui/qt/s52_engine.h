@@ -115,9 +115,9 @@ public:
 
   /** Build a small synthetic S-57 chart covering [north,south]x[west,east]
    *  and decode it through s52plib into world-coordinate geometry (P2.8c).
-   *  Returns an empty buffer if the engine is not initialised. This is the
-   *  proof-of-pipeline for the scene-graph vector path -- real chart-cell
-   *  loading replaces the synthetic feature construction later. */
+   *  Returns an empty buffer if the engine is not initialised. A synthetic
+   *  demo/test chart (the real .000 and OSENC loaders below are the production
+   *  path); useful for exercising the scene-graph vector pipeline standalone. */
   s52sg::Buffer buildDemoChart(double north, double south, double east,
                                double west);
 
