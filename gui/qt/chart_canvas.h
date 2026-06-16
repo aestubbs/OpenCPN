@@ -765,6 +765,10 @@ private:
   // Currently-resident cells, keyed by cell name ("demo" for the synthetic
   // chart, which is never evicted as it has no catalog entry).
   QHash<QString, LoadedCell> m_loaded;
+  // Diagnostics (logged under OCPN_INSTR): cumulative layer adds vs evicts, to
+  // confirm whether the resident set grows over time (adds outpacing frees).
+  qint64 m_dbg_adds = 0;
+  qint64 m_dbg_evicts = 0;
 
   // --- Async chart loading (P2.x) ---
   // The worker + its thread (owned: thread parented to this; worker

@@ -993,6 +993,7 @@ void ChartCanvas::onRasterCellLoaded(const QString& id, const QImage& image,
   lc.layerId = layerId;
   lc.provider = nullptr;  // image layer -- no S-52 provider
   m_loaded.insert(id, lc);
+  ++m_dbg_adds;
   qWarning("onRasterCellLoaded: ADD %s scale=%d %dx%d", qPrintable(id),
            cat.nativeScale, image.width(), image.height());
   m_finer_debounce->start();  // coalesce coverage re-derive + chart-bar refresh
@@ -1039,6 +1040,7 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   lc.layerId = layerId;
   lc.provider = provider;
   m_loaded.insert(id, lc);
+  ++m_dbg_adds;
   qWarning("onCellLoaded: ADD %s scale=%d cov=%lld", qPrintable(id),
            cat.nativeScale, static_cast<long long>(cat.coverage.size()));
   // The new cell may own annotations in coarser cells (or be owned by finer
@@ -1088,6 +1090,12 @@ int ChartCanvas::zOrderForScale(int native_scale) {
 
 void ChartCanvas::updateVisibleCells() {
   if (!m_worker || m_catalog.isEmpty()) return;
+
+  // Diagnostics: time the whole pass (selection runs on the GUI thread) so we
+  // can see if it grows as cells accumulate. Enabled by OCPN_INSTR.
+  const bool kInstr = qEnvironmentVariableIsSet("OCPN_INSTR");
+  QElapsedTimer dbgTimer;
+  if (kInstr) dbgTimer.start();
 
   const double scale = m_viewport->scale();
   const double cw = width() > 0 ? width() : 1024.0;
@@ -1322,8 +1330,24 @@ void ChartCanvas::updateVisibleCells() {
     m_compositor->removeLayer(m_loaded.value(name).layerId);
     m_loaded.remove(name);
     m_requested.remove(name);  // eligible to reload when needed again
+    ++m_dbg_evicts;
   }
   if (!evict.isEmpty()) update();  // repaint; finer-coverage refresh below
+
+  // Diagnostics: one line per re-quilt. Watch `loaded` and the gap between
+  // `adds` and `evicts` over a pan -- if loaded climbs or adds outpaces evicts,
+  // the resident set is growing (the suspected "increasingly heavy over time").
+  // `dt` is the GUI-thread selection cost; pair with the compositor's
+  // "freed N evicted subtree node(s)" line (also OCPN_INSTR) for frees.
+  if (kInstr)
+    qWarning(
+        "VIS dt=%lldms needed=%d loaded=%d requested=%d knownEmpty=%d "
+        "cands=%lld evicted=%d | cumAdds=%lld cumEvicts=%lld",
+        static_cast<long long>(dbgTimer.elapsed()), m_needed.size(),
+        m_loaded.size(), m_requested.size(), m_known_empty.size(),
+        static_cast<long long>(cands.size()), evict.size(),
+        static_cast<long long>(m_dbg_adds),
+        static_cast<long long>(m_dbg_evicts));
   // Refresh the chart bar's coverage list only when the displayed set changed.
   if (needed_changed) emit chartCoverageChanged();
 
