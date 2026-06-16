@@ -460,9 +460,10 @@ void EmitArea(s52plib* plib, s52sg::Buffer& buf, const char* feature,
   if (!ring.empty()) lr.addPoint(ring.front().first, ring.front().second);
   poly.addRing(&lr);
 
-  EmitAreaPoly(plib, buf, feature, &poly, ref_lat, ref_lon, obj,
-               MakeMinimalChartContext(ref_lat, ref_lon));
+  chart_context* ctx = MakeMinimalChartContext(ref_lat, ref_lon);
+  EmitAreaPoly(plib, buf, feature, &poly, ref_lat, ref_lon, obj, ctx);
   delete obj;  // synthetic one-shot; geometry already copied into buf
+  delete ctx;  // obj's only alias is gone; ~S57Obj doesn't own the context
 }
 
 // Copy an OGR feature's set fields onto an S57Obj as S-52 attributes, so
@@ -827,6 +828,10 @@ bool loadOneCell(s52plib* plib, s52sg::Buffer& buf, const QString& path_000,
   // Geometry has been copied into `buf`; free the transient decode objects
   // (each ~S57Obj also frees its PolyTessGeo fill + TriPrim vertex arrays).
   qDeleteAll(objects);
+  // The shared chart_context is aliased by every obj's m_chart_context but NOT
+  // owned by ~S57Obj, so free it once here -- after the objects are gone -- or
+  // it leaks one struct per cell decode (re-leaked on every pan re-decode).
+  delete ctx;
   return true;
 }
 
@@ -1469,6 +1474,9 @@ s52sg::Buffer S52Engine::decodeOsenc(const QByteArray& bytes, double* on,
   // decode objects (each ~S57Obj frees its PolyTessGeo fill, edge-index table,
   // etc.). Same ownership model as loadOneCell -- neither path leaks now.
   qDeleteAll(objects);
+  // Shared chart_context, aliased by every obj's m_chart_context but not owned
+  // by ~S57Obj -- free once here (may be null if the cell had no features).
+  delete ctx;
   return buf;
 }
 
