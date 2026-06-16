@@ -63,7 +63,12 @@ constexpr double kBillboardCullMarginPx = 64.0;
 // configurable later. Rendered at 2x for crispness on hi-DPI.
 QImage renderLabelImage(const s52sg::Label& lab, qreal dpr) {
   QFont font;  // default system font
-  font.setPointSizeF(lab.pointSize);
+  // Size in LOGICAL PIXELS, not points: setPointSizeF converts via the screen's
+  // logical DPI (72 on macOS, ~96 on the Pi), which rendered identical charts
+  // with ~1.3x larger text on the Pi. The pointSize values were calibrated on
+  // macOS where 1pt == 1px (72 dpi), so use them directly as px for a display-
+  // independent size (the image is still rasterised x dpr below for crispness).
+  font.setPixelSize(qMax(1, qRound(lab.pointSize)));
   QFontMetrics fm(font);
   QRect br = fm.boundingRect(lab.text);
   const int w = (br.width() + 4);
@@ -135,13 +140,15 @@ QImage renderSoundingImage(double depthMetres, int depthUnit,
   // Fonts: integer full size; the tenths digit a bit smaller (kept large enough
   // to read). The drying-height underline + low-accuracy italic apply to the
   // integer figures; the subscript shares the italic but not the underline.
+  // Logical px, not points, so soundings are DPI-independent (see
+  // renderLabelImage): basePt is the calibrated px size.
   QFont fInt;
-  fInt.setPointSizeF(basePt);
+  fInt.setPixelSize(qMax(1, qRound(basePt)));
   fInt.setBold(emphasis);
   fInt.setUnderline(drying);
   fInt.setItalic(lowAccuracy);
   QFont fFrac = fInt;
-  fFrac.setPointSizeF(basePt * 0.80);
+  fFrac.setPixelSize(qMax(1, qRound(basePt * 0.80)));
   fFrac.setUnderline(false);
 
   QFontMetricsF fmI(fInt), fmF(fFrac);
@@ -196,7 +203,9 @@ QImage renderSoundingImage(double depthMetres, int depthUnit,
 // in s52plib.cpp. Soundings keep their own centred placement.
 QPointF labelPivot(qreal w, qreal h, const s52sg::Label& lab) {
   QFont font;
-  font.setPointSizeF(lab.pointSize > 0 ? lab.pointSize : 10.0f);
+  // Logical px (matches renderLabelImage) so the pivot metrics align with the
+  // rasterised text on every display.
+  font.setPixelSize(qMax(1, qRound(lab.pointSize > 0 ? lab.pointSize : 10.0f)));
   const QFontMetricsF fm(font);
   qreal refX, refY;
   switch (lab.hjust) {
@@ -1050,11 +1059,11 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       window->screen()->logicalDotsPerInch() > 1.0) {
     m_screen_ppmm = window->screen()->logicalDotsPerInch() / 25.4;
   }
-  // LS pen width: wx's GL path draws the S-52 width number as DEVICE
-  // pixels (s52plib glLineWidth), so a width-2 dashed boundary is one
-  // LOGICAL pixel on a 2x display. The earlier 0.32mm-physical reading
-  // doubled that -- the magenta dashed area boundaries dominated the
-  // chart (user feedback 2026-06-12). Match the wx convention.
+  // Device pixel ratio -- used to rasterise BITMAPS (symbols, text, patterns)
+  // crisply on hi-dpi panels. NB: vector line widths are deliberately NOT scaled
+  // by dpr (see the LineStrip build below); they are specified in logical px so
+  // they keep a constant physical thickness across displays. Dividing by dpr made
+  // them 2x too thick on a 1x (non-retina) panel.
   const double dpr = window && window->effectiveDevicePixelRatio() > 0
                          ? window->effectiveDevicePixelRatio()
                          : 1.0;
@@ -1203,11 +1212,17 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     if (catCulled(prim.dispCat, prim.classIdx)) continue;  // category/class
 
     // Line features: anti-aliased lines through the shared AA-line shader
-    // (aa_line.h). Width is the physical S-52 pen width in logical px, kept
-    // screen-fixed by the shader -- no per-zoom rebuild, no parallel strips.
+    // (aa_line.h). Width is the S-52 pen width in LOGICAL px (device-pixel-ratio
+    // INDEPENDENT), kept screen-fixed by the shader -- no per-zoom rebuild.
     if (prim.type == s52sg::PrimType::LineStrip) {
+      // S-52 pen width number -> logical px. 0.5x reproduces the calibrated look
+      // (a width-2 boundary = 1 logical px) WITHOUT dividing by the device pixel
+      // ratio. The old `/dpr` made the logical width dpr-dependent: width-2 was
+      // 1 logical px on a 2x (retina) display but 2 on a 1x (Pi) display -- twice
+      // as thick. Logical px are a constant physical size, so this is now
+      // consistent across displays (the scene graph applies dpr for crispness).
       const float widthPx = static_cast<float>(
-          std::max(0.75, prim.width / dpr));
+          std::max(0.75, prim.width * 0.5));
       // S-52 dash, mm -> logical px (the AA-line shader runs it along the
       // screen arc length, so it stays a constant physical size at any zoom).
       const float dashOn =
