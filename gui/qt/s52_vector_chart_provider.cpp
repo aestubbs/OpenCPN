@@ -514,14 +514,25 @@ void S52VectorChartProvider::setFinerCoverage(
   }
   if (world == m_finer_coverage_world) return;  // unchanged -> no relayout
   m_finer_coverage_world = std::move(world);
+  // Cache each ring's bounding rect once, parallel to m_finer_coverage_world,
+  // so coveredByFiner can cheap-reject before the per-vertex containsPoint walk.
+  m_finer_coverage_bounds.clear();
+  m_finer_coverage_bounds.reserve(m_finer_coverage_world.size());
+  for (const QPolygonF& poly : m_finer_coverage_world)
+    m_finer_coverage_bounds << poly.boundingRect();
   // Changes which point annotations survive owner-cull -- owe a declutter pass.
   m_relayout_pending = true;
   emit changed();
 }
 
 bool S52VectorChartProvider::coveredByFiner(const QPointF& world_pos) const {
-  for (const QPolygonF& poly : m_finer_coverage_world)
-    if (poly.containsPoint(world_pos, Qt::OddEvenFill)) return true;
+  for (int i = 0; i < m_finer_coverage_world.size(); ++i) {
+    // Bbox reject first (the rect was precomputed in setFinerCoverage) -- only
+    // walk the ring's vertices for points actually inside its extent.
+    if (!m_finer_coverage_bounds.at(i).contains(world_pos)) continue;
+    if (m_finer_coverage_world.at(i).containsPoint(world_pos, Qt::OddEvenFill))
+      return true;
+  }
   return false;
 }
 
@@ -1376,15 +1387,26 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   m_build_scale_n = chartScaleN(viewport);
   const double buildN = m_build_scale_n;
   // Mirrors recomputeDeclutter's effScamin: a billboard is SCAMIN-visible while
-  // buildN <= effScamin. Soundings carry no SCAMIN cliff (they follow the chart
-  // + declutter), so gate them on how far the cell is underzoomed vs its native
-  // scale -- they're pointless once the cell is shown much smaller than native.
+  // buildN <= effScamin. Gate soundings on their OWN SCAMIN too (not a single
+  // native-scale cliff): the high-SCAMIN soundings -- the sparse, important ones
+  // meant to be read when zoomed out -- then rasterise WITH the chart instead of
+  // waiting for a zoom-in rebuild, while the dense low-SCAMIN ones still defer so
+  // the atlas stays small. (Per-frame, built soundings are never SCAMIN-culled;
+  // declutter thins them -- see recomputeDeclutter.)
   const auto buildSkip = [&](int scamin, int viewGroup, bool isSounding) -> bool {
-    if (isSounding) {
-      if (m_native_scale <= 0) return false;  // unknown native scale -> keep
-      return buildN > m_native_scale * kBuildScaminMargin;
-    }
     constexpr double kScaminUnset = 1.0e8;
+    if (isSounding) {
+      // A sounding with no real per-object SCAMIN falls back to the cell's
+      // native scale -- the same "appears as the view nears native" behaviour as
+      // before for those ENCs; one carrying a real SCAMIN is gated on it directly
+      // so it shows the moment its chart is on screen at an eligible scale.
+      const bool unset = scamin <= 0 || scamin >= kScaminUnset;
+      const double eff =
+          unset ? (m_native_scale > 0 ? static_cast<double>(m_native_scale) : 0.0)
+                : static_cast<double>(scamin);
+      if (eff <= 0.0) return false;  // truly unknown -> keep
+      return buildN > eff * kBuildScaminMargin;
+    }
     double eff = scamin >= kScaminUnset ? m_unset_scamin_n
                                         : static_cast<double>(scamin);
     if (viewGroup == s52sg::VgLights || viewGroup == s52sg::VgBuoysBeacons)

@@ -538,6 +538,19 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   connect(m_load_debounce, &QTimer::timeout, this,
           [this]() { updateVisibleCells(); });
 
+  // A burst of cellLoaded arrivals (panning a chart-dense region) used to run
+  // the O(loaded^2) finest-owner re-derivation + a chart-bar rebuild on EVERY
+  // arrival, so the cost of draining the backlog grew with the backlog and the
+  // GUI thread never caught up. Coalesce them: each arrival just (re)starts this
+  // short timer and the heavy pass runs once after the arrivals settle.
+  m_finer_debounce = new QTimer(this);
+  m_finer_debounce->setSingleShot(true);
+  m_finer_debounce->setInterval(60);
+  connect(m_finer_debounce, &QTimer::timeout, this, [this]() {
+    updateFinerCoverage();
+    emit chartCoverageChanged();
+  });
+
   connect(m_compositor.get(), &LayerCompositor::changed, this,
           [this]() { update(); });
   connect(m_viewport.get(), &Viewport::changed, this, [this]() {
@@ -982,8 +995,7 @@ void ChartCanvas::onRasterCellLoaded(const QString& id, const QImage& image,
   m_loaded.insert(id, lc);
   qWarning("onRasterCellLoaded: ADD %s scale=%d %dx%d", qPrintable(id),
            cat.nativeScale, image.width(), image.height());
-  updateFinerCoverage();
-  emit chartCoverageChanged();
+  m_finer_debounce->start();  // coalesce coverage re-derive + chart-bar refresh
   update();
 }
 
@@ -1030,9 +1042,13 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
   qWarning("onCellLoaded: ADD %s scale=%d cov=%lld", qPrintable(id),
            cat.nativeScale, static_cast<long long>(cat.coverage.size()));
   // The new cell may own annotations in coarser cells (or be owned by finer
-  // ones already loaded) -- re-derive every loaded cell's finer-coverage.
-  updateFinerCoverage();
-  emit chartCoverageChanged();
+  // ones already loaded) -- re-derive every loaded cell's finer-coverage. A
+  // burst of arrivals coalesces into ONE pass (see m_finer_debounce) instead of
+  // an O(loaded^2) re-derive + chart-bar rebuild on every cell, which on a slow
+  // core never drained while cells kept streaming in (the "never recovers"
+  // stall). The cell is already in the scene; only the cross-cell duplicate
+  // suppression waits the ~60ms settle.
+  m_finer_debounce->start();
   update();
 }
 
@@ -1178,18 +1194,22 @@ void ChartCanvas::updateVisibleCells() {
     // with no buoys/lights. Nearest-scale only adopts the finer cell once the
     // view approaches its native scale (where its aids become visible), the
     // wx reference-scale behaviour.
-    const CellExtent* best = nullptr;
+    const CellExtent* best = nullptr;      // closest-scale ELIGIBLE cover
     double bestDist = 0.0;
+    const CellExtent* coarsest = nullptr;  // coarsest cover of ANY eligibility
     for (const CellExtent* c : cands) {
-      if (!eligible(c) || !c->covers(p.lat, p.lon)) continue;
+      // ONE covers() test per (point, candidate) now -- this loop and the old
+      // separate fallback pass both walked every candidate's coverage; merged
+      // here they share the single (bbox-rejected) covers() call.
+      if (!c->covers(p.lat, p.lon)) continue;
+      // Fallback bookkeeping: track the coarsest covering cell regardless of
+      // eligibility, so a point no eligible chart reaches still keeps coverage
+      // (consulted only when `best` stays null below).
+      if (!coarsest || c->nativeScale > coarsest->nativeScale) coarsest = c;
+      if (!eligible(c)) continue;
       const bool is_cm93 = c->name.startsWith(QLatin1String("CM93-"));
       const double eff = c->nativeScale * (is_cm93 ? cm93_bias : 1.0);
       const double dist = std::abs(std::log(eff / displayN));  // log-scale ratio
-      if (!best) {
-        best = c;
-        bestDist = dist;
-        continue;
-      }
       // Closest scale wins; on a TIE (two equal-scale cells covering the same
       // point -- common where adjacent charts of the same band overlap) break
       // DETERMINISTICALLY by name. The candidate order out of the spatial index
@@ -1197,29 +1217,19 @@ void ChartCanvas::updateVisibleCells() {
       // flip every evaluation -> m_needed flapped -> the same cells were
       // re-requested and re-decoded forever (wasted CPU + churn).
       constexpr double kTieEps = 1e-9;
-      if (dist < bestDist - kTieEps ||
+      if (!best || dist < bestDist - kTieEps ||
           (dist <= bestDist + kTieEps && c->name < best->name)) {
         best = c;
         bestDist = dist;
       }
     }
-    if (best) m_needed.insert(best->name);
-  }
-  // Fallback: a sample point that NO eligible chart covers (zoomed out past
-  // every covering chart's threshold there) gets its coarsest covering chart, so
-  // existing coverage is never dropped to the basemap.
-  for (const GridPt& p : pts) {
-    bool anyEligible = false;
-    const CellExtent* coarsest = nullptr;
-    for (const CellExtent* c : cands) {
-      if (!c->covers(p.lat, p.lon)) continue;
-      if (eligible(c)) {
-        anyEligible = true;
-        break;
-      }
-      if (!coarsest || c->nativeScale > coarsest->nativeScale) coarsest = c;
-    }
-    if (!anyEligible && coarsest) m_needed.insert(coarsest->name);
+    // Prefer the closest-scale eligible cover; else keep coverage with the
+    // coarsest covering chart (zoomed out past every covering chart's threshold
+    // here) so a sample point is never dropped to the basemap.
+    if (best)
+      m_needed.insert(best->name);
+    else if (coarsest)
+      m_needed.insert(coarsest->name);
   }
 
   // Only the displayed set actually changing warrants a log line + a chart-bar
@@ -1259,12 +1269,7 @@ void ChartCanvas::updateVisibleCells() {
     m_loaded.remove(name);
     m_requested.remove(name);  // eligible to reload when needed again
   }
-  if (!evict.isEmpty()) {
-    update();
-    // A removed cell may have been the finer owner for cells that remain; they
-    // must reclaim the annotations it was suppressing.
-    updateFinerCoverage();
-  }
+  if (!evict.isEmpty()) update();  // repaint; finer-coverage refresh below
   // Refresh the chart bar's coverage list only when the displayed set changed.
   if (needed_changed) emit chartCoverageChanged();
 
@@ -1303,20 +1308,49 @@ void ChartCanvas::updateVisibleCells() {
     m_overscale_factor = newOverscale;
     emit overscaleChanged();
   }
+
+  // Refresh finest-owner suppression once this pan/zoom has settled. Ownership
+  // now depends on BOTH the loaded set AND the zoom (the closest-scale crossover
+  // in updateFinerCoverage is a function of displayN), so a pure zoom that
+  // loads/evicts nothing still needs it. Debounced -> coalesces with any
+  // in-flight cellLoaded arrival burst into one O(loaded^2) pass.
+  m_finer_debounce->start();
 }
 
 void ChartCanvas::updateFinerCoverage() {
+  if (!m_viewport) return;
   // For each loaded cell, gather the coverage of every OTHER loaded cell that is
-  // strictly FINER (smaller native scale) and overlaps it, and hand it to the
-  // provider. A point annotation (symbol, label, sounding, light sector) whose
-  // anchor a finer cell owns is then suppressed there -- drawn once, by the
-  // finest owner. This is the scene-graph form of wx's quilt region-subtraction
-  // (gui/src/quilt.cpp: ActiveRegion = quilt_region - m_covered_region), applied
-  // at the point-annotation level so the fills/lines keep their cheap bbox clip.
+  // strictly FINER *and has crossed its ownership threshold at the current zoom*,
+  // and hand it to the provider. A point annotation (symbol, label, sounding,
+  // light sector) whose ORIGIN falls in that coverage is then suppressed there --
+  // drawn once, by the finest cell that actually OWNS the spot. This is the
+  // scene-graph form of wx's quilt region-subtraction (gui/src/quilt.cpp:
+  // ActiveRegion = quilt_region - m_covered_region), applied at the point-
+  // annotation level so the fills/lines keep their cheap bbox clip.
+  //
+  // OWNERSHIP (not "finest loaded"): a finer cell only takes over -- and only
+  // then suppresses the coarser chart's annotations -- once it is the CLOSEST-
+  // scale chart where the two overlap, i.e. the same winner updateVisibleCells
+  // picks. With the log-scale closest rule (dist = |ln(eff/displayN)|), a finer
+  // cell F beats a coarser cell C exactly when displayN < sqrt(eff_C * eff_F)
+  // (the geometric mean of their scales). Below that crossover the coarser chart
+  // stays primary and keeps ALL its aids -- and its own SCAMINs are correct,
+  // because it is being shown near its compilation scale. This removes the
+  // "dead band" where a still-underzoomed finer cell blanked the coarser chart's
+  // visible buoys/lights/soundings, leaving a hole.
+  const double displayN =
+      displayScaleN(m_viewport->scale(), m_viewport->centerLat());
+  const double cm93_bias =
+      std::pow(3.0, ChartConfig::instance().cm93Detail() / 2.5);
+  const auto effScale = [&](const CellExtent& e) -> double {
+    const bool is_cm93 = e.name.startsWith(QLatin1String("CM93-"));
+    return e.nativeScale * (is_cm93 ? cm93_bias : 1.0);
+  };
   for (auto it = m_loaded.begin(); it != m_loaded.end(); ++it) {
     LoadedCell& lc = it.value();
     if (!lc.provider || !lc.extent.valid() || lc.extent.nativeScale <= 0)
       continue;
+    const double effC = effScale(lc.extent);
     QList<QPolygonF> finer;
     for (auto jt = m_loaded.cbegin(); jt != m_loaded.cend(); ++jt) {
       if (jt.key() == it.key()) continue;
@@ -1328,6 +1362,11 @@ void ChartCanvas::updateFinerCoverage() {
       if (!f.intersects(lc.extent.south, lc.extent.north, lc.extent.west,
                         lc.extent.east))
         continue;
+      // Ownership gate: only suppress once the finer cell has crossed the
+      // closest-scale crossover with this (coarser) cell. Until then this chart
+      // is primary -- keep its annotations.
+      if (displayN >= std::sqrt(effC * effScale(f)))
+        continue;  // finer cell not yet the owner here
       if (!f.coverage.isEmpty()) {
         finer += f.coverage;  // real M_COVR polygons (lon/lat)
       } else {

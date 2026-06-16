@@ -341,9 +341,19 @@ private:
   QList<Billboard> m_billboards;
   // Finer-cell coverage (from setFinerCoverage), transformed to WORLD coords
   // (x = lon, y = latToWorldY(lat)) so a billboard's worldPos can be tested
-  // directly without inverting Mercator. A billboard whose anchor is inside any
-  // of these is owner-culled in recomputeDeclutter.
+  // directly without inverting Mercator. A billboard whose anchor (its feature
+  // ORIGIN) is inside any of these is owner-culled in recomputeDeclutter -- the
+  // whole feature, incl. a light's sector arc, since the arc is one billboard
+  // anchored at the light. NB: ChartCanvas::updateFinerCoverage passes only the
+  // finer cells that actually OWN their overlap at the current zoom (closest-
+  // scale crossover), so being merely "covered by something finer" is not enough.
   QList<QPolygonF> m_finer_coverage_world;
+  // Per-polygon world bounding rects, parallel to m_finer_coverage_world and
+  // computed once in setFinerCoverage. coveredByFiner rejects a world point
+  // against the cheap rect before the O(vertices) containsPoint walk -- the
+  // declutter pass tests every billboard anchor against every finer ring, so
+  // most pairs are far apart and short-circuit here.
+  QList<QRectF> m_finer_coverage_bounds;
   // True if a point annotation at this world anchor is owned by a finer cell
   // (and so must be suppressed here). False when m_finer_coverage_world empty.
   bool coveredByFiner(const QPointF& world_pos) const;

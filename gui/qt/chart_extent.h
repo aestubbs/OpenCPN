@@ -70,8 +70,15 @@ struct CellExtent {
   /** True if (lat, lon) lies within the cell's actual coverage (M_COVR), or
    *  -- if no coverage polygons were captured -- within its bounding box. */
   bool covers(double lat, double lon) const {
-    if (coverage.isEmpty())
-      return lon >= west && lon <= east && lat >= south && lat <= north;
+    // Cheap bounding-box reject FIRST. The M_COVR coverage polygons always lie
+    // within the cell's bbox (the bbox is grown by every feature envelope,
+    // M_COVR included), so a point outside the box cannot be covered -- skip the
+    // O(vertices) polygon walk for it. This is the dominant cost in the quilt's
+    // 24x24-grid x N-candidate selection: most (grid-point, cell) pairs are far
+    // apart and fail here in four comparisons instead of a full containsPoint
+    // sweep over every ring.
+    if (lon < west || lon > east || lat < south || lat > north) return false;
+    if (coverage.isEmpty()) return true;  // inside bbox, no finer coverage data
     const QPointF p(lon, lat);
     for (const QPolygonF& poly : coverage)
       if (poly.containsPoint(p, Qt::OddEvenFill)) return true;

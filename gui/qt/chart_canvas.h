@@ -794,6 +794,12 @@ private:
   // Coalesces a burst of pan/zoom into one visible-cell evaluation.
   QTimer* m_load_debounce = nullptr;
   QTimer* m_chart_cfg_debounce = nullptr;  // coalesces ChartConfig edits
+  // Coalesces the finest-owner coverage re-derivation (O(loaded^2)) + chart-bar
+  // refresh across a BURST of cellLoaded arrivals into one pass once they
+  // settle. Without it, draining a backlog of K arrivals cost O(K * loaded^2)
+  // on the GUI thread -- the "never recovers when zoomed out over many small
+  // charts" stall, since each arrival re-touched every loaded provider.
+  QTimer* m_finer_debounce = nullptr;
   // Edge auto-pan while route-building / measuring (P3.13, wx CheckEdgePan):
   // the cursor inside a 5%-margin edge band pans the view a small step per
   // 200 ms tick, so a route extends past the current view without stopping.
