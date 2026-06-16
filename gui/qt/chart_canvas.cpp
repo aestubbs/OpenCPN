@@ -1105,10 +1105,36 @@ void ChartCanvas::updateVisibleCells() {
   const double lon0 = m_viewport->centerLon() - half_lon;
   const double lon1 = m_viewport->centerLon() + half_lon;
 
+  // Scale gates, computed up front because the candidate prune below needs them.
+  // displayN = the 1:N the view is showing (cos-lat-corrected); cm93_bias tilts
+  // which CM93 tier is eligible.
+  const double displayN =
+      displayScaleN(scale, m_viewport ? m_viewport->centerLat() : 0.0);
+  const double cm93_bias =
+      std::pow(3.0, ChartConfig::instance().cm93Detail() / 2.5);
+  const auto effScaleOf = [&](const CellExtent* c) -> double {
+    return c->nativeScale *
+           (c->name.startsWith(QLatin1String("CM93-")) ? cm93_bias : 1.0);
+  };
+  // How far a chart may be underzoomed before we stop drawing it and let the
+  // basemap show. Generous (well past the 4x content admit) but FINITE: a cell
+  // beyond this can never win or be admitted as fallback, so it is pruned from
+  // the candidate set here. Without this, an extreme zoom-out (e.g. 1:1.1M over
+  // a coast charted only by 1:45k tiles) dragged the WHOLE fine-cell tile set --
+  // none of it legible -- into the selection loop AND the decode/render set,
+  // hanging the GUI thread. Env-tunable for Pi tuning.
+  static const double kFallbackMaxUnderzoom = [] {
+    bool ok = false;
+    const double v = qgetenv("OCPN_QT_FALLBACK_UNDERZOOM").toDouble(&ok);
+    return ok && v > 0.0 ? v : 8.0;
+  }();
+
   // Candidate cells: every catalogued cell overlapping the working view that
   // has a known scale and actual chart content (administrative coverage-only
   // cells -- no depth areas/soundings/land -- are excluded so they never win
-  // a location and render nothing useful).
+  // a location and render nothing useful), AND that is drawable at this zoom
+  // (within kFallbackMaxUnderzoom of its own scale -- a cell that could never be
+  // selected is pure cost in the loop below and a wasted decode if it slipped in).
   // Spatial index gives a coarse superset of cells near the view (O(in-view),
   // not O(whole catalog) -- the catalog can hold thousands of cells); refine
   // with the precise scale/feature/intersects test, exactly as before.
@@ -1118,6 +1144,7 @@ void ChartCanvas::updateVisibleCells() {
   cands.reserve(near.size());
   for (const CellExtent* c : near) {
     if (c->nativeScale > 0 && c->navFeatures > 0 &&
+        displayN <= effScaleOf(c) * kFallbackMaxUnderzoom &&
         c->intersects(lat0, lat1, lon0, lon1))
       cands.append(c);
   }
@@ -1129,14 +1156,8 @@ void ChartCanvas::updateVisibleCells() {
   // basemap shows only where NO chart covers. A chart's CONTENT renders only
   // once the view is zoomed in to within k x of its natural scale; finer (not-
   // yet-reached) charts show only their bbox rectangle (ChartBoundaryProvider).
-  const double displayN =
-      displayScaleN(scale, m_viewport ? m_viewport->centerLat() : 0.0);
+  // (displayN, cm93_bias + the kFallbackMaxUnderzoom prune were set up above.)
   const double k = m_overzoom_k > 0.0 ? m_overzoom_k : 2.0;  // 1 (at native)..5
-  // CM93 detail slider (P2.19, wx g_cm93_zoom_factor): bias WHICH tier of a
-  // CM93 set is eligible. +5 ~ two tiers finer (each tier is ~3x), -5 two
-  // tiers coarser; ENC cells are unaffected.
-  const double cm93_bias =
-      std::pow(3.0, ChartConfig::instance().cm93Detail() / 2.5);
   // Underzoom admit (wx Quilt parity): a cell joins the quilt while the
   // display is no more than ~4x coarser than its native scale -- wx shows
   // a 1:45k island chart at a 1:170k view and lets SCAMIN/declutter thin
@@ -1230,6 +1251,39 @@ void ChartCanvas::updateVisibleCells() {
       m_needed.insert(best->name);
     else if (coarsest)
       m_needed.insert(coarsest->name);
+  }
+
+  // Safety backstop: bound how many cells the quilt loads at once. Even when all
+  // are drawable, a dense band at a wide zoom can put dozens in the set -- each
+  // an async decode + a per-frame render pass + (until #5) its own zoom timer.
+  // Keep the cells nearest the view CENTRE (the centre stays fully charted; far
+  // edges fall back to the coarser cell / basemap beneath, refilling as you pan
+  // or zoom in). High default so normal use never trips it; env-tunable, 0 off.
+  static const int kMaxCells = [] {
+    bool ok = false;
+    const int v = qgetenv("OCPN_QT_MAX_CELLS").toInt(&ok);
+    return ok ? v : 50;
+  }();
+  if (kMaxCells > 0 && m_needed.size() > kMaxCells) {
+    const double cLat = m_viewport->centerLat(), cLon = m_viewport->centerLon();
+    const auto centreDist2 = [&](const QString& n) -> double {
+      auto it = m_catalog.constFind(n);
+      if (it == m_catalog.cend()) return 1.0e18;
+      // 0 if the view centre is inside the cell's bbox; else squared gap to it.
+      const double dx = std::max({0.0, it->west - cLon, cLon - it->east});
+      const double dy = std::max({0.0, it->south - cLat, cLat - it->north});
+      return dx * dx + dy * dy;
+    };
+    QList<QString> names = m_needed.values();
+    std::sort(names.begin(), names.end(),
+              [&](const QString& a, const QString& b) {
+                return centreDist2(a) < centreDist2(b);
+              });
+    QSet<QString> trimmed;
+    for (int i = 0; i < kMaxCells; ++i) trimmed.insert(names[i]);
+    qWarning("quilt: capped %lld -> %d cells nearest centre (OCPN_QT_MAX_CELLS)",
+             static_cast<long long>(m_needed.size()), kMaxCells);
+    m_needed = std::move(trimmed);
   }
 
   // Only the displayed set actually changing warrants a log line + a chart-bar
