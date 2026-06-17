@@ -651,6 +651,15 @@ private:
   // owner. The scene-graph analogue of wx's m_covered_region.Subtract. Called
   // whenever the loaded set changes (a cell loads or is evicted).
   void updateFinerCoverage();
+  // Scale-cull the chart-outline overlay: feed ChartBoundaryProvider only the
+  // cells eligible at the current zoom (display within chartCullFactor x of the
+  // chart's native scale -- the SAME prune the quilt decode uses), so the
+  // myriad far-overzoomed small charts (rivers, harbours) don't clutter or cost
+  // anything at small scale. Rebuilds the outline node only when the eligible
+  // set changes (a zoom-band crossing; membership is monotonic in zoom, so a
+  // count change == a real change -- a pure pan is a no-op). m_boundary_count is
+  // the last eligible count (-1 forces a rebuild).
+  void updateBoundaryExtents();
   // The ~1:N display-scale denominator for a viewport scale (px/degree), at
   // a nominal display density. Compared against cells' native CSCL to pick
   // the quilt tier.
@@ -761,7 +770,12 @@ private:
     CellExtent extent;
     QString layerId;
     S52VectorChartProvider* provider = nullptr;
+    qint64 lastNeeded = 0;  // m_quilt_tick when last in the quilt (LRU recency)
   };
+  // Monotonic re-quilt counter; stamps LoadedCell::lastNeeded so the resident
+  // cache can evict least-recently-used cells when over budget (wx-style chart
+  // cache: keep built charts across pans, evict by pressure not by view-exit).
+  qint64 m_quilt_tick = 0;
   // Currently-resident cells, keyed by cell name ("demo" for the synthetic
   // chart, which is never evicted as it has no catalog entry).
   QHash<QString, LoadedCell> m_loaded;
@@ -777,6 +791,7 @@ private:
   ChartWorker* m_worker = nullptr;
   // Boundary overlay (owned by its ChartLayer in the compositor).
   ChartBoundaryProvider* m_boundary_provider = nullptr;
+  int m_boundary_count = -1;  // last scale-culled outline count (see above)
   // Pick-highlight overlay: outlines the feature shown in the object-query
   // popup (owned by its ChartLayer in the compositor).
   PickHighlightProvider* m_pick_highlight = nullptr;

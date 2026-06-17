@@ -85,6 +85,14 @@ class ChartConfig : public QObject {
   Q_PROPERTY(double cm93OffsetY READ cm93OffsetY WRITE setCm93OffsetY NOTIFY
                  changed)
 
+  // Underzoom cull factor: a chart is eligible to decode (and its outline to
+  // draw) only while the display scale is within this many times the chart's
+  // own native scale. Shared by the quilt decode prune and the boundary filter
+  // so the two stay consistent. Larger = finer charts kept when zoomed out;
+  // smaller = a cleaner, faster small-scale view (default 8).
+  Q_PROPERTY(double chartCullFactor READ chartCullFactor WRITE
+                 setChartCullFactor NOTIFY changed)
+
 public:
   static ChartConfig& instance();
   static ChartConfig* create(QQmlEngine*, QJSEngine*) {
@@ -135,6 +143,9 @@ public:
   double cm93OffsetY() const { return m_cm93_dy; }
   void setCm93OffsetY(double v);
 
+  double chartCullFactor() const { return m_cull_factor; }
+  void setChartCullFactor(double v);
+
 signals:
   void changed();
 
@@ -171,6 +182,8 @@ private:
   int m_cm93_detail = 0;
   double m_cm93_dx = 0.0;
   double m_cm93_dy = 0.0;
+
+  double m_cull_factor = 8.0;  // underzoom cull (decode + boundary), wx-ish
 };
 
 }  // namespace ocpn::qtui

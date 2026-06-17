@@ -342,6 +342,23 @@ Window {
                                     checked: DisplayConfig.showChartOutlines
                                     onToggled: DisplayConfig.showChartOutlines = checked
                                 }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Label { text: qsTr("Small-scale chart cull:") }
+                                    Slider {
+                                        id: cullSlider
+                                        Layout.fillWidth: true
+                                        from: 2; to: 32; stepSize: 1
+                                        value: ChartConfig.chartCullFactor
+                                        onMoved: ChartConfig.chartCullFactor = value
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: qsTr("How far a chart may be zoomed out before it is dropped from the quilt AND its outline, as a multiple of the chart's own scale. Lower = cleaner, faster small-scale view (fewer fine charts shown when zoomed out); higher = finer charts kept longer. Default 8×.")
+                                    }
+                                    Label {
+                                        text: ChartConfig.chartCullFactor.toFixed(0) + "×"
+                                        font.family: "monospace"
+                                    }
+                                }
                                 CheckBox {
                                     text: qsTr("Grey “no data” fill where no ENC coverage")
                                     checked: DisplayConfig.showNoData

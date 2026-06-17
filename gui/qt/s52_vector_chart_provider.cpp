@@ -943,10 +943,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // later calls (viewport pan/zoom) we only re-apply the billboard
   // counter-scale; the World-anchored root transform handles everything
   // else, so no geometry or textures are rebuilt.
+  const bool kInstr = qEnvironmentVariableIsSet("OCPN_INSTR");
+  QElapsedTimer rcTimer;
+  if (kInstr) rcTimer.start();
   if (old_subtree && m_built) {
     // Run the expensive scale-dependent declutter only when owed (zoom settle,
     // or a detail/declutter setting change) -- never per pan frame. Then run the
     // cheap per-frame view-cull (+ counter-scale on a zoom) every time.
+    const bool relayout = m_relayout_pending;
     if (m_relayout_pending) {
       recomputeDeclutter(viewport);
       m_relayout_pending = false;
@@ -955,6 +959,15 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
         viewport.visibleWorldBounds(kBillboardCullMarginPx);
     applyBillboardVisibility(viewport.scale(), viewport.rotation(), worldView);
     applyPrimCull(worldView);
+    if (kInstr) {
+      const double ms = rcTimer.nsecsElapsed() / 1.0e6;
+      if (ms > 1.0)  // only charts whose per-frame work is actually costly
+        qWarning("INSTR renderChart %s: %.2f ms | path=%s relayout=%d "
+                 "billboards=%lld primTiles=%lld",
+                 qPrintable(id()), ms, "cache", relayout ? 1 : 0,
+                 static_cast<long long>(m_billboards.size()),
+                 static_cast<long long>(m_prim_tiles.size()));
+    }
     return old_subtree;
   }
 
@@ -1067,6 +1080,26 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   const double dpr = window && window->effectiveDevicePixelRatio() > 0
                          ? window->effectiveDevicePixelRatio()
                          : 1.0;
+
+  // Scale-gate the fill/line build: at the build scale, a prim whose ENTIRE
+  // world bbox is smaller than ~kMinPrimPx pixels is sub-pixel and invisible --
+  // so don't BUILD it. A coarse overview cell shown underzoomed otherwise
+  // tessellates tens of thousands of sub-pixel depth polygons into the scene
+  // graph (the ~330 MB resident + ~1.5 s build = the OOM and the pan judder).
+  // The zoom-settle rebuild (m_build_scale_n band, ~line 344) re-runs the build
+  // as you zoom in, so the finer detail (re)appears at the scale it's legible.
+  // viewport.scale() is logical px per world-X unit (degree of longitude);
+  // world Y (Mercator) shares the same unit, so one threshold covers both.
+  // Env-tunable; 0 disables the gate.
+  static const double kMinPrimPx = [] {
+    bool ok = false;
+    const double v = qgetenv("OCPN_QT_MIN_PRIM_PX").toDouble(&ok);
+    return ok ? v : 1.5;
+  }();
+  const double minWorld = (kMinPrimPx > 0.0 && viewport.scale() > 0.0)
+                              ? kMinPrimPx / viewport.scale()
+                              : 0.0;
+  int nFillSkipped = 0, nLineSkipped = 0;
 
   // Route a static fill/line node into the tree (P2.14). If it carries a real
   // S-52 SCAMIN, wrap it in an opacity node so updateScaminNodes can hide it by
@@ -1238,6 +1271,14 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
         lminx = std::min(lminx, wx); lmaxx = std::max(lmaxx, wx);
         lminy = std::min(lminy, wy); lmaxy = std::max(lmaxy, wy);
       }
+      // Scale-gate: a line whose whole bbox is sub-pixel at this build scale is
+      // invisible -- skip it (a long coastline keeps one large bbox dimension,
+      // so only tiny detail lines are dropped; see kMinPrimPx).
+      if (minWorld > 0.0 && (lmaxx - lminx) < minWorld &&
+          (lmaxy - lminy) < minWorld) {
+        ++nLineSkipped;
+        continue;
+      }
       // Lines deliberately SKIP the cull tiles: thin lines cost almost
       // no fill-rate off-screen, and a constant parent lets the PERF-3
       // run-merge collapse a cell's lines to ~one node per style --
@@ -1273,6 +1314,12 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
       fminy = std::min<double>(fminy, tris[i].y);
       fmaxy = std::max<double>(fmaxy, tris[i].y);
     }
+    // Scale-gate: sub-pixel fill at this build scale -> skip (see kMinPrimPx).
+    if (minWorld > 0.0 && (fmaxx - fminx) < minWorld &&
+        (fmaxy - fminy) < minWorld) {
+      ++nFillSkipped;
+      continue;
+    }
     QSGNode* parent = tileParent(fillTiles, fillUnderlay, fillGrid, fminx,
                                  fminy, fmaxx, fmaxy);
     if (fr.parent != parent || fr.scamin != prim.scamin ||
@@ -1288,10 +1335,13 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   }
   flushFills();
   flushLines();
-  if (qEnvironmentVariableIsSet("OCPN_QT_SG_STATS"))
-    qInfo("provider: PERF-3 merge -- %d fill prims -> %d nodes, "
-          "%d line prims -> %d nodes",
-          nFillPrims, nFillNodes, nLinePrims, nLineNodes);
+  if (qEnvironmentVariableIsSet("OCPN_QT_SG_STATS") ||
+      qEnvironmentVariableIsSet("OCPN_INSTR"))
+    qWarning("provider %s: PERF-3 merge -- %d fill prims -> %d nodes "
+             "(%d sub-px skipped), %d line prims -> %d nodes (%d skipped) "
+             "@ minWorld=%.4g",
+             qPrintable(m_id), nFillPrims, nFillNodes, nFillSkipped, nLinePrims,
+             nLineNodes, nLineSkipped, minWorld);
 
   // Coastline land-shade REMOVED: the inland gradient band followed the LNDARE
   // ring, but that ring is clipped to the ENC cell, so the band also drew
@@ -1677,6 +1727,12 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
           static_cast<long long>(buildTimer.elapsed()));
   m_emit_scale = viewport.scale();
   m_built = true;
+  if (kInstr)
+    qWarning("INSTR renderChart %s: %.2f ms | path=REBUILD billboards=%lld "
+             "primTiles=%lld",
+             qPrintable(id()), rcTimer.nsecsElapsed() / 1.0e6,
+             static_cast<long long>(m_billboards.size()),
+             static_cast<long long>(m_prim_tiles.size()));
   return root;
 }
 

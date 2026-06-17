@@ -42,6 +42,7 @@
 #include <QSGNode>
 #include <QSGTransformNode>
 #include <QThread>
+#include <QFile>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
@@ -900,7 +901,12 @@ void ChartCanvas::onExtentsScanned(const QList<CellExtent>& cells) {
                   DisplayConfig::instance().showChartOutlines());
             });
   }
-  m_boundary_provider->setExtents(cells);
+  // Feed the outline overlay a scale-culled subset (not the whole catalog), so
+  // the small-scale view isn't swamped by every river/harbour chart. Force a
+  // rebuild (the catalog just changed), then let updateVisibleCells refresh it
+  // as the zoom band changes.
+  m_boundary_count = -1;
+  updateBoundaryExtents();
 
   // Fit the viewport to the set once (on the first batch). Fit to the dense
   // cluster of content cells, excluding area outliers: a few overview/ocean
@@ -1130,12 +1136,11 @@ void ChartCanvas::updateVisibleCells() {
   // the candidate set here. Without this, an extreme zoom-out (e.g. 1:1.1M over
   // a coast charted only by 1:45k tiles) dragged the WHOLE fine-cell tile set --
   // none of it legible -- into the selection loop AND the decode/render set,
-  // hanging the GUI thread. Env-tunable for Pi tuning.
-  static const double kFallbackMaxUnderzoom = [] {
-    bool ok = false;
-    const double v = qgetenv("OCPN_QT_FALLBACK_UNDERZOOM").toDouble(&ok);
-    return ok && v > 0.0 ? v : 8.0;
-  }();
+  // hanging the GUI thread. The SAME factor culls the boundary overlay
+  // (updateBoundaryExtents), so decode and outline stay consistent; it is the
+  // user-facing "chart cull factor" setting (default 8).
+  const double kFallbackMaxUnderzoom =
+      ChartConfig::instance().chartCullFactor();
 
   // Candidate cells: every catalogued cell overlapping the working view that
   // has a known scale and actual chart content (administrative coverage-only
@@ -1319,14 +1324,70 @@ void ChartCanvas::updateVisibleCells() {
                               Q_ARG(ocpn::qtui::CellExtent, it.value()));
   }
 
-  // --- Evict: loaded cells no longer in the needed set. ---
+  // --- Resident chart cache (wx-style). SHOW the quilt selection, PARK (hide)
+  // everything else but KEEP IT BUILT -- a cell is NOT destroyed just because it
+  // left the view. That view-exit destroy was the "halt on reverse": panning
+  // back over a just-departed chart rebuilt it from scratch (30 ms-1.5 s). Now a
+  // reverse/revisit just re-shows the cached layer. Eviction is by LRU pressure
+  // only (below), so memory stays bounded (we don't reopen the panning OOM).
+  ++m_quilt_tick;
+  for (auto it = m_loaded.begin(); it != m_loaded.end(); ++it) {
+    if (!it.value().extent.valid()) continue;  // demo -- always visible
+    const bool needed = m_needed.contains(it.key());
+    if (needed) it.value().lastNeeded = m_quilt_tick;
+    if (Layer* l = m_compositor->layer(it.value().layerId))
+      l->setVisible(needed);
+  }
+
+  // LRU eviction: keep at most kMaxResident built cells; when over budget,
+  // destroy the least-recently-needed cells that are not in the current quilt.
+  static const int kMaxResident = [] {
+    bool ok = false;
+    const int v = qgetenv("OCPN_QT_MAX_RESIDENT").toInt(&ok);
+    return ok ? v : 12;  // 0 disables the cap (unbounded -- debug only)
+  }();
+  // Memory-pressure guard: these overview/coastal cells can be HUNDREDS of MB
+  // each (the over-detail decode -- 12 cells OOM'd at ~4 GB), so the resident
+  // cache must never drive an OOM. When the system is low on free RAM, drop the
+  // WHOLE parked cache and keep only the rendered quilt. Otherwise bound it by
+  // the LRU count cap.
+  static const long kMinFreeKB = [] {
+    bool ok = false;
+    const long v = qgetenv("OCPN_QT_MIN_FREE_MB").toLong(&ok);
+    return (ok ? v : 1800) * 1024L;  // keep >= ~1.8 GB free by default
+  }();
+  long memAvailKB = 0;
+  if (QFile mi(QStringLiteral("/proc/meminfo")); mi.open(QIODevice::ReadOnly)) {
+    const QByteArray s = mi.readAll();
+    const int i = s.indexOf("MemAvailable:");
+    if (i >= 0)
+      memAvailKB = s.mid(i + 13, 24).simplified().split(' ').first().toLong();
+  }
+  const bool memPressure = memAvailKB > 0 && memAvailKB < kMinFreeKB;
+
+  QList<QString> parked;  // resident, not in the quilt -> evictable
+  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it)
+    if (it.value().extent.valid() && !m_needed.contains(it.key()))
+      parked.append(it.key());
   QList<QString> evict;
-  for (auto it = m_loaded.cbegin(); it != m_loaded.cend(); ++it) {
-    const LoadedCell& lc = it.value();
-    if (!lc.extent.valid()) continue;  // demo chart -- never evict
-    if (!m_needed.contains(it.key())) evict.append(it.key());
+  if (memPressure) {
+    evict = parked;  // under pressure: keep only what is rendered
+    if (kInstr && !evict.isEmpty())
+      qWarning("INSTR memPressure: free=%ldMB < %ldMB -> drop %lld parked cells",
+               memAvailKB / 1024, kMinFreeKB / 1024,
+               static_cast<long long>(evict.size()));
+  } else if (kMaxResident > 0 && m_loaded.size() > kMaxResident) {
+    std::sort(parked.begin(), parked.end(),
+              [this](const QString& a, const QString& b) {
+                return m_loaded.value(a).lastNeeded < m_loaded.value(b).lastNeeded;
+              });
+    const int over = m_loaded.size() - kMaxResident;
+    for (int i = 0; i < over && i < parked.size(); ++i) evict.append(parked[i]);
   }
   for (const QString& name : evict) {
+    if (kInstr)
+      qWarning("INSTR evict %s (LRU: resident=%lld > cap=%d)", qPrintable(name),
+               static_cast<long long>(m_loaded.size()), kMaxResident);
     m_compositor->removeLayer(m_loaded.value(name).layerId);
     m_loaded.remove(name);
     m_requested.remove(name);  // eligible to reload when needed again
@@ -1387,6 +1448,10 @@ void ChartCanvas::updateVisibleCells() {
     emit overscaleChanged();
   }
 
+  // Re-cull the chart-outline overlay for the (possibly new) zoom band. Cheap:
+  // a no-op unless the eligible count changed (a pure pan keeps displayN).
+  updateBoundaryExtents();
+
   // Refresh finest-owner suppression once this pan/zoom has settled. Ownership
   // now depends on BOTH the loaded set AND the zoom (the closest-scale crossover
   // in updateFinerCoverage is a function of displayN), so a pure zoom that
@@ -1432,6 +1497,10 @@ void ChartCanvas::updateFinerCoverage() {
     QList<QPolygonF> finer;
     for (auto jt = m_loaded.cbegin(); jt != m_loaded.cend(); ++jt) {
       if (jt.key() == it.key()) continue;
+      // Only RENDERED (selected) finer cells suppress -- a parked/hidden finer
+      // cell (resident for hysteresis but not in the quilt) must not blank the
+      // visible coarser chart's annotations.
+      if (!m_needed.contains(jt.key())) continue;
       const CellExtent& f = jt.value().extent;
       // Strictly finer (so it draws on top here) and actually overlapping.
       if (!f.valid() || f.nativeScale <= 0 ||
@@ -1457,6 +1526,38 @@ void ChartCanvas::updateFinerCoverage() {
     }
     if (lc.provider) lc.provider->setFinerCoverage(finer);
   }
+}
+
+void ChartCanvas::updateBoundaryExtents() {
+  if (!m_boundary_provider || !m_viewport || m_catalog.isEmpty()) return;
+
+  const double displayN =
+      displayScaleN(m_viewport->scale(), m_viewport->centerLat());
+  const double cm93_bias =
+      std::pow(3.0, ChartConfig::instance().cm93Detail() / 2.5);
+  const double cull = ChartConfig::instance().chartCullFactor();
+  const auto eligible = [&](const CellExtent& c) {
+    if (c.nativeScale <= 0) return false;
+    const bool is_cm93 = c.name.startsWith(QLatin1String("CM93-"));
+    const double eff = c.nativeScale * (is_cm93 ? cm93_bias : 1.0);
+    return displayN <= eff * cull;
+  };
+
+  // Count first (cheap O(catalog), no allocation). The eligible set is monotone
+  // in zoom -- zooming in only ADDS charts -- so a changed count is the only
+  // signal we need that the displayed set really changed; a pure pan keeps
+  // displayN and the count, and we skip the (node-rebuilding) setExtents.
+  int n = 0;
+  for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it)
+    if (eligible(it.value())) ++n;
+  if (n == m_boundary_count) return;
+  m_boundary_count = n;
+
+  QList<CellExtent> shown;
+  shown.reserve(n);
+  for (auto it = m_catalog.cbegin(); it != m_catalog.cend(); ++it)
+    if (eligible(it.value())) shown.append(it.value());
+  m_boundary_provider->setExtents(shown);
 }
 
 QVariantList ChartCanvas::chartBarCells() const {

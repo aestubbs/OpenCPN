@@ -29,6 +29,8 @@
 #ifndef OCPN_QT_SHAPEFILE_BASEMAP_PROVIDER_H_
 #define OCPN_QT_SHAPEFILE_BASEMAP_PROVIDER_H_
 
+#include <vector>
+
 #include <QColor>
 #include <QHash>
 #include <QList>
@@ -77,7 +79,7 @@ public:
    *  even-odd rule as the fill), so they coincide exactly with the land/sea
    *  fill edge -- the single source of truth shared by the coast outline and
    *  the inland-shade pass. */
-  const QList<QList<QPointF>>& coastlines() const { return m_coastlines; }
+  const QList<QList<QPointF>>& coastlines() const { return m_lod_full.coastlines; }
 
   /** Wire the viewport: the basemap submits only VIEW-INTERSECTING 15-deg
    *  tiles of its (multi-million-vertex) world geometry, and re-emits
@@ -87,22 +89,40 @@ public:
   void setViewport(const Viewport* vp);
 
 private:
-  void load(const QString& shp_path);
+  // One level-of-detail: tessellated world geometry, bucketed into the 15-deg
+  // tile grid (PERF-6, index ty*kTilesX+tx) so a rebuild submits only the
+  // visible tiles. Both tiers come from the SAME source shapefile (basemap_low):
+  // the FULL tier is the real coastline; the COARSE tier is the same coastline
+  // with its ring points Douglas-Peucker-culled, then re-tessellated -- so the
+  // fill triangles AND the outline thin out together, faithfully (no separate
+  // crude file to "pop" to). Drawn zoomed out, where the fine coastline is
+  // invisible, GPU-bound, and piles into a "thick" smudge in intricate areas.
+  struct Lod {
+    QList<QList<QPointF>> coastlines;            // fill-boundary loops, world
+    QHash<int, QList<QPointF>> tile_tris;        // per-tile land triangle list
+    QHash<int, QList<QPointF>> tile_coast_segs;  // per-tile (a,b) seg pairs
+    bool loaded = false;
+  };
+  // A polygon feature = its rings as interleaved world (x=lon, y=Mercator).
+  using Feature = std::vector<QList<float>>;
+  void load(const QString& detail_path);  // reads source, builds both LOD tiers
+  // Tessellate features (each ring DP-simplified by `eps` world-units; 0 = full
+  // detail) + bucket into tiles -> out. Static so it touches no per-instance
+  // state and can run from the shared-geometry cache.
+  static void buildTier(const std::vector<Feature>& features, double eps,
+                        Lod& out, const char* label);
+  const Lod& activeLod() const;  // full or coarse, by current zoom
+  bool useCoarse() const;        // true when the coarse tier should be drawn
   QSet<int> visibleTiles() const;  // tile indices intersecting the view
 
-  QList<QPointF> m_land_tris;            // (x=lon, y=-lat) triangle list
-  QList<QList<QPointF>> m_coastlines;    // fill-boundary loops, world coords
-  // PERF-6: per-tile buckets of the world geometry (15-deg grid, index
-  // ty*kTilesX+tx). Built once at load; renderChart concatenates only the
-  // visible tiles' buckets.
-  QHash<int, QList<QPointF>> m_tile_tris;
-  QHash<int, QList<QPointF>> m_tile_coast_segs;  // flattened (a,b) pairs
+  Lod m_lod_full;    // real coastline -- drawn zoomed in
+  Lod m_lod_coarse;  // point-culled + re-tessellated -- drawn zoomed out
   const Viewport* m_vp = nullptr;
-  QSet<int> m_attached;  // tile set of the last build
-  QColor m_sea{170, 195, 220};
-  QColor m_land{225, 213, 180};
+  QSet<int> m_attached;            // tile set of the last build
+  bool m_attached_coarse = false;  // LOD of the last build (detect crossover)
+  QColor m_sea{212, 234, 238};   // S-52 DEPDW day_bright -- match ENC deep water
+  QColor m_land{201, 185, 122};  // S-52 LANDA day_bright -- match the ENC land
   QColor m_coast{120, 110, 90};
-  bool m_loaded = false;
   bool m_nodata = false;  // paint backdrop S-52 NODATA grey (ECDIS toggle)
   // S-52 NODTA fill (the no-coverage grey); land/coast slightly darker so the
   // coastline still reads when the backdrop is grey.

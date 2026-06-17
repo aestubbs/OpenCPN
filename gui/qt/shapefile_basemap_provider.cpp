@@ -15,8 +15,10 @@
 
 #include "shapefile_basemap_provider.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 #include <QElapsedTimer>
@@ -83,6 +85,61 @@ inline int tileIndex(const QPointF& w) {
       qBound(0, int((w.y() - yTop) / ((yBot - yTop) / kTilesY)), kTilesY - 1);
   return ty * kTilesX + tx;
 }
+
+// Douglas-Peucker point culling for one ring (interleaved x,y world coords),
+// keeping the endpoints. `eps` is the max allowed perpendicular deviation in
+// world units; points whose removal moves the line by less than eps are
+// dropped. This is the coarse-LOD coastline simplification -- it thins dense
+// coastline (fjords, river deltas) uniformly while leaving simple coast
+// untouched, so the re-tessellated land keeps the real shape with far fewer
+// points. O(n log n) typical via the split stack.
+QList<float> simplifyRing(const QList<float>& pts, double eps) {
+  const int n = pts.size() / 2;
+  if (n < 3 || eps <= 0.0) return pts;
+  std::vector<bool> keep(n, false);
+  keep[0] = keep[n - 1] = true;
+  const double eps2 = eps * eps;
+  std::vector<std::pair<int, int>> stack;
+  stack.emplace_back(0, n - 1);
+  while (!stack.empty()) {
+    const auto [a, b] = stack.back();
+    stack.pop_back();
+    if (b <= a + 1) continue;
+    const double ax = pts[a * 2], ay = pts[a * 2 + 1];
+    const double dx = pts[b * 2] - ax, dy = pts[b * 2 + 1] - ay;
+    const double seg2 = dx * dx + dy * dy;
+    double maxD2 = -1.0;
+    int idx = -1;
+    for (int i = a + 1; i < b; ++i) {
+      const double px = pts[i * 2] - ax, py = pts[i * 2 + 1] - ay;
+      double d2;
+      if (seg2 <= 1e-20) {
+        d2 = px * px + py * py;  // degenerate segment: distance to A
+      } else {
+        const double t = std::clamp((px * dx + py * dy) / seg2, 0.0, 1.0);
+        const double ex = px - t * dx, ey = py - t * dy;
+        d2 = ex * ex + ey * ey;
+      }
+      if (d2 > maxD2) {
+        maxD2 = d2;
+        idx = i;
+      }
+    }
+    if (maxD2 > eps2 && idx > 0) {
+      keep[idx] = true;
+      stack.emplace_back(a, idx);
+      stack.emplace_back(idx, b);
+    }
+  }
+  QList<float> out;
+  out.reserve(n * 2);
+  for (int i = 0; i < n; ++i)
+    if (keep[i]) {
+      out.append(pts[i * 2]);
+      out.append(pts[i * 2 + 1]);
+    }
+  return out;
+}
 }  // namespace
 
 ShapefileBasemapProvider::ShapefileBasemapProvider(const QString& shp_path,
@@ -110,8 +167,8 @@ void ShapefileBasemapProvider::setColorScheme(int scheme) {
       m_nodata_coast = QColor(64, 64, 64);
       break;
     default:  // day
-      m_sea = QColor(170, 195, 220);
-      m_land = QColor(225, 213, 180);
+      m_sea = QColor(212, 234, 238);   // S-52 DEPDW day_bright (match deep water)
+      m_land = QColor(201, 185, 122);  // S-52 LANDA day_bright (match ENC land)
       m_coast = QColor(120, 110, 90);
       m_nodata_fill = QColor(200, 200, 200);
       m_nodata_coast = QColor(150, 150, 150);
@@ -126,50 +183,36 @@ void ShapefileBasemapProvider::setNoDataMode(bool on) {
   emit changed();  // forces a rebuild (renderChart re-tints the backdrop)
 }
 
-void ShapefileBasemapProvider::load(const QString& shp_path) {
-  shp::ShapefileReader reader(shp_path.toStdString());
-  if (!reader.isOpen()) {
-    qWarning("Basemap: cannot open %s", qPrintable(shp_path));
-    return;
-  }
+void ShapefileBasemapProvider::buildTier(const std::vector<Feature>& features,
+                                         double eps, Lod& out,
+                                         const char* label) {
   QElapsedTimer timer;
   timer.start();
-
+  QList<QPointF> land_tris;  // (x=lon, y=Mercator) triangle list (this tier)
   int rings = 0;
 
   // libtess2 consumes (and frees) its mesh inside each tessTesselate() call,
   // so a single tessellator cannot be asked for both the filled polygons and
-  // the boundary contours -- the second pass would run on a NULL mesh and
-  // produce nothing (or stale garbage). Keep the feature's rings and run each
-  // pass on its own freshly-fed tessellator, from the SAME even-odd contours,
-  // so the fill triangles and the boundary loops describe the identical
-  // region and the shade/outline ride the tan land/sea edge exactly.
-  std::vector<QList<float>> feature_contours;  // interleaved x,y per ring
-
-  for (const auto& feature : reader) {
-    auto* poly = static_cast<shp::Polygon*>(feature.getGeometry());
-    if (!poly) continue;
-
-    // Collect every ring of this polygon (outer + holes) as interleaved
-    // world coords; tessellate the feature together so lakes punch through.
-    feature_contours.clear();
-    for (const shp::Ring& ring : poly->getRings()) {
-      const std::vector<shp::Point>& pts = ring.getPoints();
-      if (pts.size() < 3) continue;
-      QList<float> contour;
-      contour.reserve(static_cast<int>(pts.size()) * 2);
-      for (const shp::Point& p : pts) {
-        contour.append(static_cast<float>(p.getX()));    // lon
-        contour.append(
-            static_cast<float>(Viewport::latToWorldY(p.getY())));  // Mercator
-      }
-      feature_contours.push_back(std::move(contour));
+  // the boundary contours -- the second pass would run on a NULL mesh. Run each
+  // pass on its own freshly-fed tessellator, from the SAME (eps-simplified)
+  // contours, so the fill triangles and the boundary loops describe the
+  // identical region and the shade/outline ride the land/sea edge exactly.
+  std::vector<QList<float>> contours;  // this feature's simplified rings
+  for (const Feature& feat : features) {
+    contours.clear();
+    for (const QList<float>& ring : feat) {
+      // Simplify in lat/lon (uniform degrees), THEN project to world Mercator.
+      QList<float> c = eps > 0.0 ? simplifyRing(ring, eps) : ring;
+      if (c.size() < 6) continue;  // need >= 3 points to tessellate
+      for (int i = 1; i < c.size(); i += 2)
+        c[i] = static_cast<float>(Viewport::latToWorldY(c[i]));  // lat -> Merc
+      contours.push_back(std::move(c));
       ++rings;
     }
-    if (feature_contours.empty()) continue;
+    if (contours.empty()) continue;
 
     const auto addContours = [&](TESStesselator* t) {
-      for (const QList<float>& c : feature_contours)
+      for (const QList<float>& c : contours)
         tessAddContour(t, 2, c.constData(), sizeof(float) * 2, c.size() / 2);
     };
 
@@ -180,24 +223,19 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
       const float* verts = tessGetVertices(fill);
       const TESSindex* elems = tessGetElements(fill);
       const int ne = tessGetElementCount(fill);
-      for (int i = 0; i < ne; ++i) {
+      for (int i = 0; i < ne; ++i)
         for (int j = 0; j < 3; ++j) {
           const TESSindex idx = elems[i * 3 + j];
           if (idx == TESS_UNDEF) break;
-          m_land_tris.append(QPointF(verts[idx * 2], verts[idx * 2 + 1]));
+          land_tris.append(QPointF(verts[idx * 2], verts[idx * 2 + 1]));
         }
-      }
     }
     tessDeleteTess(fill);
 
-    // Single source of truth for the coast outline + shade: ask libtess2 for
-    // the BOUNDARY CONTOURS of the *filled* region under the SAME even-odd
-    // rule used for the fill above. These loops are exactly the fill's edge
-    // (holes punched, overlapping/shared ring edges merged), so the outline
-    // and the inland shade ride the tan land/sea boundary precisely instead
-    // of the raw input rings, which can diverge from the merged fill edge.
-    // A separate tessellator is required because the fill pass already
-    // destroyed its mesh.
+    // Boundary contours of the *filled* region (same even-odd rule) -- the
+    // single source of truth for the outline + inland shade, so they ride the
+    // merged land/sea edge rather than the raw rings. Separate tessellator
+    // because the fill pass destroyed its mesh.
     TESStesselator* bound = tessNewTess(nullptr);
     addContours(bound);
     if (tessTesselate(bound, TESS_WINDING_ODD, TESS_BOUNDARY_CONTOURS, 0, 2,
@@ -213,57 +251,144 @@ void ShapefileBasemapProvider::load(const QString& shp_path) {
         loop.reserve(count);
         for (TESSindex j = 0; j < count; ++j)
           loop.append(QPointF(verts[(base + j) * 2], verts[(base + j) * 2 + 1]));
-        m_coastlines.append(std::move(loop));
+        out.coastlines.append(std::move(loop));
       }
     }
     tessDeleteTess(bound);
   }
 
-  m_loaded = !m_land_tris.isEmpty();
+  out.loaded = !land_tris.isEmpty();
 
-  // PERF-6: bucket the geometry into a 15-degree tile grid so a rebuild
-  // submits only the visible tiles. Triangles bucket by centroid;
-  // coast segments by midpoint (grid clip edges dropped here -- neither
-  // the outline nor the shade ever draws them).
-  for (int i = 0; i + 2 < m_land_tris.size(); i += 3) {
-    const QPointF c = (m_land_tris[i] + m_land_tris[i + 1] +
-                       m_land_tris[i + 2]) / 3.0;
-    QList<QPointF>& bucket = m_tile_tris[tileIndex(c)];
-    bucket.append(m_land_tris[i]);
-    bucket.append(m_land_tris[i + 1]);
-    bucket.append(m_land_tris[i + 2]);
+  // PERF-6: bucket into the 15-degree tile grid so a rebuild submits only the
+  // visible tiles. Triangles bucket by centroid; coast segments by midpoint
+  // (grid clip edges dropped here -- neither outline nor shade draws them).
+  for (int i = 0; i + 2 < land_tris.size(); i += 3) {
+    const QPointF c =
+        (land_tris[i] + land_tris[i + 1] + land_tris[i + 2]) / 3.0;
+    QList<QPointF>& bucket = out.tile_tris[tileIndex(c)];
+    bucket.append(land_tris[i]);
+    bucket.append(land_tris[i + 1]);
+    bucket.append(land_tris[i + 2]);
   }
-  for (const auto& loop : m_coastlines) {
+  for (const auto& loop : out.coastlines) {
     const int n = loop.size();
     for (int i = 0; i < n; ++i) {
       const QPointF& a = loop[i];
       const QPointF& b = loop[(i + 1) % n];
       if (isGridEdge(a, b)) continue;
-      QList<QPointF>& bucket = m_tile_coast_segs[tileIndex((a + b) / 2.0)];
+      QList<QPointF>& bucket = out.tile_coast_segs[tileIndex((a + b) / 2.0)];
       bucket.append(a);
       bucket.append(b);
     }
   }
 
-  qWarning("Basemap: %d rings, %lld triangles in %lld ms (%lld tiles)",
-           rings, (long long)(m_land_tris.size() / 3),
-           (long long)timer.elapsed(), (long long)m_tile_tris.size());
+  qWarning("Basemap[%s]: %d rings, %lld triangles in %lld ms (%lld tiles)",
+           label, rings, (long long)(land_tris.size() / 3),
+           (long long)timer.elapsed(), (long long)out.tile_tris.size());
+}
+
+void ShapefileBasemapProvider::load(const QString& detail_path) {
+  // The basemap is STATIC world geometry, identical for every canvas, and
+  // building both LOD tiers costs ~1.5 s + tens of MB. With a dual-pane layout
+  // there are two ChartCanvas instances (Main.qml), each constructing its own
+  // provider -- so cache the built (view-independent) tiers per source path and
+  // reuse them: Qt's containers are copy-on-write, so the second canvas shares
+  // the same storage at O(1) and never mutates it (renderChart only reads).
+  // Both providers are constructed on the main thread, so the static cache
+  // needs no lock; the data is read-only on the render thread thereafter.
+  struct Cached {
+    Lod full;
+    Lod coarse;
+  };
+  static QHash<QString, Cached> s_cache;
+  if (auto it = s_cache.constFind(detail_path); it != s_cache.constEnd()) {
+    m_lod_full = it->full;
+    m_lod_coarse = it->coarse;
+    qWarning("Basemap: reused cached geometry for %s",
+             qPrintable(detail_path));
+    return;
+  }
+
+  shp::ShapefileReader reader(detail_path.toStdString());
+  if (!reader.isOpen()) {
+    qWarning("Basemap: cannot open %s", qPrintable(detail_path));
+    return;
+  }
+
+  // Read every feature's rings ONCE into world coords; both LOD tiers are
+  // tessellated from this (the coarse tier first DP-simplifies each ring).
+  std::vector<Feature> features;
+  for (const auto& feature : reader) {
+    auto* poly = static_cast<shp::Polygon*>(feature.getGeometry());
+    if (!poly) continue;
+    Feature feat;
+    for (const shp::Ring& ring : poly->getRings()) {
+      const std::vector<shp::Point>& pts = ring.getPoints();
+      if (pts.size() < 3) continue;
+      QList<float> contour;
+      contour.reserve(static_cast<int>(pts.size()) * 2);
+      for (const shp::Point& p : pts) {
+        contour.append(static_cast<float>(p.getX()));   // lon (degrees)
+        contour.append(static_cast<float>(p.getY()));   // lat (degrees) -- the
+        // Mercator transform is applied per-tier AFTER simplification (below),
+        // so Douglas-Peucker runs in uniform lat/lon degrees and never perturbs
+        // the whole-degree meridian clip-edges off-grid (the coastline whisker
+        // artifact, worst near the poles where Mercator-Y is sec(lat)-stretched).
+      }
+      feat.push_back(std::move(contour));
+    }
+    if (!feat.empty()) features.push_back(std::move(feat));
+  }
+
+  // Coarse-tier point-cull tolerance (world units ~ degrees). Generous enough
+  // to thin dense coastline at world/continental zoom but keep the shape;
+  // env-tunable for Pi tuning.
+  static const double kCoarseEps = [] {
+    bool ok = false;
+    const double v = qgetenv("OCPN_QT_BASEMAP_COARSE_EPS").toDouble(&ok);
+    return ok && v > 0.0 ? v : 0.08;
+  }();
+  buildTier(features, 0.0, m_lod_full, "full");
+  buildTier(features, kCoarseEps, m_lod_coarse, "coarse");
+
+  s_cache.insert(detail_path, Cached{m_lod_full, m_lod_coarse});
+}
+
+bool ShapefileBasemapProvider::useCoarse() const {
+  // Draw the coarse tier when zoomed out past this many logical pixels per
+  // degree of longitude (m_vp->scale()). Below it the culled coastline is
+  // indistinguishable from the full one but ~Nx cheaper to draw; env-tunable.
+  static const double kCoarseBelowPxPerDeg = [] {
+    bool ok = false;
+    const double v = qgetenv("OCPN_QT_BASEMAP_COARSE_PXDEG").toDouble(&ok);
+    return ok && v > 0.0 ? v : 20.0;
+  }();
+  return m_lod_coarse.loaded && m_vp &&
+         m_vp->scale() < kCoarseBelowPxPerDeg;
+}
+
+const ShapefileBasemapProvider::Lod& ShapefileBasemapProvider::activeLod()
+    const {
+  return useCoarse() ? m_lod_coarse : m_lod_full;
 }
 
 void ShapefileBasemapProvider::setViewport(const Viewport* vp) {
   m_vp = vp;
   if (!m_vp) return;
   connect(m_vp, &Viewport::changed, this, [this] {
-    // Re-render only when the VISIBLE TILE SET changes (a pan within the
-    // same tiles costs nothing; the world-anchored transform pans).
-    if (visibleTiles() != m_attached) emit changed();
+    // Re-render only when the VISIBLE TILE SET changes (a pan within the same
+    // tiles costs nothing; the world-anchored transform pans), OR when a zoom
+    // crosses the LOD threshold (the tier switches full<->coarse).
+    if (visibleTiles() != m_attached || useCoarse() != m_attached_coarse)
+      emit changed();
   });
 }
 
 QSet<int> ShapefileBasemapProvider::visibleTiles() const {
   QSet<int> out;
   if (!m_vp) {  // no viewport wired: everything (the old behaviour)
-    for (auto it = m_tile_tris.cbegin(); it != m_tile_tris.cend(); ++it)
+    for (auto it = m_lod_full.tile_tris.cbegin();
+         it != m_lod_full.tile_tris.cend(); ++it)
       out.insert(it.key());
     return out;
   }
@@ -291,9 +416,13 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
   // ~3M world vertices -- the measured ~1 s pan-into-new-cell hitch.
   // setViewport's tile-set watcher re-dirties this layer when panning
   // crosses a tile boundary; within a tile set old_subtree is reused.
-  if (old_subtree && visibleTiles() == m_attached) return old_subtree;
-  if (!m_loaded) return nullptr;
+  const bool coarse = useCoarse();
+  if (old_subtree && visibleTiles() == m_attached && coarse == m_attached_coarse)
+    return old_subtree;
+  const Lod& lod = activeLod();
+  if (!lod.loaded) return nullptr;
   m_attached = visibleTiles();
+  m_attached_coarse = coarse;
 
   auto* root = new QSGNode();
 
@@ -317,32 +446,48 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
     root->appendChildNode(sea);
   }
 
-  // 2. Land fill: the visible tiles' tessellated triangles.
+  // 2. Land fill: the visible tiles' tessellated triangles, emitted in chunks
+  //    no larger than the scene graph's 16-bit batch limit. A single node with
+  //    all visible tiles' vertices (~1.86M at world zoom) renders on desktop/
+  //    Metal RHI (32-bit indices) but is SILENTLY DROPPED on the Pi's V3D/Mesa
+  //    GLES backend, where the batch renderer is bounded to 65535 vertices --
+  //    so the land vanished and the map showed sea + coastline only. Chunking
+  //    on a triangle boundary keeps every node drawable on both backends.
   {
-    int nv = 0;
-    for (int t : m_attached) nv += m_tile_tris.value(t).size();
-    if (nv > 0) {
-      auto* land =
-          sg::makeFlatColorNode(landCol, QSGGeometry::DrawTriangles, nv);
-      QSGGeometry::Point2D* v = land->geometry()->vertexDataAsPoint2D();
-      int k = 0;
-      for (int t : m_attached)
-        for (const QPointF& p : m_tile_tris.value(t))
-          v[k++].set(static_cast<float>(p.x()), static_cast<float>(p.y()));
+    constexpr int kMaxVerts = 65532;  // < 65536 and a multiple of 3 (triangles)
+    std::vector<QSGGeometry::Point2D> chunk;
+    chunk.reserve(kMaxVerts);
+    const auto flush = [&]() {
+      if (chunk.empty()) return;
+      auto* land = sg::makeFlatColorNode(landCol, QSGGeometry::DrawTriangles,
+                                         static_cast<int>(chunk.size()));
+      std::memcpy(land->geometry()->vertexData(), chunk.data(),
+                  chunk.size() * sizeof(QSGGeometry::Point2D));
       root->appendChildNode(land);
-    }
+      chunk.clear();
+    };
+    for (int t : m_attached)
+      for (const QPointF& p : lod.tile_tris.value(t)) {
+        if (static_cast<int>(chunk.size()) >= kMaxVerts) flush();
+        QSGGeometry::Point2D q;
+        q.set(static_cast<float>(p.x()), static_cast<float>(p.y()));
+        chunk.push_back(q);
+      }
+    flush();
   }
 
   // 3. Inland shade: a soft gradient band just inside the coast (darkening
   //    fading to transparent ~6px inland) so land lifts off the water. Built
   //    from the same fill-boundary loops as the outline (and the fill), so its
   //    coastal edge sits exactly on the land/sea boundary. Skip grid clip
-  //    edges so the tile boundaries aren't shaded. Suppressed in NODATA mode --
-  //    the backdrop is a flat no-coverage grey, not a cartographic shoreline.
-  if (!m_nodata) {
+  //    edges so the tile boundaries aren't shaded. Suppressed in NODATA mode
+  //    and at COARSE zoom -- the band is alpha-blended over every coastline
+  //    (fill-rate heavy on the Pi's V3D) yet ramps to ~1px and is invisible
+  //    when zoomed out, so it is pure cost there.
+  if (!m_nodata && !coarse) {
     const QSet<int>& vis = m_attached;
     if (auto* shade = makeCoastShadeNode(
-            m_coastlines, QColor(0, 0, 0), /*width_px=*/6.0f,
+            lod.coastlines, QColor(0, 0, 0), /*width_px=*/6.0f,
             /*max_alpha=*/0.38f, [&vis](const QPointF& a, const QPointF& b) {
               return !isGridEdge(a, b) &&
                      vis.contains(tileIndex((a + b) / 2.0));
@@ -355,7 +500,7 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
   {
     std::vector<QSGGeometry::Point2D> seg;
     for (int t : m_attached) {
-      const QList<QPointF>& pts = m_tile_coast_segs.value(t);
+      const QList<QPointF>& pts = lod.tile_coast_segs.value(t);
       for (const QPointF& p : pts) {
         QSGGeometry::Point2D q;
         q.set(static_cast<float>(p.x()), static_cast<float>(p.y()));

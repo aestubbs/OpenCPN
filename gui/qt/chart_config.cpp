@@ -46,6 +46,7 @@ ChartConfig::ChartConfig() {
   m_cm93_detail = c.getInt("vchart/cm93Detail", m_cm93_detail);
   m_cm93_dx = c.getDouble("vchart/cm93OffsetX", m_cm93_dx);
   m_cm93_dy = c.getDouble("vchart/cm93OffsetY", m_cm93_dy);
+  m_cull_factor = c.getDouble("vchart/chartCullFactor", m_cull_factor);
 }
 
 // guard, store, persist, notify.
@@ -111,6 +112,9 @@ void ChartConfig::setCm93OffsetX(double v) {
 }
 void ChartConfig::setCm93OffsetY(double v) {
   OCPN_VC_SET(m_cm93_dy, v, "vchart/cm93OffsetY", setDouble)
+}
+void ChartConfig::setChartCullFactor(double v) {
+  OCPN_VC_SET(m_cull_factor, v, "vchart/chartCullFactor", setDouble)
 }
 
 #undef OCPN_VC_SET
