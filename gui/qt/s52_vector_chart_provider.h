@@ -320,12 +320,19 @@ private:
   QSGOpacityNode* m_overscale_hatch = nullptr;
   void rebuildOverscaleHatch(double scale, double chart_scale_n);
   double m_unset_scamin_n = 100000.0;  // default min display scale (no SCAMIN)
-  // How far below a sounding's SCAMIN (or, when unset, the cell's native scale)
-  // a sounding still shows -- wx super-SCAMIN is native*2. Used by BOTH the build
-  // gate (buildSkip) and the per-frame show gate (effScamin) so existence and
-  // visibility stay in lockstep (no hysteresis). >2 shows soundings sooner /
-  // further out at the cost of a larger text atlas. Env OCPN_QT_SOUNDING_SCAMIN.
-  double m_sounding_scamin_margin = 2.0;
+  // SCAMIN effectivity margin for ALL features (soundings, lights, buoys, labels,
+  // ...). A feature with a real SCAMIN shows while displayN <= SCAMIN*margin; an
+  // unset sounding uses the cell's native scale as its SCAMIN. Used by BOTH the
+  // build gate (buildSkip) and the per-frame show gate (effScamin) so existence
+  // and visibility stay in lockstep (no hysteresis). The default 4.0 MATCHES
+  // ChartCanvas::updateVisibleCells' kUnderzoomAdmit: a cell joins the quilt out
+  // to 4x underzoom, so its features come in at the SAME zoom as the chart rather
+  // than the chart appearing first and its detail only further in (the "soundings
+  // come in too late" report). (Unset non-sounding aids keep the m_unset_scamin_n
+  // declutter floor, NOT margin-scaled, so overview-cell aids don't pile up.) Env
+  // OCPN_QT_SCAMIN_MARGIN overrides (>4 sooner/further out, larger atlas; <4
+  // later).
+  double m_scamin_margin = 4.0;
   // The 1:N display scale the billboards were last BUILT at. Labels/soundings/
   // symbols that are SCAMIN-hidden (or, for soundings, far underzoomed) at the
   // build scale are not rasterised at all -- a big overview cell shown zoomed

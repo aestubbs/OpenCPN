@@ -320,11 +320,12 @@ S52VectorChartProvider::S52VectorChartProvider(QString id,
       m_west(west),
       m_east(east),
       m_viewport(viewport) {
-  // Sounding SCAMIN show/build margin (default wx super-SCAMIN = native*2);
-  // raise to reveal soundings sooner / further out (larger text atlas).
-  if (bool ok = false; qEnvironmentVariableIsSet("OCPN_QT_SOUNDING_SCAMIN")) {
-    const double v = qgetenv("OCPN_QT_SOUNDING_SCAMIN").toDouble(&ok);
-    if (ok && v >= 1.0) m_sounding_scamin_margin = v;
+  // SCAMIN effectivity margin for all features (default 4.0 = the quilt's
+  // underzoom admit, so features come in with their chart); raise to reveal
+  // detail sooner / further out (larger text atlas), lower to hold it later.
+  if (bool ok = false; qEnvironmentVariableIsSet("OCPN_QT_SCAMIN_MARGIN")) {
+    const double v = qgetenv("OCPN_QT_SCAMIN_MARGIN").toDouble(&ok);
+    if (ok && v >= 1.0) m_scamin_margin = v;
   }
   // Billboarded point items (symbols/text) re-apply their counter-scale,
   // and lines/patterns relay out, only when the viewport ZOOMS. A pure pan
@@ -784,10 +785,11 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
     // it showed late on zoom-in (waiting for a rebuild) and lingered on zoom-out
     // (the gate never hid it; only a later rebuild dropped it) -- a ~2x hysteresis
     // band. Gating on the live scale with the SAME margin the build uses
-    // (m_sounding_scamin_margin) makes the show/hide point symmetric. A sounding
-    // with no real per-object SCAMIN follows the cell's native scale (wx
-    // super-SCAMIN = native*2); the margin lets them show a little before strict
-    // SCAMIN. The shallowest-per-cell declutter below still thins them
+    // (m_scamin_margin) makes the show/hide point symmetric. A sounding
+    // with no real per-object SCAMIN follows the cell's native scale, and the
+    // default margin (4.0) matches the quilt's underzoom admit -- so the chart
+    // and its soundings come in at the SAME zoom, not 2x apart ("soundings come
+    // in too late"). The shallowest-per-cell declutter below still thins them
     // progressively, so crossing a single shared SOUNDG SCAMIN is a gradual
     // fade-out, not an all-at-once cliff.
     if (b.kind == BbKind::Sounding) {
@@ -796,10 +798,14 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
           unset ? (m_native_scale > 0 ? static_cast<double>(m_native_scale) : 0.0)
                 : static_cast<double>(b.scamin);
       if (base <= 0.0) return 1.0e12;  // truly unknown -> always keep
-      return base * m_sounding_scamin_margin;
+      return base * m_scamin_margin;
     }
-    const double base = b.scamin >= kScaminUnset ? m_unset_scamin_n
-                                                 : static_cast<double>(b.scamin);
+    // Other features: a real SCAMIN is margin-scaled the same way (so the
+    // feature comes in with its chart, not later); an UNSET SCAMIN falls back to
+    // the m_unset_scamin_n declutter floor WITHOUT the margin.
+    const double base = b.scamin >= kScaminUnset
+                            ? m_unset_scamin_n
+                            : static_cast<double>(b.scamin) * m_scamin_margin;
     // Nav aids (lights, buoys/beacons, sector arcs, their labels) are HARD-
     // capped at the detail scale even if they carry a large real SCAMIN -- many
     // ENC overview-cell aids have a huge SCAMIN so they'd otherwise pile up at
@@ -1464,9 +1470,7 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // rasterises thousands of SCAMIN-hidden labels/soundings into 16MB atlas pages
   // (the dominant Pi chart-memory cost). The zoom-settle timer rebuilds when the
   // scale crosses kRebuildScaleBand x this, so detail reappears on zoom-in and
-  // the invisible bitmaps are dropped on zoom-out. The margin (build one band
-  // finer than strictly visible) avoids a rebuild on every small zoom-in.
-  constexpr double kBuildScaminMargin = 2.0;
+  // the invisible bitmaps are dropped on zoom-out.
   m_build_scale_n = chartScaleN(viewport);
   const double buildN = m_build_scale_n;
   // Mirrors recomputeDeclutter's effScamin: a billboard is SCAMIN-visible while
@@ -1488,16 +1492,20 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
           unset ? (m_native_scale > 0 ? static_cast<double>(m_native_scale) : 0.0)
                 : static_cast<double>(scamin);
       if (eff <= 0.0) return false;  // truly unknown -> keep
-      // Build with the SAME margin the per-frame show gate uses (effScamin in
-      // recomputeDeclutter), so a sounding's bitmap exists exactly when the gate
-      // would show it -- existence and visibility stay in lockstep, no hysteresis.
-      return buildN > eff * m_sounding_scamin_margin;
+      // Build with the SAME effective SCAMIN the per-frame show gate uses
+      // (effScamin in recomputeDeclutter), so a billboard's bitmap exists exactly
+      // when the gate would show it -- existence and visibility in lockstep, no
+      // hysteresis.
+      return buildN > eff * m_scamin_margin;
     }
-    double eff = scamin >= kScaminUnset ? m_unset_scamin_n
-                                        : static_cast<double>(scamin);
+    // Mirror effScamin for non-soundings: real SCAMIN is margin-scaled, unset
+    // uses the (un-scaled) declutter floor; nav aids capped at that floor.
+    double eff = scamin >= kScaminUnset
+                     ? m_unset_scamin_n
+                     : static_cast<double>(scamin) * m_scamin_margin;
     if (viewGroup == s52sg::VgLights || viewGroup == s52sg::VgBuoysBeacons)
       eff = std::min(eff, m_unset_scamin_n);
-    return buildN > eff * kBuildScaminMargin;
+    return buildN > eff;
   };
 
   struct PendingAtlasImage {
