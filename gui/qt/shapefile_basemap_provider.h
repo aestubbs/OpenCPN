@@ -113,13 +113,17 @@ private:
                         Lod& out, const char* label);
   const Lod& activeLod() const;  // full or coarse, by current zoom
   bool useCoarse() const;        // true when the coarse tier should be drawn
-  QSet<int> visibleTiles() const;  // tile indices intersecting the view
+  // Visible tiles per longitude "copy": the view can straddle the antimeridian
+  // (continuous E-W scroll), so the world is rendered repeated at lon shifts of
+  // k*360. Each entry is {lonShiftDegrees, tileIndices(in that copy)}.
+  using ShiftTiles = QList<QPair<double, QSet<int>>>;
+  ShiftTiles visibleWrapped() const;
+  static QString attachSig(const ShiftTiles& v, bool coarse);  // rebuild key
 
   Lod m_lod_full;    // real coastline -- drawn zoomed in
   Lod m_lod_coarse;  // point-culled + re-tessellated -- drawn zoomed out
   const Viewport* m_vp = nullptr;
-  QSet<int> m_attached;            // tile set of the last build
-  bool m_attached_coarse = false;  // LOD of the last build (detect crossover)
+  QString m_attach_sig;  // signature of the last build (shifts+tiles+LOD)
   QColor m_sea{212, 234, 238};   // S-52 DEPDW day_bright -- match ENC deep water
   QColor m_land{201, 185, 122};  // S-52 LANDA day_bright -- match the ENC land
   QColor m_coast{120, 110, 90};

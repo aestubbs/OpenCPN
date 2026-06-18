@@ -376,35 +376,78 @@ void ShapefileBasemapProvider::setViewport(const Viewport* vp) {
   m_vp = vp;
   if (!m_vp) return;
   connect(m_vp, &Viewport::changed, this, [this] {
-    // Re-render only when the VISIBLE TILE SET changes (a pan within the same
-    // tiles costs nothing; the world-anchored transform pans), OR when a zoom
-    // crosses the LOD threshold (the tier switches full<->coarse).
-    if (visibleTiles() != m_attached || useCoarse() != m_attached_coarse)
-      emit changed();
+    // Re-render only when the visible tile/shift set or the LOD changes (a pan
+    // within the same tiles costs nothing; the world-anchored transform pans).
+    if (attachSig(visibleWrapped(), useCoarse()) != m_attach_sig) emit changed();
   });
 }
 
-QSet<int> ShapefileBasemapProvider::visibleTiles() const {
-  QSet<int> out;
-  if (!m_vp) {  // no viewport wired: everything (the old behaviour)
+ShapefileBasemapProvider::ShiftTiles ShapefileBasemapProvider::visibleWrapped()
+    const {
+  ShiftTiles out;
+  if (!m_vp) {  // no viewport wired: whole world, no shift
+    QSet<int> all;
     for (auto it = m_lod_full.tile_tris.cbegin();
          it != m_lod_full.tile_tris.cend(); ++it)
-      out.insert(it.key());
+      all.insert(it.key());
+    if (!all.isEmpty()) out.append({0.0, all});
     return out;
   }
   const QRectF r = m_vp->visibleWorldBounds(/*marginPx=*/512.0);
   if (r.isEmpty()) return out;
+  // Defend ONLY against an un-sized canvas: visibleWorldBounds then returns a
+  // ~2e9-wide rect, and the copy loop below would spin millions of longitude
+  // copies and OOM. A real view is never more than the world plus a little, so
+  // a generous cap separates the two; render one copy of all tiles in that case.
+  if (r.width() > 2000.0) {
+    QSet<int> all;
+    for (auto it = m_lod_full.tile_tris.cbegin();
+         it != m_lod_full.tile_tris.cend(); ++it)
+      all.insert(it.key());
+    if (!all.isEmpty()) out.append({0.0, all});
+    return out;
+  }
   const double yTop = Viewport::latToWorldY(90.0);
   const double yBot = Viewport::latToWorldY(-90.0);
   const double tileW = 360.0 / kTilesX;
   const double tileH = (yBot - yTop) / kTilesY;
-  const int tx0 = qBound(0, int((r.left() + 180.0) / tileW), kTilesX - 1);
-  const int tx1 = qBound(0, int((r.right() + 180.0) / tileW), kTilesX - 1);
   const int ty0 = qBound(0, int((r.top() - yTop) / tileH), kTilesY - 1);
   const int ty1 = qBound(0, int((r.bottom() - yTop) / tileH), kTilesY - 1);
-  for (int ty = ty0; ty <= ty1; ++ty)
-    for (int tx = tx0; tx <= tx1; ++tx) out.insert(ty * kTilesX + tx);
+  // Longitude copies whose world span [k*360-180, k*360+180] meets the view, so
+  // the world repeats E-W across the antimeridian (continuous scroll). A view up
+  // to ~360 deg wide spans at most ~2-3 copies; cap defensively regardless.
+  const int k0 = static_cast<int>(std::ceil((r.left() - 180.0) / 360.0));
+  int k1 = static_cast<int>(std::floor((r.right() + 180.0) / 360.0));
+  if (k1 - k0 > 4) k1 = k0 + 4;
+  for (int k = k0; k <= k1; ++k) {
+    const double shift = k * 360.0;
+    const double lonL = std::max(-180.0, r.left() - shift);
+    const double lonR = std::min(180.0, r.right() - shift);
+    if (lonR < lonL) continue;
+    const int tx0 = qBound(0, int((lonL + 180.0) / tileW), kTilesX - 1);
+    const int tx1 = qBound(0, int((lonR + 180.0) / tileW), kTilesX - 1);
+    QSet<int> tiles;
+    for (int ty = ty0; ty <= ty1; ++ty)
+      for (int tx = tx0; tx <= tx1; ++tx) tiles.insert(ty * kTilesX + tx);
+    if (!tiles.isEmpty()) out.append({shift, tiles});
+  }
   return out;
+}
+
+QString ShapefileBasemapProvider::attachSig(const ShiftTiles& v, bool coarse) {
+  QString s = coarse ? QStringLiteral("c") : QStringLiteral("f");
+  for (const auto& st : v) {
+    s += QLatin1Char(';');
+    s += QString::number(static_cast<int>(st.first));
+    s += QLatin1Char(':');
+    QList<int> ts = st.second.values();
+    std::sort(ts.begin(), ts.end());
+    for (int t : ts) {
+      s += QString::number(t);
+      s += QLatin1Char(',');
+    }
+  }
+  return s;
 }
 
 QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
@@ -417,12 +460,12 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
   // setViewport's tile-set watcher re-dirties this layer when panning
   // crosses a tile boundary; within a tile set old_subtree is reused.
   const bool coarse = useCoarse();
-  if (old_subtree && visibleTiles() == m_attached && coarse == m_attached_coarse)
-    return old_subtree;
+  const ShiftTiles cfg = visibleWrapped();
+  const QString sig = attachSig(cfg, coarse);
+  if (old_subtree && sig == m_attach_sig) return old_subtree;
   const Lod& lod = activeLod();
   if (!lod.loaded) return nullptr;
-  m_attached = visibleTiles();
-  m_attached_coarse = coarse;
+  m_attach_sig = sig;
 
   auto* root = new QSGNode();
 
@@ -433,12 +476,23 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
   const QColor landCol = m_nodata ? m_nodata_fill : m_land;
   const QColor coastCol = m_nodata ? m_nodata_coast : m_coast;
 
-  // 1. Sea backdrop quad over the whole world (drawn first).
+  // Visible longitude span (covers the antimeridian seam for continuous scroll).
+  double viewL = -180.0, viewR = 180.0;
+  if (m_vp) {
+    const QRectF r = m_vp->visibleWorldBounds(/*marginPx=*/512.0);
+    if (!r.isEmpty()) {
+      viewL = r.left();
+      viewR = r.right();
+    }
+  }
+
+  // 1. Sea backdrop quad. Y spans the clamped Mercator range; X spans the whole
+  //    visible longitude range so the wrapped (off-[-180,180]) part has a sea
+  //    backdrop too.
   {
     auto* sea = sg::makeFlatColorNode(seaCol, QSGGeometry::DrawTriangles, 6);
     QSGGeometry::Point2D* v = sea->geometry()->vertexDataAsPoint2D();
-    // World Y spans the clamped Mercator range (lat +/-kMercMaxLat).
-    const float xl = -180, xr = 180;
+    const float xl = static_cast<float>(viewL), xr = static_cast<float>(viewR);
     const float yt = static_cast<float>(Viewport::latToWorldY(90.0));
     const float yb = static_cast<float>(Viewport::latToWorldY(-90.0));
     v[0].set(xl, yt); v[1].set(xr, yt); v[2].set(xr, yb);
@@ -466,55 +520,30 @@ QSGNode* ShapefileBasemapProvider::renderChart(QSGNode* old_subtree,
       root->appendChildNode(land);
       chunk.clear();
     };
-    for (int t : m_attached)
-      for (const QPointF& p : lod.tile_tris.value(t)) {
-        if (static_cast<int>(chunk.size()) >= kMaxVerts) flush();
-        QSGGeometry::Point2D q;
-        q.set(static_cast<float>(p.x()), static_cast<float>(p.y()));
-        chunk.push_back(q);
-      }
+    // Each longitude copy: its visible tiles, X-translated by the copy's shift
+    // (0 for the main world, +/-360 for the wrapped seam) for continuous scroll.
+    for (const auto& st : cfg) {
+      const double shift = st.first;
+      for (int t : st.second)
+        for (const QPointF& p : lod.tile_tris.value(t)) {
+          if (static_cast<int>(chunk.size()) >= kMaxVerts) flush();
+          QSGGeometry::Point2D q;
+          q.set(static_cast<float>(p.x() + shift), static_cast<float>(p.y()));
+          chunk.push_back(q);
+        }
+    }
     flush();
   }
 
-  // 3. Inland shade: a soft gradient band just inside the coast (darkening
-  //    fading to transparent ~6px inland) so land lifts off the water. Built
-  //    from the same fill-boundary loops as the outline (and the fill), so its
-  //    coastal edge sits exactly on the land/sea boundary. Skip grid clip
-  //    edges so the tile boundaries aren't shaded. Suppressed in NODATA mode
-  //    and at COARSE zoom -- the band is alpha-blended over every coastline
-  //    (fill-rate heavy on the Pi's V3D) yet ramps to ~1px and is invisible
-  //    when zoomed out, so it is pure cost there.
-  if (!m_nodata && !coarse) {
-    const QSet<int>& vis = m_attached;
-    if (auto* shade = makeCoastShadeNode(
-            lod.coastlines, QColor(0, 0, 0), /*width_px=*/6.0f,
-            /*max_alpha=*/0.38f, [&vis](const QPointF& a, const QPointF& b) {
-              return !isGridEdge(a, b) &&
-                     vis.contains(tileIndex((a + b) / 2.0));
-            }))
-      root->appendChildNode(shade);
-  }
-
-  // 4. Coastline outline: real-coast segments only (grid clip edges skipped),
-  //    so the basemap shows a clean coast and no tile grid.
-  {
-    std::vector<QSGGeometry::Point2D> seg;
-    for (int t : m_attached) {
-      const QList<QPointF>& pts = lod.tile_coast_segs.value(t);
-      for (const QPointF& p : pts) {
-        QSGGeometry::Point2D q;
-        q.set(static_cast<float>(p.x()), static_cast<float>(p.y()));
-        seg.push_back(q);
-      }
-    }
-    if (!seg.empty()) {
-      auto* coast = sg::makeFlatColorNode(coastCol, QSGGeometry::DrawLines,
-                                          static_cast<int>(seg.size()));
-      std::memcpy(coast->geometry()->vertexData(), seg.data(),
-                  seg.size() * sizeof(QSGGeometry::Point2D));
-      root->appendChildNode(coast);
-    }
-  }
+  // 3 + 4. Inland shade AND coastline outline: BOTH DROPPED. The basemap is now
+  //    just sea + land FILL; the land/sea fill edge reads as a clean coastline
+  //    at every zoom, and all coastal detail is left to the ENC chart cells.
+  //    The stroked outline drew spurious thin-feature spikes (GSHHG river/sliver
+  //    polygons -- fill invisible land-on-land, but the stroke showed as N-S
+  //    "whiskers"); the inland alpha shade added a coastline darkening band that
+  //    isn't wanted under the charts. (coastCol / lod.coastlines / tile_coast_segs
+  //    are retained but unused here.)
+  Q_UNUSED(coastCol);
 
   return root;
 }

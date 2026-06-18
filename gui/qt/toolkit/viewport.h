@@ -69,12 +69,50 @@ public:
     if (m_center_lat == lat && m_center_lon == lon) return;
     m_center_lat = lat;
     m_center_lon = lon;
+    clampCenter();
     emit changed();
   }
 
+  // The world extent used for the zoom-out fit + recentre. Full longitude, but
+  // latitude is trimmed at the south to kFitMinLat -- under Mercator the deep
+  // south (Antarctica) is hugely stretched and just wastes screen height in the
+  // world view, so the fit stops there. (It is only the FIT/centre bound; when
+  // zoomed in you can still pan freely further south.)
+  static constexpr double kFitMaxLat = 85.05113;   // north (= kMercMaxLat)
+  static constexpr double kFitMinLat = -85.05113;  // south (full world)
+
+  // Smallest scale (most zoomed out) that still fits the whole fit-extent world
+  // inside the canvas: the world fills the BINDING window dimension edge-to-edge
+  // and letterboxes the other. Stops the zoom-out from shrinking the map to a
+  // dot. 0 canvas (pre-layout) falls back to the fixed kMinScale.
+  static double minScaleForCanvas(int w, int h) {
+    if (w <= 0 || h <= 0) return kMinScale;
+    const double worldX = 360.0;  // lon -180..180
+    const double worldY = latToWorldY(kFitMinLat) - latToWorldY(kFitMaxLat);
+    return std::max(kMinScale, std::min(w / worldX, h / worldY));
+  }
+
+  // LONGITUDE scrolls continuously round the world (no edge, no clamp) -- the
+  // basemap renders the world repeated across the antimeridian. LATITUDE is
+  // letterboxed: when the view is taller than the fit-extent world, centre it
+  // (it can't be panned off into the background); zoomed in, lat panning is
+  // free. (m_center_lon is left un-normalised so the view never jumps across
+  // the seam; double precision is ample for many laps.)
+  void clampCenter() {
+    if (m_canvas_h <= 0 || m_scale <= 0.0) return;
+    const double yTop = latToWorldY(kFitMaxLat);  // north (more negative)
+    const double yBot = latToWorldY(kFitMinLat);  // south
+    if (m_canvas_h / m_scale >= (yBot - yTop))     // view taller than world
+      m_center_lat = worldYToLat(0.5 * (yTop + yBot));
+  }
+
   void setScale(double s) {
-    if (s <= 0.0 || m_scale == s) return;
+    if (s <= 0.0) return;
+    s = std::min(std::max(s, minScaleForCanvas(m_canvas_w, m_canvas_h)),
+                 kMaxScale);
+    if (m_scale == s) return;
     m_scale = s;
+    clampCenter();
     emit changed();
   }
 
@@ -96,6 +134,7 @@ public:
     // Pan in world (Mercator) Y, then invert back to latitude. A mouse drag
     // DOWN moves the viewport to look further SOUTH.
     m_center_lat = worldYToLat(latToWorldY(m_center_lat) - wdy);
+    clampCenter();
     emit changed();
   }
 
@@ -108,7 +147,10 @@ public:
     double w_lat, w_lon;
     screenToLatLon(sx, sy, canvas_w, canvas_h, w_lat, w_lon);
     m_scale *= factor;
-    if (m_scale < kMinScale) m_scale = kMinScale;
+    // Clamp zoom-out to "whole world fits the canvas" (letterboxed), not the
+    // fixed floor; use the passed canvas size (most current).
+    const double fitMin = minScaleForCanvas(canvas_w, canvas_h);
+    if (m_scale < fitMin) m_scale = fitMin;
     if (m_scale > kMaxScale) m_scale = kMaxScale;
     // Recompute centre so that the same world point lands under (sx, sy).
     const double c = std::cos(m_rotation), s = std::sin(m_rotation);
@@ -117,6 +159,7 @@ public:
     const double wry = (-s * srx + c * sry) / m_scale;
     m_center_lon = w_lon - wrx;
     m_center_lat = worldYToLat(latToWorldY(w_lat) - wry);
+    clampCenter();
     emit changed();
   }
 
@@ -156,6 +199,10 @@ public:
     if (m_canvas_w == w && m_canvas_h == h) return;
     m_canvas_w = w;
     m_canvas_h = h;
+    // A resize changes the zoom-out floor and the fit; re-clamp both so a
+    // shrink can't leave us zoomed out past "world fits", and re-centre.
+    m_scale = std::min(std::max(m_scale, minScaleForCanvas(w, h)), kMaxScale);
+    clampCenter();
     emit changed();  // re-cull at the new extent
   }
   int canvasWidth() const { return m_canvas_w; }
