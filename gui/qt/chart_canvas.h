@@ -819,6 +819,15 @@ private:
   // on the GUI thread -- the "never recovers when zoomed out over many small
   // charts" stall, since each arrival re-touched every loaded provider.
   QTimer* m_finer_debounce = nullptr;
+  // Coalesces a malloc_trim(0) after cell eviction. Evicting a cell deletes its
+  // provider (CPU atlases/buffers) on this thread and its scene-graph nodes on
+  // the render thread shortly after; glibc keeps the freed heap (RSS stays at
+  // the high-water mark, so MemAvailable reads falsely low and the memory-
+  // pressure guard then drops cells the view needs -- the "dead band"). This
+  // timer fires ~after the render thread has released the subtrees and returns
+  // the freed heap to the OS so RSS actually recedes. Single-shot, restarted on
+  // each eviction batch so a pan's worth of evictions trims once.
+  QTimer* m_trim_timer = nullptr;
   // Edge auto-pan while route-building / measuring (P3.13, wx CheckEdgePan):
   // the cursor inside a 5%-margin edge band pans the view a small step per
   // 200 ms tick, so a route extends past the current view without stopping.

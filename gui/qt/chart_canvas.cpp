@@ -29,6 +29,10 @@
 #include <algorithm>
 #include <cmath>
 
+#if defined(__GLIBC__)
+#include <malloc.h>  // malloc_trim -- return freed cell heap to the OS on evict
+#endif
+
 #include <QClipboard>
 #include <QDir>
 #include <QDirIterator>
@@ -550,6 +554,31 @@ ChartCanvas::ChartCanvas(QQuickItem* parent) : QQuickItem(parent) {
   connect(m_finer_debounce, &QTimer::timeout, this, [this]() {
     updateFinerCoverage();
     emit chartCoverageChanged();
+  });
+
+  // Return freed cell heap to the OS a short while after eviction (see
+  // m_trim_timer in the header). Delayed + single-shot so it runs once the
+  // render thread has released the evicted subtrees and off the pan/zoom hot
+  // path. glibc only; a no-op build elsewhere.
+  m_trim_timer = new QTimer(this);
+  m_trim_timer->setSingleShot(true);
+  m_trim_timer->setInterval(400);
+  connect(m_trim_timer, &QTimer::timeout, this, [this]() {
+#if defined(__GLIBC__)
+    const bool kInstr = qEnvironmentVariableIsSet("OCPN_INSTR");
+    const auto rssKB = []() -> long {
+      QFile s(QStringLiteral("/proc/self/status"));
+      if (!s.open(QIODevice::ReadOnly)) return 0;
+      const QByteArray b = s.readAll();
+      const int i = b.indexOf("VmRSS:");
+      return i < 0 ? 0 : b.mid(i + 6, 24).simplified().split(' ').first().toLong();
+    };
+    const long before = kInstr ? rssKB() : 0;
+    malloc_trim(0);  // releases the top of every arena back to the kernel
+    if (kInstr)
+      qWarning("INSTR malloc_trim: RSS %ldMB -> %ldMB", before / 1024,
+               rssKB() / 1024);
+#endif
   });
 
   connect(m_compositor.get(), &LayerCompositor::changed, this,
@@ -1414,7 +1443,10 @@ void ChartCanvas::updateVisibleCells() {
     m_requested.remove(name);  // eligible to reload when needed again
     ++m_dbg_evicts;
   }
-  if (!evict.isEmpty()) update();  // repaint; finer-coverage refresh below
+  if (!evict.isEmpty()) {
+    update();             // repaint; finer-coverage refresh below
+    m_trim_timer->start();  // return the evicted cells' heap to the OS (delayed)
+  }
 
   // Diagnostics: one line per re-quilt. Watch `loaded` and the gap between
   // `adds` and `evicts` over a pan -- if loaded climbs or adds outpaces evicts,
