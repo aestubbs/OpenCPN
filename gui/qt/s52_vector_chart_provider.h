@@ -320,6 +320,12 @@ private:
   QSGOpacityNode* m_overscale_hatch = nullptr;
   void rebuildOverscaleHatch(double scale, double chart_scale_n);
   double m_unset_scamin_n = 100000.0;  // default min display scale (no SCAMIN)
+  // How far below a sounding's SCAMIN (or, when unset, the cell's native scale)
+  // a sounding still shows -- wx super-SCAMIN is native*2. Used by BOTH the build
+  // gate (buildSkip) and the per-frame show gate (effScamin) so existence and
+  // visibility stay in lockstep (no hysteresis). >2 shows soundings sooner /
+  // further out at the cost of a larger text atlas. Env OCPN_QT_SOUNDING_SCAMIN.
+  double m_sounding_scamin_margin = 2.0;
   // The 1:N display scale the billboards were last BUILT at. Labels/soundings/
   // symbols that are SCAMIN-hidden (or, for soundings, far underzoomed) at the
   // build scale are not rasterised at all -- a big overview cell shown zoomed

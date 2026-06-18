@@ -1032,6 +1032,31 @@ void ChartCanvas::onCellLoaded(const QString& id, const s52sg::Buffer& buffer,
     return;
   }
 
+  // Hard OOM guard at the build point. These dense fine-scale cells build very
+  // large scene graphs (hundreds of MB each) and arrive in async bursts faster
+  // than the updateVisibleCells memory guard can run -- so check free RAM here
+  // and SKIP the build when critically low (the basemap shows there; a later
+  // pass retries once panning/eviction frees memory). Prevents the load-burst
+  // OOM. Env: OCPN_QT_BUILD_FLOOR_MB.
+  static const long kBuildFloorKB = [] {
+    bool ok = false;
+    const long v = qgetenv("OCPN_QT_BUILD_FLOOR_MB").toLong(&ok);
+    return (ok ? v : 900) * 1024L;
+  }();
+  long memKB = 0;
+  if (QFile mi(QStringLiteral("/proc/meminfo")); mi.open(QIODevice::ReadOnly)) {
+    const QByteArray s = mi.readAll();
+    const int i = s.indexOf("MemAvailable:");
+    if (i >= 0)
+      memKB = s.mid(i + 13, 24).simplified().split(' ').first().toLong();
+  }
+  if (memKB > 0 && memKB < kBuildFloorKB) {
+    qWarning("onCellLoaded: SKIP %s -- free=%ldMB < %ldMB (OOM guard)",
+             qPrintable(id), memKB / 1024, kBuildFloorKB / 1024);
+    m_requested.remove(id);  // allow a retry once memory recovers
+    return;
+  }
+
   const QString layerId = "enc." + id;
   auto* provider = new S52VectorChartProvider(layerId, buffer, north, south,
                                               west, east, m_viewport.get());
@@ -1179,12 +1204,6 @@ void ChartCanvas::updateVisibleCells() {
   // them left islands rendering only overview shapes until the view was
   // nearly at chart scale.
   constexpr double kUnderzoomAdmit = 4.0;
-  const auto eligible = [&](const CellExtent* c) {
-    if (c->nativeScale <= 0) return false;
-    const bool is_cm93 = c->name.startsWith(QLatin1String("CM93-"));
-    const double eff = c->nativeScale * (is_cm93 ? cm93_bias : 1.0);
-    return displayN <= eff * kUnderzoomAdmit;
-  };
 
   // Candidates finest -> coarsest.
   std::sort(cands.begin(), cands.end(),
@@ -1205,65 +1224,54 @@ void ChartCanvas::updateVisibleCells() {
   }
   const QSet<QString> prev_needed = m_needed;  // to detect a real change below
   m_needed.clear();
-  // Per LOCATION, render only the FINEST content-eligible chart that covers it
-  // (region-subtraction, mirroring wx Quilt: each pixel = one chart). Sampling
-  // the view on the grid, each point picks the finest eligible cell covering it;
-  // a cell is needed iff it is the finest cover for >=1 point. Where a finer
-  // chart does NOT cover (a coverage gap), the loop falls through to the next
-  // coarser cell that does, so that spot still gets a chart -- but a coarser
-  // cell is NO LONGER stacked under a finer one that already covers the area.
-  // That stacking was up to 5-7 fully-overlapping cells at harbour zoom (each
-  // re-painting the whole screen), the dominant fill-rate / overdraw cost when
-  // zoomed in. zOrderForScale still puts finer on top where tiers do meet.
-  // (Trade-off vs the old "render every eligible underlay": a sub-grid hole in a
-  // finer cell's M_COVR could now expose the basemap instead of a coarser chart;
-  // the 24x24 grid keeps that rare.)
+  // ---- wx-style "finest appropriate chart" selection ----
+  // Per LOCATION, render the FINEST chart that covers it and is still scale-
+  // appropriate -- not zoomed out more than kUnderzoomAdmit (4x, wx vector
+  // GetNomScaleMin) past its native scale. This is the legacy wx Quilt rule:
+  // show the largest-scale (finest) chart the zoom justifies, fill its coverage
+  // gaps with progressively COARSER charts, and let SCAMIN/declutter thin the
+  // detail -- never a chart FINER than the finest appropriate one (wx Compose
+  // skips those as "scale too large"). cands are sorted finest -> coarsest, so
+  // the first eligible covering cell IS the finest.
+  //
+  // The interim Qt build picked the chart whose scale was log-CLOSEST to the view
+  // instead. That deliberately AVOIDED finer charts (to dodge a nav-aid "dead
+  // band" where a finer cell shown underzoomed hid its own SCAMIN-culled aids) --
+  // but at e.g. a 1:60k view it chose a 1:80k cell over an available 1:22k one,
+  // which is exactly the "overscale / coarse chart while a finer one exists"
+  // report. wx accepts the SCAMIN behaviour (aids follow the displayed chart);
+  // the per-frame sounding SCAMIN fix (s52_vector_chart_provider) addresses the
+  // related soundings symptom. Each point = exactly one chart (no stacking of
+  // fully-overlapping cells, the old harbour-zoom overdraw cost); zOrderForScale
+  // still puts finer on top where tiers meet. Where NO eligible chart covers a
+  // point (zoomed out past every covering chart) keep coverage with the COARSEST
+  // cover so the spot is never dropped to the basemap.
+  // Overscale admit: how far the view may be zoomed IN past a chart's native
+  // scale before we'd rather UNDERZOOM a finer chart than overscale this one
+  // (wx GetNomScaleMax = scale/4). Crucial: the underzoom test alone (eligible)
+  // lets a coarse OVERVIEW always qualify -- its native 1:N dwarfs the view -- so
+  // a finer chart sitting just past the 4x underzoom limit was being rejected in
+  // favour of a 1:350k overview overscaled ~7x (the bug). wx instead extends the
+  // finer chart's range to fill that scale gap. So: prefer the finest chart that
+  // is neither badly overscaled (ratio >= 1/kOverscaleAdmit) NOR underzoomed past
+  // its appropriate band; only widen to the cull limit, and only as a coarse
+  // overview overscaled past kOverscaleAdmit when nothing better covers.
+  constexpr double kOverscaleAdmit = kUnderzoomAdmit;  // 4x (wx scale/4)
   for (const GridPt& p : pts) {
-    // CLOSEST-SCALE per location (was: finest). Pick the covering chart whose
-    // native scale is NEAREST the view scale, not the most detailed one. The
-    // old "finest" rule handed each spot to the finest eligible cell -- and
-    // when that was a harbour chart shown zoomed OUT (e.g. a 1:20k cell at a
-    // 1:55k view), it suppressed the coarser chart whose nav aids ARE visible
-    // while its own aids were still SCAMIN-culled, leaving a wide "dead band"
-    // with no buoys/lights. Nearest-scale only adopts the finer cell once the
-    // view approaches its native scale (where its aids become visible), the
-    // wx reference-scale behaviour.
-    const CellExtent* best = nullptr;      // closest-scale ELIGIBLE cover
-    double bestDist = 0.0;
-    const CellExtent* coarsest = nullptr;  // coarsest cover of ANY eligibility
-    for (const CellExtent* c : cands) {
-      // ONE covers() test per (point, candidate) now -- this loop and the old
-      // separate fallback pass both walked every candidate's coverage; merged
-      // here they share the single (bbox-rejected) covers() call.
+    const CellExtent* appropriate = nullptr;  // finest cover within [1/4 .. 4]
+    const CellExtent* gapFill = nullptr;      // finest cover within [1/4 .. cull]
+    const CellExtent* anyCover = nullptr;     // finest cover (last resort)
+    for (const CellExtent* c : cands) {       // finest -> coarsest
       if (!c->covers(p.lat, p.lon)) continue;
-      // Fallback bookkeeping: track the coarsest covering cell regardless of
-      // eligibility, so a point no eligible chart reaches still keeps coverage
-      // (consulted only when `best` stays null below).
-      if (!coarsest || c->nativeScale > coarsest->nativeScale) coarsest = c;
-      if (!eligible(c)) continue;
-      const bool is_cm93 = c->name.startsWith(QLatin1String("CM93-"));
-      const double eff = c->nativeScale * (is_cm93 ? cm93_bias : 1.0);
-      const double dist = std::abs(std::log(eff / displayN));  // log-scale ratio
-      // Closest scale wins; on a TIE (two equal-scale cells covering the same
-      // point -- common where adjacent charts of the same band overlap) break
-      // DETERMINISTICALLY by name. The candidate order out of the spatial index
-      // is not stable between calls, so a bare `dist < bestDist` let the winner
-      // flip every evaluation -> m_needed flapped -> the same cells were
-      // re-requested and re-decoded forever (wasted CPU + churn).
-      constexpr double kTieEps = 1e-9;
-      if (!best || dist < bestDist - kTieEps ||
-          (dist <= bestDist + kTieEps && c->name < best->name)) {
-        best = c;
-        bestDist = dist;
-      }
+      if (!anyCover) anyCover = c;  // finest covering anything = least overscaled
+      const double ratio = displayN / effScaleOf(c);  // >1 underzoom, <1 overscale
+      if (ratio < 1.0 / kOverscaleAdmit) continue;     // too overscaled -> skip
+      if (!gapFill && ratio <= kFallbackMaxUnderzoom) gapFill = c;
+      if (!appropriate && ratio <= kUnderzoomAdmit) appropriate = c;
     }
-    // Prefer the closest-scale eligible cover; else keep coverage with the
-    // coarsest covering chart (zoomed out past every covering chart's threshold
-    // here) so a sample point is never dropped to the basemap.
-    if (best)
-      m_needed.insert(best->name);
-    else if (coarsest)
-      m_needed.insert(coarsest->name);
+    const CellExtent* pick =
+        appropriate ? appropriate : (gapFill ? gapFill : anyCover);
+    if (pick) m_needed.insert(pick->name);
   }
 
   // Safety backstop: bound how many cells the quilt loads at once. Even when all
@@ -1297,6 +1305,19 @@ void ChartCanvas::updateVisibleCells() {
     qWarning("quilt: capped %lld -> %d cells nearest centre (OCPN_QT_MAX_CELLS)",
              static_cast<long long>(m_needed.size()), kMaxCells);
     m_needed = std::move(trimmed);
+  }
+
+  // Diagnostic: which candidates actually COVER the view centre (and at what
+  // scale). Tells gap-vs-selection apart -- if the centre overscales on a coarse
+  // cell, this shows whether any finer cell genuinely reaches it.
+  if (kInstr && (m_needed != prev_needed)) {
+    const double dcLat = m_viewport->centerLat(), dcLon = m_viewport->centerLon();
+    QStringList cov;
+    for (const CellExtent* c : cands)
+      if (c->covers(dcLat, dcLon))
+        cov << QStringLiteral("%1@%2").arg(c->name).arg(c->nativeScale);
+    qWarning("INSTR centreCover lat=%.5f lon=%.5f -> %s", dcLat, dcLon,
+             cov.isEmpty() ? "NONE" : qPrintable(cov.join(QLatin1Char(','))));
   }
 
   // Only the displayed set actually changing warrants a log line + a chart-bar
