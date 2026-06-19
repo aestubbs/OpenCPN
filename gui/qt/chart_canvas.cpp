@@ -1286,20 +1286,40 @@ void ChartCanvas::updateVisibleCells() {
   // its appropriate band; only widen to the cull limit, and only as a coarse
   // overview overscaled past kOverscaleAdmit when nothing better covers.
   constexpr double kOverscaleAdmit = kUnderzoomAdmit;  // 4x (wx scale/4)
+  // Fallback underzoom reach: a finer chart may be shown UNDERZOOMED up to this
+  // to fill a scale gap (the "overscale while a finer chart exists" fix needs
+  // ~4.2x), but NO further -- beyond it the basemap shows. This bound is what
+  // stops a continental zoom from dragging in the memory-huge far-underzoomed
+  // overview cells: they spike RSS to OOM and the freed heap never returns
+  // (malloc_trim reclaims almost nothing -- it is GL/atlas memory), so the
+  // build-floor guard then starves every cell and the whole quilt drops to
+  // basemap at ALL scales until restart. Must be >= kUnderzoomAdmit; env
+  // OCPN_QT_FALLBACK_ADMIT (restored after the wx-selection rewrite dropped it).
+  static const double kFallbackAdmit = [] {
+    bool ok = false;
+    const double v = qgetenv("OCPN_QT_FALLBACK_ADMIT").toDouble(&ok);
+    return (ok && v >= kUnderzoomAdmit) ? v : 6.0;
+  }();
   for (const GridPt& p : pts) {
     const CellExtent* appropriate = nullptr;  // finest cover within [1/4 .. 4]
-    const CellExtent* gapFill = nullptr;      // finest cover within [1/4 .. cull]
-    const CellExtent* anyCover = nullptr;     // finest cover (last resort)
-    for (const CellExtent* c : cands) {       // finest -> coarsest
+    const CellExtent* gapFill = nullptr;      // finest cover within [1/4 .. fallbackAdmit]
+    const CellExtent* overscaled = nullptr;   // finest cover zoomed IN past (ratio < 1/4)
+    for (const CellExtent* c : cands) {        // finest -> coarsest
       if (!c->covers(p.lat, p.lon)) continue;
-      if (!anyCover) anyCover = c;  // finest covering anything = least overscaled
       const double ratio = displayN / effScaleOf(c);  // >1 underzoom, <1 overscale
-      if (ratio < 1.0 / kOverscaleAdmit) continue;     // too overscaled -> skip
-      if (!gapFill && ratio <= kFallbackMaxUnderzoom) gapFill = c;
+      if (ratio < 1.0 / kOverscaleAdmit) {     // zoomed IN past this chart
+        if (!overscaled) overscaled = c;       // finest = least overscaled (cheap)
+        continue;
+      }
+      if (!gapFill && ratio <= kFallbackAdmit) gapFill = c;
       if (!appropriate && ratio <= kUnderzoomAdmit) appropriate = c;
     }
+    // Underzoom is CAPPED at kFallbackAdmit -> a cell more underzoomed than that
+    // is NOT loaded (basemap shows; avoids the continental overview OOM). The
+    // overscale last-resort is uncapped: you are zoomed IN so only a few small
+    // cells cover, and showing the finest (least overscaled) beats the basemap.
     const CellExtent* pick =
-        appropriate ? appropriate : (gapFill ? gapFill : anyCover);
+        appropriate ? appropriate : (gapFill ? gapFill : overscaled);
     if (pick) m_needed.insert(pick->name);
   }
 
@@ -1444,8 +1464,12 @@ void ChartCanvas::updateVisibleCells() {
     ++m_dbg_evicts;
   }
   if (!evict.isEmpty()) {
-    update();             // repaint; finer-coverage refresh below
-    m_trim_timer->start();  // return the evicted cells' heap to the OS (delayed)
+    update();  // repaint; finer-coverage refresh below
+    // Return the evicted cells' heap to the OS (delayed). Only (re)start when
+    // idle so a SUSTAINED eviction run (e.g. a fast zoom-out storm) still trims
+    // every ~interval instead of the timer being reset to never-fire by each
+    // successive batch.
+    if (!m_trim_timer->isActive()) m_trim_timer->start();
   }
 
   // Diagnostics: one line per re-quilt. Watch `loaded` and the gap between
