@@ -82,15 +82,25 @@ Touch points: `gui/qt/chart_canvas.cpp` (`updateVisibleCells` query bbox + every
 bar / piano coverage list and click-to-query, which likely share the same raw
 longitude.
 
-**Applied (option 1, commit `23bf8f8b4`):** a `wrapLon` into [-180,180] is used
-for all catalog work in `updateVisibleCells` (spatial query, candidate intersects
-prune, grid-point covers tests, and the centre covers for OVERSCALE/centreCover/
-LRU-trim) and in `chartBarCells` (the empty chart bar). Both split the query into
-two in-range longitude spans when the normalised view straddles +/-180.
-`updateBoundaryExtents` needed no change (whole-catalog scale-only scan, no geo
-query). STILL UN-WRAPPED elsewhere (not yet hit, watch for the same symptom):
-**click-to-query / cursor pick** and any other consumer that geographically
-queries the catalog from a raw cursor/centre longitude.
+**Applied in TWO commits** (the first was necessary but not sufficient):
+- `23bf8f8b4` — catalog/selection side: a `wrapLon` into [-180,180] for all
+  catalog work in `updateVisibleCells` (spatial query, candidate intersects
+  prune, grid-point covers tests, centre covers for OVERSCALE/centreCover/LRU
+  trim) and in `chartBarCells` (the empty chart bar). Both split the query into
+  two in-range spans when the normalised view straddles +/-180. This made cells
+  SELECT + the chart bar populate, but they still drew off-screen.
+- `98f00dcde` — render side (the real fix): `Viewport::clampCenter` now wraps
+  `m_center_lon` into [-180,180] (`-= 360*floor((lon+180)/360)`), and
+  `screenToLatLon` normalises its output. The render transform + chart geometry
+  live in [-180,180], so an un-normalised centre drew every chart off-screen
+  (basemap only) and reported a 632 deg cursor. Now the centre stays a real
+  longitude and charts render; the basemap still scrolls continuously (it draws
+  its own +/-360 copies).
+
+`updateBoundaryExtents` needed no change (whole-catalog scale-only scan).
+**Remaining limitation:** a chart cell within ~half a view of +/-180 can still
+glitch right at the seam -- the wx fix draws such cells at both lon and lon+/-360
+(`s52plib.cpp` ~11613 region); not done here.
 
 ### Quick mitigation
 Restarting recentres the view in range, so it "fixes itself" until you scroll
