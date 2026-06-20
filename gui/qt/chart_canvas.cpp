@@ -1168,10 +1168,24 @@ void ChartCanvas::updateVisibleCells() {
   const double hw = (cw / 2.0) / scale, hh = (ch / 2.0) / scale;
   const double half_lon = (hw * ac + hh * as) * 1.3;
   const double half_lat = (hw * as + hh * ac) * 1.3;
-  const double lat0 = m_viewport->centerLat() - half_lat;
-  const double lat1 = m_viewport->centerLat() + half_lat;
-  const double lon0 = m_viewport->centerLon() - half_lon;
-  const double lon1 = m_viewport->centerLon() + half_lon;
+  // The viewport keeps longitude UN-normalised so the basemap can scroll
+  // continuously across the antimeridian (it renders the world repeated at
+  // k*360 shifts). The ENC catalog lives in [-180,180] and neither the spatial
+  // index nor CellExtent::covers/intersects wrap, so once the view scrolls a
+  // full lap past the seam (centerLon -> e.g. 283) every catalog query missed
+  // and the charts vanished to basemap. Use a seam-NORMALISED centre longitude
+  // for all catalog work below (the basemap keeps the raw continuous value).
+  const auto wrapLon = [](double d) {
+    d = std::fmod(d + 180.0, 360.0);
+    if (d < 0.0) d += 360.0;
+    return d - 180.0;
+  };
+  const double clatV = m_viewport->centerLat();
+  const double clonV = wrapLon(m_viewport->centerLon());
+  const double lat0 = clatV - half_lat;
+  const double lat1 = clatV + half_lat;
+  const double lon0 = clonV - half_lon;  // may exceed +/-180 (wide / seam-straddle)
+  const double lon1 = clonV + half_lon;
 
   // Scale gates, computed up front because the candidate prune below needs them.
   // displayN = the 1:N the view is showing (cos-lat-corrected); cm93_bias tilts
@@ -1205,14 +1219,37 @@ void ChartCanvas::updateVisibleCells() {
   // Spatial index gives a coarse superset of cells near the view (O(in-view),
   // not O(whole catalog) -- the catalog can hold thousands of cells); refine
   // with the precise scale/feature/intersects test, exactly as before.
+  // Query the catalog within [-180,180]. If the (normalised) view straddles the
+  // antimeridian -- lon0 < -180 or lon1 > 180 -- or is wider than the world,
+  // split into 1-2 in-range longitude spans and union; a cell is in view if it
+  // overlaps ANY span. (The common wrapped case -- a narrow view a full lap off
+  // the seam -- normalises to a single in-range span, no split.)
+  QVarLengthArray<QPair<double, double>, 2> lonSpans;
+  if (lon1 - lon0 >= 360.0)
+    lonSpans.push_back({-180.0, 180.0});
+  else if (lon0 < -180.0)
+    lonSpans.push_back({lon0 + 360.0, 180.0}), lonSpans.push_back({-180.0, lon1});
+  else if (lon1 > 180.0)
+    lonSpans.push_back({lon0, 180.0}), lonSpans.push_back({-180.0, lon1 - 360.0});
+  else
+    lonSpans.push_back({lon0, lon1});
   QList<const CellExtent*> near;
-  m_spatial_index.query(lat0, lat1, lon0, lon1, near);
+  for (const auto& s : lonSpans)
+    m_spatial_index.query(lat0, lat1, s.first, s.second, near);
+  const auto lonInView = [&](const CellExtent* c) {
+    for (const auto& s : lonSpans)
+      if (c->east >= s.first && c->west <= s.second) return true;
+    return false;
+  };
   QList<const CellExtent*> cands;
   cands.reserve(near.size());
+  QSet<const CellExtent*> seenCand;  // dedup across the (up to 2) span queries
   for (const CellExtent* c : near) {
+    if (seenCand.contains(c)) continue;
+    seenCand.insert(c);
     if (c->nativeScale > 0 && c->navFeatures > 0 &&
         displayN <= effScaleOf(c) * kFallbackMaxUnderzoom &&
-        c->intersects(lat0, lat1, lon0, lon1))
+        c->north >= lat0 && c->south <= lat1 && lonInView(c))
       cands.append(c);
   }
 
@@ -1249,7 +1286,8 @@ void ChartCanvas::updateVisibleCells() {
   for (int gy = 0; gy < kGrid; ++gy) {
     const double plat = lat0 + (gy + 0.5) / kGrid * (lat1 - lat0);
     for (int gx = 0; gx < kGrid; ++gx)
-      pts.push_back({plat, lon0 + (gx + 0.5) / kGrid * (lon1 - lon0)});
+      pts.push_back(
+          {plat, wrapLon(lon0 + (gx + 0.5) / kGrid * (lon1 - lon0))});
   }
   const QSet<QString> prev_needed = m_needed;  // to detect a real change below
   m_needed.clear();
@@ -1335,7 +1373,7 @@ void ChartCanvas::updateVisibleCells() {
     return ok ? v : 50;
   }();
   if (kMaxCells > 0 && m_needed.size() > kMaxCells) {
-    const double cLat = m_viewport->centerLat(), cLon = m_viewport->centerLon();
+    const double cLat = clatV, cLon = clonV;  // seam-normalised (see above)
     const auto centreDist2 = [&](const QString& n) -> double {
       auto it = m_catalog.constFind(n);
       if (it == m_catalog.cend()) return 1.0e18;
@@ -1360,7 +1398,7 @@ void ChartCanvas::updateVisibleCells() {
   // scale). Tells gap-vs-selection apart -- if the centre overscales on a coarse
   // cell, this shows whether any finer cell genuinely reaches it.
   if (kInstr && (m_needed != prev_needed)) {
-    const double dcLat = m_viewport->centerLat(), dcLon = m_viewport->centerLon();
+    const double dcLat = clatV, dcLon = clonV;  // seam-normalised (see above)
     QStringList cov;
     for (const CellExtent* c : cands)
       if (c->covers(dcLat, dcLon))
@@ -1497,8 +1535,7 @@ void ChartCanvas::updateVisibleCells() {
   // (the one the mariner is looking at), not the finest cell anywhere in the
   // quilt -- a small overscaled cell in a corner must not drive the readout.
   // The hatch overlay (per provider) shows it on each overscaled cell directly.
-  const double cLat = m_viewport->centerLat();
-  const double cLon = m_viewport->centerLon();
+  const double cLat = clatV, cLon = clonV;  // seam-normalised (see above)
   int centreN = 0;  // finest displayed cell covering the view centre
   for (const QString& name : m_needed) {
     auto it = m_catalog.constFind(name);
@@ -1648,18 +1685,44 @@ QVariantList ChartCanvas::chartBarCells() const {
   if (s <= 0.0) return out;
   const double halfLon = (width() / 2.0) / s;
   const double halfLat = (height() / 2.0) / s;
+  // Seam-normalise the centre longitude (the viewport keeps it un-normalised for
+  // continuous antimeridian scroll; the catalog is in [-180,180]). Without this
+  // the chart bar emptied once the view scrolled a lap past the seam -- the same
+  // failure as updateVisibleCells. Split the query if it straddles +/-180.
+  const auto wrapLon = [](double d) {
+    d = std::fmod(d + 180.0, 360.0);
+    if (d < 0.0) d += 360.0;
+    return d - 180.0;
+  };
   const double cLat = m_viewport->centerLat();
-  const double cLon = m_viewport->centerLon();
+  const double cLon = wrapLon(m_viewport->centerLon());
   const double latMin = cLat - halfLat, latMax = cLat + halfLat;
-  const double lonMin = cLon - halfLon, lonMax = cLon + halfLon;
+  const double lon0 = cLon - halfLon, lon1 = cLon + halfLon;
+  QVarLengthArray<QPair<double, double>, 2> lonSpans;
+  if (lon1 - lon0 >= 360.0)
+    lonSpans.push_back({-180.0, 180.0});
+  else if (lon0 < -180.0)
+    lonSpans.push_back({lon0 + 360.0, 180.0}), lonSpans.push_back({-180.0, lon1});
+  else if (lon1 > 180.0)
+    lonSpans.push_back({lon0, 180.0}), lonSpans.push_back({-180.0, lon1 - 360.0});
+  else
+    lonSpans.push_back({lon0, lon1});
 
   QList<const CellExtent*> near;
-  m_spatial_index.query(latMin, latMax, lonMin, lonMax, near);
+  for (const auto& sp : lonSpans)
+    m_spatial_index.query(latMin, latMax, sp.first, sp.second, near);
   QList<const CellExtent*> cells;
   cells.reserve(near.size());
+  QSet<const CellExtent*> seen;
   for (const CellExtent* c : near) {
+    if (seen.contains(c)) continue;
+    seen.insert(c);
     if (c->navFeatures <= 0) continue;  // administrative cell -- not a chart
-    if (!c->intersects(latMin, latMax, lonMin, lonMax)) continue;
+    if (c->north < latMin || c->south > latMax) continue;
+    bool lonOk = false;
+    for (const auto& sp : lonSpans)
+      if (c->east >= sp.first && c->west <= sp.second) { lonOk = true; break; }
+    if (!lonOk) continue;
     cells.append(c);
   }
   // Coarse -> fine (largest 1:N first), like the wx chart bar.
