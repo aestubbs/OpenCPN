@@ -92,13 +92,21 @@ public:
     return std::max(kMinScale, std::min(w / worldX, h / worldY));
   }
 
-  // LONGITUDE scrolls continuously round the world (no edge, no clamp) -- the
-  // basemap renders the world repeated across the antimeridian. LATITUDE is
-  // letterboxed: when the view is taller than the fit-extent world, centre it
-  // (it can't be panned off into the background); zoomed in, lat panning is
-  // free. (m_center_lon is left un-normalised so the view never jumps across
-  // the seam; double precision is ample for many laps.)
+  // LONGITUDE is normalised to [-180,180] (wx parity). The basemap renders the
+  // world repeated across the antimeridian, so scrolling stays visually
+  // continuous, but the CENTRE value must stay a real longitude: the
+  // world-anchored render transform (transformMatrix) and the ENC chart geometry
+  // both live in [-180,180], so a centre that drifted a full lap off the seam
+  // (e.g. 283 or -459 deg) drew every chart OFF-SCREEN (only the basemap, which
+  // draws its own +/-360 copies, still showed) and reported a nonsense cursor
+  // longitude (632 deg). LATITUDE is letterboxed: when the view is taller than
+  // the fit-extent world, centre it; zoomed in, lat panning is free.
+  // (Note: a chart cell within ~half a view of +/-180 can still glitch right at
+  // the seam -- the wx fix for that draws the cell at both lon and lon+/-360;
+  // not done here.)
   void clampCenter() {
+    // Wrap longitude into [-180,180); one modulo handles any number of laps.
+    m_center_lon -= 360.0 * std::floor((m_center_lon + 180.0) / 360.0);
     if (m_canvas_h <= 0 || m_scale <= 0.0) return;
     const double yTop = latToWorldY(kFitMaxLat);  // north (more negative)
     const double yBot = latToWorldY(kFitMinLat);  // south
@@ -247,6 +255,10 @@ public:
     const double wrx = (c * srx + s * sry) / m_scale;
     const double wry = (-s * srx + c * sry) / m_scale;
     lon = m_center_lon + wrx;
+    // Normalise to [-180,180] so every cursor/pick longitude is a real longitude
+    // (the readout, dropped marks, click-query). centerLon is already normalised
+    // by clampCenter; this only trims the small overshoot near the view edge.
+    lon -= 360.0 * std::floor((lon + 180.0) / 360.0);
     lat = worldYToLat(latToWorldY(m_center_lat) + wry);
   }
 
