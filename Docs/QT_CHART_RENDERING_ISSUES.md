@@ -21,10 +21,12 @@ Key log lines: `quilt: displayN=… cells:`, `VIS … cands= needed= loaded=`,
 
 ---
 
-## Problem 1 — Longitude un-normalisation breaks chart selection (REGRESSION)
+## Problem 1 — Longitude un-normalisation breaks chart selection (REGRESSION) — FIXED
 
-**This is the cause of the reported "zoom out then back in and the cells don't
-reappear / chart bar is empty".** It is a *selection* bug, not a memory bug.
+**FIXED in commit `23bf8f8b4`** (see "Fix direction" below for what was done).
+Kept here as the record of the bug. It was the cause of the reported "zoom out
+then back in and the cells don't reappear / chart bar is empty" — a *selection*
+bug, not a memory bug.
 
 ### Evidence
 - Live view when stuck: `view/lon = 283.52`, `view/lat = 38.23`, `view/scale =
@@ -79,6 +81,16 @@ Touch points: `gui/qt/chart_canvas.cpp` (`updateVisibleCells` query bbox + every
 `clampCenter`, where `m_center_lon` is kept un-normalised). Also check the chart
 bar / piano coverage list and click-to-query, which likely share the same raw
 longitude.
+
+**Applied (option 1, commit `23bf8f8b4`):** a `wrapLon` into [-180,180] is used
+for all catalog work in `updateVisibleCells` (spatial query, candidate intersects
+prune, grid-point covers tests, and the centre covers for OVERSCALE/centreCover/
+LRU-trim) and in `chartBarCells` (the empty chart bar). Both split the query into
+two in-range longitude spans when the normalised view straddles +/-180.
+`updateBoundaryExtents` needed no change (whole-catalog scale-only scan, no geo
+query). STILL UN-WRAPPED elsewhere (not yet hit, watch for the same symptom):
+**click-to-query / cursor pick** and any other consumer that geographically
+queries the catalog from a raw cursor/centre longitude.
 
 ### Quick mitigation
 Restarting recentres the view in range, so it "fixes itself" until you scroll
