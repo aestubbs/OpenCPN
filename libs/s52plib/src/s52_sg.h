@@ -81,6 +81,7 @@
 #include <QImage>
 #include <QList>
 #include <QPointF>
+#include <QRect>
 #include <QString>
 #include <QStringList>
 
@@ -203,7 +204,14 @@ struct ComplexLine {
  *  position, screen-pixel size). */
 struct Symbol {
   QPointF pos;     // (lon, lat) anchor
-  QImage image;    // RGBA symbol bitmap
+  QImage image;    // RGBA symbol bitmap (cropped from the library sheet)
+  // The symbol's rect WITHIN the shared library sheet (Buffer::symbolSheet),
+  // in sheet pixels -- the SAME region `image` was cropped from. The consumer
+  // draws every symbol from ONE shared sheet texture (sourceRect = this), so
+  // all symbols batch into ~one draw call instead of a texture per symbol type.
+  // Geometry (size/pivot) still derives from `image`, so HiDPI is unchanged.
+  // Invalid (null) -> consumer falls back to `image`.
+  QRect atlasRect;
   QPointF pivot;   // pixel offset of the anchor within image
   double rotationDeg = 0.0;  // symbol rotation about the pivot (S-52 SY angle)
   // S-52 SCAMIN: the 1:N chart scale beyond which (more zoomed out) this
@@ -277,6 +285,13 @@ public:
   QList<Prim> prims;
   QList<PatternFill> patternFills;
   QList<Symbol> symbols;
+  // The S-52 raster symbol library sheet (rastersymbols-*.png for the current
+  // colour scheme), shared by every Symbol via Symbol::atlasRect. One
+  // implicitly-shared QImage across all buffers (set once at emit), so the
+  // consumer uploads ONE texture for every symbol on screen. Null if no raster
+  // symbols were emitted. NB: the decoded-cell cache must NOT bill this per
+  // cell (it is shared) -- see approxDecodedBytes.
+  QImage symbolSheet;
   QList<VectorSymbol> vectorSymbols;
   QList<ComplexLine> complexLines;
   QList<Label> labels;

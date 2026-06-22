@@ -49,6 +49,7 @@
 #include "coast_shade.h"
 #include "sg_helpers.h"
 #include "sg_texture_cache.h"
+#include "shared_symbol_atlas.h"
 #include "viewport.h"
 
 namespace ocpn::qtui {
@@ -1512,11 +1513,24 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     QImage image;
   };
   QList<PendingAtlasImage> atlasPending;
+  // ONE shared texture for the whole S-52 symbol library sheet
+  // (m_buffer.symbolSheet): every symbol draws from it via its atlasRect
+  // source-rect, so all symbols batch into ~one draw call and the sheet uploads
+  // once for the whole app (shared across cells + both split-view panes, single
+  // render context) -- no per-cell QPainter pack or page upload. A null sheet
+  // (or invalid per-symbol rect) falls back to the per-cell atlas built below.
+  // See SharedSymbolTextures + Docs/QT_SHARED_ATLAS.md.
+  QSGTexture* sheetTex =
+      m_buffer.symbolSheet.isNull()
+          ? nullptr
+          : SharedSymbolTextures::instance().texture(m_buffer.symbolSheet,
+                                                     window);
   auto addBillboard = [&](const QImage& image, QPointF worldPos,
                           QPointF pivotPx, int scamin, BbKind kind,
                           float depth, double rotationDeg = 0.0,
                           int viewGroup = 0, bool upright = false,
-                          const QString& text = QString()) {
+                          const QString& text = QString(),
+                          QRect srcRect = QRect()) {
     if (image.isNull() || !window) return;
     const qreal dpr = image.devicePixelRatio() > 0 ? image.devicePixelRatio()
                                                     : 1.0;
@@ -1529,12 +1543,22 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     // offset is baked straight into the rect and the glyph rotates with chart.
     const QPointF centreOff(w / 2.0 - pivotPx.x(), h / 2.0 - pivotPx.y());
     auto* img = window->createImageNode();
-    img->setOwnsTexture(false);  // TextureCacheNode (root) owns it
-    atlasPending.append({img, image});
+    img->setOwnsTexture(false);  // SharedSymbolTextures / TextureCacheNode owns it
+    // Texture: the shared library-sheet texture (sub-rect = srcRect) when
+    // available -- the batching win -- else defer into the per-cell atlas.
+    // Size/pivot (w/h) derive from `image` either way, so HiDPI is unchanged.
+    const bool useSheet = sheetTex && srcRect.isValid();
+    if (useSheet)
+      img->setTexture(sheetTex);
+    else
+      atlasPending.append({img, image});
     if (upright)
       img->setRect(QRectF(-w / 2.0, -h / 2.0, w, h));  // centred; offset in mtx
     else
       img->setRect(QRectF(-pivotPx.x(), -pivotPx.y(), w, h));
+    // setTexture resets the source rect to the full texture, so select this
+    // symbol's sub-rect of the sheet AFTER it.
+    if (useSheet) img->setSourceRect(QRectF(srcRect));
     img->setFiltering(QSGTexture::Linear);
     auto* xform = new QSGTransformNode();
     if (rotationDeg != 0.0) {
@@ -1732,7 +1756,8 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     addBillboard(sym.image,
                  QPointF(sym.pos.x(), Viewport::latToWorldY(sym.pos.y())),
                  sym.pivot, sym.scamin, BbKind::Symbol, /*depth=*/0.0f,
-                 sym.rotationDeg, sym.viewGroup);
+                 sym.rotationDeg, sym.viewGroup, /*upright=*/false,
+                 /*text=*/QString(), sym.atlasRect);
   }
 
   // Vector (HPGL) symbols -- billboarded geometry. The op coords are

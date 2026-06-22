@@ -90,6 +90,8 @@ qt_add_qml_module(opencpn-qt
     s52_engine.cpp
     s52_vector_chart_provider.h
     s52_vector_chart_provider.cpp
+    shared_symbol_atlas.h
+    shared_symbol_atlas.cpp
     chart_extent.h
     chart_boundary_provider.h
     chart_boundary_provider.cpp

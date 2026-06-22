@@ -69,6 +69,24 @@ static QImage cachedAtlasImage(ChartSymbols& symbols, const char* name) {
   return q;
 }
 
+// The WHOLE S-52 raster symbol library sheet (rastersymbols-*.png) as one
+// QImage, memoised per loaded colour scheme. Every raster Symbol carries its
+// rect within this sheet (Symbol::atlasRect), so the consumer uploads ONE
+// texture for ALL symbols (they batch into ~one draw call) instead of packing
+// a per-cell atlas. Same single-worker-thread caveat as cachedAtlasImage.
+static QImage cachedSymbolSheet(ChartSymbols& symbols) {
+  static QImage sheet;
+  static int loadedScheme = -99;
+  const int scheme = symbols.rasterSymbolsLoadedColorMapNumber;
+  if (scheme != loadedScheme || sheet.isNull()) {
+    sheet = symbols.rasterSymbols.IsOk()
+                ? WxImageToQImage(symbols.rasterSymbols.ConvertToImage())
+                : QImage();
+    loadedScheme = scheme;
+  }
+  return sheet;
+}
+
 // --- Vector (HPGL) AP pattern support --------------------------------------
 //
 // cachedAtlasImage (above) only serves the handful of AP patterns baked into
@@ -529,6 +547,14 @@ int s52plib::RenderPointSymbolToSG(s52sg::Buffer &out, ObjRazRules *rzRules,
       s52sg::Symbol sym;
       sym.pos = QPointF(anchor_lon, anchor_lat);
       sym.image = qimg;
+      // Carry the symbol's rect in the shared sheet (same region GetImage
+      // cropped qimg from) + the sheet itself, so the consumer draws every
+      // symbol from one shared texture and batches them.
+      wxRect r;
+      m_chartSymbols.GetGLTextureRect(r, prule->name.SYNM);
+      sym.atlasRect = QRect(r.x, r.y, r.width, r.height);
+      if (out.symbolSheet.isNull())
+        out.symbolSheet = cachedSymbolSheet(m_chartSymbols);
       sym.pivot = QPointF(prule->pos.symb.pivot_x.SYCL,
                           prule->pos.symb.pivot_y.SYRW);
       sym.rotationDeg = angle;
