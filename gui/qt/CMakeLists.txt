@@ -66,7 +66,13 @@ qt_add_qml_module(opencpn-qt
   SOURCES
     app_controller.h
     chart_canvas.h
+    chart_canvas_internal.h
     chart_canvas.cpp
+    chart_canvas_routes.cpp
+    chart_canvas_edit.cpp
+    chart_canvas_objects.cpp
+    chart_canvas_display.cpp
+    chart_canvas_input.cpp
     layer_compositor.h
     layer_compositor.cpp
     coast_shade.h

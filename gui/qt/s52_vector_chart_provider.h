@@ -306,7 +306,7 @@ private:
   bool m_showText = true;
   bool m_showLights = true;
   bool m_showBuoys = true;
-  bool m_declutter = false;  // P2.23a: label overlap-avoid (wx default off)
+  bool m_declutter = true;  // P2.23a: smart-placement label de-confliction (on)
   int m_depth_unit = 0;          // sounding unit: 0 metres, 1 feet, 2 fathoms
   double m_safety_depth_m = 5.0;  // <= this (metres) -> emphasised sounding
   double m_sounding_scale = 1.0;  // ENC sounding-size slider multiplier

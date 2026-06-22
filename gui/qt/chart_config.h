@@ -167,7 +167,7 @@ private:
   bool m_ext_light_sectors = true;
   bool m_national_text = false;
   bool m_important_text = false;
-  bool m_declutter = false;
+  bool m_declutter = true;
   bool m_reduced_detail = true;
   bool m_super_scamin = false;
 

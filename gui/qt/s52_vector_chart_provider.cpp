@@ -40,7 +40,9 @@
 #include <QSGImageNode>
 #include <QSGNode>
 #include <QSGOpacityNode>
+#include <QSGTextNode>
 #include <QSGTransformNode>
+#include <QTextLayout>
 
 #include "aa_line.h"
 #include "area_pattern_material.h"
@@ -57,52 +59,34 @@ namespace {
 // edge) isn't culled mid-stroke.
 constexpr double kBillboardCullMarginPx = 64.0;
 
-// Render a text label to an RGBA image using a SYSTEM font (the default
-// application font). This is the Qt-native replacement for the chart's
-// proprietary TexFont/DepthFont engine; font selection becomes
-// configurable later. Rendered at 2x for crispness on hi-DPI.
-QImage renderLabelImage(const s52sg::Label& lab, qreal dpr) {
-  QFont font;  // default system font
-  // Size in LOGICAL PIXELS, not points: setPointSizeF converts via the screen's
-  // logical DPI (72 on macOS, ~96 on the Pi), which rendered identical charts
-  // with ~1.3x larger text on the Pi. The pointSize values were calibrated on
-  // macOS where 1pt == 1px (72 dpi), so use them directly as px for a display-
-  // independent size (the image is still rasterised x dpr below for crispness).
-  font.setPixelSize(qMax(1, qRound(lab.pointSize)));
-  QFontMetrics fm(font);
-  QRect br = fm.boundingRect(lab.text);
-  const int w = (br.width() + 4);
-  const int h = (br.height() + 4);
-  QImage img(static_cast<int>(w * dpr), static_cast<int>(h * dpr),
-             QImage::Format_RGBA8888_Premultiplied);
-  img.setDevicePixelRatio(dpr);
-  img.fill(Qt::transparent);
-  QPainter p(&img);
-  p.setRenderHint(QPainter::TextAntialiasing, true);
-  p.setFont(font);
-  p.setPen(lab.color.isValid() ? lab.color : QColor(0, 0, 0));
-  p.drawText(QRectF(0, 0, w, h), Qt::AlignCenter, lab.text);
-  p.end();
-  return img;
+// Font for a system-font (upright) text label. Size in LOGICAL PIXELS, not
+// points: setPointSizeF converts via the screen's logical DPI (72 on macOS, ~96
+// on the Pi), which rendered identical charts with ~1.3x larger text on the Pi.
+// The pointSize values were calibrated on macOS where 1pt == 1px (72 dpi), so
+// use them directly as px for a display-independent size.
+QFont labelFont(const s52sg::Label& lab) {
+  QFont font;  // default system font (selection becomes configurable later)
+  font.setPixelSize(qMax(1, qRound(lab.pointSize > 0 ? lab.pointSize : 10.0f)));
+  return font;
 }
 
-// Render a sounding to an RGBA image following the S-52 SNDFRM convention
-// (mirrors libs/s52plib SNDFRM02 + IHO S-52 "Soundings"), using a system font
-// in place of the proprietary DepthFont symbol set:
-//   * the depth (held in metres) is converted to the user's display unit;
+// Decode a sounding (held in metres) into the figures + emphasis flags drawn on
+// screen, following the S-52 SNDFRM convention (mirrors libs/s52plib SNDFRM02 +
+// IHO S-52 "Soundings"):
+//   * the depth is converted to the user's display unit;
 //   * the integer part is drawn full size, the tenths digit (if any) as a
 //     right-SUBSCRIPT with NO decimal point ("9.5" -> "9" + small low "5");
 //   * a drying height (negative depth -- a feature that uncovers, charted as a
 //     height above datum) has its integer figures UNDERLINED and no sign;
 //   * a sounding at or shallower than the safety depth is EMPHASISED (bold,
-//     solid black -- the legacy SOUNDS vs SOUNDG split), deeper ones are the
-//     lighter grey the chart used before.
-// Decimals are shown only to 31 display-units (S-52); deeper values and feet
-// are whole numbers. `safetyMetres` is the safety depth in metres (raw, so the
-// comparison is unit-agnostic). `basePt` is the integer-figure point size.
-QImage renderSoundingImage(double depthMetres, int depthUnit,
-                           double safetyMetres, float basePt, bool swept,
-                           bool lowAccuracy, qreal dpr) {
+//     solid black -- the legacy SOUNDS vs SOUNDG split), deeper ones the lighter
+//     grey the chart used before.
+// Decimals are shown only to 31 display-units (S-52); deeper values and feet are
+// whole numbers. `safetyMetres` is the safety depth in metres (raw, so the
+// comparison is unit-agnostic).
+void soundingFigures(double depthMetres, int depthUnit, double safetyMetres,
+                     QString& intStr, QString& fracStr, bool& emphasis,
+                     bool& drying) {
   // Guard bogus SENC/ENC values (mirrors SNDFRM02): absurdly deep -> no sounding
   // figure of merit; far-above-datum -> clamp to datum.
   double dm = depthMetres;
@@ -116,12 +100,12 @@ QImage renderSoundingImage(double depthMetres, int depthUnit,
     case 2: v *= 1.0 / 0.3048 / 6.0; break;  // fathoms
     default: break;                          // metres
   }
-  const bool drying = dm < 0.0;             // above chart datum (uncovers)
-  const bool emphasis = dm <= safetyMetres;  // <= safety depth -> bold/black
+  drying = dm < 0.0;             // above chart datum (uncovers)
+  emphasis = dm <= safetyMetres;  // <= safety depth -> bold/black
   const double av = std::fabs(v);
 
   // Split into integer + single tenths digit; never emit a decimal point.
-  QString intStr, fracStr;
+  fracStr.clear();
   const bool showTenths = depthUnit != 1 /*feet are whole*/ && av < 31.0;
   if (showTenths) {
     const double r = std::round(av * 10.0) / 10.0;  // round to one decimal
@@ -136,63 +120,6 @@ QImage renderSoundingImage(double depthMetres, int depthUnit,
   } else {
     intStr = QString::number(static_cast<long long>(std::llround(av)));
   }
-
-  // Fonts: integer full size; the tenths digit a bit smaller (kept large enough
-  // to read). The drying-height underline + low-accuracy italic apply to the
-  // integer figures; the subscript shares the italic but not the underline.
-  // Logical px, not points, so soundings are DPI-independent (see
-  // renderLabelImage): basePt is the calibrated px size.
-  QFont fInt;
-  fInt.setPixelSize(qMax(1, qRound(basePt)));
-  fInt.setBold(emphasis);
-  fInt.setUnderline(drying);
-  fInt.setItalic(lowAccuracy);
-  QFont fFrac = fInt;
-  fFrac.setPixelSize(qMax(1, qRound(basePt * 0.80)));
-  fFrac.setUnderline(false);
-
-  QFontMetricsF fmI(fInt), fmF(fFrac);
-  const qreal wI = fmI.horizontalAdvance(intStr);
-  const qreal wF = fracStr.isEmpty() ? 0.0 : fmF.horizontalAdvance(fracStr);
-  // The subscript baseline drops below the integer baseline so it sits low and
-  // to the right, as on a paper chart.
-  const qreal drop = fmI.ascent() * 0.30;
-  const qreal pad = 2.0;
-  // Reserve room below the figures for the swept-depth bracket (bar + ticks).
-  const qreal sweptGap = swept ? std::max<qreal>(3.0, basePt * 0.35) : 0.0;
-  const qreal w = wI + wF + pad * 2.0;
-  const qreal h = fmI.ascent() + fmI.descent() + drop + sweptGap + pad * 2.0;
-
-  QImage img(qRound(w * dpr), qRound(h * dpr),
-             QImage::Format_RGBA8888_Premultiplied);
-  img.setDevicePixelRatio(dpr);
-  img.fill(Qt::transparent);
-  QPainter p(&img);
-  p.setRenderHint(QPainter::TextAntialiasing, true);
-  const QColor col = emphasis ? QColor(0, 0, 0) : QColor(60, 60, 60);
-  p.setPen(col);
-  const qreal baseY = pad + fmI.ascent();
-  p.setFont(fInt);
-  p.drawText(QPointF(pad, baseY), intStr);
-  if (!fracStr.isEmpty()) {
-    p.setFont(fFrac);
-    p.drawText(QPointF(pad + wI, baseY + drop), fracStr);
-  }
-  // Swept depth (TECSOU "swept by wire drag"): a horizontal bar under the
-  // integer figures with short upturned end ticks -- the S-52 SOUNDS/GB1 glyph.
-  if (swept) {
-    const qreal y = baseY + fmI.descent() + sweptGap * 0.5;
-    const qreal x0 = pad, x1 = pad + wI;
-    const qreal tick = std::max<qreal>(2.0, basePt * 0.22);
-    QPen pen(col);
-    pen.setWidthF(std::max<qreal>(1.0, basePt * 0.09));
-    p.setPen(pen);
-    p.drawLine(QPointF(x0, y), QPointF(x1, y));         // bar
-    p.drawLine(QPointF(x0, y), QPointF(x0, y - tick));  // left tick (up)
-    p.drawLine(QPointF(x1, y), QPointF(x1, y - tick));  // right tick (up)
-  }
-  p.end();
-  return img;
 }
 
 // S-52 label placement: returns the point of the text image (logical px,
@@ -563,7 +490,10 @@ void S52VectorChartProvider::setDetailScale(double n) {
 void S52VectorChartProvider::setDeclutter(bool on) {
   if (on == m_declutter) return;
   m_declutter = on;
-  // Label overlap-avoid is part of the declutter pass -- owe a re-layout.
+  // Placement (4-corner de-conflict) is decided in the declutter pass and bakes
+  // the chosen offset into each label, so a full rebuild is needed to regenerate
+  // the S-52 base placement -- toggling OFF then cleanly restores it.
+  m_built = false;
   m_relayout_pending = true;
   emit changed();
 }
@@ -752,6 +682,18 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   if (s <= 0.0) return;
   const double rot = viewport.rotation();  // chart rotation (rad), 0 = north-up
 
+  // INSTR (OCPN_QT_SG_STATS): isolate where declutter time goes -- relayout
+  // helpers vs pass 1 vs pass 2, and specifically coveredByFiner (the suspected
+  // O(F*V), called twice per billboard) total time + call count. Timing only;
+  // no behaviour change.
+  const bool kDeclutterStats = qEnvironmentVariableIsSet("OCPN_QT_SG_STATS");
+  QElapsedTimer dclTimer;
+  qint64 relayoutNs = 0, pass1Ns = 0, coveredNs = 0, dedupNs = 0, cornerNs = 0;
+  int coveredCalls = 0, nLabel = 0, nSound = 0, maxDupList = 0;
+  long totalCornerCells = 0, maxCornerCells = 0;
+  float maxLabelW = 0, maxLabelH = 0;
+  if (kDeclutterStats) dclTimer.start();
+
   // Scale-dependent, pan-invariant re-layout (pattern UVs, complex lines,
   // static SCAMIN, and the per-billboard `kept` flag + counter-scale matrix).
   // renderChart gates this so it runs only on build and at zoom-settle, never
@@ -770,6 +712,7 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   rebuildComplexLines(s, chart_scale_n);  // screen-fixed LC glyphs along lines
   updateScaminNodes(chart_scale_n);       // hide static fills/lines past SCAMIN
   rebuildOverscaleHatch(s, chart_scale_n);  // S-52 over-scale hatch over bbox
+  if (kDeclutterStats) relayoutNs = dclTimer.nsecsElapsed();
 
   // Effective SCAMIN: many ENC objects (esp. buoys, lights, their sector arcs)
   // carry NO SCAMIN, so they'd pile up at every zoom. Give those a configurable
@@ -822,9 +765,10 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   // stays readable as you zoom out, and hidden items become opacity-0 (no
   // draw call).
   //   - Soundings: fine grid, keep the SHALLOWEST (safety).
-  //   - Text labels: declutter by the label's whole screen bounding box (the
-  //     names are long and overlap horizontally even when anchors are far
-  //     apart), keep the first, mark every ~20px cell it covers as occupied.
+  //   - Text labels (names): NEVER hidden for crowding. Each name is anchored by
+  //     one of the four CORNERS of its text box to its feature, and the corner
+  //     that best clears already-placed names is chosen (the corner loop below).
+  //     Name-vs-name only -- soundings are not in this grid. Cells are ~20px.
   //   - Symbols / vector marks: kept (nav aids), subject only to SCAMIN.
   constexpr double kSoundingCellPx = 46.0;
   constexpr double kOccCellPx = 20.0;  // label bbox occupancy grid
@@ -837,6 +781,19 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
     return (static_cast<qint64>(cx) << 32) ^ static_cast<quint32>(cy);
   };
 
+  // Diagnostic wrapper: isolate coveredByFiner cost (accumulate time + count)
+  // without changing behaviour. covTimer.restart()/nsecsElapsed is ~tens of ns,
+  // negligible against the millisecond-scale cost we're chasing.
+  QElapsedTimer covTimer;
+  const auto coveredTimed = [&](const QPointF& wp) -> bool {
+    if (!kDeclutterStats) return coveredByFiner(wp);
+    covTimer.restart();
+    const bool r = coveredByFiner(wp);
+    coveredNs += covTimer.nsecsElapsed();
+    ++coveredCalls;
+    return r;
+  };
+
   // Pass 1: per-cell winners. Soundings -> shallowest; labels -> first that
   // fits, by bounding box.
   QHash<qint64, int> cellShallowest;  // sounding cell -> billboard index
@@ -845,60 +802,117 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   QHash<QString, QList<QRectF>> placedByText;  // same-name dedup: text -> rects
   for (int i = 0; i < m_billboards.size(); ++i) {
     const Billboard& b = m_billboards[i];
-    if (coveredByFiner(b.worldPos)) continue;  // a finer quilt cell owns it
+    if (coveredTimed(b.worldPos)) continue;  // a finer quilt cell owns it
     if (chart_scale_n > effScamin(b)) continue;  // SCAMIN-culled anyway
     if (b.kind == BbKind::Sounding) {
+      if (kDeclutterStats) ++nSound;
       const qint64 key = soundKey(b.worldPos);
       auto it = cellShallowest.find(key);
       if (it == cellShallowest.end() || b.depth < m_billboards[it.value()].depth)
         cellShallowest[key] = i;
     } else if (b.kind == BbKind::Label) {
-      // Screen-pixel bbox of the label, centred on the anchor PLUS the S-52
-      // placement offset (screenCx/Cy), so tests use where the text draws --
-      // offset names/light text don't collide on the symbol anchor.
-      const double sx = b.worldPos.x() * s + b.screenCx;
-      const double sy = b.worldPos.y() * s + b.screenCy;
+      if (kDeclutterStats) ++nLabel;
+      // Anchor = the feature's symbol position, in screen px. A name is placed
+      // with ONE CORNER of its text box AT the anchor (plus a small gap), so the
+      // text always sits right next to its light/buoy -- never flung a whole
+      // word-width away. The half-extents are constant native px (the glyph node
+      // is screen-fixed), so a corner stays adjacent to the anchor at every zoom.
+      const double ax = b.worldPos.x() * s;
+      const double ay = b.worldPos.y() * s;
+      const double halfW = b.screenW / 2.0;
+      const double halfH = b.screenH / 2.0;
+
       // Same-name de-dup (ALWAYS on): one cell often repeats a place/feature
       // name -- "River Yar" along the river, "Isle of Wight" on each land
-      // polygon. Drop a label whose TEXT matches one already placed in this cell
-      // AND whose (slightly grown) screen rect overlaps it: redundant stacked
-      // copies go, while distinct same-name labels far apart are kept. Unlike
-      // the m_declutter toggle below (which thins DIFFERENT overlapping names),
-      // this is unconditional -- a name drawn twice in the same spot is noise.
+      // polygon. Drop a label whose TEXT matches one already placed AND whose
+      // anchor box overlaps it: redundant stacked copies go, distinct same-name
+      // labels far apart are kept. This is the ONLY label-hide path now -- the
+      // crowding de-conflict below never hides, it only repositions.
+      QElapsedTimer subT;
+      if (kDeclutterStats) subT.restart();
       if (!b.text.isEmpty()) {
         constexpr double kDupMarginPx = 4.0;
-        const QRectF probe(sx - b.screenW / 2.0 - kDupMarginPx,
-                           sy - b.screenH / 2.0 - kDupMarginPx,
+        const QRectF probe(ax - halfW - kDupMarginPx, ay - halfH - kDupMarginPx,
                            b.screenW + 2 * kDupMarginPx,
                            b.screenH + 2 * kDupMarginPx);
         bool dup = false;
         const auto it2 = placedByText.constFind(b.text);
-        if (it2 != placedByText.constEnd())
+        if (it2 != placedByText.constEnd()) {
+          if (kDeclutterStats)
+            maxDupList = std::max(maxDupList, int(it2.value().size()));
           for (const QRectF& r : it2.value())
             if (r.intersects(probe)) { dup = true; break; }
-        if (dup) { labelKeep[i] = false; continue; }
+        }
+        if (dup) {
+          if (kDeclutterStats) dedupNs += subT.nsecsElapsed();
+          labelKeep[i] = false;
+          continue;
+        }
         placedByText[b.text].append(
-            QRectF(sx - b.screenW / 2.0, sy - b.screenH / 2.0, b.screenW,
-                   b.screenH));
+            QRectF(ax - halfW, ay - halfH, b.screenW, b.screenH));
       }
-      // General de-clutter (P2.23a): only suppress overlapping (different)
-      // labels when the toggle is on. Off (the wx default) keeps every label.
-      if (!m_declutter) { labelKeep[i] = true; continue; }
-      // Occupancy-grid test for the label's screen bbox.
-      const long c0x = std::lround((sx - b.screenW / 2.0) / kOccCellPx);
-      const long c1x = std::lround((sx + b.screenW / 2.0) / kOccCellPx);
-      const long c0y = std::lround((sy - b.screenH / 2.0) / kOccCellPx);
-      const long c1y = std::lround((sy + b.screenH / 2.0) / kOccCellPx);
-      bool clash = false;
-      for (long cy = c0y; cy <= c1y && !clash; ++cy)
-        for (long cx = c0x; cx <= c1x; ++cx)
-          if (occupied.contains(occKey(cx, cy))) { clash = true; break; }
-      labelKeep[i] = !clash;
-      if (!clash)
-        for (long cy = c0y; cy <= c1y; ++cy)
-          for (long cx = c0x; cx <= c1x; ++cx) occupied.insert(occKey(cx, cy));
+      if (kDeclutterStats) dedupNs += subT.nsecsElapsed();
+
+      // Names are NEVER hidden for crowding -- we want to see every name and let
+      // the chart reader judge placement. The de-conflict only chooses WHICH
+      // corner the text grows from.
+      labelKeep[i] = true;
+      QElapsedTimer cornerT;
+      if (kDeclutterStats) cornerT.restart();
+      if (!m_declutter) continue;  // toggle off: keep the S-52 placement as built
+
+      // Four corner placements: the text-box corner that touches the anchor,
+      // tried in preference order. cx/cy is the box-CENTRE offset from the anchor
+      // (+x = right, +y = down, since world y = -lat). The first corner whose box
+      // clears already-placed NAMES wins; if all four clash the preferred (first)
+      // corner is used anyway. Soundings are not in `occupied`, so a depth figure
+      // never pushes a name around. Idempotent: computed from the anchor, not the
+      // current offset, so repeated relayouts don't drift.
+      constexpr double kGapPx = 3.0;
+      const double dx = halfW + kGapPx, dy = halfH + kGapPx;
+      const QPointF kCorners[] = {
+          {dx, -dy},   // up-right   (bottom-left box corner at anchor, left-just)
+          {dx, dy},    // down-right (top-left corner,                  left-just)
+          {-dx, -dy},  // up-left    (bottom-right corner,              right-just)
+          {-dx, dy}};  // down-left  (top-right corner,                 right-just)
+      const auto cellsOf = [&](const QPointF& c, long& c0x, long& c1x, long& c0y,
+                               long& c1y) {
+        const double bx = ax + c.x(), by = ay + c.y();
+        c0x = std::lround((bx - halfW) / kOccCellPx);
+        c1x = std::lround((bx + halfW) / kOccCellPx);
+        c0y = std::lround((by - halfH) / kOccCellPx);
+        c1y = std::lround((by + halfH) / kOccCellPx);
+      };
+      QPointF chosen = kCorners[0];
+      for (const QPointF& corner : kCorners) {
+        long c0x, c1x, c0y, c1y;
+        cellsOf(corner, c0x, c1x, c0y, c1y);
+        bool clash = false;
+        for (long cy = c0y; cy <= c1y && !clash; ++cy)
+          for (long cx = c0x; cx <= c1x; ++cx)
+            if (occupied.contains(occKey(cx, cy))) { clash = true; break; }
+        if (clash) continue;
+        chosen = corner;
+        break;
+      }
+      long c0x, c1x, c0y, c1y;
+      cellsOf(chosen, c0x, c1x, c0y, c1y);
+      if (kDeclutterStats) {
+        const long cc = (c1x - c0x + 1) * (c1y - c0y + 1);
+        totalCornerCells += cc;
+        maxCornerCells = std::max(maxCornerCells, cc);
+        maxLabelW = std::max(maxLabelW, b.screenW);
+        maxLabelH = std::max(maxLabelH, b.screenH);
+      }
+      for (long cy = c0y; cy <= c1y; ++cy)
+        for (long cx = c0x; cx <= c1x; ++cx) occupied.insert(occKey(cx, cy));
+      m_billboards[i].screenCx = static_cast<float>(chosen.x());
+      m_billboards[i].screenCy = static_cast<float>(chosen.y());
+      if (kDeclutterStats) cornerNs += cornerT.nsecsElapsed();
     }
   }
+
+  if (kDeclutterStats) pass1Ns = dclTimer.nsecsElapsed();
 
   // Pass 2: record each billboard's declutter result in `kept` (SCAMIN +
   // density), and pre-set the counter-scale matrix on every kept billboard so
@@ -908,7 +922,7 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
   for (int i = 0; i < m_billboards.size(); ++i) {
     Billboard& b = m_billboards[i];
     bool hidden = chart_scale_n > effScamin(b);  // SCAMIN hard floor
-    if (!hidden) hidden = coveredByFiner(b.worldPos);  // finer cell owns it
+    if (!hidden) hidden = coveredTimed(b.worldPos);  // finer cell owns it
     if (!hidden && b.kind == BbKind::Sounding)
       hidden = (cellShallowest.value(soundKey(b.worldPos), -1) != i);
     else if (!hidden && b.kind == BbKind::Label)
@@ -917,6 +931,21 @@ void S52VectorChartProvider::recomputeDeclutter(const Viewport& viewport) {
     if (b.kept && b.xform)
       b.xform->setMatrix(billboardMatrix(b.worldPos, 1.0 / s, b.upright,
                                          rot, QPointF(b.screenCx, b.screenCy)));
+  }
+  if (kDeclutterStats) {
+    const qint64 totalNs = dclTimer.nsecsElapsed();
+    long fverts = 0;
+    for (const QPolygonF& p : m_finer_coverage_world) fverts += p.size();
+    qWarning(
+        "INSTR declutter %s: total=%.1fms | relayout=%.1f pass1=%.1f pass2=%.1f"
+        " | coveredByFiner=%.1f dedup=%.1f corner=%.1f (ms)"
+        " | nLabel=%d nSound=%d maxDupList=%d cornerCells=%ld(max %ld)"
+        " maxLabel=%.0fx%.0f | n=%d bb",
+        qPrintable(id()), totalNs / 1e6, relayoutNs / 1e6,
+        (pass1Ns - relayoutNs) / 1e6, (totalNs - pass1Ns) / 1e6,
+        coveredNs / 1e6, dedupNs / 1e6, cornerNs / 1e6, nLabel, nSound,
+        maxDupList, totalCornerCells, maxCornerCells, maxLabelW, maxLabelH,
+        static_cast<int>(m_billboards.size()));
   }
   m_bb_scale = s;
   m_bb_rotation = rot;
@@ -1022,67 +1051,43 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // by finest-owner suppression in recomputeDeclutter (see setFinerCoverage),
   // the scene-graph analogue of wx's m_covered_region.Subtract (quilt.cpp).
   QSGNode* content = root;
-  {
-    // P2.17: clip to the cell's M_COVR coverage union when the catalog
-    // carries it (concave rings tessellated NONZERO, holes honoured by
-    // winding); else the geographic bounding box, as before.
-    QList<QSGGeometry::Point2D> tris;
-    if (!m_coverage.isEmpty()) {
-      TESStesselator* tess = tessNewTess(nullptr);
-      for (const QPolygonF& ring : m_coverage) {
-        if (ring.size() < 3) continue;
-        QList<float> contour;
-        contour.reserve(ring.size() * 2);
-        for (const QPointF& p : ring) {  // (lon, lat) -> world
-          contour.append(static_cast<float>(p.x()));
-          contour.append(
-              static_cast<float>(Viewport::latToWorldY(p.y())));
-        }
-        tessAddContour(tess, 2, contour.constData(), sizeof(float) * 2,
-                       static_cast<int>(ring.size()));
-      }
-      if (tessTesselate(tess, TESS_WINDING_NONZERO, TESS_POLYGONS, 3, 2,
-                        nullptr)) {
-        const float* verts = tessGetVertices(tess);
-        const TESSindex* elems = tessGetElements(tess);
-        const int ne = tessGetElementCount(tess);
-        tris.reserve(ne * 3);
-        for (int i = 0; i < ne; ++i) {
-          bool degenerate = false;
-          QSGGeometry::Point2D tri[3];
-          for (int j = 0; j < 3; ++j) {
-            const TESSindex idx = elems[i * 3 + j];
-            if (idx == TESS_UNDEF) {
-              degenerate = true;
-              break;
-            }
-            tri[j].set(verts[idx * 2], verts[idx * 2 + 1]);
-          }
-          if (!degenerate) tris << tri[0] << tri[1] << tri[2];
-        }
-      }
-      tessDeleteTess(tess);
-    }
+  if (!qEnvironmentVariableIsSet("OCPN_QT_NOCLIP")) {
+    // Clip the chart's AREA FILLS + LINES to its geographic BOUNDING BOX -- a
+    // RECTANGULAR (scissor) clip. It bounds a finer chart's fills to its box so
+    // they can't bleed past it over the coarser chart beneath (the composite
+    // display rules). World coords: x = lon, y = latToWorldY(lat) (north ->
+    // smaller y).
+    //
+    // This deliberately does NOT use the cell's M_COVR coverage POLYGON. That
+    // earlier clip used a non-rectangular STENCIL clip whose state also sliced
+    // the sibling POINT ANNOTATIONS (names / symbols / CARC light arcs) that are
+    // appended UNCLIPPED to `root` below -- truncating labels mid-word along the
+    // curved coverage boundary. A rectangular scissor clip is strictly
+    // hierarchical: it bounds only its own subtree (the fills), so an annotation
+    // -- which represents a feature AT a point and must draw in full -- is never
+    // clipped, even where its text sweeps past the cell edge. Cross-cell
+    // duplicate annotations are instead suppressed by finest-owner culling in
+    // recomputeDeclutter (coveredByFiner / setFinerCoverage), the scene-graph
+    // analogue of wx's m_covered_region.Subtract.
     const float xl = static_cast<float>(m_west);
     const float xr = static_cast<float>(m_east);
     const float yt = static_cast<float>(Viewport::latToWorldY(m_north));
     const float yb = static_cast<float>(Viewport::latToWorldY(m_south));
-    if (tris.isEmpty() && xr > xl && yb > yt) {
-      tris.reserve(6);
-      QSGGeometry::Point2D p0, p1, p2, p3;
-      p0.set(xl, yt); p1.set(xr, yt); p2.set(xr, yb); p3.set(xl, yb);
-      tris << p0 << p1 << p2 << p0 << p2 << p3;
-    }
-    if (!tris.isEmpty()) {
-      auto* clipGeom = new QSGGeometry(
-          QSGGeometry::defaultAttributes_Point2D(), tris.size());
-      clipGeom->setDrawingMode(QSGGeometry::DrawTriangles);
+    if (xr > xl && yb > yt) {
+      const QRectF box(xl, yt, xr - xl, yb - yt);
+      auto* clipGeom =
+          new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 4);
+      clipGeom->setDrawingMode(QSGGeometry::DrawTriangleStrip);
       QSGGeometry::Point2D* cv = clipGeom->vertexDataAsPoint2D();
-      for (int i = 0; i < tris.size(); ++i) cv[i] = tris[i];
+      cv[0].set(xl, yt);
+      cv[1].set(xr, yt);
+      cv[2].set(xl, yb);
+      cv[3].set(xr, yb);
       auto* clip = new QSGClipNode();
       clip->setGeometry(clipGeom);
       clip->setFlag(QSGNode::OwnsGeometry, true);
-      clip->setIsRectangular(false);
+      clip->setClipRect(box);
+      clip->setIsRectangular(true);
       root->appendChildNode(clip);
       content = clip;
     }
@@ -1458,12 +1463,6 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
   // shelf-packed into shared atlas pages after the loops, so a cell
   // carries a handful of textures instead of one per label/symbol.
   m_billboards.clear();
-  // Rasterise label/sounding bitmaps at the REAL screen device-pixel ratio, not
-  // a hardcoded 2x. On a 1x display 2x quadrupled every text atlas page for no
-  // visible gain (the dominant Pi chart-memory cost); on a 2x panel this still
-  // resolves to 2. Clamp to >=1 so a stale/zero ratio can't blank the text.
-  const qreal bbDpr =
-      window ? std::max<qreal>(1.0, window->effectiveDevicePixelRatio()) : 1.0;
 
   // SCAMIN-aware build: rasterise only billboards visible at -- or within one
   // zoom band of -- the build scale. A far-underzoomed overview cell otherwise
@@ -1570,6 +1569,159 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     m_billboards.append(b);
   };
 
+  // Like addBillboard, but for a pre-built UPRIGHT text subtree (QSGTextNode +
+  // optional sibling geometry) rather than a textured quad: no atlas/texture --
+  // the glyphs come straight from Qt's shared glyph cache, so the per-label
+  // QImage atlas pages (the dominant Pi chart-memory cost) are gone. `child`
+  // must already draw its content CENTRED on its local origin; w/h are its
+  // logical-px size (declutter bbox) and pivotPx the S-52 anchor within that box.
+  auto addTextBillboard = [&](QSGNode* child, qreal w, qreal h,
+                              QPointF worldPos, QPointF pivotPx, int scamin,
+                              BbKind kind, float depth, int viewGroup,
+                              const QString& text) {
+    if (!child) return;
+    const QPointF centreOff(w / 2.0 - pivotPx.x(), h / 2.0 - pivotPx.y());
+    auto* xform = new QSGTransformNode();
+    xform->appendChildNode(child);
+    auto* opacity = new QSGOpacityNode();
+    opacity->appendChildNode(xform);
+    root->appendChildNode(opacity);  // unclipped: never sliced by the cell bbox
+    Billboard b;
+    b.opacity = opacity;
+    b.xform = xform;
+    b.worldPos = worldPos;
+    b.scamin = scamin;
+    b.kind = kind;
+    b.viewGroup = viewGroup;
+    b.depth = depth;
+    b.screenW = static_cast<float>(w);
+    b.screenH = static_cast<float>(h);
+    b.screenCx = static_cast<float>(centreOff.x());
+    b.screenCy = static_cast<float>(centreOff.y());
+    b.upright = true;
+    b.text = text;
+    m_billboards.append(b);
+  };
+
+  // Lay `text` out as a single (never-wrapping) line in `font`; `outBounds`
+  // (optional) gets the line's bounding rect in the layout's own coordinates
+  // (origin top-left). The QTextLayout must outlive the addTextLayout() call.
+  auto layoutLine = [](QTextLayout& layout, QRectF* outBounds) {
+    layout.beginLayout();
+    QTextLine line = layout.createLine();
+    double w = 0.0, h = 0.0;
+    if (line.isValid()) {
+      line.setLineWidth(1.0e6);  // never wrap
+      line.setPosition(QPointF(0, 0));
+      w = line.naturalTextWidth();
+      h = line.height();
+    }
+    layout.endLayout();
+    // Use the line's NATURAL text width, NOT layout.boundingRect(): with the
+    // 1e6 no-wrap line width above, boundingRect().width() comes back as ~1e6,
+    // which then poisons the label-declutter bbox -- screenW ~ 1e6 makes the
+    // corner-placement occupancy grid iterate ~50,000 cells PER label
+    // (millions per cell, seconds of render-thread declutter, the fine-scale
+    // pan stutter). Glyphs lay out from x=0, so (0,0,w,h) is the true text box;
+    // this also keeps makeCenteredText's centring correct (offset = -w/2,-h/2).
+    if (outBounds) *outBounds = QRectF(0.0, 0.0, w, h);
+  };
+
+  // A QSGTextNode whose glyphs are CENTRED on the node origin (the upright-
+  // billboard convention: the S-52 placement offset is carried by the per-frame
+  // matrix). `outSize` (optional) gets the text's logical-px size.
+  auto makeCenteredText = [&](const QString& text, const QFont& font,
+                              const QColor& color,
+                              QSizeF* outSize) -> QSGTextNode* {
+    auto* tn = window->createTextNode();
+    tn->setColor(color);
+    tn->setRenderType(QSGTextNode::NativeRendering);
+    QTextLayout layout(text, font);
+    QRectF br;
+    layoutLine(layout, &br);
+    tn->addTextLayout(QPointF(-(br.x() + br.width() / 2.0),
+                              -(br.y() + br.height() / 2.0)),
+                      &layout);
+    if (outSize) *outSize = br.size();
+    return tn;
+  };
+
+  // Build the upright subtree for one sounding: integer figures + an optional
+  // tenths subscript as QSGTextNodes, plus an optional swept-depth bracket as a
+  // flat-colour line node. Content is CENTRED on the group origin. `basePt` is
+  // the (slider-scaled) integer-figure px size.
+  auto buildSounding = [&](const s52sg::Label& lab, float basePt,
+                           QSizeF* outSize) -> QSGNode* {
+    QString intStr, fracStr;
+    bool emphasis = false, drying = false;
+    soundingFigures(lab.depth, m_depth_unit, m_safety_depth_m, intStr, fracStr,
+                    emphasis, drying);
+    // Integer full size; tenths a bit smaller (still readable). Drying-height
+    // underline + low-accuracy italic apply to the integer figures; the
+    // subscript shares the italic but not the underline.
+    QFont fInt;
+    fInt.setPixelSize(qMax(1, qRound(basePt)));
+    fInt.setBold(emphasis);
+    fInt.setUnderline(drying);
+    fInt.setItalic(lab.soundingLowAccuracy);
+    QFont fFrac = fInt;
+    fFrac.setPixelSize(qMax(1, qRound(basePt * 0.80)));
+    fFrac.setUnderline(false);
+    const QFontMetricsF fmI(fInt), fmF(fFrac);
+    const qreal wI = fmI.horizontalAdvance(intStr);
+    const qreal wF = fracStr.isEmpty() ? 0.0 : fmF.horizontalAdvance(fracStr);
+    const qreal drop = fmI.ascent() * 0.30;  // subscript baseline drop
+    const qreal sweptGap =
+        lab.soundingSwept ? std::max<qreal>(3.0, basePt * 0.35) : 0.0;
+    const qreal w = wI + wF;
+    const qreal h = fmI.ascent() + fmI.descent() + drop + sweptGap;
+    const QColor col = emphasis ? QColor(0, 0, 0) : QColor(60, 60, 60);
+
+    auto* group = new QSGTransformNode();
+    // Integer figures: line top at y=0, baseline at fmI.ascent().
+    {
+      auto* tn = window->createTextNode();
+      tn->setColor(col);
+      tn->setRenderType(QSGTextNode::NativeRendering);
+      QTextLayout layout(intStr, fInt);
+      layoutLine(layout, nullptr);
+      tn->addTextLayout(QPointF(0, 0), &layout);
+      group->appendChildNode(tn);
+    }
+    // Tenths subscript: baseline = integer baseline + drop, low and to the right.
+    if (!fracStr.isEmpty()) {
+      auto* tn = window->createTextNode();
+      tn->setColor(col);
+      tn->setRenderType(QSGTextNode::NativeRendering);
+      QTextLayout layout(fracStr, fFrac);
+      layoutLine(layout, nullptr);
+      const qreal topY = fmI.ascent() + drop - fmF.ascent();  // line top
+      tn->addTextLayout(QPointF(wI, topY), &layout);
+      group->appendChildNode(tn);
+    }
+    // Swept depth (TECSOU "swept by wire drag"): a horizontal bar under the
+    // integer figures with short upturned end ticks -- the S-52 SOUNDS/GB1 glyph.
+    if (lab.soundingSwept) {
+      const qreal y = fmI.ascent() + fmI.descent() + sweptGap * 0.5;
+      const qreal x0 = 0.0, x1 = wI;
+      const qreal tick = std::max<qreal>(2.0, basePt * 0.22);
+      auto* geo = sg::makeFlatColorNode(
+          col, QSGGeometry::DrawLines, 6,
+          static_cast<float>(std::max<qreal>(1.0, basePt * 0.09)));
+      auto* v = geo->geometry()->vertexDataAsPoint2D();
+      v[0].set(x0, y);  v[1].set(x1, y);         // bar
+      v[2].set(x0, y);  v[3].set(x0, y - tick);  // left tick (up)
+      v[4].set(x1, y);  v[5].set(x1, y - tick);  // right tick (up)
+      group->appendChildNode(geo);
+    }
+    // Centre the whole [0,w] x [0,h] content box on the group origin.
+    QMatrix4x4 m;
+    m.translate(static_cast<float>(-w / 2.0), static_cast<float>(-h / 2.0));
+    group->setMatrix(m);
+    if (outSize) *outSize = QSizeF(w, h);
+    return group;
+  };
+
   // Point symbols (buoys/beacons) -- pivot is the symbol's hot-spot. Drawn
   // BEFORE text labels so a town/feature dot sits UNDER its name (e.g. the
   // "East Oakland" POPL dot), not over it.
@@ -1621,39 +1773,43 @@ QSGNode* S52VectorChartProvider::renderChart(QSGNode* old_subtree,
     m_billboards.append(b);
   }
 
-  // Text labels (soundings, names) -- appended LAST so they draw on top of
-  // the point symbols / dots they annotate.
-  for (const s52sg::Label& lab : m_buffer.labels) {
-    if (catCulled(lab.dispCat, lab.classIdx)) continue;
-    // Viewing-group filter: soundings vs. other text (names), each
-    // independently toggleable (mirrors s52plib's ShowSoundings /
-    // ShowS57Text).
-    if (lab.isSounding ? !m_showSoundings : !m_showText) continue;
-    if (buildSkip(lab.scamin, lab.viewGroup, lab.isSounding)) continue;
-    // Soundings get the unit-aware S-52 SNDFRM layout (integer + subscript
-    // tenths, drying-height underline, safety-depth emphasis); other labels
-    // (feature names) render as plain text.
-    QImage img =
-        lab.isSounding
-            ? renderSoundingImage(
-                  lab.depth, m_depth_unit, m_safety_depth_m,
-                  lab.pointSize * static_cast<float>(m_sounding_scale),
-                  lab.soundingSwept, lab.soundingLowAccuracy, bbDpr)
-            : renderLabelImage(lab, bbDpr);
-    const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
-    const qreal w = img.width() / dpr;
-    const qreal h = img.height() / dpr;
-    // Soundings stay centred on their position; other text (names, light
-    // descriptions, clearances) uses the S-52 justification + offsets so it
-    // sits clear of the symbol instead of stacked on top of it.
-    const QPointF pivot =
-        lab.isSounding ? QPointF(w / 2.0, h / 2.0) : labelPivot(w, h, lab);
-    addBillboard(img, QPointF(lab.pos.x(), Viewport::latToWorldY(lab.pos.y())),
-                 pivot, lab.scamin,
-                 lab.isSounding ? BbKind::Sounding : BbKind::Label, lab.depth,
-                 /*rotationDeg=*/0.0, lab.viewGroup, /*upright=*/true,
-                 lab.isSounding ? QString() : lab.text);
-  }
+  // Text labels (soundings, names) -- appended LAST so they draw on top of the
+  // point symbols / dots they annotate. Rendered as QSGTextNodes (glyphs from
+  // Qt's shared cache), not rasterised bitmaps: crisper at every zoom and no
+  // per-label atlas page (the dominant Pi chart-memory cost).
+  if (window)
+    for (const s52sg::Label& lab : m_buffer.labels) {
+      if (catCulled(lab.dispCat, lab.classIdx)) continue;
+      // Viewing-group filter: soundings vs. other text (names), each
+      // independently toggleable (mirrors s52plib's ShowSoundings / ShowS57Text).
+      if (lab.isSounding ? !m_showSoundings : !m_showText) continue;
+      if (buildSkip(lab.scamin, lab.viewGroup, lab.isSounding)) continue;
+      const QPointF worldPos(lab.pos.x(), Viewport::latToWorldY(lab.pos.y()));
+      if (lab.isSounding) {
+        // Unit-aware S-52 SNDFRM layout (integer + subscript tenths, drying-
+        // height underline, safety-depth emphasis, swept bracket); stays CENTRED
+        // on its position.
+        QSizeF sz;
+        QSGNode* child = buildSounding(
+            lab, lab.pointSize * static_cast<float>(m_sounding_scale), &sz);
+        addTextBillboard(child, sz.width(), sz.height(), worldPos,
+                         QPointF(sz.width() / 2.0, sz.height() / 2.0),
+                         lab.scamin, BbKind::Sounding, lab.depth, lab.viewGroup,
+                         QString());
+      } else {
+        // Feature names / light descriptions: plain text placed by the S-52
+        // justification + offsets so it sits clear of the symbol instead of
+        // stacked on top of it.
+        QSizeF sz;
+        QSGTextNode* tn = makeCenteredText(
+            lab.text, labelFont(lab),
+            lab.color.isValid() ? lab.color : QColor(0, 0, 0), &sz);
+        const QPointF pivot = labelPivot(sz.width(), sz.height(), lab);
+        addTextBillboard(tn, sz.width(), sz.height(), worldPos, pivot,
+                         lab.scamin, BbKind::Label, lab.depth, lab.viewGroup,
+                         lab.text);
+      }
+    }
 
   // PERF-0 phase timing: where a first build's sync-thread time goes
   // (billboards above are the label-rasterization phase).
